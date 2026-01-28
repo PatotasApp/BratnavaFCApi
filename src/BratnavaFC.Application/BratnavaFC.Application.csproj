@@ -6,4 +6,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\BratnavaFC.Domain\BratnavaFC.Domain.csproj" />
+    <ProjectReference Include="..\BratnavaFC.Infrastructure\BratnavaFC.Infrastructure.csproj" />
+  </ItemGroup>
+
 </Project>
