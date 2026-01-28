@@ -1,0 +1,14 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/.vs
+/src/BratmavaFC.Domain/obj
+/src/BratnavaFC.Api/obj
+/src/BratnavaFC.Infrastructure/obj
+/src/BratnavaFC.Api/bin/Debug/net8.0
+/src/BratnavaFC.Application/bin/Debug/net8.0
+/src/BratnavaFC.Application/obj
+/src/BratnavaFC.Domain/bin/Debug/net8.0
+/src/BratnavaFC.Domain/obj
+/src/BratnavaFC.Infrastructure/bin/Debug/net8.0
