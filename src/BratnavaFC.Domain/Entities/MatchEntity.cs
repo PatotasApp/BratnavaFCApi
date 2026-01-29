@@ -15,6 +15,9 @@ public class MatchEntity : BaseEntity
     public int TeamBGoals { get; private set; }
 
     public List<MatchPlayerEntity> Players { get; private set; } = [];
+    public List<VoteEntity> Votes { get; private set; } = new();
+
+    public bool IsFinalized { get; private set; }
 
     public IReadOnlyList<MatchPlayerEntity> TeamAPlayers => Players.Where(p => p.Team == 1).ToList();
     public IReadOnlyList<MatchPlayerEntity> TeamBPlayers => Players.Where(p => p.Team == 2).ToList();
@@ -49,5 +52,12 @@ public class MatchEntity : BaseEntity
         var removed = Players.Remove(player);
         if (removed) UpdateDate = DateTime.UtcNow;
         return removed;
+    }
+
+    public void MarkFinalized()
+    {
+        if (IsFinalized) return;
+        IsFinalized = true;
+        UpdateDate = DateTime.UtcNow;
     }
 }

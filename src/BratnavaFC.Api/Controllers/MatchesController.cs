@@ -24,10 +24,10 @@ public class MatchesController : ControllerBase
         return Ok(dtos);
     }
 
-    [HttpGet("{id:guid}")]
-    public async Task<IActionResult> Get(Guid id)
+    [HttpGet("{matchId:guid}")]
+    public async Task<IActionResult> Get(Guid matchId)
     {
-        var match = await _service.GetByIdAsync(id);
+        var match = await _service.GetByIdAsync(matchId);
         if (match == null) return NotFound();
         return Ok(ToDto(match));
     }
@@ -37,15 +37,15 @@ public class MatchesController : ControllerBase
     {
         var entity = FromDto(dto);
         var created = await _service.CreateAsync(entity);
-        return CreatedAtAction(nameof(Get), new { id = created.Id }, ToDto(created));
+        return CreatedAtAction(nameof(Get), new { matchId = created.Id }, ToDto(created));
     }
 
-    [HttpPut("{id:guid}")]
-    public async Task<IActionResult> Update(Guid id, [FromBody] MatchDto dto)
+    [HttpPut("{matchId:guid}")]
+    public async Task<IActionResult> Update(Guid matchId, [FromBody] MatchDto dto)
     {
-        if (dto.Id.HasValue && dto.Id.Value != id) return BadRequest();
+        if (dto.Id.HasValue && dto.Id.Value != matchId) return BadRequest();
 
-        var existing = await _service.GetByIdAsync(id);
+        var existing = await _service.GetByIdAsync(matchId);
         if (existing == null) return NotFound();
 
         existing.SetPlayedAt(dto.PlayedAt);
@@ -68,11 +68,62 @@ public class MatchesController : ControllerBase
         return NoContent();
     }
 
-    [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id)
+    [HttpDelete("{matchId:guid}")]
+    public async Task<IActionResult> Delete(Guid matchId)
     {
-        await _service.DeleteAsync(id);
+        await _service.DeleteAsync(matchId);
         return NoContent();
+    }
+
+    [HttpPost("{matchId:guid}/vote")]
+    public async Task<IActionResult> Vote(Guid matchId, [FromBody] VoteRequestDto dto)
+    {
+        if (dto == null) return BadRequest();
+
+        if (dto.VoterPlayerId == Guid.Empty || dto.VotedPlayerId == Guid.Empty)
+            return BadRequest("O jogador que votou e o votado são obrigatórios.");
+
+        if (dto.VoterPlayerId == dto.VotedPlayerId)
+            return BadRequest("O jogador não pode votar em si mesmo.");
+
+        try
+        {
+            await _service.VoteAsync(matchId, dto.VoterPlayerId, dto.VotedPlayerId);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("{matchId:guid}/finalize")]
+    public async Task<IActionResult> Finalize(Guid matchId)
+    {
+        try
+        {
+            await _service.FinalizeMatchAsync(matchId);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpGet("{matchId:guid}/mvp")]
+    public async Task<IActionResult> GetMvp(Guid matchId)
+    {
+        var mvp = await _service.GetMvpAsync(matchId);
+        if (mvp == null) return NotFound();
+
+        var dto = new MatchPlayerDto
+        {
+            Id = mvp.Id,
+            Name = mvp.Name,
+            IsMvp = mvp.IsMvp,
+        };
+        return Ok(dto);
     }
 
     private static MatchDto ToDto(MatchEntity e)

@@ -9,4 +9,7 @@ public interface IMatchService
     Task<MatchEntity> CreateAsync(MatchEntity match);
     Task UpdateAsync(MatchEntity match);
     Task DeleteAsync(Guid id);
+    Task VoteAsync(Guid matchId, Guid voterPlayerId, Guid votedPlayerId);
+    Task FinalizeMatchAsync(Guid matchId);
+    Task<MatchPlayerEntity?> GetMvpAsync(Guid matchId);
 }
