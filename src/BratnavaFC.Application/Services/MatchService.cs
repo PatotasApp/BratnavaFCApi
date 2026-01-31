@@ -35,7 +35,6 @@ public class MatchService : IMatchService
 
     public async Task<MatchEntity> CreateAsync(MatchEntity match)
     {
-        match.CreateDate = DateTime.UtcNow;
         await _repository.AddAsync(match);
         await _repository.SaveChangesAsync();
         return match;
@@ -46,7 +45,6 @@ public class MatchService : IMatchService
         if (match.IsFinalized)
             throw new InvalidOperationException("Partida já finalizada. Não é possível atualizar seus dados.");
 
-        match.UpdateDate = DateTime.UtcNow;
         _repository.Update(match);
         await _repository.SaveChangesAsync();
     }

@@ -19,13 +19,11 @@ namespace BratnavaFC.Domain.Entities
         public void SetName(string name)
         {
             Name = name ?? string.Empty;
-            UpdateDate = DateTime.UtcNow;
         }
 
         public void SetHexValue(string hex)
         {
             HexValue = hex ?? string.Empty;
-            UpdateDate = DateTime.UtcNow;
         }
     }
 }

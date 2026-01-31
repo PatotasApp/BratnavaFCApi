@@ -24,26 +24,22 @@ public class MatchPlayerEntity : BaseEntity
     public void SetName(string name)
     {
         Name = name ?? throw new ArgumentNullException(nameof(name));
-        UpdateDate = DateTime.UtcNow;
     }
 
     public void SetMvp()
     {
         IsMvp = true;
-        UpdateDate = DateTime.UtcNow;
     }
 
     public void RevokeMvp()
     {
         IsMvp = null;
-        UpdateDate = DateTime.UtcNow;
     }
 
     public void AssignToMatch(MatchEntity match)
     {
         Match = match ?? throw new ArgumentNullException(nameof(match));
         MatchId = match.Id;
-        UpdateDate = DateTime.UtcNow;
     }
 
     public void SetTeam(short team)
@@ -52,7 +48,6 @@ public class MatchPlayerEntity : BaseEntity
             throw new ArgumentOutOfRangeException(nameof(team), "Time deve ser 1 (Time A) ou 2 (Time B).");
 
         Team = team;
-        UpdateDate = DateTime.UtcNow;
     }
 
     public void AddReceivedVote(VoteEntity vote)
@@ -62,7 +57,6 @@ public class MatchPlayerEntity : BaseEntity
         if (!ReceivedVotes.Exists(v => v.Id == vote.Id))
         {
             ReceivedVotes.Add(vote);
-            UpdateDate = DateTime.UtcNow;
         }
     }
 
@@ -72,19 +66,16 @@ public class MatchPlayerEntity : BaseEntity
         if (idx >= 0)
         {
             ReceivedVotes.RemoveAt(idx);
-            UpdateDate = DateTime.UtcNow;
         }
     }
 
     public void SetVotedFor(Guid? votedForId)
     {
         VotedForId = votedForId;
-        UpdateDate = DateTime.UtcNow;
     }
 
     public void ClearVotedFor()
     {
         VotedForId = null;
-        UpdateDate = DateTime.UtcNow;
     }
 }

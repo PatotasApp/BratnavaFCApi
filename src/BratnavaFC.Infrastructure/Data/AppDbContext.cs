@@ -1,3 +1,6 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using BratnavaFC.Domain.Entities;
 
@@ -83,5 +86,46 @@ public class AppDbContext : DbContext
             b.Property(c => c.Name).IsRequired().HasMaxLength(100);
             b.Property(c => c.HexValue).IsRequired().HasMaxLength(10);
         });
+    }
+
+    public override int SaveChanges()
+    {
+        ApplyTimestamps();
+        return base.SaveChanges();
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        ApplyTimestamps();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        ApplyTimestamps();
+        return base.SaveChangesAsync(cancellationToken);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        ApplyTimestamps();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    private void ApplyTimestamps()
+    {
+        var utcNow = DateTime.UtcNow;
+        foreach (var entry in ChangeTracker.Entries<BaseEntity>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Property(nameof(BaseEntity.CreateDate)).CurrentValue = utcNow;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Property(nameof(BaseEntity.CreateDate)).IsModified = false;
+                entry.Property(nameof(BaseEntity.UpdateDate)).CurrentValue = utcNow;
+            }
+        }
     }
 }

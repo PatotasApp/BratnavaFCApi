@@ -35,39 +35,33 @@ public class MatchEntity : BaseEntity
     public void SetPlaceName(string placeName)
     {
         PlaceName = placeName;
-        UpdateDate = DateTime.UtcNow;
     }
 
     public void SetPlayedAt(DateTime playedAt)
     {
         PlayedAt = playedAt;
-        UpdateDate = DateTime.UtcNow;
     }
 
     public void SetScore(int homeGoals, int awayGoals)
     {
         TeamAGoals = homeGoals;
         TeamBGoals = awayGoals;
-        UpdateDate = DateTime.UtcNow;
     }
 
     public void SetTeamAColor(Guid? colorId)
     {
         TeamAColorId = colorId;
-        UpdateDate = DateTime.UtcNow;
     }
 
     public void SetTeamBColor(Guid? colorId)
     {
         TeamBColorId = colorId;
-        UpdateDate = DateTime.UtcNow;
     }
 
     public void SetTeamColors(Guid? teamAColorId, Guid? teamBColorId)
     {
         TeamAColorId = teamAColorId;
         TeamBColorId = teamBColorId;
-        UpdateDate = DateTime.UtcNow;
     }
 
     public void AddPlayer(MatchPlayerEntity player)
@@ -78,14 +72,12 @@ public class MatchEntity : BaseEntity
 
         player.AssignToMatch(this);
         Players.Add(player);
-        UpdateDate = DateTime.UtcNow;
     }
 
     public bool RemovePlayer(MatchPlayerEntity player)
     {
         ArgumentNullException.ThrowIfNull(player);
         var removed = Players.Remove(player);
-        if (removed) UpdateDate = DateTime.UtcNow;
         return removed;
     }
 
@@ -93,6 +85,5 @@ public class MatchEntity : BaseEntity
     {
         if (IsFinalized) return;
         IsFinalized = true;
-        UpdateDate = DateTime.UtcNow;
     }
 }
