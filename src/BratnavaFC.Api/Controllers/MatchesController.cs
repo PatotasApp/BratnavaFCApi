@@ -141,15 +141,9 @@ public class MatchesController : ControllerBase
         }
     }
 
-    private static MatchDto ToDto(MatchEntity e)
-    {
-        return new MatchDto(e.PlayedAt, e.TeamAGoals ?? 0, e.TeamBGoals ?? 0, e.PlaceName, e.TeamAColorId, e.TeamBColorId)
-    }
+    private static MatchDto ToDto(MatchEntity e) =>
+        new(e.PlayedAt, e.TeamAGoals ?? 0, e.TeamBGoals ?? 0, e.PlaceName, e.TeamAColorId, e.TeamBColorId);
 
-    private static MatchEntity FromDto(CreateMatchDto dto)
-    {
-        var match = new MatchEntity(dto.PlayedAt, dto.PlaceName);
-
-        return match;
-    }
+    private static MatchEntity FromDto(CreateMatchDto dto) =>
+        new(dto.PlayedAt, dto.PlaceName);
 }
