@@ -6,10 +6,5 @@ using System.Threading.Tasks;
 
 namespace BratnavaFC.Domain.Dtos
 {
-    public class SetMatchColorsRequestDto
-    {
-        public Guid? TeamAColorId { get; init; }
-        public Guid? TeamBColorId { get; init; }
-        public bool Randomize { get; init; } = false;
-    }
+    public record SetMatchColorsRequestDto(Guid? TeamAColorId, Guid? TeamBColorId, bool Randomize);
 }

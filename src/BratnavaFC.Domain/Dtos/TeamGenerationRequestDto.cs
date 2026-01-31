@@ -7,11 +7,5 @@ using System.Threading.Tasks;
 
 namespace BratnavaFC.Domain.Dtos
 {
-    public class TeamGenerationRequestDto
-    {
-        public List<PlayerRequestDto> Players { get; init; } = new();
-        public StrategyType StrategyType { get; init; } = StrategyType.Random;
-        public int PlayersPerTeam { get; init; } = 5;
-        public bool IncludeGoalkeepers { get; init; } = true;
-    }
+    public record TeamGenerationRequestDto(List<PlayerRequestDto> Players, StrategyType StrategyType, int PlayersPerTeam, bool IncludeGoalkeepers);
 }

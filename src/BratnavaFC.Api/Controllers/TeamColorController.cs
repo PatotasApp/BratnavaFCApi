@@ -1,6 +1,7 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
+using Microsoft.AspNetCore.Mvc;
 
 namespace BratnavaFC.Api.Controllers;
 
@@ -31,7 +32,7 @@ public class TeamColorsController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateTeamColorRequest dto)
+    public async Task<IActionResult> Create([FromBody] CreateTeamColorDto dto)
     {
         if (dto == null) return BadRequest();
         var entity = new TeamColorEntity(dto.Name, dto.HexValue);
@@ -40,7 +41,7 @@ public class TeamColorsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateTeamColorRequest dto)
+    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateTeamColorDto dto)
     {
         if (dto == null) return BadRequest();
         var existing = await _service.GetByIdAsync(id);
@@ -59,7 +60,4 @@ public class TeamColorsController : ControllerBase
         await _service.DeleteAsync(id);
         return NoContent();
     }
-
-    public record CreateTeamColorRequest(string Name, string HexValue);
-    public record UpdateTeamColorRequest(string Name, string HexValue);
 }

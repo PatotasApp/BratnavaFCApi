@@ -105,12 +105,8 @@ public class MatchesController : ControllerBase
         var mvp = await _service.GetMvpAsync(matchId);
         if (mvp == null) return NotFound();
 
-        var dto = new MatchPlayerDto
-        {
-            Id = mvp.Id,
-            Name = mvp.Name,
-            IsMvp = mvp.IsMvp,
-        };
+        var dto = new MatchPlayerDto(mvp.Id, mvp.Name, mvp.IsMvp);
+        
         return Ok(dto);
     }
 
@@ -147,15 +143,7 @@ public class MatchesController : ControllerBase
 
     private static MatchDto ToDto(MatchEntity e)
     {
-        return new MatchDto
-        {
-            PlayedAt = e.PlayedAt,
-            PlaceName = e.PlaceName,
-            TeamAGoals = e.TeamAGoals ?? 0,
-            TeamBGoals = e.TeamBGoals ?? 0,
-            TeamAColorId = e.TeamAColorId,
-            TeamBColorId = e.TeamBColorId
-        };
+        return new MatchDto(e.PlayedAt, e.TeamAGoals ?? 0, e.TeamBGoals ?? 0, e.PlaceName, e.TeamAColorId, e.TeamBColorId)
     }
 
     private static MatchEntity FromDto(CreateMatchDto dto)

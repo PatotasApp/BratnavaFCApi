@@ -28,7 +28,8 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
 
         var candidates = SelectCandidates(players, statsByPlayerId, settings);
         var perTeam = settings.PlayersPerTeam;
-        var result = new TeamsResultDto();
+
+        var result = new TeamsResultDto([], [], []);
 
         var maxAssignable = Math.Min(candidates.Count, perTeam * 2);
         if (maxAssignable == 0)
