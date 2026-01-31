@@ -1,10 +1,16 @@
-﻿namespace BratnavaFC.Domain.Dtos;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 
-public class MatchDto
+namespace BratnavaFC.Domain.Dtos
 {
-    public Guid? Id { get; set; }
-    public DateTime PlayedAt { get; set; }
-    public int HomeGoals { get; set; }
-    public int AwayGoals { get; set; }
-    public List<MatchPlayerDto> Players { get; set; } = new();
+    public class MatchDto
+    {
+        public DateTime PlayedAt { get; set; }
+        public int TeamAGoals { get; set; }
+        public int TeamBGoals { get; set; }
+        public string PlaceName { get; set; } = string.Empty;  
+    }
 }

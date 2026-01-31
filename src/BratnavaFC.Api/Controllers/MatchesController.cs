@@ -33,7 +33,7 @@ public class MatchesController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] MatchDto dto)
+    public async Task<IActionResult> Create([FromBody] CreateMatchDto dto)
     {
         var entity = FromDto(dto);
         var created = await _service.CreateAsync(entity);
@@ -41,7 +41,7 @@ public class MatchesController : ControllerBase
     }
 
     [HttpPut("{matchId:guid}")]
-    public async Task<IActionResult> Update(Guid matchId, [FromBody] MatchDto dto)
+    public async Task<IActionResult> Update(Guid matchId, [FromBody] UpdateMatchDto dto)
     {
         if (dto.Id.HasValue && dto.Id.Value != matchId) return BadRequest();
 
@@ -49,22 +49,10 @@ public class MatchesController : ControllerBase
         if (existing == null) return NotFound();
 
         existing.SetPlayedAt(dto.PlayedAt);
-        existing.SetScore(dto.HomeGoals, dto.AwayGoals);
-
-        var existingPlayers = existing.Players.ToList();
-        foreach (var p in existingPlayers)
-        {
-            existing.RemovePlayer(p);
-        }
-
-        foreach (var pDto in dto.Players)
-        {
-            var player = new MatchPlayerEntity(pDto.Name);
-            if (pDto.IsMvp == true) player.SetMvp();
-            existing.AddPlayer(player);
-        }
+        existing.SetPlaceName(dto.PlaceName);
 
         await _service.UpdateAsync(existing);
+
         return NoContent();
     }
 
@@ -130,29 +118,17 @@ public class MatchesController : ControllerBase
     {
         return new MatchDto
         {
-            Id = e.Id,
             PlayedAt = e.PlayedAt,
-            HomeGoals = e.TeamAGoals,
-            AwayGoals = e.TeamBGoals,
-            Players = e.Players.Select(p => new MatchPlayerDto
-            {
-                Id = p.Id,
-                Name = p.Name,
-                IsMvp = p.IsMvp
-            }).ToList()
+            PlaceName = e.PlaceName,
+            TeamAGoals = e.TeamAGoals ?? 0,
+            TeamBGoals = e.TeamBGoals ?? 0
         };
     }
 
-    private static MatchEntity FromDto(MatchDto dto)
+    private static MatchEntity FromDto(CreateMatchDto dto)
     {
-        var match = new MatchEntity(dto.PlayedAt);
-        match.SetScore(dto.HomeGoals, dto.AwayGoals);
-        foreach (var p in dto.Players)
-        {
-            var player = new MatchPlayerEntity(p.Name);
-            if (p.IsMvp == true) player.SetMvp();
-            match.AddPlayer(player);
-        }
+        var match = new MatchEntity(dto.PlayedAt, dto.PlaceName);
+
         return match;
     }
 }
