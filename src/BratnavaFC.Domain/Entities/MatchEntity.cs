@@ -24,6 +24,14 @@ public class MatchEntity : BaseEntity
     public IReadOnlyList<MatchPlayerEntity> TeamAPlayers => Players.Where(p => p.Team == 1).ToList();
     public IReadOnlyList<MatchPlayerEntity> TeamBPlayers => Players.Where(p => p.Team == 2).ToList();
 
+    // Team color references (optional)
+    public Guid? TeamAColorId { get; private set; }
+    public Guid? TeamBColorId { get; private set; }
+
+    // Navigation properties (optional for EF)
+    public TeamColorEntity? TeamAColor { get; private set; }
+    public TeamColorEntity? TeamBColor { get; private set; }
+
     public void SetPlaceName(string placeName)
     {
         PlaceName = placeName;
@@ -40,6 +48,25 @@ public class MatchEntity : BaseEntity
     {
         TeamAGoals = homeGoals;
         TeamBGoals = awayGoals;
+        UpdateDate = DateTime.UtcNow;
+    }
+
+    public void SetTeamAColor(Guid? colorId)
+    {
+        TeamAColorId = colorId;
+        UpdateDate = DateTime.UtcNow;
+    }
+
+    public void SetTeamBColor(Guid? colorId)
+    {
+        TeamBColorId = colorId;
+        UpdateDate = DateTime.UtcNow;
+    }
+
+    public void SetTeamColors(Guid? teamAColorId, Guid? teamBColorId)
+    {
+        TeamAColorId = teamAColorId;
+        TeamBColorId = teamBColorId;
         UpdateDate = DateTime.UtcNow;
     }
 

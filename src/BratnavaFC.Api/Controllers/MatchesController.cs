@@ -129,6 +129,22 @@ public class MatchesController : ControllerBase
         }
     }
 
+    [HttpPut("{matchId:guid}/colors")]
+    public async Task<IActionResult> SetMatchColors(Guid matchId, [FromBody] SetMatchColorsRequestDto dto)
+    {
+        if (dto == null) return BadRequest();
+
+        try
+        {
+            await _service.SetTeamColorsAsync(matchId, dto.TeamAColorId, dto.TeamBColorId, dto.Randomize);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     private static MatchDto ToDto(MatchEntity e)
     {
         return new MatchDto
@@ -136,7 +152,9 @@ public class MatchesController : ControllerBase
             PlayedAt = e.PlayedAt,
             PlaceName = e.PlaceName,
             TeamAGoals = e.TeamAGoals ?? 0,
-            TeamBGoals = e.TeamBGoals ?? 0
+            TeamBGoals = e.TeamBGoals ?? 0,
+            TeamAColorId = e.TeamAColorId,
+            TeamBColorId = e.TeamBColorId
         };
     }
 

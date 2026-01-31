@@ -16,4 +16,5 @@ public interface IMatchService
     Task FinalizeMatchAsync(Guid matchId);
     Task<MatchPlayerEntity?> GetMvpAsync(Guid matchId);
     Task SetScoreAsync(Guid matchId, int teamAGoals, int teamBGoals);
+    Task SetTeamColorsAsync(Guid matchId, Guid? teamAColorId, Guid? teamBColorId, bool randomize = false);
 }

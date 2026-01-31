@@ -21,6 +21,7 @@ builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connect
 builder.Services.AddScoped(typeof(IRepositoryBase<>), typeof(RepositoryBase<>));
 builder.Services.AddScoped<IMatchService, MatchService>();
 builder.Services.AddScoped<IPlayerStatsService, PlayerStatsService>();
+builder.Services.AddScoped<ITeamColorService, TeamColorService>();
 
 // Register TeamGenerationService so controllers can use it
 builder.Services.AddScoped<TeamGenerationService>();

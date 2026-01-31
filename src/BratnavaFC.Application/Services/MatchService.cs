@@ -147,4 +147,42 @@ public class MatchService : IMatchService
         match.SetScore(teamAGoals, teamBGoals);
         await _context.SaveChangesAsync();
     }
+
+    public async Task SetTeamColorsAsync(Guid matchId, Guid? teamAColorId, Guid? teamBColorId, bool randomize = false)
+    {
+        var match = await _context.Matches.FirstOrDefaultAsync(m => m.Id == matchId);
+        if (match == null) throw new InvalidOperationException("Partida não encontrada.");
+        if (match.IsFinalized) throw new InvalidOperationException("Partida já finalizada.");
+
+        if (randomize)
+        {
+            var colors = await _context.TeamColors.ToListAsync();
+            if (colors.Count == 0) throw new InvalidOperationException("Não há cores cadastradas para sortear.");
+
+            var rng = Random.Shared;
+            var shuffled = colors.OrderBy(_ => rng.Next()).ToList();
+            var a = shuffled[0].Id;
+            var b = shuffled.Count > 1 ? shuffled[1].Id : shuffled[0].Id;
+
+            match.SetTeamColors(a, b);
+        }
+        else
+        {
+            if (teamAColorId.HasValue)
+            {
+                var foundA = await _context.TeamColors.FindAsync(teamAColorId.Value);
+                if (foundA == null) throw new InvalidOperationException("Cor do time A não encontrada.");
+            }
+
+            if (teamBColorId.HasValue)
+            {
+                var foundB = await _context.TeamColors.FindAsync(teamBColorId.Value);
+                if (foundB == null) throw new InvalidOperationException("Cor do time B não encontrada.");
+            }
+
+            match.SetTeamColors(teamAColorId, teamBColorId);
+        }
+
+        await _context.SaveChangesAsync();
+    }
 }

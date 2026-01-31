@@ -10,6 +10,7 @@ public class AppDbContext : DbContext
     public DbSet<MatchEntity> Matches => Set<MatchEntity>();
     public DbSet<MatchPlayerEntity> MatchPlayers => Set<MatchPlayerEntity>();
     public DbSet<VoteEntity> Votes => Set<VoteEntity>();
+    public DbSet<TeamColorEntity> TeamColors => Set<TeamColorEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -28,6 +29,17 @@ public class AppDbContext : DbContext
 
             b.Ignore(x => x.TeamAPlayers);
             b.Ignore(x => x.TeamBPlayers);
+
+            // optional relationship to team colors
+            b.HasOne(m => m.TeamAColor)
+             .WithMany()
+             .HasForeignKey(m => m.TeamAColorId)
+             .OnDelete(DeleteBehavior.SetNull);
+
+            b.HasOne(m => m.TeamBColor)
+             .WithMany()
+             .HasForeignKey(m => m.TeamBColorId)
+             .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<MatchPlayerEntity>(b =>
@@ -53,7 +65,7 @@ public class AppDbContext : DbContext
              .OnDelete(DeleteBehavior.Cascade);
 
             b.HasOne(v => v.Voter)
-             .WithMany() 
+             .WithMany()
              .HasForeignKey(v => v.VoterId)
              .OnDelete(DeleteBehavior.Restrict);
 
@@ -63,6 +75,13 @@ public class AppDbContext : DbContext
              .OnDelete(DeleteBehavior.Restrict);
 
             b.HasIndex(v => new { v.MatchId, v.VoterId }).IsUnique();
+        });
+
+        modelBuilder.Entity<TeamColorEntity>(b =>
+        {
+            b.HasKey(c => c.Id);
+            b.Property(c => c.Name).IsRequired().HasMaxLength(100);
+            b.Property(c => c.HexValue).IsRequired().HasMaxLength(10);
         });
     }
 }

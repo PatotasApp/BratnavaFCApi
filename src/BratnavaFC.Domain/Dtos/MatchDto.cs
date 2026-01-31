@@ -1,8 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace BratnavaFC.Domain.Dtos
 {
@@ -11,6 +7,10 @@ namespace BratnavaFC.Domain.Dtos
         public DateTime PlayedAt { get; set; }
         public int TeamAGoals { get; set; }
         public int TeamBGoals { get; set; }
-        public string PlaceName { get; set; } = string.Empty;  
+        public string PlaceName { get; set; } = string.Empty;
+
+        // optional color ids for teams
+        public Guid? TeamAColorId { get; set; }
+        public Guid? TeamBColorId { get; set; }
     }
 }
