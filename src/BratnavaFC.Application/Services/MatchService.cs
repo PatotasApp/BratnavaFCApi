@@ -43,6 +43,9 @@ public class MatchService : IMatchService
 
     public async Task UpdateAsync(MatchEntity match)
     {
+        if (match.IsFinalized)
+            throw new InvalidOperationException("Partida já finalizada. Não é possível atualizar seus dados.");
+
         match.UpdateDate = DateTime.UtcNow;
         _repository.Update(match);
         await _repository.SaveChangesAsync();
@@ -133,5 +136,15 @@ public class MatchService : IMatchService
         if (top == null || top.PlayerId == Guid.Empty) return null;
 
         return match.Players.FirstOrDefault(p => p.Id == top.PlayerId);
+    }
+
+    public async Task SetScoreAsync(Guid matchId, int teamAGoals, int teamBGoals)
+    {
+        var match = await _context.Matches.FirstOrDefaultAsync(m => m.Id == matchId);
+        if (match == null) throw new InvalidOperationException("Partida não encontrada.");
+        if (match.IsFinalized) throw new InvalidOperationException("Partida já finalizada.");
+
+        match.SetScore(teamAGoals, teamBGoals);
+        await _context.SaveChangesAsync();
     }
 }

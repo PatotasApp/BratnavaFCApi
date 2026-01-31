@@ -114,6 +114,21 @@ public class MatchesController : ControllerBase
         return Ok(dto);
     }
 
+    [HttpPut("{matchId:guid}/score")]
+    public async Task<IActionResult> SetScore(Guid matchId, [FromBody] SetScoreRequestDto dto)
+    {
+        if (dto == null) return BadRequest();
+        try
+        {
+            await _service.SetScoreAsync(matchId, dto.TeamAGoals, dto.TeamBGoals);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     private static MatchDto ToDto(MatchEntity e)
     {
         return new MatchDto
