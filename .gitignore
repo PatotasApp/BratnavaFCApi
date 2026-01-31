@@ -12,3 +12,5 @@
 /src/BratnavaFC.Domain/bin/Debug/net8.0
 /src/BratnavaFC.Domain/obj
 /src/BratnavaFC.Infrastructure/bin/Debug/net8.0
+/BranavaFCTests/bin/Debug/net8.0
+/BranavaFCTests/obj
