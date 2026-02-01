@@ -7,9 +7,9 @@ namespace BratnavaFC.Application.Abstractions;
 
 public interface ITeamColorService
 {
-    Task<IEnumerable<TeamColorEntity>> GetAllAsync();
-    Task<TeamColorEntity?> GetByIdAsync(Guid id);
-    Task<TeamColorEntity> CreateAsync(TeamColorEntity color);
-    Task UpdateAsync(TeamColorEntity color);
-    Task DeleteAsync(Guid id);
+    Task<IEnumerable<TeamColorEntity>> GetAllAsync(CancellationToken cancellationToken);
+    Task<TeamColorEntity?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
+    Task<TeamColorEntity> CreateAsync(TeamColorEntity color, CancellationToken cancellationToken);
+    Task UpdateAsync(TeamColorEntity color, CancellationToken cancellationToken);
+    Task DeleteAsync(Guid id, CancellationToken cancellationToken);
 }

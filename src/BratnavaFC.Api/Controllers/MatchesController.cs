@@ -116,7 +116,7 @@ public class MatchesController : ControllerBase
         if (dto == null) return BadRequest();
         try
         {
-            await _service.SetScoreAsync(matchId, dto.TeamAGoals, dto.TeamBGoals, cancellationToken);
+            await _service.SetScoreAsync(matchId, dto.TeamAGoals, dto.TeamBGoals, cancellationToken: cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -126,7 +126,7 @@ public class MatchesController : ControllerBase
     }
 
     [HttpPut("{matchId:guid}/colors")]
-    public async Task<IActionResult> SetMatchColors(Guid matchId, [FromBody] SetMatchColorsRequestDto dto)
+    public async Task<IActionResult> SetMatchColors(Guid matchId, [FromBody] SetMatchColorsRequestDto dto, CancellationToken cancellationToken)
     {
         if (dto == null) return BadRequest();
 
