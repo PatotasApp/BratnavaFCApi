@@ -16,19 +16,24 @@ public class RepositoryBase<T> : IRepositoryBase<T> where T : BaseEntity
         _dbSet = _context.Set<T>();
     }
 
-    public async Task<T?> GetByIdAsync(Guid id)
+    public async Task<T?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
     {
-        return await _dbSet.FindAsync(id);
+        return await _dbSet.FindAsync(id, cancellationToken);
     }
 
-    public async Task<IEnumerable<T>> GetAllAsync()
+    public async Task<IEnumerable<T>> GetAllAsync(CancellationToken cancellationToken)
     {
-        return await _dbSet.ToListAsync();
+        return await _dbSet.ToListAsync(cancellationToken);
     }
 
-    public async Task AddAsync(T entity)
+    public async Task AddAsync(T entity, CancellationToken cancellationToken)
     {
-        await _dbSet.AddAsync(entity);
+        await _dbSet.AddAsync(entity, cancellationToken);
+    }
+
+    public void Add(T entity)
+    {
+        _dbSet.Add(entity);
     }
 
     public void Update(T entity)
@@ -42,8 +47,5 @@ public class RepositoryBase<T> : IRepositoryBase<T> where T : BaseEntity
         _dbSet.Remove(entity);
     }
 
-    public Task SaveChangesAsync()
-    {
-        return _context.SaveChangesAsync();
-    }
+    public Task<int> SaveChangesAsync(CancellationToken cancellationToken) => _context.SaveChangesAsync(cancellationToken);
 }

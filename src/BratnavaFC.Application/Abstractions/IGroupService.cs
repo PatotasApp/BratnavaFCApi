@@ -1,0 +1,14 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using BratnavaFC.Domain.Dtos.Groups;
+
+namespace BratnavaFC.Application.Abstractions;
+
+public interface IGroupService
+{
+    Task CreateAsync(GroupContracts.CreateGroupRequest request, CancellationToken cancellationToken);
+    Task UpdateAsync(GroupContracts.UpdateGroupRequest request, CancellationToken cancellationToken);
+    Task DeleteAsync(GroupContracts.DeleteGroupRequest request, CancellationToken cancellationToken);
+    Task<GroupContracts.GetResponse> GetByIdAsync(Guid groupId, CancellationToken cancellationToken);
+}

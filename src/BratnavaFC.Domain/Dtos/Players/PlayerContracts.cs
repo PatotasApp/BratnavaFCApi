@@ -1,0 +1,12 @@
+using System;
+using BratnavaFC.Domain.Enums;
+
+namespace BratnavaFC.Domain.Dtos.Players;
+
+public class PlayerContracts
+{
+    public record CreatePlayerRequest(string Name, Guid UserId, Guid GroupId, SoccerPosition MainPosition, SoccerPosition[] Positions, decimal SkillPoints, Status Status);
+    public record UpdatePlayerRequest(Guid Id, string Name, SoccerPosition MainPosition, SoccerPosition[] Positions, decimal SkillPoints, Status Status);
+    public record DeletePlayerRequest(Guid PlayerId);
+    public record GetResponse(Guid Id, string Name, Guid UserId, Guid GroupId, SoccerPosition MainPosition, SoccerPosition[] Positions, decimal SkillPoints, Status Status);
+}

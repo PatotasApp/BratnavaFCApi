@@ -9,11 +9,11 @@ public interface IMatchService
 {
     Task<IEnumerable<MatchEntity>> GetAllAsync();
     Task<MatchEntity?> GetByIdAsync(Guid id);
-    Task<MatchEntity> CreateAsync(MatchEntity match);
-    Task UpdateAsync(MatchEntity match);
-    Task DeleteAsync(Guid id);
-    Task VoteAsync(Guid matchId, Guid voterPlayerId, Guid votedPlayerId);
-    Task FinalizeMatchAsync(Guid matchId);
+    Task<MatchEntity> CreateAsync(MatchEntity match, CancellationToken cancellationToken);
+    Task UpdateAsync(MatchEntity match, CancellationToken cancellationToken);
+    Task DeleteAsync(Guid id, CancellationToken cancellationToken);
+    Task VoteAsync(Guid matchId, Guid voterPlayerId, Guid votedPlayerId, CancellationToken cancellationToken);
+    Task FinalizeMatchAsync(Guid matchId, CancellationToken cancellationToken);
     Task<MatchPlayerEntity?> GetMvpAsync(Guid matchId);
-    Task SetScoreAsync(Guid matchId, int teamAGoals, int teamBGoals);
+    Task SetScoreAsync(Guid matchId, int teamAGoals, int teamBGoals, CancellationToken cancellationToken);
 }

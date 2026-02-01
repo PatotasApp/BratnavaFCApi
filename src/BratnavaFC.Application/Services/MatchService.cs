@@ -33,48 +33,48 @@ public class MatchService : IMatchService
             .FirstOrDefaultAsync(m => m.Id == id);
     }
 
-    public async Task<MatchEntity> CreateAsync(MatchEntity match)
+    public async Task<MatchEntity> CreateAsync(MatchEntity match, CancellationToken cancellationToken)
     {
         match.CreateDate = DateTime.UtcNow;
-        await _repository.AddAsync(match);
-        await _repository.SaveChangesAsync();
+        _repository.Add(match);
+        await _repository.SaveChangesAsync(cancellationToken);
         return match;
     }
 
-    public async Task UpdateAsync(MatchEntity match)
+    public async Task UpdateAsync(MatchEntity match, CancellationToken cancellationToken)
     {
         if (match.IsFinalized)
-            throw new InvalidOperationException("Partida já finalizada. Não é possível atualizar seus dados.");
+            throw new InvalidOperationException("Partida jÃ¡ finalizada. NÃ£o Ã© possÃ­vel atualizar seus dados.");
 
         match.UpdateDate = DateTime.UtcNow;
         _repository.Update(match);
-        await _repository.SaveChangesAsync();
+        await _repository.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task DeleteAsync(Guid id)
+    public async Task DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        var entity = await _repository.GetByIdAsync(id);
+        var entity = await _repository.GetByIdAsync(id, cancellationToken);
         if (entity == null) return;
         _repository.Remove(entity);
-        await _repository.SaveChangesAsync();
+        await _repository.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task VoteAsync(Guid matchId, Guid voterPlayerId, Guid votedPlayerId)
+    public async Task VoteAsync(Guid matchId, Guid voterPlayerId, Guid votedPlayerId, CancellationToken cancellationToken)
     {
         var match = await _context.Matches
             .Include(m => m.Players)
             .Include(m => m.Votes)
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
-        if (match == null) throw new InvalidOperationException("Partida não encontrada.");
+        if (match == null) throw new InvalidOperationException("Partida nï¿½o encontrada.");
 
-        if (match.IsFinalized) throw new InvalidOperationException("Partida já finalizada.");
+        if (match.IsFinalized) throw new InvalidOperationException("Partida jï¿½ finalizada.");
 
         var voter = match.Players.FirstOrDefault(p => p.Id == voterPlayerId);
         if (voter == null) throw new InvalidOperationException("Apenas jogadores da partida podem votar.");
 
         var already = match.Votes.Any(v => v.VoterId == voterPlayerId);
-        if (already) throw new InvalidOperationException("Esse jogador já votou.");
+        if (already) throw new InvalidOperationException("Esse jogador jï¿½ votou.");
 
         var votedFor = match.Players.FirstOrDefault(p => p.Id == votedPlayerId);
         if (votedFor == null) throw new InvalidOperationException("Apenas jogadores que jogaram podem ser votados.");
@@ -85,18 +85,18 @@ public class MatchService : IMatchService
         votedFor.AddReceivedVote(vote);
         voter.SetVotedFor(votedFor.Id);
 
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task FinalizeMatchAsync(Guid matchId)
+    public async Task FinalizeMatchAsync(Guid matchId, CancellationToken cancellationToken)
     {
         var match = await _context.Matches
             .Include(m => m.Players)
             .Include(m => m.Votes)
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
-        if (match == null) throw new InvalidOperationException("Partida não encontrada.");
-        if (match.IsFinalized) throw new InvalidOperationException("Partida já finalizada.");
+        if (match == null) throw new InvalidOperationException("Partida nï¿½o encontrada.");
+        if (match.IsFinalized) throw new InvalidOperationException("Partida jï¿½ finalizada.");
 
         var top = match.Votes
             .Where(v => v.VotedForId != Guid.Empty)
@@ -114,7 +114,7 @@ public class MatchService : IMatchService
         }
 
         match.MarkFinalized();
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<MatchPlayerEntity?> GetMvpAsync(Guid matchId)
@@ -138,13 +138,13 @@ public class MatchService : IMatchService
         return match.Players.FirstOrDefault(p => p.Id == top.PlayerId);
     }
 
-    public async Task SetScoreAsync(Guid matchId, int teamAGoals, int teamBGoals)
+    public async Task SetScoreAsync(Guid matchId, int teamAGoals, int teamBGoals, CancellationToken cancellationToken)
     {
         var match = await _context.Matches.FirstOrDefaultAsync(m => m.Id == matchId);
-        if (match == null) throw new InvalidOperationException("Partida não encontrada.");
-        if (match.IsFinalized) throw new InvalidOperationException("Partida já finalizada.");
+        if (match == null) throw new InvalidOperationException("Partida nï¿½o encontrada.");
+        if (match.IsFinalized) throw new InvalidOperationException("Partida jï¿½ finalizada.");
 
         match.SetScore(teamAGoals, teamBGoals);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(cancellationToken);
     }
 }

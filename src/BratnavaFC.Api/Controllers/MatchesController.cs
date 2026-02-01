@@ -33,15 +33,15 @@ public class MatchesController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateMatchDto dto)
+    public async Task<IActionResult> Create([FromBody] CreateMatchDto dto, CancellationToken cancellationToken)
     {
         var entity = FromDto(dto);
-        var created = await _service.CreateAsync(entity);
+        var created = await _service.CreateAsync(entity, cancellationToken);
         return CreatedAtAction(nameof(Get), new { matchId = created.Id }, ToDto(created));
     }
 
     [HttpPut("{matchId:guid}")]
-    public async Task<IActionResult> Update(Guid matchId, [FromBody] UpdateMatchDto dto)
+    public async Task<IActionResult> Update(Guid matchId, [FromBody] UpdateMatchDto dto, CancellationToken cancellationToken)
     {
         if (dto.Id.HasValue && dto.Id.Value != matchId) return BadRequest();
 
@@ -51,32 +51,32 @@ public class MatchesController : ControllerBase
         existing.SetPlayedAt(dto.PlayedAt);
         existing.SetPlaceName(dto.PlaceName);
 
-        await _service.UpdateAsync(existing);
+        await _service.UpdateAsync(existing, cancellationToken);
 
         return NoContent();
     }
 
     [HttpDelete("{matchId:guid}")]
-    public async Task<IActionResult> Delete(Guid matchId)
+    public async Task<IActionResult> Delete(Guid matchId, CancellationToken cancellationToken)
     {
-        await _service.DeleteAsync(matchId);
+        await _service.DeleteAsync(matchId, cancellationToken);
         return NoContent();
     }
 
     [HttpPost("{matchId:guid}/vote")]
-    public async Task<IActionResult> Vote(Guid matchId, [FromBody] VoteRequestDto dto)
+    public async Task<IActionResult> Vote(Guid matchId, [FromBody] VoteRequestDto dto, CancellationToken cancellationToken)
     {
         if (dto == null) return BadRequest();
 
         if (dto.VoterPlayerId == Guid.Empty || dto.VotedPlayerId == Guid.Empty)
-            return BadRequest("O jogador que votou e o votado são obrigatórios.");
+            return BadRequest("O jogador que votou e o votado sï¿½o obrigatï¿½rios.");
 
         if (dto.VoterPlayerId == dto.VotedPlayerId)
-            return BadRequest("O jogador não pode votar em si mesmo.");
+            return BadRequest("O jogador nï¿½o pode votar em si mesmo.");
 
         try
         {
-            await _service.VoteAsync(matchId, dto.VoterPlayerId, dto.VotedPlayerId);
+            await _service.VoteAsync(matchId, dto.VoterPlayerId, dto.VotedPlayerId, cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -86,11 +86,11 @@ public class MatchesController : ControllerBase
     }
 
     [HttpPost("{matchId:guid}/finalize")]
-    public async Task<IActionResult> Finalize(Guid matchId)
+    public async Task<IActionResult> Finalize(Guid matchId, CancellationToken cancellationToken)
     {
         try
         {
-            await _service.FinalizeMatchAsync(matchId);
+            await _service.FinalizeMatchAsync(matchId, cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -115,12 +115,12 @@ public class MatchesController : ControllerBase
     }
 
     [HttpPut("{matchId:guid}/score")]
-    public async Task<IActionResult> SetScore(Guid matchId, [FromBody] SetScoreRequestDto dto)
+    public async Task<IActionResult> SetScore(Guid matchId, [FromBody] SetScoreRequestDto dto, CancellationToken cancellationToken)
     {
         if (dto == null) return BadRequest();
         try
         {
-            await _service.SetScoreAsync(matchId, dto.TeamAGoals, dto.TeamBGoals);
+            await _service.SetScoreAsync(matchId, dto.TeamAGoals, dto.TeamBGoals, cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex)

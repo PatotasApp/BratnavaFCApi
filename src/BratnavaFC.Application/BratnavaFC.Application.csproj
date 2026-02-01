@@ -10,5 +10,8 @@
     <ProjectReference Include="..\BratnavaFC.Domain\BratnavaFC.Domain.csproj" />
     <ProjectReference Include="..\BratnavaFC.Infrastructure\BratnavaFC.Infrastructure.csproj" />
   </ItemGroup>
-
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.13" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.13" />
+  </ItemGroup>
 </Project>

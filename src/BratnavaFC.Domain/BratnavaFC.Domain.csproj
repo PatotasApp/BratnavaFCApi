@@ -6,4 +6,12 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Folder Include="Dtos\Authentication\" />
+    <Folder Include="Dtos\Groups\" />
+    <Folder Include="Dtos\Players\" />
+    <Folder Include="Dtos\Users\" />
+    <Folder Include="Enums\" />
+  </ItemGroup>
+
 </Project>
