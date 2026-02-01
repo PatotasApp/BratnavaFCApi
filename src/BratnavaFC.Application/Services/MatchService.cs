@@ -46,7 +46,6 @@ public class MatchService : IMatchService
         if (match.IsFinalized)
             throw new InvalidOperationException("Partida já finalizada. Não é possível atualizar seus dados.");
 
-        match.UpdateDate = DateTime.UtcNow;
         _repository.Update(match);
         await _repository.SaveChangesAsync(cancellationToken);
     }
@@ -138,12 +137,11 @@ public class MatchService : IMatchService
         return match.Players.FirstOrDefault(p => p.Id == top.PlayerId);
     }
 
-    public async Task SetScoreAsync(Guid matchId, int teamAGoals, int teamBGoals, CancellationToken cancellationToken)
+    public async Task SetScoreAsync(Guid matchId, int teamAGoals, int teamBGoals, bool randomize = false, CancellationToken cancellationToken = default)
     {
         var match = await _context.Matches.FirstOrDefaultAsync(m => m.Id == matchId);
-        if (match == null) throw new InvalidOperationException("Partida n�o encontrada.");
-        if (match.IsFinalized) throw new InvalidOperationException("Partida j� finalizada.");
-
+        if (match == null) throw new InvalidOperationException("Partida no encontrada.");
+        if (match.IsFinalized) throw new InvalidOperationException("Partida j finalizada.");
         match.SetScore(teamAGoals, teamBGoals);
         await _context.SaveChangesAsync(cancellationToken);
     }

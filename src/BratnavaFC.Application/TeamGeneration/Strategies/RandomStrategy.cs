@@ -48,7 +48,7 @@ public class RandomStrategy : ITeamGenerationStrategy
 
         var unassigned = unassignedFromCandidates.Concat(excludedPlayerIds).ToList();
 
-        var result = new TeamsResultDto { TeamA = teamA, TeamB = teamB, Unassigned = unassigned };
+        var result = new TeamsResultDto(teamA, teamB, unassigned);
         return Task.FromResult(result);
     }
 }

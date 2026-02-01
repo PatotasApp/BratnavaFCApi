@@ -38,7 +38,6 @@ public class RepositoryBase<T> : IRepositoryBase<T> where T : BaseEntity
 
     public void Update(T entity)
     {
-        entity.UpdateDate = DateTime.UtcNow;
         _dbSet.Update(entity);
     }
 

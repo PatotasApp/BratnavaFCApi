@@ -1,3 +1,6 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
@@ -11,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<MatchEntity> Matches => Set<MatchEntity>();
     public DbSet<MatchPlayerEntity> MatchPlayers => Set<MatchPlayerEntity>();
     public DbSet<VoteEntity> Votes => Set<VoteEntity>();
+    public DbSet<TeamColorEntity> TeamColors => Set<TeamColorEntity>();
     public DbSet<UserEntity> Users => Set<UserEntity>();
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
     public DbSet<GroupEntity> Groups => Set<GroupEntity>();
@@ -33,6 +37,17 @@ public class AppDbContext : DbContext
 
             b.Ignore(x => x.TeamAPlayers);
             b.Ignore(x => x.TeamBPlayers);
+
+            // optional relationship to team colors
+            b.HasOne(m => m.TeamAColor)
+             .WithMany()
+             .HasForeignKey(m => m.TeamAColorId)
+             .OnDelete(DeleteBehavior.SetNull);
+
+            b.HasOne(m => m.TeamBColor)
+             .WithMany()
+             .HasForeignKey(m => m.TeamBColorId)
+             .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<MatchPlayerEntity>(b =>
@@ -131,5 +146,53 @@ public class AppDbContext : DbContext
            builder.Property(x => x.Status)
                 .HasDefaultValue(Status.Active);
        });
+
+        modelBuilder.Entity<TeamColorEntity>(b =>
+        {
+            b.HasKey(c => c.Id);
+            b.Property(c => c.Name).IsRequired().HasMaxLength(100);
+            b.Property(c => c.HexValue).IsRequired().HasMaxLength(10);
+        });
+    }
+
+    public override int SaveChanges()
+    {
+        ApplyTimestamps();
+        return base.SaveChanges();
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        ApplyTimestamps();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        ApplyTimestamps();
+        return base.SaveChangesAsync(cancellationToken);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        ApplyTimestamps();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    private void ApplyTimestamps()
+    {
+        var utcNow = DateTime.UtcNow;
+        foreach (var entry in ChangeTracker.Entries<BaseEntity>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Property(nameof(BaseEntity.CreateDate)).CurrentValue = utcNow;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Property(nameof(BaseEntity.CreateDate)).IsModified = false;
+                entry.Property(nameof(BaseEntity.UpdateDate)).CurrentValue = utcNow;
+            }
+        }
     }
 }

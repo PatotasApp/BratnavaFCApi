@@ -15,5 +15,5 @@ public interface IMatchService
     Task VoteAsync(Guid matchId, Guid voterPlayerId, Guid votedPlayerId, CancellationToken cancellationToken);
     Task FinalizeMatchAsync(Guid matchId, CancellationToken cancellationToken);
     Task<MatchPlayerEntity?> GetMvpAsync(Guid matchId);
-    Task SetScoreAsync(Guid matchId, int teamAGoals, int teamBGoals, CancellationToken cancellationToken);
+    Task SetScoreAsync(Guid matchId, int teamAGoals, int teamBGoals, bool randomize = false, CancellationToken cancellationToken = default);
 }

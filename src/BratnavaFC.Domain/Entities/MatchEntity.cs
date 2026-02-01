@@ -24,23 +24,44 @@ public class MatchEntity : BaseEntity
     public IReadOnlyList<MatchPlayerEntity> TeamAPlayers => Players.Where(p => p.Team == 1).ToList();
     public IReadOnlyList<MatchPlayerEntity> TeamBPlayers => Players.Where(p => p.Team == 2).ToList();
 
+    // Team color references (optional)
+    public Guid? TeamAColorId { get; private set; }
+    public Guid? TeamBColorId { get; private set; }
+
+    // Navigation properties (optional for EF)
+    public TeamColorEntity? TeamAColor { get; private set; }
+    public TeamColorEntity? TeamBColor { get; private set; }
+
     public void SetPlaceName(string placeName)
     {
         PlaceName = placeName;
-        UpdateDate = DateTime.UtcNow;
     }
 
     public void SetPlayedAt(DateTime playedAt)
     {
         PlayedAt = playedAt;
-        UpdateDate = DateTime.UtcNow;
     }
 
     public void SetScore(int homeGoals, int awayGoals)
     {
         TeamAGoals = homeGoals;
         TeamBGoals = awayGoals;
-        UpdateDate = DateTime.UtcNow;
+    }
+
+    public void SetTeamAColor(Guid? colorId)
+    {
+        TeamAColorId = colorId;
+    }
+
+    public void SetTeamBColor(Guid? colorId)
+    {
+        TeamBColorId = colorId;
+    }
+
+    public void SetTeamColors(Guid? teamAColorId, Guid? teamBColorId)
+    {
+        TeamAColorId = teamAColorId;
+        TeamBColorId = teamBColorId;
     }
 
     public void AddPlayer(MatchPlayerEntity player)
@@ -51,14 +72,12 @@ public class MatchEntity : BaseEntity
 
         player.AssignToMatch(this);
         Players.Add(player);
-        UpdateDate = DateTime.UtcNow;
     }
 
     public bool RemovePlayer(MatchPlayerEntity player)
     {
         ArgumentNullException.ThrowIfNull(player);
         var removed = Players.Remove(player);
-        if (removed) UpdateDate = DateTime.UtcNow;
         return removed;
     }
 
@@ -66,6 +85,5 @@ public class MatchEntity : BaseEntity
     {
         if (IsFinalized) return;
         IsFinalized = true;
-        UpdateDate = DateTime.UtcNow;
     }
 }

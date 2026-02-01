@@ -6,5 +6,5 @@ using System.Threading.Tasks;
 
 namespace BratnavaFC.Domain.Dtos
 {
-    public record PlayerRequestDto(Guid Id, string Name, bool IsGoalkeeper);
+    public record SetMatchColorsRequestDto(Guid? TeamAColorId, Guid? TeamBColorId, bool Randomize);
 }

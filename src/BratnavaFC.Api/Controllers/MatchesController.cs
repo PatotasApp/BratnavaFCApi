@@ -105,12 +105,8 @@ public class MatchesController : ControllerBase
         var mvp = await _service.GetMvpAsync(matchId);
         if (mvp == null) return NotFound();
 
-        var dto = new MatchPlayerDto
-        {
-            Id = mvp.Id,
-            Name = mvp.Name,
-            IsMvp = mvp.IsMvp,
-        };
+        var dto = new MatchPlayerDto(mvp.Id, mvp.Name, mvp.IsMvp);
+        
         return Ok(dto);
     }
 
@@ -129,21 +125,25 @@ public class MatchesController : ControllerBase
         }
     }
 
-    private static MatchDto ToDto(MatchEntity e)
+    [HttpPut("{matchId:guid}/colors")]
+    public async Task<IActionResult> SetMatchColors(Guid matchId, [FromBody] SetMatchColorsRequestDto dto)
     {
-        return new MatchDto
+        if (dto == null) return BadRequest();
+
+        try
         {
-            PlayedAt = e.PlayedAt,
-            PlaceName = e.PlaceName,
-            TeamAGoals = e.TeamAGoals ?? 0,
-            TeamBGoals = e.TeamBGoals ?? 0
-        };
+            await _service.SetTeamColorsAsync(matchId, dto.TeamAColorId, dto.TeamBColorId, dto.Randomize);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
-    private static MatchEntity FromDto(CreateMatchDto dto)
-    {
-        var match = new MatchEntity(dto.PlayedAt, dto.PlaceName);
+    private static MatchDto ToDto(MatchEntity e) =>
+        new(e.PlayedAt, e.TeamAGoals ?? 0, e.TeamBGoals ?? 0, e.PlaceName, e.TeamAColorId, e.TeamBColorId);
 
-        return match;
-    }
+    private static MatchEntity FromDto(CreateMatchDto dto) =>
+        new(dto.PlayedAt, dto.PlaceName);
 }
