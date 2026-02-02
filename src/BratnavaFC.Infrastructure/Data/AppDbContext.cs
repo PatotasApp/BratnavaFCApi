@@ -9,216 +9,228 @@ namespace BratnavaFC.Infrastructure.Data;
 
 public class AppDbContext : DbContext
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+       public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
-    public DbSet<MatchEntity> Matches => Set<MatchEntity>();
-    public DbSet<MatchPlayerEntity> MatchPlayers => Set<MatchPlayerEntity>();
-    public DbSet<VoteEntity> Votes => Set<VoteEntity>();
-    public DbSet<TeamColorEntity> TeamColors => Set<TeamColorEntity>();
-    public DbSet<UserEntity> Users => Set<UserEntity>();
-    public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
-    public DbSet<GroupEntity> Groups => Set<GroupEntity>();
-    public DbSet<PlayerEntity> Players => Set<PlayerEntity>();
+       public DbSet<MatchEntity> Matches => Set<MatchEntity>();
+       public DbSet<MatchPlayerEntity> MatchPlayers => Set<MatchPlayerEntity>();
+       public DbSet<VoteEntity> Votes => Set<VoteEntity>();
+       public DbSet<TeamColorEntity> TeamColors => Set<TeamColorEntity>();
+       public DbSet<UserEntity> Users => Set<UserEntity>();
+       public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
+       public DbSet<GroupEntity> Groups => Set<GroupEntity>();
+       public DbSet<GroupAdminEntity> GroupAdmins => Set<GroupAdminEntity>();
+       public DbSet<PlayerEntity> Players => Set<PlayerEntity>();
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<MatchEntity>(builder =>
-        {
-            builder.HasKey(x => x.Id);
+       protected override void OnModelCreating(ModelBuilder modelBuilder)
+       {
+              modelBuilder.Entity<MatchEntity>(builder =>
+              {
+                     builder.HasKey(x => x.Id);
 
-            builder.HasMany(x => x.Players)
-                   .WithOne(x => x.Match)
-                   .HasForeignKey(x => x.MatchId)
-                   .OnDelete(DeleteBehavior.Cascade);
+                     builder.HasMany(x => x.Players)
+                      .WithOne(x => x.Match)
+                      .HasForeignKey(x => x.MatchId)
+                      .OnDelete(DeleteBehavior.Cascade);
 
-            builder.HasMany(x => x.Votes)
-                   .WithOne(x => x.Match)
-                   .HasForeignKey(x => x.MatchId)
-                   .OnDelete(DeleteBehavior.Cascade);
+                     builder.HasMany(x => x.Votes)
+                      .WithOne(x => x.Match)
+                      .HasForeignKey(x => x.MatchId)
+                      .OnDelete(DeleteBehavior.Cascade);
 
-            builder.Ignore(x => x.TeamAPlayers);
-            builder.Ignore(x => x.TeamBPlayers);
+                     builder.Ignore(x => x.TeamAPlayers);
+                     builder.Ignore(x => x.TeamBPlayers);
 
-            builder.HasOne(x => x.TeamAColor)
-                   .WithMany()
-                   .HasForeignKey(x => x.TeamAColorId)
-                   .OnDelete(DeleteBehavior.SetNull);
+                     builder.HasOne(x => x.TeamAColor)
+                      .WithMany()
+                      .HasForeignKey(x => x.TeamAColorId)
+                      .OnDelete(DeleteBehavior.SetNull);
 
-            builder.HasOne(x => x.TeamBColor)
-                   .WithMany()
-                   .HasForeignKey(x => x.TeamBColorId)
-                   .OnDelete(DeleteBehavior.SetNull);
-        });
+                     builder.HasOne(x => x.TeamBColor)
+                      .WithMany()
+                      .HasForeignKey(x => x.TeamBColorId)
+                      .OnDelete(DeleteBehavior.SetNull);
+              });
 
-        modelBuilder.Entity<MatchPlayerEntity>(builder =>
-        {
-            builder.HasKey(x => x.Id);
+              modelBuilder.Entity<MatchPlayerEntity>(builder =>
+              {
+                     builder.HasKey(x => x.Id);
 
-            builder.Property(x => x.Name)
-                   .IsRequired();
+                     builder.Property(x => x.Name)
+                      .IsRequired();
 
-            builder.HasOne(x => x.Match)
-                   .WithMany(x => x.Players)
-                   .HasForeignKey(x => x.MatchId)
-                   .OnDelete(DeleteBehavior.Cascade);
+                     builder.HasOne(x => x.Match)
+                      .WithMany(x => x.Players)
+                      .HasForeignKey(x => x.MatchId)
+                      .OnDelete(DeleteBehavior.Cascade);
 
-            builder.HasOne(x => x.Player)
-                   .WithMany(x => x.MatchPlayers)
-                   .HasForeignKey(x => x.PlayerId)
-                   .OnDelete(DeleteBehavior.Restrict);
+                     builder.HasOne(x => x.Player)
+                      .WithMany(x => x.MatchPlayers)
+                      .HasForeignKey(x => x.PlayerId)
+                      .OnDelete(DeleteBehavior.Restrict);
 
-            builder.HasMany(x => x.ReceivedVotes)
-                   .WithOne(x => x.VotedFor)
-                   .HasForeignKey(x => x.VotedForId)
-                   .OnDelete(DeleteBehavior.Restrict);
+                     builder.HasMany(x => x.ReceivedVotes)
+                      .WithOne(x => x.VotedFor)
+                      .HasForeignKey(x => x.VotedForId)
+                      .OnDelete(DeleteBehavior.Restrict);
 
-            builder.HasIndex(x => new { x.MatchId, x.PlayerId })
-                   .IsUnique();
-        });
+                     builder.HasIndex(x => new { x.MatchId, x.PlayerId })
+                      .IsUnique();
+              });
 
-        modelBuilder.Entity<VoteEntity>(builder =>
-        {
-            builder.HasKey(x => x.Id);
+              modelBuilder.Entity<VoteEntity>(builder =>
+              {
+                     builder.HasKey(x => x.Id);
 
-            builder.HasOne(x => x.Match)
-                   .WithMany(x => x.Votes)
-                   .HasForeignKey(x => x.MatchId)
-                   .OnDelete(DeleteBehavior.Cascade);
+                     builder.HasOne(x => x.Match)
+                      .WithMany(x => x.Votes)
+                      .HasForeignKey(x => x.MatchId)
+                      .OnDelete(DeleteBehavior.Cascade);
 
-            builder.HasOne(x => x.Voter)
-                   .WithMany()
-                   .HasForeignKey(x => x.VoterId)
-                   .OnDelete(DeleteBehavior.Restrict);
+                     builder.HasOne(x => x.Voter)
+                      .WithMany()
+                      .HasForeignKey(x => x.VoterId)
+                      .OnDelete(DeleteBehavior.Restrict);
 
-            builder.HasOne(x => x.VotedFor)
-                   .WithMany(x => x.ReceivedVotes)
-                   .HasForeignKey(x => x.VotedForId)
-                   .OnDelete(DeleteBehavior.Restrict);
+                     builder.HasOne(x => x.VotedFor)
+                      .WithMany(x => x.ReceivedVotes)
+                      .HasForeignKey(x => x.VotedForId)
+                      .OnDelete(DeleteBehavior.Restrict);
 
-            builder.HasIndex(x => new { x.MatchId, x.VoterId })
-                   .IsUnique();
-        });
+                     builder.HasIndex(x => new { x.MatchId, x.VoterId })
+                      .IsUnique();
+              });
 
-        modelBuilder.Entity<PlayerEntity>(builder =>
-        {
-            builder.HasKey(x => x.Id);
+              modelBuilder.Entity<PlayerEntity>(builder =>
+              {
+                     builder.HasKey(x => x.Id);
 
-            builder.Property(x => x.Name)
-                   .IsRequired();
+                     builder.Property(x => x.Name)
+                      .IsRequired();
 
-            builder.Property(x => x.IsGoalkeeper)
-                   .IsRequired();
+                     builder.Property(x => x.IsGoalkeeper)
+                      .IsRequired();
 
-            builder.HasOne(x => x.User)
-                   .WithMany(x => x.Players)
-                   .HasForeignKey(x => x.UserId);
+                     builder.HasOne(x => x.User)
+                      .WithMany(x => x.Players)
+                      .HasForeignKey(x => x.UserId);
 
-            builder.HasOne(x => x.Group)
-                   .WithMany(x => x.Players)
-                   .HasForeignKey(x => x.GroupId);
+                     builder.HasOne(x => x.Group)
+                      .WithMany(x => x.Players)
+                      .HasForeignKey(x => x.GroupId);
 
-            builder.HasMany(x => x.MatchPlayers)
-                   .WithOne(x => x.Player)
-                   .HasForeignKey(x => x.PlayerId);
+                     builder.HasMany(x => x.MatchPlayers)
+                      .WithOne(x => x.Player)
+                      .HasForeignKey(x => x.PlayerId);
 
-            builder.Property(x => x.Status)
-                   .HasDefaultValue(Status.Active);
+                     builder.Property(x => x.Status)
+                      .HasDefaultValue(Status.Active);
 
-            builder.HasQueryFilter(x => x.Status != Status.Inactive);
-        });
+                     builder.HasQueryFilter(x => x.Status != Status.Inactive);
+              });
 
-        modelBuilder.Entity<UserEntity>(builder =>
-        {
-            builder.HasKey(x => x.Id);
+              modelBuilder.Entity<UserEntity>(builder =>
+              {
+                     builder.HasKey(x => x.Id);
 
-            builder.Property(x => x.FirstName).IsRequired();
-            builder.Property(x => x.LastName).IsRequired();
-            builder.Property(x => x.Email).IsRequired();
+                     builder.Property(x => x.FirstName).IsRequired();
+                     builder.Property(x => x.LastName).IsRequired();
+                     builder.Property(x => x.Email).IsRequired();
 
-            builder.HasMany(x => x.Players)
-                   .WithOne(x => x.User)
-                   .HasForeignKey(x => x.UserId);
+                     builder.HasMany(x => x.Players)
+                      .WithOne(x => x.User)
+                      .HasForeignKey(x => x.UserId);
 
-            builder.HasMany(x => x.Groups)
-                   .WithOne(x => x.Admin)
-                   .HasForeignKey(x => x.AdminId);
+                  builder.Property(x => x.Status)
+                         .HasDefaultValue(Status.Active);
 
-            builder.Property(x => x.Status)
-                   .HasDefaultValue(Status.Active);
+                     builder.HasQueryFilter(x => x.Status != Status.Inactive);
+              });
 
-            builder.HasQueryFilter(x => x.Status != Status.Inactive);
-        });
+              modelBuilder.Entity<GroupEntity>(builder =>
+              {
+                     builder.HasKey(x => x.Id);
 
-        modelBuilder.Entity<GroupEntity>(builder =>
-        {
-            builder.HasKey(x => x.Id);
+                     builder.Property(x => x.Name)
+                      .IsRequired();
 
-            builder.Property(x => x.Name)
-                   .IsRequired();
+                     builder.HasMany(x => x.Players)
+                      .WithOne(x => x.Group)
+                      .HasForeignKey(x => x.GroupId);
 
-            builder.HasMany(x => x.Players)
-                   .WithOne(x => x.Group)
-                   .HasForeignKey(x => x.GroupId);
+                     builder.Property(x => x.Status)
+                      .HasDefaultValue(Status.Active);
 
-            builder.Property(x => x.Status)
-                   .HasDefaultValue(Status.Active);
+                     builder.HasQueryFilter(x => x.Status != Status.Inactive);
+              });
 
-            builder.HasQueryFilter(x => x.Status != Status.Inactive);
-        });
+              modelBuilder.Entity<GroupAdminEntity>(builder =>
+               {
+                      builder.HasKey(x => new { x.UserId, x.GroupId });
 
-        modelBuilder.Entity<TeamColorEntity>(builder =>
-        {
-            builder.HasKey(x => x.Id);
+                      builder.HasOne(x => x.Group)
+                      .WithMany(x => x.Admins)
+                      .HasForeignKey(x => x.GroupId)
+                      .OnDelete(DeleteBehavior.Cascade);
 
-            builder.Property(x => x.Name)
-                   .IsRequired()
-                   .HasMaxLength(100);
+                      builder.HasOne(x => x.User)
+                      .WithMany(x => x.Admins)
+                      .HasForeignKey(x => x.UserId)
+                      .OnDelete(DeleteBehavior.Cascade);
+               });
 
-            builder.Property(x => x.HexValue)
-                   .IsRequired()
-                   .HasMaxLength(10);
-        });
-    }
+              modelBuilder.Entity<TeamColorEntity>(builder =>
+              {
+                     builder.HasKey(x => x.Id);
 
-    public override int SaveChanges()
-    {
-        ApplyTimestamps();
-        return base.SaveChanges();
-    }
+                     builder.Property(x => x.Name)
+                      .IsRequired()
+                      .HasMaxLength(100);
 
-    public override int SaveChanges(bool acceptAllChangesOnSuccess)
-    {
-        ApplyTimestamps();
-        return base.SaveChanges(acceptAllChangesOnSuccess);
-    }
+                     builder.Property(x => x.HexValue)
+                      .IsRequired()
+                      .HasMaxLength(10);
+              });
+       }
 
-    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
-    {
-        ApplyTimestamps();
-        return base.SaveChangesAsync(cancellationToken);
-    }
+       public override int SaveChanges()
+       {
+              ApplyTimestamps();
+              return base.SaveChanges();
+       }
 
-    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
-    {
-        ApplyTimestamps();
-        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
-    }
+       public override int SaveChanges(bool acceptAllChangesOnSuccess)
+       {
+              ApplyTimestamps();
+              return base.SaveChanges(acceptAllChangesOnSuccess);
+       }
 
-    private void ApplyTimestamps()
-    {
-        var utcNow = DateTime.UtcNow;
+       public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+       {
+              ApplyTimestamps();
+              return base.SaveChangesAsync(cancellationToken);
+       }
 
-        foreach (var entry in ChangeTracker.Entries<BaseEntity>())
-        {
-            if (entry.State == EntityState.Added)
-            {
-                entry.Property(nameof(BaseEntity.CreateDate)).CurrentValue = utcNow;
-            }
-            else if (entry.State == EntityState.Modified)
-            {
-                entry.Property(nameof(BaseEntity.CreateDate)).IsModified = false;
-                entry.Property(nameof(BaseEntity.UpdateDate)).CurrentValue = utcNow;
-            }
-        }
-    }
+       public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+       {
+              ApplyTimestamps();
+              return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+       }
+
+       private void ApplyTimestamps()
+       {
+              var utcNow = DateTime.UtcNow;
+
+              foreach (var entry in ChangeTracker.Entries<BaseEntity>())
+              {
+                     if (entry.State == EntityState.Added)
+                     {
+                            entry.Property(nameof(BaseEntity.CreateDate)).CurrentValue = utcNow;
+                     }
+                     else if (entry.State == EntityState.Modified)
+                     {
+                            entry.Property(nameof(BaseEntity.CreateDate)).IsModified = false;
+                            entry.Property(nameof(BaseEntity.UpdateDate)).CurrentValue = utcNow;
+                     }
+              }
+       }
 }

@@ -11,4 +11,5 @@ public interface IGroupService
     Task UpdateAsync(GroupContracts.UpdateGroupRequest request, CancellationToken cancellationToken);
     Task DeleteAsync(GroupContracts.DeleteGroupRequest request, CancellationToken cancellationToken);
     Task<GroupContracts.GetResponse> GetByIdAsync(Guid groupId, CancellationToken cancellationToken);
+    Task<List<GroupContracts.GetResponse>> GetByAdminIdAsync(Guid adminId, CancellationToken cancellationToken);
 }

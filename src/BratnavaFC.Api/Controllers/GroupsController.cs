@@ -42,5 +42,12 @@ namespace BratnavaFC.Api.Controllers
             var response = await _groupService.GetByIdAsync(groupId, cancellationToken);
             return Ok(response);
         }
+
+        [HttpGet("admin/{adminId:guid}")]
+        public async Task<IActionResult> GetByAdminIdAsync(Guid adminId, CancellationToken cancellationToken)
+        {
+            var response = await _groupService.GetByAdminIdAsync(adminId, cancellationToken);
+            return Ok(response);
+        }
     }
 }

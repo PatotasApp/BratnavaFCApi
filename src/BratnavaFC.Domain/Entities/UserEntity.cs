@@ -21,9 +21,8 @@ public sealed class UserEntity : BaseEntity
     public string? Phone { get; set; }
 
     public UserRole Role { get; set; } = UserRole.User;
-
-    public List<GroupEntity> Groups { get; set; } = [];
     public List<PlayerEntity> Players { get; set; } = [];
+    public List<GroupAdminEntity> Admins { get; set; } = [];
 
     public Status Status { get; set; }
 }

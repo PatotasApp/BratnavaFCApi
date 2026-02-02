@@ -1,12 +1,11 @@
-using System;
-using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore;
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Abstractions;
 using BratnavaFC.Domain.Dtos.Groups;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System.Linq;
 
 namespace BratnavaFC.Application.Services;
 
@@ -27,7 +26,7 @@ public class GroupService : IGroupService
     {
         try
         {
-            var adminExists = await _context.Users.AnyAsync(x => x.Id == request.UserAdminId, cancellationToken);
+            var adminExists = await _context.Users.AllAsync(x => request.UserAdminIds.Contains(x.Id), cancellationToken);
 
             if (!adminExists)
             {
@@ -37,9 +36,14 @@ public class GroupService : IGroupService
             GroupEntity newGroup = new()
             {
                 Name = request.Name,
-                AdminId = request.UserAdminId,
-                ScheduleMatchDate = request.ScheduleMatchDate
-            };
+                ScheduleMatchDate = request.ScheduleMatchDate              
+            };          
+
+            newGroup.Admins = request.UserAdminIds.Select(adminId => new GroupAdminEntity()
+            {
+                GroupId = newGroup.Id,
+                UserId = adminId
+            }).ToList();
 
             _repository.Add(newGroup);
             await _repository.SaveChangesAsync(cancellationToken);
@@ -75,7 +79,7 @@ public class GroupService : IGroupService
     {
         try
         {
-            var group =  await _repository.GetByIdAsync(request.Id, cancellationToken);
+            var group = await _repository.GetByIdAsync(request.Id, cancellationToken);
 
             if (group == null)
             {
@@ -115,7 +119,7 @@ public class GroupService : IGroupService
                 group.Id,
                 group.Name,
                 group.ScheduleMatchDate,
-                group.AdminId,
+                group.Admins.Select(x => x.UserId).ToArray(),
                 group.Status,
                 players
             );
@@ -125,5 +129,12 @@ public class GroupService : IGroupService
             _logger.LogError(ex, "Error trying to get group by id.");
             throw;
         }
+    }
+
+    public Task<List<GroupContracts.GetResponse>> GetByAdminIdAsync(Guid adminId, CancellationToken cancellationToken)
+    {
+        return _context.GroupAdmins.Include(x => x.Group).ThenInclude(x => x.Players).Where(x => x.UserId == adminId)
+                                    .Select(g => new GroupContracts.GetResponse(g.Group.Id, g.Group.Name, g.Group.ScheduleMatchDate, g.Group.Admins.Select(x => x.UserId).ToArray(), g.Group.Status, g.Group.Players!.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name)).ToList()))
+                                    .ToListAsync(cancellationToken);
     }
 }
