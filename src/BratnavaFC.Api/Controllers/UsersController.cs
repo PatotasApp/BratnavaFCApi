@@ -26,4 +26,12 @@ public sealed class UsersController : ControllerBase
 
         return StatusCode(StatusCodes.Status201Created);
     }
+
+    [HttpGet("{userId:guid}")]
+    public async Task<IActionResult> GetUserAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var user = await _userService.GetUserByIdAsync(userId, cancellationToken);
+
+        return Ok(user);
+    }
 }

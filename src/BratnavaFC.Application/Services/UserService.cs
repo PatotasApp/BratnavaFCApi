@@ -57,4 +57,21 @@ public class UserService : IUserService
             throw;
         }
     }
+
+    public Task<UserDto?> GetUserByIdAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        return _appDbContext.Users.Include(x => x.Admins)
+                                  .Include(x => x.Players)
+                                  .Select(u => new UserDto
+                                  {
+                                      Id = u.Id,
+                                      FirstName = u.FirstName,
+                                      LastName = u.LastName,
+                                      BirthDate = u.BirthDate,
+                                      Role = u.Role,
+                                      Status = u.Status,
+                                      PlayerIds = u.Players.Select(x => x.Id).ToArray(),
+                                      GroupAdminIds = u.Admins.Select(x => x.GroupId).ToArray()
+                                  }).FirstOrDefaultAsync(x => x.Id == userId, cancellationToken);
+    }
 }
