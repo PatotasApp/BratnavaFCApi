@@ -30,8 +30,6 @@ public class PlayerService : IPlayerService
                 Name = request.Name,
                 UserId = request.UserId,
                 GroupId = request.GroupId,
-                MainPosition = request.MainPosition,
-                Positions = request.Positions,
                 SkillPoints = request.SkillPoints,
                 Status = request.Status
             };
@@ -54,7 +52,7 @@ public class PlayerService : IPlayerService
             
             if (player == null)
             {
-                throw new ApplicationException("Player not found.");
+                throw new ApplicationException("PlayerEntity not found.");
             }
 
             _repository.Remove(player);
@@ -74,7 +72,7 @@ public class PlayerService : IPlayerService
             var player = await _repository.GetByIdAsync(playerId, cancellationToken);
             if (player == null)
             {
-                throw new ApplicationException("Player not found.");
+                throw new ApplicationException("PlayerEntity not found.");
             }
 
             return new PlayerContracts.GetResponse(
@@ -82,8 +80,6 @@ public class PlayerService : IPlayerService
                 player.Name,
                 player.UserId,
                 player.GroupId,
-                player.MainPosition,
-                player.Positions,
                 player.SkillPoints,
                 player.Status
             );
@@ -102,12 +98,10 @@ public class PlayerService : IPlayerService
             var player = await _repository.GetByIdAsync(request.Id, cancellationToken);
             if (player == null)
             {
-                throw new ApplicationException("Player not found.");
+                throw new ApplicationException("PlayerEntity not found.");
             }
 
             player.Name = request.Name;
-            player.MainPosition = request.MainPosition;
-            player.Positions = request.Positions;
             player.SkillPoints = request.SkillPoints;
             player.Status = request.Status;
 

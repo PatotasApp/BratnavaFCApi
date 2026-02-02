@@ -1,4 +1,5 @@
-﻿using BratnavaFC.Domain.Models;
+﻿using BratnavaFC.Domain.Entities;
+using BratnavaFC.Domain.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,6 +10,6 @@ namespace BratnavaFC.Application.Abstractions
 {
     public interface IPlayerStatsService
     {
-        Task<List<PlayerStats>> EnrichPlayersAsync(List<Player> players);
+        Task<List<PlayerStats>> EnrichPlayersAsync(List<PlayerEntity> players);
     }
 }

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos;
+using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Models;
 
 namespace BratnavaFC.Application.TeamGeneration;
@@ -17,7 +18,7 @@ public sealed class GroupByWinsStrategy : ITeamGenerationStrategy
         _statsService = statsService ?? throw new ArgumentNullException(nameof(statsService));
     }
 
-    public async Task<TeamsResultDto> GenerateTeamsAsync(List<Player> players, TeamGenerationSettings settings)
+    public async Task<TeamsResultDto> GenerateTeamsAsync(List<PlayerEntity> players, TeamGenerationSettings settings)
     {
         if (players is null) throw new ArgumentNullException(nameof(players));
         if (settings is null) throw new ArgumentNullException(nameof(settings));
@@ -39,7 +40,7 @@ public sealed class GroupByWinsStrategy : ITeamGenerationStrategy
 
         var ordered = candidates
             .OrderByDescending(x => x.Stats.Wins)
-            .ThenBy(x => x.Player.Id)
+            .ThenBy(x => x.PlayerEntity.Id)
             .ToList();
 
         SeedTeams(ordered, result);
@@ -47,7 +48,7 @@ public sealed class GroupByWinsStrategy : ITeamGenerationStrategy
         var toA = true;
         for (int i = 2; i < ordered.Count && (result.TeamA.Count + result.TeamB.Count) < maxAssignable; i++)
         {
-            var pick = ordered[i].Player.Id;
+            var pick = ordered[i].PlayerEntity.Id;
 
             if (toA && result.TeamA.Count < perTeam)
                 result.TeamA.Add(pick);
@@ -58,7 +59,7 @@ public sealed class GroupByWinsStrategy : ITeamGenerationStrategy
         }
 
         var assigned = new HashSet<Guid>(result.TeamA.Concat(result.TeamB));
-        result.Unassigned.AddRange(ordered.Where(x => !assigned.Contains(x.Player.Id)).Select(x => x.Player.Id));
+        result.Unassigned.AddRange(ordered.Where(x => !assigned.Contains(x.PlayerEntity.Id)).Select(x => x.PlayerEntity.Id));
 
         if (!settings.IncludeGoalkeepers)
             result.Unassigned.AddRange(players.Where(p => p.IsGoalkeeper).Select(p => p.Id));
@@ -66,14 +67,14 @@ public sealed class GroupByWinsStrategy : ITeamGenerationStrategy
         return result;
     }
 
-    private async Task<Dictionary<Guid, PlayerStats>> LoadStatsByPlayerId(List<Player> players)
+    private async Task<Dictionary<Guid, PlayerStats>> LoadStatsByPlayerId(List<PlayerEntity> players)
     {
         var statsList = await _statsService.EnrichPlayersAsync(players);
         return statsList.ToDictionary(s => s.PlayerId, s => s);
     }
 
     private static List<PlayerWithStats> SelectCandidates(
-        List<Player> players,
+        List<PlayerEntity> players,
         Dictionary<Guid, PlayerStats> statsByPlayerId,
         TeamGenerationSettings settings)
     {
@@ -94,7 +95,7 @@ public sealed class GroupByWinsStrategy : ITeamGenerationStrategy
         if (ordered.Count == 0) return;
         if (ordered.Count == 1)
         {
-            result.TeamA.Add(ordered[0].Player.Id);
+            result.TeamA.Add(ordered[0].PlayerEntity.Id);
             return;
         }
 
@@ -103,13 +104,13 @@ public sealed class GroupByWinsStrategy : ITeamGenerationStrategy
 
         if (first.Stats.Wins <= second.Stats.Wins)
         {
-            result.TeamA.Add(first.Player.Id);
-            result.TeamB.Add(second.Player.Id);
+            result.TeamA.Add(first.PlayerEntity.Id);
+            result.TeamB.Add(second.PlayerEntity.Id);
         }
         else
         {
-            result.TeamA.Add(second.Player.Id);
-            result.TeamB.Add(first.Player.Id);
+            result.TeamA.Add(second.PlayerEntity.Id);
+            result.TeamB.Add(first.PlayerEntity.Id);
         }
     }
 }

@@ -7,6 +7,7 @@ using BratnavaFC.Domain.Models;
 using BratnavaFC.Domain.Dtos;
 using Xunit;
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Entities;
 
 namespace BratnavaFC.Tests;
 
@@ -16,17 +17,17 @@ public class GroupByWinsStrategyTests
     public async Task GroupByWins_Distributes_As_Expected()
     {
         // prepare players with Wins values
-        var p1 = new Player { Id = Guid.NewGuid(), Name = "P1", IsGoalkeeper = false };
-        var p2 = new Player { Id = Guid.NewGuid(), Name = "P2", IsGoalkeeper = false };
-        var p3 = new Player { Id = Guid.NewGuid(), Name = "P3", IsGoalkeeper = false };
-        var p4 = new Player { Id = Guid.NewGuid(), Name = "P4", IsGoalkeeper = false };
+        var p1 = new PlayerEntity { Id = Guid.NewGuid(), Name = "P1", IsGoalkeeper = false };
+        var p2 = new PlayerEntity { Id = Guid.NewGuid(), Name = "P2", IsGoalkeeper = false };
+        var p3 = new PlayerEntity { Id = Guid.NewGuid(), Name = "P3", IsGoalkeeper = false };
+        var p4 = new PlayerEntity { Id = Guid.NewGuid(), Name = "P4", IsGoalkeeper = false };
 
         // we will simulate stats via a fake IPlayerStatsService by composing PlayerStats directly
         // but GroupByWinsStrategy supports optional stats service; for deterministic behavior we can
         // create PlayerStats list and call the strategy instance directly by using the overload in factory.
         // Simpler: construct a local list of players and create a fake stats service.
 
-        var players = new List<Player> { p1, p2, p3, p4 };
+        var players = new List<PlayerEntity> { p1, p2, p3, p4 };
 
         // create fake stats service that returns wins matching intended ordering
         var fakeStatsService = new FakeStatsService(new Dictionary<Guid, int>
@@ -66,7 +67,7 @@ public class GroupByWinsStrategyTests
             _wins = wins;
         }
 
-        public Task<List<BratnavaFC.Domain.Models.PlayerStats>> EnrichPlayersAsync(List<Player> players)
+        public Task<List<BratnavaFC.Domain.Models.PlayerStats>> EnrichPlayersAsync(List<PlayerEntity> players)
         {
             var list = players.Select(p =>
                 new BratnavaFC.Domain.Models.PlayerStats

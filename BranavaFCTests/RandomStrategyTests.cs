@@ -6,17 +6,18 @@ using BratnavaFC.Application.TeamGeneration;
 using BratnavaFC.Domain.Models;
 using BratnavaFC.Domain.Dtos;
 using Xunit;
+using BratnavaFC.Domain.Entities;
 
 namespace BratnavaFC.Tests;
 
 public class RandomStrategyTests
 {
-    private static List<Player> CreatePlayers(int count)
+    private static List<PlayerEntity> CreatePlayers(int count)
     {
-        var list = new List<Player>();
+        var list = new List<PlayerEntity>();
         for (int i = 0; i < count; i++)
         {
-            list.Add(new Player { Id = Guid.NewGuid(), Name = $"P{i + 1}", IsGoalkeeper = false });
+            list.Add(new PlayerEntity { Id = Guid.NewGuid(), Name = $"P{i + 1}", IsGoalkeeper = false });
         }
         return list;
     }
@@ -45,12 +46,12 @@ public class RandomStrategyTests
     [Fact]
     public async Task RandomStrategy_Respects_Exclude_Goalkeepers()
     {
-        var players = new List<Player>
+        var players = new List<PlayerEntity>
         {
-            new Player { Id = Guid.NewGuid(), Name = "Gk", IsGoalkeeper = true },
-            new Player { Id = Guid.NewGuid(), Name = "P1", IsGoalkeeper = false },
-            new Player { Id = Guid.NewGuid(), Name = "P2", IsGoalkeeper = false },
-            new Player { Id = Guid.NewGuid(), Name = "P3", IsGoalkeeper = false }
+            new PlayerEntity { Id = Guid.NewGuid(), Name = "Gk", IsGoalkeeper = true },
+            new PlayerEntity { Id = Guid.NewGuid(), Name = "P1", IsGoalkeeper = false },
+            new PlayerEntity { Id = Guid.NewGuid(), Name = "P2", IsGoalkeeper = false },
+            new PlayerEntity { Id = Guid.NewGuid(), Name = "P3", IsGoalkeeper = false }
         };
 
         var settings = new TeamGenerationSettings { PlayersPerTeam = 2, IncludeGoalkeepers = false };

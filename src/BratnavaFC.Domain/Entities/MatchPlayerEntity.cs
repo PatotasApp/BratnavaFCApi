@@ -2,13 +2,16 @@ namespace BratnavaFC.Domain.Entities;
 
 public class MatchPlayerEntity : BaseEntity
 {
-    // EF Core
     private MatchPlayerEntity() { }
 
-    public MatchPlayerEntity(string name)
+    public MatchPlayerEntity(Guid playerId, string name)
     {
+        PlayerId = playerId;
         Name = name ?? throw new ArgumentNullException(nameof(name));
     }
+
+    public Guid PlayerId { get; private set; }
+    public PlayerEntity? Player { get; private set; }
 
     public string Name { get; private set; } = null!;
     public bool? IsMvp { get; private set; }
@@ -21,25 +24,22 @@ public class MatchPlayerEntity : BaseEntity
     public List<VoteEntity> ReceivedVotes { get; private set; } = new();
     public Guid? VotedForId { get; private set; }
 
-    public void SetName(string name)
-    {
-        Name = name ?? throw new ArgumentNullException(nameof(name));
-    }
+    public void SetName(string name) => Name = name ?? throw new ArgumentNullException(nameof(name));
 
-    public void SetMvp()
-    {
-        IsMvp = true;
-    }
+    public void SetMvp() => IsMvp = true;
 
-    public void RevokeMvp()
-    {
-        IsMvp = null;
-    }
+    public void RevokeMvp() => IsMvp = null;
 
     public void AssignToMatch(MatchEntity match)
     {
         Match = match ?? throw new ArgumentNullException(nameof(match));
         MatchId = match.Id;
+    }
+
+    public void AssignToPlayer(PlayerEntity player)
+    {
+        Player = player ?? throw new ArgumentNullException(nameof(player));
+        PlayerId = player.Id;
     }
 
     public void SetTeam(short team)
@@ -55,27 +55,16 @@ public class MatchPlayerEntity : BaseEntity
         ArgumentNullException.ThrowIfNull(vote);
 
         if (!ReceivedVotes.Exists(v => v.Id == vote.Id))
-        {
             ReceivedVotes.Add(vote);
-        }
     }
 
     public void RemoveReceivedVote(Guid voteId)
     {
         var idx = ReceivedVotes.FindIndex(v => v.Id == voteId);
-        if (idx >= 0)
-        {
-            ReceivedVotes.RemoveAt(idx);
-        }
+        if (idx >= 0) ReceivedVotes.RemoveAt(idx);
     }
 
-    public void SetVotedFor(Guid? votedForId)
-    {
-        VotedForId = votedForId;
-    }
+    public void SetVotedFor(Guid? votedForId) => VotedForId = votedForId;
 
-    public void ClearVotedFor()
-    {
-        VotedForId = null;
-    }
+    public void ClearVotedFor() => VotedForId = null;
 }

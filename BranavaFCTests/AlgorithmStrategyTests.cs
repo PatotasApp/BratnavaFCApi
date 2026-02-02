@@ -7,6 +7,7 @@ using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Models;
 using BratnavaFC.Domain.Dtos;
 using Xunit;
+using BratnavaFC.Domain.Entities;
 
 namespace BratnavaFC.Tests;
 
@@ -16,12 +17,12 @@ public class AlgorithmStrategyTests
     public async Task AlgorithmStrategy_SeedsByWinRate_And_Distributes()
     {
         // Arrange - four players
-        var p1 = new Player { Id = Guid.NewGuid(), Name = "P1", IsGoalkeeper = false };
-        var p2 = new Player { Id = Guid.NewGuid(), Name = "P2", IsGoalkeeper = false };
-        var p3 = new Player { Id = Guid.NewGuid(), Name = "P3", IsGoalkeeper = false };
-        var p4 = new Player { Id = Guid.NewGuid(), Name = "P4", IsGoalkeeper = false };
+        var p1 = new PlayerEntity { Id = Guid.NewGuid(), Name = "P1", IsGoalkeeper = false };
+        var p2 = new PlayerEntity { Id = Guid.NewGuid(), Name = "P2", IsGoalkeeper = false };
+        var p3 = new PlayerEntity { Id = Guid.NewGuid(), Name = "P3", IsGoalkeeper = false };
+        var p4 = new PlayerEntity { Id = Guid.NewGuid(), Name = "P4", IsGoalkeeper = false };
 
-        var players = new List<Player> { p1, p2, p3, p4 };
+        var players = new List<PlayerEntity> { p1, p2, p3, p4 };
 
         // Fake stats: winrates to determine keys and subsequent ordering
         var stats = new Dictionary<Guid, PlayerStats>
@@ -57,14 +58,14 @@ public class AlgorithmStrategyTests
     public async Task AlgorithmStrategy_Respects_Synergy_When_Selecting()
     {
         // Arrange - six players, strong synergy between p1 and p3 should favor p3 joining p1
-        var p1 = new Player { Id = Guid.NewGuid(), Name = "P1", IsGoalkeeper = false };
-        var p2 = new Player { Id = Guid.NewGuid(), Name = "P2", IsGoalkeeper = false };
-        var p3 = new Player { Id = Guid.NewGuid(), Name = "P3", IsGoalkeeper = false };
-        var p4 = new Player { Id = Guid.NewGuid(), Name = "P4", IsGoalkeeper = false };
-        var p5 = new Player { Id = Guid.NewGuid(), Name = "P5", IsGoalkeeper = false };
-        var p6 = new Player { Id = Guid.NewGuid(), Name = "P6", IsGoalkeeper = false };
+        var p1 = new PlayerEntity { Id = Guid.NewGuid(), Name = "P1", IsGoalkeeper = false };
+        var p2 = new PlayerEntity { Id = Guid.NewGuid(), Name = "P2", IsGoalkeeper = false };
+        var p3 = new PlayerEntity { Id = Guid.NewGuid(), Name = "P3", IsGoalkeeper = false };
+        var p4 = new PlayerEntity { Id = Guid.NewGuid(), Name = "P4", IsGoalkeeper = false };
+        var p5 = new PlayerEntity { Id = Guid.NewGuid(), Name = "P5", IsGoalkeeper = false };
+        var p6 = new PlayerEntity { Id = Guid.NewGuid(), Name = "P6", IsGoalkeeper = false };
 
-        var players = new List<Player> { p1, p2, p3, p4, p5, p6 };
+        var players = new List<PlayerEntity> { p1, p2, p3, p4, p5, p6 };
 
         // Stats: p1 and p2 are keys (higher winrates)
         // p3 has much higher synergy with p1 than p4 has, so when it's p1's team's turn, p3 should be chosen before p4 despite winrate
@@ -110,7 +111,7 @@ public class AlgorithmStrategyTests
             _stats = stats ?? new Dictionary<Guid, PlayerStats>();
         }
 
-        public Task<List<PlayerStats>> EnrichPlayersAsync(List<Player> players)
+        public Task<List<PlayerStats>> EnrichPlayersAsync(List<PlayerEntity> players)
         {
             var list = players.Select(p =>
             {

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using BratnavaFC.Domain.Models;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Entities;
 
 namespace BratnavaFC.Application.TeamGeneration;
 
@@ -16,7 +17,7 @@ public class TeamGenerationService
         _playerStatsService = playerStatsService ?? throw new ArgumentNullException(nameof(playerStatsService));
     }
 
-    public async Task<TeamsResultDto> GenerateAsync(List<Player> players, TeamGenerationSettings settings, StrategyType strategyType)
+    public async Task<TeamsResultDto> GenerateAsync(List<PlayerEntity> players, TeamGenerationSettings settings, StrategyType strategyType)
     {
         if (players == null) throw new ArgumentNullException(nameof(players));
         if (settings == null) throw new ArgumentNullException(nameof(settings));

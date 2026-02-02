@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using BratnavaFC.Application.TeamGeneration;
 using BratnavaFC.Domain.Models;
 using BratnavaFC.Domain.Dtos;
+using BratnavaFC.Domain.Entities;
 
 namespace BratnavaFC.Api.Controllers;
 
@@ -25,7 +26,7 @@ public class TeamGenerationController : ControllerBase
     {
         if (request == null) return BadRequest();
 
-        var players = request.Players.Select(p => new Player
+        var players = request.Players.Select(p => new PlayerEntity
         {
             Id = p.Id,
             Name = p.Name,

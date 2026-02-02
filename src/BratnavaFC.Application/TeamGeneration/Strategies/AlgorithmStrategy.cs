@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos;
+using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Models;
 
 namespace BratnavaFC.Application.TeamGeneration;
@@ -18,7 +19,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         _statsService = statsService ?? throw new ArgumentNullException(nameof(statsService));
     }
 
-    public async Task<TeamsResultDto> GenerateTeamsAsync(List<Player> players, TeamGenerationSettings settings)
+    public async Task<TeamsResultDto> GenerateTeamsAsync(List<PlayerEntity> players, TeamGenerationSettings settings)
     {
         if (players is null) throw new ArgumentNullException(nameof(players));
         if (settings is null) throw new ArgumentNullException(nameof(settings));
@@ -61,9 +62,9 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
             pickForA = !pickForA;
         }
 
-        result.TeamA.AddRange(teamA.Select(x => x.Player.Id));
-        result.TeamB.AddRange(teamB.Select(x => x.Player.Id));
-        result.Unassigned.AddRange(waiting.Select(x => x.Player.Id));
+        result.TeamA.AddRange(teamA.Select(x => x.PlayerEntity.Id));
+        result.TeamB.AddRange(teamB.Select(x => x.PlayerEntity.Id));
+        result.Unassigned.AddRange(waiting.Select(x => x.PlayerEntity.Id));
 
         if (!settings.IncludeGoalkeepers)
             result.Unassigned.AddRange(players.Where(p => p.IsGoalkeeper).Select(p => p.Id));
@@ -71,14 +72,14 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         return result;
     }
 
-    private async Task<Dictionary<Guid, PlayerStats>> LoadStatsByPlayerId(List<Player> players)
+    private async Task<Dictionary<Guid, PlayerStats>> LoadStatsByPlayerId(List<PlayerEntity> players)
     {
         var statsList = await _statsService.EnrichPlayersAsync(players);
         return statsList.ToDictionary(s => s.PlayerId, s => s);
     }
 
     private static List<PlayerWithStats> SelectCandidates(
-        List<Player> players,
+        List<PlayerEntity> players,
         Dictionary<Guid, PlayerStats> statsByPlayerId,
         TeamGenerationSettings settings)
     {
@@ -138,7 +139,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         {
             return waiting
                 .OrderByDescending(p => p.Stats?.WinRate ?? 0.0)
-                .ThenBy(p => p.Player.Id)
+                .ThenBy(p => p.PlayerEntity.Id)
                 .First();
         }
 
@@ -148,7 +149,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         return waiting
             .OrderByDescending(p => ComputeSynergySum(p.Stats, teamStats, statsLookup))
             .ThenByDescending(p => p.Stats?.WinRate ?? 0.0)
-            .ThenBy(p => p.Player.Id)
+            .ThenBy(p => p.PlayerEntity.Id)
             .First();
     }
 

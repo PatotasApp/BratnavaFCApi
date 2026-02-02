@@ -19,7 +19,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
         _context = context ?? throw new ArgumentNullException(nameof(context));
     }
 
-    public async Task<List<PlayerStats>> EnrichPlayersAsync(List<Player> players)
+    public async Task<List<PlayerStats>> EnrichPlayersAsync(List<PlayerEntity> players)
     {
         if (players is null) throw new ArgumentNullException(nameof(players));
         if (players.Count == 0) return new List<PlayerStats>();
@@ -150,7 +150,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
     private static Dictionary<Guid, double> BuildSynergyMap(
         Guid playerId,
-        List<Player> allPlayers,
+        List<PlayerEntity> allPlayers,
         Dictionary<PairKey, PairAccumulator> pairTotals)
     {
         var map = new Dictionary<Guid, double>(Math.Max(0, allPlayers.Count - 1));
