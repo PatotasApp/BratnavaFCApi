@@ -11,23 +11,24 @@ namespace BratnavaFC.Application.Services;
 
 public class UserService : IUserService
 {
-    private readonly AppDbContext appDbContext;
+    private readonly AppDbContext _appDbContext;
     private readonly IRepositoryBase<UserEntity> _repository;
     private readonly ILogger<UserService> _logger;
     private readonly PasswordHasher<UserEntity> _passwordHasher;
 
-    public UserService(IRepositoryBase<UserEntity> repository, ILogger<UserService> logger, PasswordHasher<UserEntity> passwordHasher)
+    public UserService(AppDbContext db, IRepositoryBase<UserEntity> repository, ILogger<UserService> logger, PasswordHasher<UserEntity> passwordHasher)
     {
         _repository = repository;
         _logger = logger;
         _passwordHasher = passwordHasher;
+        _appDbContext = db;
     }
 
     public async Task CreateUserAsync(CreateUserDto registerUserDto, CancellationToken cancellationToken)
     {
         try
         {
-            var user = await appDbContext.Users.FirstOrDefaultAsync(x => x.Email == registerUserDto.Email, cancellationToken);
+            var user = await _appDbContext.Users.FirstOrDefaultAsync(x => x.Email == registerUserDto.Email, cancellationToken);
 
             if (user is not null)
             {

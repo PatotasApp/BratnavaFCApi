@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Dtos;
@@ -7,6 +8,7 @@ namespace BratnavaFC.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = "User,Admin,GodMode")]
 public class MatchesController : ControllerBase
 {
     private readonly IMatchService _service;
@@ -32,6 +34,7 @@ public class MatchesController : ControllerBase
         return Ok(ToDto(match));
     }
 
+    [Authorize(Roles = "Admin,GodMode")]
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateMatchDto dto, CancellationToken cancellationToken)
     {
@@ -69,10 +72,10 @@ public class MatchesController : ControllerBase
         if (dto == null) return BadRequest();
 
         if (dto.VoterPlayerId == Guid.Empty || dto.VotedPlayerId == Guid.Empty)
-            return BadRequest("O jogador que votou e o votado s�o obrigat�rios.");
+            return BadRequest("O jogador que votou e o votado são obrigatórios.");
 
         if (dto.VoterPlayerId == dto.VotedPlayerId)
-            return BadRequest("O jogador n�o pode votar em si mesmo.");
+            return BadRequest("O jogador não pode votar em si mesmo.");
 
         try
         {
@@ -85,6 +88,7 @@ public class MatchesController : ControllerBase
         }
     }
 
+    [Authorize(Roles = "Admin,GodMode")]
     [HttpPost("{matchId:guid}/finalize")]
     public async Task<IActionResult> Finalize(Guid matchId, CancellationToken cancellationToken)
     {
@@ -106,14 +110,15 @@ public class MatchesController : ControllerBase
         if (mvp == null) return NotFound();
 
         var dto = new MatchPlayerDto(mvp.Id, mvp.Name, mvp.IsMvp);
-        
         return Ok(dto);
     }
 
+    [Authorize(Roles = "Admin,GodMode")]
     [HttpPut("{matchId:guid}/score")]
     public async Task<IActionResult> SetScore(Guid matchId, [FromBody] SetScoreRequestDto dto, CancellationToken cancellationToken)
     {
         if (dto == null) return BadRequest();
+
         try
         {
             await _service.SetScoreAsync(matchId, dto.TeamAGoals, dto.TeamBGoals, cancellationToken: cancellationToken);

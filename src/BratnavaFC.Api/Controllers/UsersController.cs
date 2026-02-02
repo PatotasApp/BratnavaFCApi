@@ -2,24 +2,28 @@ using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos.Users;
 using Microsoft.AspNetCore.Mvc;
 
-namespace BratnavaFC.Api.Controllers
+namespace BratnavaFC.Api.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public sealed class UsersController : ControllerBase
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class UsersController : ControllerBase
+    private readonly IUserService _userService;
+
+    public UsersController(IUserService userService)
     {
-        private readonly IUserService _userService;
+        _userService = userService;
+    }
 
-        public UsersController(IUserService userService)
-        {
-            _userService = userService;
-        }
+    [HttpPost]
+    public async Task<IActionResult> CreateAsync(
+        [FromBody] CreateUserDto dto,
+        CancellationToken cancellationToken)
+    {
+        if (dto == null) return BadRequest();
 
-        [HttpPost]
-        public async Task<IActionResult> CreateAsync([FromBody] CreateUserDto dto, CancellationToken cancellationToken)
-        {
-            await _userService.CreateUserAsync(dto, cancellationToken);
-            return CreatedAtAction(nameof(CreateAsync), "created");
-        }
+        await _userService.CreateUserAsync(dto, cancellationToken);
+
+        return StatusCode(StatusCodes.Status201Created);
     }
 }
