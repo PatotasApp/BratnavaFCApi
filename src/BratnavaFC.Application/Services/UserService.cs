@@ -28,15 +28,21 @@ public class UserService : IUserService
     {
         try
         {
-            var user = await _appDbContext.Users.FirstOrDefaultAsync(x => x.Email == registerUserDto.Email, cancellationToken);
+            var user = await _appDbContext.Users.FirstOrDefaultAsync(x => x.Email == registerUserDto.Email || x.UserName == registerUserDto.UserName, cancellationToken);
 
-            if (user is not null)
+            if (user?.UserName == registerUserDto.UserName)
             {
-                throw new ApplicationException("User already exists.");
+                throw new ApplicationException($"User already exists with the user name '{registerUserDto.UserName}'.");
+            }
+    
+            if (user?.Email == registerUserDto.Email)
+            {
+                throw new ApplicationException($"User already exists with the email '{registerUserDto.Email}'.");
             }
 
             UserEntity newUser = new()
             {
+                UserName = registerUserDto.UserName,
                 Email = registerUserDto.Email,
                 FirstName = registerUserDto.FirstName,
                 LastName = registerUserDto.LastName,

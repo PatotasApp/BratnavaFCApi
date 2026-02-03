@@ -1,3 +1,6 @@
+using System.Runtime.ConstrainedExecution;
+using BratnavaFC.Domain.Enums;
+
 namespace BratnavaFC.Domain.Entities;
 
 public class MatchEntity : BaseEntity

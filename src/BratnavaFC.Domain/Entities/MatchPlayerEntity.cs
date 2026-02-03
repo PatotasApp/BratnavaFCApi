@@ -1,19 +1,19 @@
+using BratnavaFC.Domain.Enums;
+
 namespace BratnavaFC.Domain.Entities;
 
 public class MatchPlayerEntity : BaseEntity
 {
     private MatchPlayerEntity() { }
 
-    public MatchPlayerEntity(Guid playerId, string name)
+    public MatchPlayerEntity(Guid playerId)
     {
         PlayerId = playerId;
-        Name = name ?? throw new ArgumentNullException(nameof(name));
     }
 
     public Guid PlayerId { get; private set; }
     public PlayerEntity? Player { get; private set; }
 
-    public string Name { get; private set; } = null!;
     public bool? IsMvp { get; private set; }
 
     public Guid MatchId { get; private set; }
@@ -23,8 +23,8 @@ public class MatchPlayerEntity : BaseEntity
 
     public List<VoteEntity> ReceivedVotes { get; private set; } = new();
     public Guid? VotedForId { get; private set; }
-
-    public void SetName(string name) => Name = name ?? throw new ArgumentNullException(nameof(name));
+    
+    public InviteResponse InviteResponse { get; set; } = InviteResponse.None;
 
     public void SetMvp() => IsMvp = true;
 

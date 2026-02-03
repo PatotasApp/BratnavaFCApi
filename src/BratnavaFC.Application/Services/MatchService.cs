@@ -119,7 +119,7 @@ public class MatchService : IMatchService
     public async Task<MatchPlayerEntity?> GetMvpAsync(Guid matchId)
     {
         var match = await _context.Matches
-            .Include(m => m.Players)
+            .Include(m => m.Players).ThenInclude(x => x.Player)
             .Include(m => m.Votes)
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
@@ -180,6 +180,24 @@ public class MatchService : IMatchService
 
             match.SetTeamColors(teamAColorId, teamBColorId);
         }
+
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public Task AcceptInviteAsync(Guid matchId, Guid playerId, CancellationToken cancellationToken)
+       => UpdateMatchPlayerInviteResponseAsync(matchId, playerId, Domain.Enums.InviteResponse.Accepted, cancellationToken);
+
+    public Task RejectInviteAsync(Guid matchId, Guid playerId, CancellationToken cancellationToken)
+       => UpdateMatchPlayerInviteResponseAsync(matchId, playerId, Domain.Enums.InviteResponse.Rejected, cancellationToken);
+
+    private async Task UpdateMatchPlayerInviteResponseAsync(Guid matchId, Guid playerId, Domain.Enums.InviteResponse response, CancellationToken cancellationToken)
+    {
+        var matchPlayer = await _context.MatchPlayers.FirstOrDefaultAsync(mp => mp.MatchId == matchId && mp.PlayerId == playerId, cancellationToken);
+
+        if (matchPlayer == null)
+            throw new InvalidOperationException("Convite não encontrado para o jogador nesta partida.");
+
+        matchPlayer.InviteResponse = response;
 
         await _context.SaveChangesAsync(cancellationToken);
     }

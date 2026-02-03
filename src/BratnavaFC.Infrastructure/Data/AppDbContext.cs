@@ -55,8 +55,8 @@ public class AppDbContext : DbContext
               {
                      builder.HasKey(x => x.Id);
 
-                     builder.Property(x => x.Name)
-                      .IsRequired();
+                     builder.Property(x => x.InviteResponse)
+                      .HasDefaultValue(InviteResponse.None);
 
                      builder.HasOne(x => x.Match)
                       .WithMany(x => x.Players)
@@ -132,6 +132,7 @@ public class AppDbContext : DbContext
               {
                      builder.HasKey(x => x.Id);
 
+                     builder.Property(x => x.UserName).IsRequired();
                      builder.Property(x => x.FirstName).IsRequired();
                      builder.Property(x => x.LastName).IsRequired();
                      builder.Property(x => x.Email).IsRequired();

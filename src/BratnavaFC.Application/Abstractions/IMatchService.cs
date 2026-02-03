@@ -17,4 +17,6 @@ public interface IMatchService
     Task<MatchPlayerEntity?> GetMvpAsync(Guid matchId);
     Task SetScoreAsync(Guid matchId, int teamAGoals, int teamBGoals, CancellationToken cancellationToken);
     Task SetTeamColorsAsync(Guid matchId, Guid? teamAColorId, Guid? teamBColorId, bool randomize = false, CancellationToken cancellationToken = default);
+    Task AcceptInviteAsync(Guid matchId, Guid playerId, CancellationToken cancellationToken);
+    Task RejectInviteAsync(Guid matchId, Guid playerId, CancellationToken cancellationToken);
 }

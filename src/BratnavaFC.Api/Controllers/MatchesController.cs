@@ -59,6 +59,35 @@ public class MatchesController : ControllerBase
         return NoContent();
     }
 
+
+    [HttpPut("{matchId:guid}/invite/{playerId:guid}/accept")]
+    public async Task<IActionResult> AcceptInviteAsync(Guid matchId, Guid playerId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _service.AcceptInviteAsync(matchId, playerId, cancellationToken);
+            return Ok();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }    
+    }
+
+    [HttpPatch("{matchId:guid}/invite/{playerId:guid}/reject")]
+    public async Task<IActionResult> RejectInviteAsync(Guid matchId, Guid playerId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _service.RejectInviteAsync(matchId, playerId, cancellationToken);
+            return Ok();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }    
+    }
+
     [HttpDelete("{matchId:guid}")]
     public async Task<IActionResult> Delete(Guid matchId, CancellationToken cancellationToken)
     {
@@ -109,7 +138,7 @@ public class MatchesController : ControllerBase
         var mvp = await _service.GetMvpAsync(matchId);
         if (mvp == null) return NotFound();
 
-        var dto = new MatchPlayerDto(mvp.Id, mvp.Name, mvp.IsMvp);
+        var dto = new MatchPlayerDto(mvp.Id, mvp.Player!.Name, mvp.IsMvp);
         return Ok(dto);
     }
 
