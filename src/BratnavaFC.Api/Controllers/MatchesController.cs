@@ -60,7 +60,7 @@ public class MatchesController : ControllerBase
     }
 
 
-    [HttpPut("{matchId:guid}/invite/{playerId:guid}/accept")]
+    [HttpPatch("{matchId:guid}/invite/{playerId:guid}/accept")]
     public async Task<IActionResult> AcceptInviteAsync(Guid matchId, Guid playerId, CancellationToken cancellationToken)
     {
         try
