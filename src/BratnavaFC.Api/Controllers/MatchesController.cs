@@ -22,8 +22,7 @@ public class MatchesController : ControllerBase
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var matches = await _service.GetAllAsync(cancellationToken);
-        var dtos = matches.Select(ToDto);
-        return Ok(dtos);
+        return Ok(matches.Select(ToDto));
     }
 
     [HttpGet("{matchId:guid}")]
@@ -38,26 +37,25 @@ public class MatchesController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateMatchDto dto, CancellationToken cancellationToken)
     {
-        var entity = FromDto(dto);
-        var created = await _service.CreateAsync(entity, cancellationToken);
-        return CreatedAtAction(nameof(Get), new { matchId = created.Id }, ToDto(created));
+        try
+        {
+            var entity = FromDto(dto);
+            var created = await _service.Create(entity, cancellationToken);
+            return CreatedAtAction(nameof(Get), new { matchId = created.Id }, ToDto(created));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     [Authorize(Roles = "Admin,GodMode")]
     [HttpPut("{matchId:guid}")]
     public async Task<IActionResult> Update(Guid matchId, [FromBody] UpdateMatchDto dto, CancellationToken cancellationToken)
     {
-        if (dto.Id.HasValue && dto.Id.Value != matchId) return BadRequest();
-
-        var existing = await _service.GetByIdAsync(matchId, cancellationToken);
-        if (existing == null) return NotFound();
-
-        existing.SetPlayedAt(dto.PlayedAt);
-        existing.SetPlaceName(dto.PlaceName);
-
         try
         {
-            await _service.UpdateAsync(existing, cancellationToken);
+            await _service.UpdateAsync(matchId, dto, cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -81,12 +79,9 @@ public class MatchesController : ControllerBase
         }
     }
 
-
     [HttpPatch("{matchId:guid}/invite/accept")]
     public async Task<IActionResult> AcceptInviteAsync(Guid matchId, [FromBody] InviteActionDto dto, CancellationToken cancellationToken)
     {
-        if (dto == null || dto.PlayerId == Guid.Empty) return BadRequest("PlayerId é obrigatório.");
-
         try
         {
             await _service.AcceptInviteAsync(matchId, dto.PlayerId, cancellationToken);
@@ -101,8 +96,6 @@ public class MatchesController : ControllerBase
     [HttpPatch("{matchId:guid}/invite/reject")]
     public async Task<IActionResult> RejectInviteAsync(Guid matchId, [FromBody] InviteActionDto dto, CancellationToken cancellationToken)
     {
-        if (dto == null || dto.PlayerId == Guid.Empty) return BadRequest("PlayerId é obrigatório.");
-
         try
         {
             await _service.RejectInviteAsync(matchId, dto.PlayerId, cancellationToken);
@@ -116,7 +109,7 @@ public class MatchesController : ControllerBase
 
     [Authorize(Roles = "Admin,GodMode")]
     [HttpPost("{matchId:guid}/start")]
-    public async Task<IActionResult> Start(Guid matchId, CancellationToken cancellationToken)
+    public async Task<IActionResult> StartAsync(Guid matchId, CancellationToken cancellationToken)
     {
         try
         {
@@ -131,7 +124,7 @@ public class MatchesController : ControllerBase
 
     [Authorize(Roles = "Admin,GodMode")]
     [HttpPost("{matchId:guid}/end")]
-    public async Task<IActionResult> End(Guid matchId, CancellationToken cancellationToken)
+    public async Task<IActionResult> EndAsync(Guid matchId, CancellationToken cancellationToken)
     {
         try
         {
@@ -145,16 +138,8 @@ public class MatchesController : ControllerBase
     }
 
     [HttpPost("{matchId:guid}/vote")]
-    public async Task<IActionResult> Vote(Guid matchId, [FromBody] VoteRequestDto dto, CancellationToken cancellationToken)
+    public async Task<IActionResult> VoteAsync(Guid matchId, [FromBody] VoteRequestDto dto, CancellationToken cancellationToken)
     {
-        if (dto == null) return BadRequest();
-
-        if (dto.VoterPlayerId == Guid.Empty || dto.VotedPlayerId == Guid.Empty)
-            return BadRequest("O jogador que votou e o votado são obrigatórios.");
-
-        if (dto.VoterPlayerId == dto.VotedPlayerId)
-            return BadRequest("O jogador não pode votar em si mesmo.");
-
         try
         {
             await _service.VoteAsync(matchId, dto.VoterPlayerId, dto.VotedPlayerId, cancellationToken);
@@ -167,21 +152,18 @@ public class MatchesController : ControllerBase
     }
 
     [HttpGet("{matchId:guid}/mvp")]
-    public async Task<IActionResult> GetMvp(Guid matchId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetMvpAsync(Guid matchId, CancellationToken cancellationToken)
     {
         var mvp = await _service.GetMvpAsync(matchId, cancellationToken);
         if (mvp == null) return NotFound();
 
-        var dto = new MatchPlayerDto(mvp.Id, mvp.Player?.Name ?? string.Empty, mvp.IsMvp);
-        return Ok(dto);
+        return Ok(new MatchPlayerDto(mvp.Id, mvp.Player?.Name ?? string.Empty, mvp.IsMvp));
     }
 
     [Authorize(Roles = "Admin,GodMode")]
     [HttpPut("{matchId:guid}/score")]
-    public async Task<IActionResult> SetScore(Guid matchId, [FromBody] SetScoreRequestDto dto, CancellationToken cancellationToken)
+    public async Task<IActionResult> SetScoreAsync(Guid matchId, [FromBody] SetScoreRequestDto dto, CancellationToken cancellationToken)
     {
-        if (dto == null) return BadRequest();
-
         try
         {
             await _service.SetScoreAsync(matchId, dto.TeamAGoals, dto.TeamBGoals, cancellationToken);
@@ -195,13 +177,17 @@ public class MatchesController : ControllerBase
 
     [Authorize(Roles = "Admin,GodMode")]
     [HttpPut("{matchId:guid}/colors")]
-    public async Task<IActionResult> SetMatchColors(Guid matchId, [FromBody] SetMatchColorsRequestDto dto, CancellationToken cancellationToken)
+    public async Task<IActionResult> SetMatchColorsAsync(Guid matchId, [FromBody] SetMatchColorsRequestDto dto, CancellationToken cancellationToken)
     {
-        if (dto == null) return BadRequest();
-
         try
         {
-            await _service.SetTeamColorsAsync(matchId, dto.TeamAColorId, dto.TeamBColorId, dto.Randomize, cancellationToken);
+            await _service.SetTeamColorsAsync(
+                matchId,
+                dto.TeamAColorId,
+                dto.TeamBColorId,
+                dto.Randomize,
+                cancellationToken);
+
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -212,7 +198,7 @@ public class MatchesController : ControllerBase
 
     [Authorize(Roles = "Admin,GodMode")]
     [HttpPost("{matchId:guid}/finalize")]
-    public async Task<IActionResult> Finalize(Guid matchId, CancellationToken cancellationToken)
+    public async Task<IActionResult> FinalizeAsync(Guid matchId, CancellationToken cancellationToken)
     {
         try
         {
