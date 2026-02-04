@@ -254,4 +254,114 @@ public class MatchService : IMatchService
         if (groupId == Guid.Empty)
             throw new InvalidOperationException("GroupId é obrigatório.");
     }
+
+    public async Task<MatchDetailsDto?> GetDetailsAsync(Guid matchId, CancellationToken ct)
+    {
+        var match = await  _context.Matches
+            .AsNoTracking()
+            .Include(m => m.TeamAColor)
+            .Include(m => m.TeamBColor)
+            .Include(m => m.Players)
+                .ThenInclude(mp => mp.Player)
+            .Include(m => m.Votes)
+                .ThenInclude(v => v.Voter)     // MatchPlayerEntity
+            .Include(m => m.Votes)
+                .ThenInclude(v => v.VotedFor)  // MatchPlayerEntity
+            .FirstOrDefaultAsync(m => m.Id == matchId, ct);
+
+        if (match is null) return null;
+
+        // MVP computado por votos (teu método)
+        var computedMvp = match.GetComputedMvp();
+
+        // Map rápido de MatchPlayerId -> nome (pra votos)
+        var mpName = match.Players.ToDictionary(
+            p => p.Id,
+            p => p.Player?.Name ?? ""
+        );
+
+        var teamAPlayers = match.Players.Where(p => p.Team == 1).ToList();
+        var teamBPlayers = match.Players.Where(p => p.Team == 2).ToList();
+        var unassigned = match.Players.Where(p => p.Team == 0).ToList();
+
+        var voteCounts = match.Votes
+            .Where(v => v.VotedForId != Guid.Empty)
+            .GroupBy(v => v.VotedForId)
+            .Select(g => new VoteCountDto
+            {
+                VotedForMatchPlayerId = g.Key,
+                VotedForName = mpName.TryGetValue(g.Key, out var n) ? n : "",
+                Count = g.Count()
+            })
+            .OrderByDescending(x => x.Count)
+            .ThenBy(x => x.VotedForName)
+            .ToList();
+
+        return new MatchDetailsDto
+        {
+            MatchId = match.Id,
+            GroupId = match.GroupId,
+            PlayedAt = match.PlayedAt,
+            PlaceName = match.PlaceName,
+
+            Status = (short)match.Status,
+            StatusName = match.Status.ToString(),
+
+            TeamAGoals = match.TeamAGoals,
+            TeamBGoals = match.TeamBGoals,
+
+            TeamAColor = match.TeamAColorId is null || match.TeamAColor is null
+                ? null
+                : new TeamColorDto
+                {
+                    Id = match.TeamAColor.Id,
+                    Name = match.TeamAColor.Name,
+                    HexValue = match.TeamAColor.HexValue
+                },
+
+            TeamBColor = match.TeamBColorId is null || match.TeamBColor is null
+                ? null
+                : new TeamColorDto
+                {
+                    Id = match.TeamBColor.Id,
+                    Name = match.TeamBColor.Name,
+                    HexValue = match.TeamBColor.HexValue
+                },
+
+            ComputedMvp = computedMvp is null
+                ? null
+                : new MatchMvpDto
+                {
+                    MatchPlayerId = computedMvp.Id,
+                    PlayerId = computedMvp.PlayerId,
+                    PlayerName = computedMvp.Player?.Name ?? "",
+                    Team = computedMvp.Team
+                },
+
+            TeamAPlayers = teamAPlayers.Select(ToPlayerDto).OrderBy(x => x.PlayerName).ToList(),
+            TeamBPlayers = teamBPlayers.Select(ToPlayerDto).OrderBy(x => x.PlayerName).ToList(),
+            UnassignedPlayers = unassigned.Select(ToPlayerDto).OrderBy(x => x.PlayerName).ToList(),
+
+            Votes = match.Votes.Select(v => new VoteDto
+            {
+                VoteId = v.Id,
+                VoterMatchPlayerId = v.VoterId,
+                VotedForMatchPlayerId = v.VotedForId,
+                VoterName = mpName.TryGetValue(v.VoterId, out var voterName) ? voterName : "",
+                VotedForName = mpName.TryGetValue(v.VotedForId, out var votedName) ? votedName : ""
+            }).ToList(),
+
+            VoteCounts = voteCounts,
+        };
+    }
+
+    private static PlayerInMatchDto ToPlayerDto(dynamic mp) => new PlayerInMatchDto
+    {
+        MatchPlayerId = mp.Id,
+        PlayerId = mp.PlayerId,
+        PlayerName = mp.Player?.Name ?? "",
+        IsGoalkeeper = mp.Player?.IsGoalkeeper ?? false,
+        Team = mp.Team,
+        InviteResponse = (short)mp.InviteResponse
+    };
 }

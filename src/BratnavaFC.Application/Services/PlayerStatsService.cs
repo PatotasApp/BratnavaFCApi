@@ -57,7 +57,6 @@ public sealed class PlayerStatsService : IPlayerStatsService
         return result;
     }
 
-    // ✅ MODO VISUAL
     public async Task<PlayerVisualStatsReport> GetVisualReportAsync(Guid groupId, CancellationToken cancellationToken = default)
     {
         // 1) Players do grupo
@@ -80,32 +79,48 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
         var playerIds = players.Select(p => p.Id).ToHashSet();
 
-        // 2) Matches com MatchPlayers desse grupo (inclui Players e MVP flag)
+        // 2) Matches do grupo (carrega MatchPlayers)
         var matches = await _context.Matches
             .AsNoTracking()
+            .Where(m => m.GroupId == groupId)
             .Include(m => m.Players)
-            .Where(m => m.Players.Any(mp => playerIds.Contains(mp.PlayerId)))
             .ToListAsync(cancellationToken);
 
-        var totalMatches = matches.Count;
-        var totalFinalized = matches.Count(m => m.IsFinalized);
-        var totalWithScore = matches.Count(m => m.TeamAGoals.HasValue && m.TeamBGoals.HasValue);
+        // mantém só matches que, após filtro defensivo, tenham players do grupo
+        var matchesFiltered = matches
+            .Select(m => new
+            {
+                Match = m,
+                Players = m.Players
+                    .Where(mp => mp.GroupId == groupId && playerIds.Contains(mp.PlayerId))
+                    .ToList()
+            })
+            .Where(x => x.Players.Count > 0)
+            .ToList();
 
-        // 3) Acumuladores (agora também MVP)
+        var totalMatches = matchesFiltered.Count;
+        var totalFinalized = matchesFiltered.Count(x => x.Match.Status == BratnavaFC.Domain.Enums.MatchStatus.Finalized);
+        var totalWithScore = matchesFiltered.Count(x => x.Match.TeamAGoals.HasValue && x.Match.TeamBGoals.HasValue);
+
+        // 3) Acumuladores
         var perPlayer = InitializePlayerAccumulators(playerIds);
         var mvpCounts = playerIds.ToDictionary(id => id, _ => 0);
-
         var pairTotals = new Dictionary<PairKey, PairAccumulator>();
 
-        foreach (var match in matches)
+        foreach (var x in matchesFiltered)
         {
-            ProcessMatchForVisual(match, playerIds, perPlayer, pairTotals, mvpCounts);
+            // IMPORTANTE: seu ProcessMatchForVisual provavelmente usa match.Players.
+            // Então, se ele depende disso, você tem 2 opções:
+            // A) criar uma sobrecarga que recebe a lista filtrada (recomendado)
+            // B) ajustar ProcessMatchForVisual pra aceitar "IReadOnlyList<MatchPlayerEntity> playersInMatch"
+
+            ProcessMatchForVisual(x.Match, x.Players, playerIds, perPlayer, pairTotals, mvpCounts);
         }
 
-        // 4) Mapa nome por id (pra synergies “visuais”)
+        // 4) mapa de nomes
         var playerNameById = players.ToDictionary(p => p.Id, p => p.Name);
 
-        // 5) Monta o report
+        // 5) monta report
         var items = new List<PlayerVisualStatsItem>(players.Count);
 
         foreach (var pl in players)
@@ -133,7 +148,6 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
                 Mvps = mvpCounts.TryGetValue(pl.Id, out var mvps) ? mvps : 0,
 
-                // deixa synergies mais úteis: ordena por matches juntos desc, depois winrate desc
                 Synergies = synergies
                     .OrderByDescending(s => s.MatchesTogether)
                     .ThenByDescending(s => s.WinRateTogether)
@@ -141,7 +155,6 @@ public sealed class PlayerStatsService : IPlayerStatsService
             });
         }
 
-        // ordena players por winrate e jogos
         items = items
             .OrderByDescending(p => p.WinRate)
             .ThenByDescending(p => p.GamesPlayed)
@@ -158,6 +171,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
             Players = items
         };
     }
+
 
     private Task<List<MatchEntity>> LoadMatchesAsync(HashSet<Guid> playerIds, CancellationToken cancellationToken)
     {
@@ -237,17 +251,15 @@ public sealed class PlayerStatsService : IPlayerStatsService
     }
 
     private static void ProcessMatchForVisual(
-        MatchEntity match,
-        HashSet<Guid> trackedPlayerIds,
-        Dictionary<Guid, PlayerAccumulator> perPlayer,
-        Dictionary<PairKey, PairAccumulator> pairTotals,
-        Dictionary<Guid, int> mvpCounts)
+    MatchEntity match,
+    IReadOnlyList<MatchPlayerEntity> participants,
+    HashSet<Guid> trackedPlayerIds,
+    Dictionary<Guid, PlayerAccumulator> perPlayer,
+    Dictionary<PairKey, PairAccumulator> pairTotals,
+    Dictionary<Guid, int> mvpCounts)
     {
-        var participants = match.Players
-            .Where(mp => trackedPlayerIds.Contains(mp.PlayerId))
-            .ToList();
-
-        if (participants.Count == 0) return;
+        if (participants == null || participants.Count == 0)
+            return;
 
         // MVP counts
         foreach (var mp in participants)
@@ -262,7 +274,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
         var outcome = GetMatchOutcome(match);
 
-        // Individual W/D/L
+        // Individual W / D / L
         foreach (var mp in participants)
         {
             var playerId = mp.PlayerId;
@@ -283,13 +295,21 @@ public sealed class PlayerStatsService : IPlayerStatsService
             perPlayer[playerId] = acc;
         }
 
-        // Pair synergy
+        // Pair synergy (jogaram juntos no mesmo time)
         foreach (var teamGroup in participants.GroupBy(p => p.Team))
         {
-            var teamPlayers = teamGroup.Select(p => p.PlayerId).Distinct().ToList();
-            if (teamPlayers.Count < 2) continue;
+            var teamPlayers = teamGroup
+                .Select(p => p.PlayerId)
+                .Distinct()
+                .ToList();
 
-            var teamWon = outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == teamGroup.Key;
+            if (teamPlayers.Count < 2)
+                continue;
+
+            var teamWon =
+                outcome.HasScore &&
+                !outcome.IsTie &&
+                outcome.WinningTeam == teamGroup.Key;
 
             for (int i = 0; i < teamPlayers.Count; i++)
             {
@@ -301,13 +321,15 @@ public sealed class PlayerStatsService : IPlayerStatsService
                         pairAcc = PairAccumulator.Empty;
 
                     pairAcc.MatchesTogether++;
-                    if (teamWon) pairAcc.WinsTogether++;
+                    if (teamWon)
+                        pairAcc.WinsTogether++;
 
                     pairTotals[key] = pairAcc;
                 }
             }
         }
     }
+
 
     private static MatchOutcome GetMatchOutcome(MatchEntity match)
     {

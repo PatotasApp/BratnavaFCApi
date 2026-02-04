@@ -221,6 +221,16 @@ public class MatchesController : ControllerBase
         }
     }
 
+    [HttpGet("{matchId:guid}/details")]
+    public async Task<ActionResult<MatchDetailsDto>> GetDetails(
+    [FromRoute] Guid matchId,
+    CancellationToken cancellationToken)
+    {
+        var details = await _service.GetDetailsAsync(matchId, cancellationToken);
+        if (details is null) return NotFound();
+
+        return Ok(details);
+    }
     private static MatchDto ToDto(MatchEntity e) =>
         new(
             e.Id,

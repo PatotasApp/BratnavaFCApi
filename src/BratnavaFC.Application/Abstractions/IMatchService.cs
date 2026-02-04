@@ -32,4 +32,5 @@ public interface IMatchService
     Task SetTeamColorsAsync(Guid groupId, Guid matchId, Guid? teamAColorId, Guid? teamBColorId, bool randomize, CancellationToken cancellationToken);
 
     Task FinalizeMatchAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken);
+    Task<MatchDetailsDto?> GetDetailsAsync(Guid matchId, CancellationToken ct);
 }
