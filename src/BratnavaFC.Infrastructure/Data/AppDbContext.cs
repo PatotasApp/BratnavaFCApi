@@ -49,6 +49,12 @@ public class AppDbContext : DbContext
                       .WithMany()
                       .HasForeignKey(x => x.TeamBColorId)
                       .OnDelete(DeleteBehavior.SetNull);
+
+                  builder.Property(x => x.Status)
+                    .HasConversion<short>()
+                    .HasDefaultValue(MatchStatus.Created)
+                    .IsRequired();
+
               });
 
               modelBuilder.Entity<MatchPlayerEntity>(builder =>

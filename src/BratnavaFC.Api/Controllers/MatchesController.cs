@@ -19,17 +19,17 @@ public class MatchesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll()
+    public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
-        var matches = await _service.GetAllAsync();
+        var matches = await _service.GetAllAsync(cancellationToken);
         var dtos = matches.Select(ToDto);
         return Ok(dtos);
     }
 
     [HttpGet("{matchId:guid}")]
-    public async Task<IActionResult> Get(Guid matchId)
+    public async Task<IActionResult> Get(Guid matchId, CancellationToken cancellationToken)
     {
-        var match = await _service.GetByIdAsync(matchId);
+        var match = await _service.GetByIdAsync(matchId, cancellationToken);
         if (match == null) return NotFound();
         return Ok(ToDto(match));
     }
@@ -43,56 +43,105 @@ public class MatchesController : ControllerBase
         return CreatedAtAction(nameof(Get), new { matchId = created.Id }, ToDto(created));
     }
 
+    [Authorize(Roles = "Admin,GodMode")]
     [HttpPut("{matchId:guid}")]
     public async Task<IActionResult> Update(Guid matchId, [FromBody] UpdateMatchDto dto, CancellationToken cancellationToken)
     {
         if (dto.Id.HasValue && dto.Id.Value != matchId) return BadRequest();
 
-        var existing = await _service.GetByIdAsync(matchId);
+        var existing = await _service.GetByIdAsync(matchId, cancellationToken);
         if (existing == null) return NotFound();
 
         existing.SetPlayedAt(dto.PlayedAt);
         existing.SetPlaceName(dto.PlaceName);
 
-        await _service.UpdateAsync(existing, cancellationToken);
-
-        return NoContent();
-    }
-
-
-    [HttpPatch("{matchId:guid}/invite/{playerId:guid}/accept")]
-    public async Task<IActionResult> AcceptInviteAsync(Guid matchId, Guid playerId, CancellationToken cancellationToken)
-    {
         try
         {
-            await _service.AcceptInviteAsync(matchId, playerId, cancellationToken);
-            return Ok();
+            await _service.UpdateAsync(existing, cancellationToken);
+            return NoContent();
         }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
-        }    
-    }
-
-    [HttpPatch("{matchId:guid}/invite/{playerId:guid}/reject")]
-    public async Task<IActionResult> RejectInviteAsync(Guid matchId, Guid playerId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _service.RejectInviteAsync(matchId, playerId, cancellationToken);
-            return Ok();
         }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }    
     }
 
+    [Authorize(Roles = "Admin,GodMode")]
     [HttpDelete("{matchId:guid}")]
     public async Task<IActionResult> Delete(Guid matchId, CancellationToken cancellationToken)
     {
-        await _service.DeleteAsync(matchId, cancellationToken);
-        return NoContent();
+        try
+        {
+            await _service.DeleteAsync(matchId, cancellationToken);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+
+    [HttpPatch("{matchId:guid}/invite/accept")]
+    public async Task<IActionResult> AcceptInviteAsync(Guid matchId, [FromBody] InviteActionDto dto, CancellationToken cancellationToken)
+    {
+        if (dto == null || dto.PlayerId == Guid.Empty) return BadRequest("PlayerId é obrigatório.");
+
+        try
+        {
+            await _service.AcceptInviteAsync(matchId, dto.PlayerId, cancellationToken);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPatch("{matchId:guid}/invite/reject")]
+    public async Task<IActionResult> RejectInviteAsync(Guid matchId, [FromBody] InviteActionDto dto, CancellationToken cancellationToken)
+    {
+        if (dto == null || dto.PlayerId == Guid.Empty) return BadRequest("PlayerId é obrigatório.");
+
+        try
+        {
+            await _service.RejectInviteAsync(matchId, dto.PlayerId, cancellationToken);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [Authorize(Roles = "Admin,GodMode")]
+    [HttpPost("{matchId:guid}/start")]
+    public async Task<IActionResult> Start(Guid matchId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _service.StartMatchAsync(matchId, cancellationToken);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [Authorize(Roles = "Admin,GodMode")]
+    [HttpPost("{matchId:guid}/end")]
+    public async Task<IActionResult> End(Guid matchId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _service.EndMatchAsync(matchId, cancellationToken);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     [HttpPost("{matchId:guid}/vote")]
@@ -117,28 +166,13 @@ public class MatchesController : ControllerBase
         }
     }
 
-    [Authorize(Roles = "Admin,GodMode")]
-    [HttpPost("{matchId:guid}/finalize")]
-    public async Task<IActionResult> Finalize(Guid matchId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _service.FinalizeMatchAsync(matchId, cancellationToken);
-            return NoContent();
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
-    }
-
     [HttpGet("{matchId:guid}/mvp")]
-    public async Task<IActionResult> GetMvp(Guid matchId)
+    public async Task<IActionResult> GetMvp(Guid matchId, CancellationToken cancellationToken)
     {
-        var mvp = await _service.GetMvpAsync(matchId);
+        var mvp = await _service.GetMvpAsync(matchId, cancellationToken);
         if (mvp == null) return NotFound();
 
-        var dto = new MatchPlayerDto(mvp.Id, mvp.Player!.Name, mvp.IsMvp);
+        var dto = new MatchPlayerDto(mvp.Id, mvp.Player?.Name ?? string.Empty, mvp.IsMvp);
         return Ok(dto);
     }
 
@@ -150,7 +184,7 @@ public class MatchesController : ControllerBase
 
         try
         {
-            await _service.SetScoreAsync(matchId, dto.TeamAGoals, dto.TeamBGoals, cancellationToken: cancellationToken);
+            await _service.SetScoreAsync(matchId, dto.TeamAGoals, dto.TeamBGoals, cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -159,6 +193,7 @@ public class MatchesController : ControllerBase
         }
     }
 
+    [Authorize(Roles = "Admin,GodMode")]
     [HttpPut("{matchId:guid}/colors")]
     public async Task<IActionResult> SetMatchColors(Guid matchId, [FromBody] SetMatchColorsRequestDto dto, CancellationToken cancellationToken)
     {
@@ -166,7 +201,22 @@ public class MatchesController : ControllerBase
 
         try
         {
-            await _service.SetTeamColorsAsync(matchId, dto.TeamAColorId, dto.TeamBColorId, dto.Randomize);
+            await _service.SetTeamColorsAsync(matchId, dto.TeamAColorId, dto.TeamBColorId, dto.Randomize, cancellationToken);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [Authorize(Roles = "Admin,GodMode")]
+    [HttpPost("{matchId:guid}/finalize")]
+    public async Task<IActionResult> Finalize(Guid matchId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _service.FinalizeMatchAsync(matchId, cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex)
