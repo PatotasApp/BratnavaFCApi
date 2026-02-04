@@ -1,6 +1,12 @@
-﻿using System;
+﻿namespace BratnavaFC.Domain.Dtos;
 
-namespace BratnavaFC.Domain.Dtos
-{
-    public record MatchDto(DateTime PlayedAt, int TeamAGoals, int TeamBGoals, string PlaceName, Guid? TeamAColorId, Guid? TeamBColorId);
-}
+public sealed record MatchDto(
+    Guid Id,
+    Guid GroupId,
+    DateTime PlayedAt,
+    int TeamAGoals,
+    int TeamBGoals,
+    string PlaceName,
+    Guid? TeamAColorId,
+    Guid? TeamBColorId
+);

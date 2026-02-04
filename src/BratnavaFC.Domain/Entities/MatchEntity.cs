@@ -6,12 +6,18 @@ public class MatchEntity : BaseEntity
 {
     private MatchEntity() { } // EF
 
-    public MatchEntity(DateTime playedAt, string placeName)
+    public MatchEntity(Guid groupId, DateTime playedAt, string placeName)
     {
+        if (groupId == Guid.Empty) throw new InvalidOperationException("GroupId é obrigatório.");
+
+        GroupId = groupId;
         PlayedAt = playedAt;
         PlaceName = placeName ?? throw new ArgumentNullException(nameof(placeName));
         Status = MatchStatus.Created;
     }
+
+    public Guid GroupId { get; private set; }
+    public GroupEntity? Group { get; private set; }
 
     public DateTime PlayedAt { get; private set; }
     public int? TeamAGoals { get; private set; }
@@ -32,9 +38,15 @@ public class MatchEntity : BaseEntity
     public TeamColorEntity? TeamAColor { get; private set; }
     public TeamColorEntity? TeamBColor { get; private set; }
 
-    public void UpdateDetails(DateTime playedAt, string placeName, Guid matchIdFromRoute, Guid? dtoId)
+    public void UpdateDetails(Guid groupIdFromRequest, DateTime playedAt, string placeName, Guid matchIdFromRoute, Guid? dtoId)
     {
         EnsureNotFinalized();
+
+        if (groupIdFromRequest == Guid.Empty)
+            throw new InvalidOperationException("GroupId é obrigatório.");
+
+        if (groupIdFromRequest != GroupId)
+            throw new InvalidOperationException("GroupId informado não pertence a esta partida.");
 
         if (dtoId.HasValue && dtoId.Value != matchIdFromRoute)
             throw new InvalidOperationException("Id do payload não bate com o Id da rota.");
@@ -184,23 +196,27 @@ public class MatchEntity : BaseEntity
         Status = MatchStatus.Finalized;
     }
 
-    public void AddPlayer(MatchPlayerEntity player)
+    public void AddPlayer(MatchPlayerEntity matchPlayer, PlayerEntity playerEntity)
     {
-        ArgumentNullException.ThrowIfNull(player);
+        ArgumentNullException.ThrowIfNull(matchPlayer);
+        ArgumentNullException.ThrowIfNull(playerEntity);
+
         EnsureStatus(MatchStatus.Created, "Só é possível adicionar/jogar convites quando a partida está Criada.");
 
-        player.AssignToMatch(this);
-        Players.Add(player);
+        if (playerEntity.GroupId != GroupId)
+            throw new InvalidOperationException("Player não pertence ao mesmo Group da partida.");
+
+        if (Players.Any(p => p.PlayerId == playerEntity.Id))
+            return;  
+
+        matchPlayer.AssignToMatch(this);
+        matchPlayer.AssignGroup(GroupId);
+        matchPlayer.AssignToPlayer(playerEntity);
+
+        matchPlayer.SetTeam(0);
+
+        Players.Add(matchPlayer);
     }
-
-    public bool RemovePlayer(MatchPlayerEntity player)
-    {
-        ArgumentNullException.ThrowIfNull(player);
-        EnsureStatus(MatchStatus.Created, "Só é possível remover jogadores quando a partida está Criada.");
-
-        return Players.Remove(player);
-    }
-
 
     private void EnsureNotFinalized()
     {
