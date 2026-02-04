@@ -13,6 +13,7 @@ public enum UserRole
 
 public sealed class UserEntity : BaseEntity
 {
+    public string UserName { get; set; }
     public string FirstName { get; set; } = null!;
     public string LastName { get; set; } = null!;
     public DateTimeOffset? BirthDate { get; set; }

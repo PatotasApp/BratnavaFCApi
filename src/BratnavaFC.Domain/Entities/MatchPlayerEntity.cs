@@ -1,19 +1,24 @@
+using BratnavaFC.Domain.Enums;
+
 namespace BratnavaFC.Domain.Entities;
 
 public class MatchPlayerEntity : BaseEntity
 {
     private MatchPlayerEntity() { }
 
-    public MatchPlayerEntity(Guid playerId, string name)
+    public MatchPlayerEntity(Guid playerId)
     {
+        if (playerId == Guid.Empty) throw new InvalidOperationException("PlayerId é obrigatório.");
         PlayerId = playerId;
-        Name = name ?? throw new ArgumentNullException(nameof(name));
+        Team = 0; 
     }
 
     public Guid PlayerId { get; private set; }
     public PlayerEntity? Player { get; private set; }
 
-    public string Name { get; private set; } = null!;
+    public Guid GroupId { get; private set; }
+    public GroupEntity? Group { get; private set; }
+
     public bool? IsMvp { get; private set; }
 
     public Guid MatchId { get; private set; }
@@ -24,28 +29,40 @@ public class MatchPlayerEntity : BaseEntity
     public List<VoteEntity> ReceivedVotes { get; private set; } = new();
     public Guid? VotedForId { get; private set; }
 
-    public void SetName(string name) => Name = name ?? throw new ArgumentNullException(nameof(name));
+    public InviteResponse InviteResponse { get; set; } = InviteResponse.None;
 
     public void SetMvp() => IsMvp = true;
-
     public void RevokeMvp() => IsMvp = null;
 
     public void AssignToMatch(MatchEntity match)
     {
         Match = match ?? throw new ArgumentNullException(nameof(match));
         MatchId = match.Id;
+
+        AssignGroup(match.GroupId);
     }
 
     public void AssignToPlayer(PlayerEntity player)
     {
         Player = player ?? throw new ArgumentNullException(nameof(player));
         PlayerId = player.Id;
+
+        if (GroupId != Guid.Empty && player.GroupId != GroupId)
+            throw new InvalidOperationException("Player não pertence ao Group do MatchPlayer.");
+    }
+
+    public void AssignGroup(Guid groupId)
+    {
+        if (groupId == Guid.Empty)
+            throw new InvalidOperationException("GroupId é obrigatório.");
+
+        GroupId = groupId;
     }
 
     public void SetTeam(short team)
     {
-        if (team != 1 && team != 2)
-            throw new ArgumentOutOfRangeException(nameof(team), "Time deve ser 1 (Time A) ou 2 (Time B).");
+        if (team != 0 && team != 1 && team != 2)
+            throw new ArgumentOutOfRangeException(nameof(team), "Team deve ser 0 (Unassigned), 1 (Time A) ou 2 (Time B).");
 
         Team = team;
     }
@@ -65,6 +82,5 @@ public class MatchPlayerEntity : BaseEntity
     }
 
     public void SetVotedFor(Guid? votedForId) => VotedForId = votedForId;
-
     public void ClearVotedFor() => VotedForId = null;
 }

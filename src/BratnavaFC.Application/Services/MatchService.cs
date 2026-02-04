@@ -1,5 +1,6 @@
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Abstractions;
+using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -17,164 +18,206 @@ public class MatchService : IMatchService
         _repository = repository;
     }
 
-    public async Task<IEnumerable<MatchEntity>> GetAllAsync()
+    public async Task<IEnumerable<MatchEntity>> GetAllAsync(Guid groupId, CancellationToken cancellationToken = default)
     {
+        EnsureGroupId(groupId);
+
         return await _context.Matches
-            .Include(m => m.Players)
+            .Where(m => m.GroupId == groupId)
+            .Include(m => m.Players).ThenInclude(mp => mp.Player)
             .Include(m => m.Votes)
-            .ToListAsync();
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
     }
 
-    public async Task<MatchEntity?> GetByIdAsync(Guid id)
+    public async Task<MatchEntity?> GetByIdAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken = default)
     {
+        EnsureGroupId(groupId);
+
         return await _context.Matches
-            .Include(m => m.Players)
+            .Where(m => m.GroupId == groupId && m.Id == matchId)
+            .Include(m => m.Players).ThenInclude(mp => mp.Player)
             .Include(m => m.Votes)
-            .FirstOrDefaultAsync(m => m.Id == id);
+            .AsNoTracking()
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<MatchEntity> CreateAsync(MatchEntity match, CancellationToken cancellationToken)
+    public async Task<MatchEntity> Create(Guid groupId, MatchEntity match, CancellationToken cancellationToken)
     {
+        EnsureGroupId(groupId);
+
+        if (match.GroupId != groupId)
+            throw new InvalidOperationException("GroupId do match não bate com o GroupId da request.");
+
         match.CreateDate = DateTime.UtcNow;
+
         _repository.Add(match);
         await _repository.SaveChangesAsync(cancellationToken);
+
+        await SyncPlayersFromGroupAsync(groupId, match.Id, cancellationToken);
+
         return match;
     }
 
-    public async Task UpdateAsync(MatchEntity match, CancellationToken cancellationToken)
+    public async Task UpdateAsync(Guid groupId, Guid matchId, UpdateMatchDto dto, CancellationToken cancellationToken)
     {
-        if (match.IsFinalized)
-            throw new InvalidOperationException("Partida já finalizada. Não é possível atualizar seus dados.");
+        EnsureGroupId(groupId);
 
-        _repository.Update(match);
-        await _repository.SaveChangesAsync(cancellationToken);
+        var match = await _context.Matches
+            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, cancellationToken);
+
+        if (match == null) throw new InvalidOperationException("Partida não encontrada.");
+
+        match.UpdateDetails(groupId, dto.PlayedAt, dto.PlaceName, matchIdFromRoute: matchId, dtoId: dto.Id);
+
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task DeleteAsync(Guid id, CancellationToken cancellationToken)
+    public async Task DeleteAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
-        var entity = await _repository.GetByIdAsync(id, cancellationToken);
+        EnsureGroupId(groupId);
+
+        var entity = await _context.Matches
+            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, cancellationToken);
+
         if (entity == null) return;
+
+        entity.EnsureCanDelete();
+
         _repository.Remove(entity);
         await _repository.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task VoteAsync(Guid matchId, Guid voterPlayerId, Guid votedPlayerId, CancellationToken cancellationToken)
+    public async Task SyncPlayersFromGroupAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
+        EnsureGroupId(groupId);
+
         var match = await _context.Matches
+            .Where(m => m.GroupId == groupId && m.Id == matchId)
             .Include(m => m.Players)
-            .Include(m => m.Votes)
-            .FirstOrDefaultAsync(m => m.Id == matchId);
+            .FirstOrDefaultAsync(cancellationToken);
 
-        if (match == null) throw new InvalidOperationException("Partida n�o encontrada.");
+        if (match == null) throw new InvalidOperationException("Partida não encontrada.");
 
-        if (match.IsFinalized) throw new InvalidOperationException("Partida j� finalizada.");
+        var players = await _context.Players
+            .Where(p => p.GroupId == groupId)
+            .ToListAsync(cancellationToken);
 
-        var voter = match.Players.FirstOrDefault(p => p.Id == voterPlayerId);
-        if (voter == null) throw new InvalidOperationException("Apenas jogadores da partida podem votar.");
-
-        var already = match.Votes.Any(v => v.VoterId == voterPlayerId);
-        if (already) throw new InvalidOperationException("Esse jogador j� votou.");
-
-        var votedFor = match.Players.FirstOrDefault(p => p.Id == votedPlayerId);
-        if (votedFor == null) throw new InvalidOperationException("Apenas jogadores que jogaram podem ser votados.");
-
-        var vote = new VoteEntity(match.Id, voter.Id, votedFor.Id);
-        await _context.Votes.AddAsync(vote);
-
-        votedFor.AddReceivedVote(vote);
-        voter.SetVotedFor(votedFor.Id);
-
-        await _context.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task FinalizeMatchAsync(Guid matchId, CancellationToken cancellationToken)
-    {
-        var match = await _context.Matches
-            .Include(m => m.Players)
-            .Include(m => m.Votes)
-            .FirstOrDefaultAsync(m => m.Id == matchId);
-
-        if (match == null) throw new InvalidOperationException("Partida n�o encontrada.");
-        if (match.IsFinalized) throw new InvalidOperationException("Partida j� finalizada.");
-
-        var top = match.Votes
-            .Where(v => v.VotedForId != Guid.Empty)
-            .GroupBy(v => v.VotedForId)
-            .Select(g => new { PlayerId = g.Key, Count = g.Count() })
-            .OrderByDescending(x => x.Count)
-            .FirstOrDefault();
-
-        match.Players.ForEach(e => e.RevokeMvp());
-
-        if (top != null && top.PlayerId != Guid.Empty)
+        foreach (var player in players)
         {
-            var winner = match.Players.FirstOrDefault(p => p.Id == top.PlayerId);
-            winner?.SetMvp();
+            if (match.Players.Any(mp => mp.PlayerId == player.Id))
+                continue;
+
+            var mp = new MatchPlayerEntity(player.Id);
+            match.AddPlayer(mp, player);
         }
 
-        match.MarkFinalized();
         await _context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<MatchPlayerEntity?> GetMvpAsync(Guid matchId)
+    public async Task AcceptInviteAsync(Guid groupId, Guid matchId, Guid playerId, CancellationToken cancellationToken)
     {
-        var match = await _context.Matches
-            .Include(m => m.Players)
-            .Include(m => m.Votes)
-            .FirstOrDefaultAsync(m => m.Id == matchId);
+        EnsureGroupId(groupId);
 
-        if (match == null) return null;
+        var match = await LoadMatchForActions(groupId, matchId, cancellationToken);
+        match.AcceptInvite(playerId);
 
-        var top = match.Votes
-            .Where(v => v.VotedForId != Guid.Empty)
-            .GroupBy(v => v.VotedForId)
-            .Select(g => new { PlayerId = g.Key, Count = g.Count() })
-            .OrderByDescending(x => x.Count)
-            .FirstOrDefault();
-
-        if (top == null || top.PlayerId == Guid.Empty) return null;
-
-        return match.Players.FirstOrDefault(p => p.Id == top.PlayerId);
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task SetScoreAsync(Guid matchId, int teamAGoals, int teamBGoals, CancellationToken cancellationToken = default)
+    public async Task RejectInviteAsync(Guid groupId, Guid matchId, Guid playerId, CancellationToken cancellationToken)
     {
-        var match = await _context.Matches.FirstOrDefaultAsync(m => m.Id == matchId);
-        if (match == null) throw new InvalidOperationException("Partida no encontrada.");
-        if (match.IsFinalized) throw new InvalidOperationException("Partida j finalizada.");
+        EnsureGroupId(groupId);
+
+        var match = await LoadMatchForActions(groupId, matchId, cancellationToken);
+        match.RejectInvite(playerId);
+
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task StartMatchAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
+    {
+        EnsureGroupId(groupId);
+
+        var match = await _context.Matches
+            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, cancellationToken);
+
+        if (match == null) throw new InvalidOperationException("Partida não encontrada.");
+
+        match.Start();
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task EndMatchAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
+    {
+        EnsureGroupId(groupId);
+
+        var match = await _context.Matches
+            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, cancellationToken);
+
+        if (match == null) throw new InvalidOperationException("Partida não encontrada.");
+
+        match.End();
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task VoteAsync(Guid groupId, Guid matchId, Guid voterMatchPlayerId, Guid votedMatchPlayerId, CancellationToken cancellationToken)
+    {
+        EnsureGroupId(groupId);
+
+        var match = await LoadMatchForActions(groupId, matchId, cancellationToken);
+        var vote = match.CreateVote(voterMatchPlayerId, votedMatchPlayerId);
+
+        await _context.Votes.AddAsync(vote, cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<MatchPlayerEntity?> GetMvpAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken = default)
+    {
+        EnsureGroupId(groupId);
+
+        var match = await LoadMatchForActions(groupId, matchId, cancellationToken);
+        return match.GetComputedMvp();
+    }
+
+    public async Task SetScoreAsync(Guid groupId, Guid matchId, int teamAGoals, int teamBGoals, CancellationToken cancellationToken)
+    {
+        EnsureGroupId(groupId);
+
+        var match = await _context.Matches
+            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, cancellationToken);
+
+        if (match == null) throw new InvalidOperationException("Partida não encontrada.");
+
         match.SetScore(teamAGoals, teamBGoals);
         await _context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task SetTeamColorsAsync(Guid matchId, Guid? teamAColorId, Guid? teamBColorId, bool randomize = false, CancellationToken cancellationToken = default)
+    public async Task SetTeamColorsAsync(Guid groupId, Guid matchId, Guid? teamAColorId, Guid? teamBColorId, bool randomize, CancellationToken cancellationToken)
     {
-        var match = await _context.Matches.FirstOrDefaultAsync(m => m.Id == matchId);
+        EnsureGroupId(groupId);
+
+        var match = await _context.Matches
+            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, cancellationToken);
+
         if (match == null) throw new InvalidOperationException("Partida não encontrada.");
-        if (match.IsFinalized) throw new InvalidOperationException("Partida já finalizada.");
 
         if (randomize)
         {
-            var colors = await _context.TeamColors.ToListAsync();
-            if (colors.Count == 0) throw new InvalidOperationException("Não há cores cadastradas para sortear.");
-
-            var rng = Random.Shared;
-            var shuffled = colors.OrderBy(_ => rng.Next()).ToList();
-            var a = shuffled[0].Id;
-            var b = shuffled.Count > 1 ? shuffled[1].Id : shuffled[0].Id;
-
-            match.SetTeamColors(a, b);
+            var colors = await _context.TeamColors.ToListAsync(cancellationToken);
+            match.SetTeamColorsRandomly(colors);
         }
         else
         {
             if (teamAColorId.HasValue)
             {
-                var foundA = await _context.TeamColors.FindAsync(teamAColorId.Value);
+                var foundA = await _context.TeamColors.FindAsync([teamAColorId.Value], cancellationToken: cancellationToken);
                 if (foundA == null) throw new InvalidOperationException("Cor do time A não encontrada.");
             }
 
             if (teamBColorId.HasValue)
             {
-                var foundB = await _context.TeamColors.FindAsync(teamBColorId.Value);
+                var foundB = await _context.TeamColors.FindAsync([teamBColorId.Value], cancellationToken: cancellationToken);
                 if (foundB == null) throw new InvalidOperationException("Cor do time B não encontrada.");
             }
 
@@ -182,5 +225,33 @@ public class MatchService : IMatchService
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task FinalizeMatchAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
+    {
+        EnsureGroupId(groupId);
+
+        var match = await LoadMatchForActions(groupId, matchId, cancellationToken);
+        match.FinalizeByVotes();
+
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<MatchEntity> LoadMatchForActions(Guid groupId, Guid matchId, CancellationToken cancellationToken)
+    {
+        var match = await _context.Matches
+            .Where(m => m.GroupId == groupId && m.Id == matchId)
+            .Include(m => m.Players)
+            .Include(m => m.Votes)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (match == null) throw new InvalidOperationException("Partida não encontrada.");
+        return match;
+    }
+
+    private static void EnsureGroupId(Guid groupId)
+    {
+        if (groupId == Guid.Empty)
+            throw new InvalidOperationException("GroupId é obrigatório.");
     }
 }

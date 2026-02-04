@@ -3,6 +3,7 @@ using System;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BratnavaFC.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260204044235_MatchStatus")]
+    partial class MatchStatus
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -75,9 +78,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<DateTime>("CreateDate")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("GroupId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("PlaceName")
                         .IsRequired()
                         .HasColumnType("text");
@@ -111,8 +111,6 @@ namespace BratnavaFC.Infrastructure.Migrations
 
                     b.HasIndex("TeamBColorId");
 
-                    b.HasIndex("GroupId", "PlayedAt");
-
                     b.ToTable("Matches");
                 });
 
@@ -124,9 +122,6 @@ namespace BratnavaFC.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreateDate")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("GroupId")
-                        .HasColumnType("uuid");
 
                     b.Property<int>("InviteResponse")
                         .ValueGeneratedOnAdd()
@@ -143,9 +138,7 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<short>("Team")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("smallint")
-                        .HasDefaultValue((short)0);
+                        .HasColumnType("smallint");
 
                     b.Property<DateTime?>("UpdateDate")
                         .HasColumnType("timestamp with time zone");
@@ -155,14 +148,9 @@ namespace BratnavaFC.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("GroupId");
-
                     b.HasIndex("PlayerId");
 
                     b.HasIndex("MatchId", "PlayerId")
-                        .IsUnique();
-
-                    b.HasIndex("MatchId", "PlayerId", "GroupId")
                         .IsUnique();
 
                     b.ToTable("MatchPlayers");
@@ -365,12 +353,6 @@ namespace BratnavaFC.Infrastructure.Migrations
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.MatchEntity", b =>
                 {
-                    b.HasOne("BratnavaFC.Domain.Entities.GroupEntity", "Group")
-                        .WithMany()
-                        .HasForeignKey("GroupId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
                     b.HasOne("BratnavaFC.Domain.Entities.TeamColorEntity", "TeamAColor")
                         .WithMany()
                         .HasForeignKey("TeamAColorId")
@@ -381,8 +363,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .HasForeignKey("TeamBColorId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.Navigation("Group");
-
                     b.Navigation("TeamAColor");
 
                     b.Navigation("TeamBColor");
@@ -390,12 +370,6 @@ namespace BratnavaFC.Infrastructure.Migrations
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.MatchPlayerEntity", b =>
                 {
-                    b.HasOne("BratnavaFC.Domain.Entities.GroupEntity", "Group")
-                        .WithMany()
-                        .HasForeignKey("GroupId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
                     b.HasOne("BratnavaFC.Domain.Entities.MatchEntity", "Match")
                         .WithMany("Players")
                         .HasForeignKey("MatchId")
@@ -407,8 +381,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .HasForeignKey("PlayerId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.Navigation("Group");
 
                     b.Navigation("Match");
 

@@ -1,15 +1,23 @@
+using BratnavaFC.Domain.Enums;
+
 namespace BratnavaFC.Domain.Entities;
 
 public class MatchEntity : BaseEntity
 {
-    //  EF Core
-    private MatchEntity() { }
+    private MatchEntity() { } // EF
 
-    public MatchEntity(DateTime playedAt, string placeName)
+    public MatchEntity(Guid groupId, DateTime playedAt, string placeName)
     {
+        if (groupId == Guid.Empty) throw new InvalidOperationException("GroupId é obrigatório.");
+
+        GroupId = groupId;
         PlayedAt = playedAt;
         PlaceName = placeName ?? throw new ArgumentNullException(nameof(placeName));
+        Status = MatchStatus.Created;
     }
+
+    public Guid GroupId { get; private set; }
+    public GroupEntity? Group { get; private set; }
 
     public DateTime PlayedAt { get; private set; }
     public int? TeamAGoals { get; private set; }
@@ -19,71 +27,213 @@ public class MatchEntity : BaseEntity
     public List<MatchPlayerEntity> Players { get; private set; } = [];
     public List<VoteEntity> Votes { get; private set; } = [];
 
-    public bool IsFinalized { get; private set; } = false;
+    public MatchStatus Status { get; private set; }
 
     public IReadOnlyList<MatchPlayerEntity> TeamAPlayers => Players.Where(p => p.Team == 1).ToList();
     public IReadOnlyList<MatchPlayerEntity> TeamBPlayers => Players.Where(p => p.Team == 2).ToList();
 
-    // Team color references (optional)
     public Guid? TeamAColorId { get; private set; }
     public Guid? TeamBColorId { get; private set; }
 
-    // Navigation properties (optional for EF)
     public TeamColorEntity? TeamAColor { get; private set; }
     public TeamColorEntity? TeamBColor { get; private set; }
 
-    public void SetPlaceName(string placeName)
+    public void UpdateDetails(Guid groupIdFromRequest, DateTime playedAt, string placeName, Guid matchIdFromRoute, Guid? dtoId)
     {
+        EnsureNotFinalized();
+
+        if (groupIdFromRequest == Guid.Empty)
+            throw new InvalidOperationException("GroupId é obrigatório.");
+
+        if (groupIdFromRequest != GroupId)
+            throw new InvalidOperationException("GroupId informado não pertence a esta partida.");
+
+        if (dtoId.HasValue && dtoId.Value != matchIdFromRoute)
+            throw new InvalidOperationException("Id do payload não bate com o Id da rota.");
+
+        if (string.IsNullOrWhiteSpace(placeName))
+            throw new InvalidOperationException("Local da partida é obrigatório.");
+
+        PlayedAt = playedAt;
         PlaceName = placeName;
     }
 
-    public void SetPlayedAt(DateTime playedAt)
+    public void EnsureCanDelete()
     {
-        PlayedAt = playedAt;
+        if (Status == MatchStatus.Finalized)
+            throw new InvalidOperationException("Partida já Finalizada. Não é possível excluir.");
     }
 
-    public void SetScore(int homeGoals, int awayGoals)
+    public void AcceptInvite(Guid playerId)
     {
-        TeamAGoals = homeGoals;
-        TeamBGoals = awayGoals;
+        EnsureStatus(MatchStatus.Created, "Só é possível aceitar convite quando a partida está Criada.");
+        if (playerId == Guid.Empty) throw new InvalidOperationException("PlayerId é obrigatório.");
+
+        var mp = FindMatchPlayer(playerId);
+        mp.InviteResponse = InviteResponse.Accepted;
     }
 
-    public void SetTeamAColor(Guid? colorId)
+    public void RejectInvite(Guid playerId)
     {
-        TeamAColorId = colorId;
+        EnsureStatus(MatchStatus.Created, "Só é possível recusar convite quando a partida está Criada.");
+        if (playerId == Guid.Empty) throw new InvalidOperationException("PlayerId é obrigatório.");
+
+        var mp = FindMatchPlayer(playerId);
+        mp.InviteResponse = InviteResponse.Rejected;
     }
 
-    public void SetTeamBColor(Guid? colorId)
+    public void Start()
     {
-        TeamBColorId = colorId;
+        EnsureStatus(MatchStatus.Created, "A partida só pode ser iniciada se estiver Criada.");
+        Status = MatchStatus.Started;
+    }
+
+    public void End()
+    {
+        EnsureStatus(MatchStatus.Started, "A partida só pode ser encerrada se estiver Iniciada.");
+        Status = MatchStatus.Ended;
+    }
+
+    public void SetScore(int teamAGoals, int teamBGoals)
+    {
+        EnsureStatus(MatchStatus.Ended, "Só é possível setar placar quando a partida está Encerrada.");
+
+        if (teamAGoals < 0 || teamBGoals < 0)
+            throw new InvalidOperationException("Placar não pode ser negativo.");
+
+        TeamAGoals = teamAGoals;
+        TeamBGoals = teamBGoals;
     }
 
     public void SetTeamColors(Guid? teamAColorId, Guid? teamBColorId)
     {
+        EnsureStatus(MatchStatus.Created, "Só é possível setar cores quando a partida está Criada.");
+
         TeamAColorId = teamAColorId;
         TeamBColorId = teamBColorId;
     }
 
-    public void AddPlayer(MatchPlayerEntity player)
+    public void SetTeamColorsRandomly(IReadOnlyList<TeamColorEntity> colors)
     {
-        ArgumentNullException.ThrowIfNull(player);
+        EnsureStatus(MatchStatus.Created, "Só é possível sortear cores quando a partida está Criada.");
 
-        short playerTeam = player.Team;
+        if (colors == null || colors.Count == 0)
+            throw new InvalidOperationException("Não há cores cadastradas para sortear.");
 
-        player.AssignToMatch(this);
-        Players.Add(player);
+        var rng = Random.Shared;
+        var shuffled = colors.OrderBy(_ => rng.Next()).ToList();
+
+        var a = shuffled[0].Id;
+        var b = shuffled.Count > 1 ? shuffled[1].Id : shuffled[0].Id;
+
+        TeamAColorId = a;
+        TeamBColorId = b;
     }
 
-    public bool RemovePlayer(MatchPlayerEntity player)
+    public VoteEntity CreateVote(Guid voterMatchPlayerId, Guid votedMatchPlayerId)
     {
-        ArgumentNullException.ThrowIfNull(player);
-        var removed = Players.Remove(player);
-        return removed;
+        EnsureStatus(MatchStatus.Ended, "Só é possível votar no MVP quando a partida está Encerrada.");
+
+        if (voterMatchPlayerId == Guid.Empty || votedMatchPlayerId == Guid.Empty)
+            throw new InvalidOperationException("O jogador que votou e o votado são obrigatórios.");
+
+        if (voterMatchPlayerId == votedMatchPlayerId)
+            throw new InvalidOperationException("O jogador não pode votar em si mesmo.");
+
+        var voter = Players.FirstOrDefault(p => p.Id == voterMatchPlayerId)
+            ?? throw new InvalidOperationException("Apenas jogadores da partida podem votar.");
+
+        if (Votes.Any(v => v.VoterId == voterMatchPlayerId))
+            throw new InvalidOperationException("Esse jogador já votou.");
+
+        var votedFor = Players.FirstOrDefault(p => p.Id == votedMatchPlayerId)
+            ?? throw new InvalidOperationException("Apenas jogadores que jogaram podem ser votados.");
+
+        var vote = new VoteEntity(Id, voter.Id, votedFor.Id);
+
+        voter.SetVotedFor(votedFor.Id);
+        votedFor.AddReceivedVote(vote);
+
+        return vote;
     }
 
-    public void MarkFinalized()
+    public MatchPlayerEntity? GetComputedMvp()
     {
-        if (IsFinalized) return;
-        IsFinalized = true;
+        var top = Votes
+            .Where(v => v.VotedForId != Guid.Empty)
+            .GroupBy(v => v.VotedForId)
+            .Select(g => new { PlayerId = g.Key, Count = g.Count() })
+            .OrderByDescending(x => x.Count)
+            .FirstOrDefault();
+
+        if (top == null || top.PlayerId == Guid.Empty) return null;
+
+        return Players.FirstOrDefault(p => p.Id == top.PlayerId);
+    }
+
+    public void FinalizeByVotes()
+    {
+        EnsureStatus(MatchStatus.Ended, "A partida só pode ser finalizada se estiver Encerrada.");
+
+        if (!TeamAGoals.HasValue || !TeamBGoals.HasValue)
+            throw new InvalidOperationException("Para finalizar a partida, o placar deve estar definido.");
+
+        var top = Votes
+            .Where(v => v.VotedForId != Guid.Empty)
+            .GroupBy(v => v.VotedForId)
+            .Select(g => new { PlayerId = g.Key, Count = g.Count() })
+            .OrderByDescending(x => x.Count)
+            .FirstOrDefault();
+
+        Players.ForEach(p => p.RevokeMvp());
+
+        if (top != null && top.PlayerId != Guid.Empty)
+        {
+            var winner = Players.FirstOrDefault(p => p.Id == top.PlayerId);
+            winner?.SetMvp();
+        }
+
+        Status = MatchStatus.Finalized;
+    }
+
+    public void AddPlayer(MatchPlayerEntity matchPlayer, PlayerEntity playerEntity)
+    {
+        ArgumentNullException.ThrowIfNull(matchPlayer);
+        ArgumentNullException.ThrowIfNull(playerEntity);
+
+        EnsureStatus(MatchStatus.Created, "Só é possível adicionar/jogar convites quando a partida está Criada.");
+
+        if (playerEntity.GroupId != GroupId)
+            throw new InvalidOperationException("Player não pertence ao mesmo Group da partida.");
+
+        if (Players.Any(p => p.PlayerId == playerEntity.Id))
+            return;  
+
+        matchPlayer.AssignToMatch(this);
+        matchPlayer.AssignGroup(GroupId);
+        matchPlayer.AssignToPlayer(playerEntity);
+
+        matchPlayer.SetTeam(0);
+
+        Players.Add(matchPlayer);
+    }
+
+    private void EnsureNotFinalized()
+    {
+        if (Status == MatchStatus.Finalized)
+            throw new InvalidOperationException("Partida já Finalizada. Não é possível atualizar seus dados.");
+    }
+
+    private void EnsureStatus(MatchStatus required, string message)
+    {
+        if (Status != required)
+            throw new InvalidOperationException(message);
+    }
+
+    private MatchPlayerEntity FindMatchPlayer(Guid playerIdOrMatchPlayerId)
+    {
+        var mp = Players.FirstOrDefault(p => p.Id == playerIdOrMatchPlayerId || p.PlayerId == playerIdOrMatchPlayerId);
+        if (mp == null) throw new InvalidOperationException("Jogador não encontrado nesta partida.");
+        return mp;
     }
 }
