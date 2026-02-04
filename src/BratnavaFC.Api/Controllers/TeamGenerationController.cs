@@ -1,12 +1,13 @@
+using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.TeamGeneration;
+using BratnavaFC.Domain.Dtos;
+using BratnavaFC.Domain.Entities;
+using BratnavaFC.Domain.Models;
+using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
-using BratnavaFC.Application.TeamGeneration;
-using BratnavaFC.Domain.Models;
-using BratnavaFC.Domain.Dtos;
-using BratnavaFC.Domain.Entities;
 
 namespace BratnavaFC.Api.Controllers;
 
@@ -15,10 +16,12 @@ namespace BratnavaFC.Api.Controllers;
 public class TeamGenerationController : ControllerBase
 {
     private readonly TeamGenerationService _teamService;
+    private readonly IPlayerStatsService _playerStats;
 
-    public TeamGenerationController(TeamGenerationService teamService)
+    public TeamGenerationController(TeamGenerationService teamService, IPlayerStatsService playerStats)
     {
         _teamService = teamService ?? throw new ArgumentNullException(nameof(teamService));
+        _playerStats = playerStats;
     }
 
     [HttpPost("generate")]
@@ -41,6 +44,14 @@ public class TeamGenerationController : ControllerBase
 
         var result = await _teamService.GenerateAsync(players, settings, request.StrategyType);
         return Ok(result);
+    }
+
+    [HttpGet("visual-stats/{groupId:guid}")]
+    [ProducesResponseType(typeof(PlayerVisualStatsReport), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetVisualStats([FromRoute] Guid groupId, CancellationToken cancellationToken)
+    {
+        var report = await _playerStats.GetVisualReportAsync(groupId, cancellationToken);
+        return Ok(report);
     }
 
 

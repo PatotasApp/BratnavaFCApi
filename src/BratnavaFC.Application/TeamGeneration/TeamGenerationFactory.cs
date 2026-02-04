@@ -1,10 +1,11 @@
+using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Entities;
+using BratnavaFC.Domain.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
-using BratnavaFC.Domain.Models;
-using BratnavaFC.Application.Abstractions;
-using BratnavaFC.Domain.Entities;
 
 namespace BratnavaFC.Application.TeamGeneration;
 
@@ -26,13 +27,18 @@ public static class TeamGenerationFactory
 
     private sealed class DefaultPlayerStatsService : IPlayerStatsService
     {
-        public Task<List<PlayerStats>> EnrichPlayersAsync(List<PlayerEntity> players)
+        public Task<List<PlayerStats>> EnrichPlayersAsync(List<PlayerEntity> players, CancellationToken cancellationToken = default)
         {
             var list = players.Select(p => new PlayerStats
             {
                 PlayerId = p.Id
             }).ToList();
             return Task.FromResult(list);
+        }
+
+        public Task<PlayerVisualStatsReport> GetVisualReportAsync(Guid groupId, CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
         }
     }
 }

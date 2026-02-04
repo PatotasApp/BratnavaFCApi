@@ -1,13 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
-using BratnavaFC.Application.TeamGeneration;
-using BratnavaFC.Domain.Models;
-using BratnavaFC.Domain.Dtos;
-using Xunit;
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.TeamGeneration;
 using BratnavaFC.Domain.Entities;
+using BratnavaFC.Domain.Models;
+using Xunit;
 
 namespace BratnavaFC.Tests;
 
@@ -21,11 +21,6 @@ public class GroupByWinsStrategyTests
         var p2 = new PlayerEntity { Id = Guid.NewGuid(), Name = "P2", IsGoalkeeper = false };
         var p3 = new PlayerEntity { Id = Guid.NewGuid(), Name = "P3", IsGoalkeeper = false };
         var p4 = new PlayerEntity { Id = Guid.NewGuid(), Name = "P4", IsGoalkeeper = false };
-
-        // we will simulate stats via a fake IPlayerStatsService by composing PlayerStats directly
-        // but GroupByWinsStrategy supports optional stats service; for deterministic behavior we can
-        // create PlayerStats list and call the strategy instance directly by using the overload in factory.
-        // Simpler: construct a local list of players and create a fake stats service.
 
         var players = new List<PlayerEntity> { p1, p2, p3, p4 };
 
@@ -58,7 +53,7 @@ public class GroupByWinsStrategyTests
     }
 
     // minimal fake stats service for tests
-    private class FakeStatsService : IPlayerStatsService
+    private sealed class FakeStatsService : IPlayerStatsService
     {
         private readonly Dictionary<Guid, int> _wins;
 
@@ -67,18 +62,32 @@ public class GroupByWinsStrategyTests
             _wins = wins;
         }
 
-        public Task<List<BratnavaFC.Domain.Models.PlayerStats>> EnrichPlayersAsync(List<PlayerEntity> players)
+        public Task<List<PlayerStats>> EnrichPlayersAsync(List<PlayerEntity> players, CancellationToken cancellationToken = default)
         {
-            var list = players.Select(p =>
-                new BratnavaFC.Domain.Models.PlayerStats
-                {
-                    PlayerId = p.Id,
-                    Wins = _wins.GetValueOrDefault(p.Id),
-                    WinRate = 0.0,
-                    SynergyWith = new Dictionary<Guid, double>()
-                }).ToList();
+            var list = players.Select(p => new PlayerStats
+            {
+                PlayerId = p.Id,
+                Wins = _wins.GetValueOrDefault(p.Id),
+                Ties = 0,
+                Losses = 0,
+                WinRate = 0.0,
+                SynergyWith = new Dictionary<Guid, double>()
+            }).ToList();
 
             return Task.FromResult(list);
+        }
+
+        // Novo método da interface -> no teste não usamos, então pode retornar vazio.
+        public Task<PlayerVisualStatsReport> GetVisualReportAsync(Guid groupId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new PlayerVisualStatsReport
+            {
+                GroupId = groupId,
+                TotalMatchesConsidered = 0,
+                TotalFinalizedMatches = 0,
+                TotalMatchesWithScore = 0,
+                Players = new List<PlayerVisualStatsItem>()
+            });
         }
     }
 }
