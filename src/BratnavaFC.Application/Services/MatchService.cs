@@ -52,9 +52,10 @@ public class MatchService : IMatchService
         match.CreateDate = DateTime.UtcNow;
 
         _repository.Add(match);
-        await _repository.SaveChangesAsync(cancellationToken);
 
-        await SyncPlayersFromGroupAsync(groupId, match.Id, cancellationToken);
+        await SyncPlayersFromGroupAsync(groupId, match, cancellationToken);
+
+        await _repository.SaveChangesAsync(cancellationToken);
 
         return match;
     }
@@ -86,6 +87,28 @@ public class MatchService : IMatchService
 
         _repository.Remove(entity);
         await _repository.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task SyncPlayersFromGroupAsync(Guid groupId, MatchEntity match, CancellationToken cancellationToken)
+    {
+        EnsureGroupId(groupId);
+
+        if (match == null) throw new InvalidOperationException("Partida não encontrada.");
+
+        var players = await _context.Players
+            .Where(p => p.GroupId == groupId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var player in players)
+        {
+            if (match.Players.Any(mp => mp.PlayerId == player.Id))
+                continue;
+
+            var mp = new MatchPlayerEntity(player.Id);
+            match.AddPlayer(mp, player);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task SyncPlayersFromGroupAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
@@ -259,6 +282,7 @@ public class MatchService : IMatchService
     {
         var match = await  _context.Matches
             .AsNoTracking()
+            .Include(m => m.Group)
             .Include(m => m.TeamAColor)
             .Include(m => m.TeamBColor)
             .Include(m => m.Players)
@@ -300,6 +324,7 @@ public class MatchService : IMatchService
         return new MatchDetailsDto
         {
             MatchId = match.Id,
+            GroupName = match.Group?.Name ?? "",
             GroupId = match.GroupId,
             PlayedAt = match.PlayedAt,
             PlaceName = match.PlaceName,

@@ -2,6 +2,7 @@
 {
     public Guid MatchId { get; set; }
     public Guid GroupId { get; set; }
+    public string GroupName { get; set; } = "";
     public DateTime PlayedAt { get; set; }
     public string PlaceName { get; set; } = "";
 

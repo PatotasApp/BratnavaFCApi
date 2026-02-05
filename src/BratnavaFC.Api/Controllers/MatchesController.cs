@@ -177,7 +177,7 @@ public class MatchesController : ControllerBase
     }
 
     [Authorize(Roles = "Admin,GodMode")]
-    [HttpPut("group/{groupId:guid}/{matchId:guid}/score")]
+    [HttpPatch("group/{groupId:guid}/{matchId:guid}/score")]
     public async Task<IActionResult> SetScoreAsync(Guid groupId, Guid matchId, [FromBody] SetScoreRequestDto dto, CancellationToken cancellationToken)
     {
         try
@@ -192,7 +192,7 @@ public class MatchesController : ControllerBase
     }
 
     [Authorize(Roles = "Admin,GodMode")]
-    [HttpPut("group/{groupId:guid}/{matchId:guid}/colors")]
+    [HttpPatch("group/{groupId:guid}/{matchId:guid}/colors")]
     public async Task<IActionResult> SetMatchColorsAsync(Guid groupId, Guid matchId, [FromBody] SetMatchColorsRequestDto dto, CancellationToken cancellationToken)
     {
         try

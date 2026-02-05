@@ -26,7 +26,8 @@ public class GroupService : IGroupService
     {
         try
         {
-            var adminExists = await _context.Users.AllAsync(x => request.UserAdminIds.Contains(x.Id), cancellationToken);
+            var adminExists = await _context.Users
+                 .AnyAsync(u => request.UserAdminIds.Contains(u.Id), cancellationToken);
 
             if (!adminExists)
             {
