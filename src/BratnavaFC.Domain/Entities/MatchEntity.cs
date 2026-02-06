@@ -85,8 +85,16 @@ public class MatchEntity : BaseEntity
     public void Start()
     {
         EnsureStatus(MatchStatus.Created, "A partida só pode ser iniciada se estiver Criada.");
+
+        var hasTeamA = Players.Any(p => p.Team == 1);
+        var hasTeamB = Players.Any(p => p.Team == 2);
+
+        if (!hasTeamA || !hasTeamB)
+            throw new InvalidOperationException("Não é possível iniciar a partida sem os times estarem definidos.");
+
         Status = MatchStatus.Started;
     }
+
 
     public void End()
     {
@@ -181,18 +189,19 @@ public class MatchEntity : BaseEntity
         if (!TeamAGoals.HasValue || !TeamBGoals.HasValue)
             throw new InvalidOperationException("Para finalizar a partida, o placar deve estar definido.");
 
-        var top = Votes
+        foreach (var p in Players)
+            p.RevokeMvp();
+
+        var winnerMatchPlayerId = Votes
             .Where(v => v.VotedForId != Guid.Empty)
             .GroupBy(v => v.VotedForId)
-            .Select(g => new { PlayerId = g.Key, Count = g.Count() })
-            .OrderByDescending(x => x.Count)
+            .OrderByDescending(g => g.Count())
+            .Select(g => g.Key)
             .FirstOrDefault();
 
-        Players.ForEach(p => p.RevokeMvp());
-
-        if (top != null && top.PlayerId != Guid.Empty)
+        if (winnerMatchPlayerId != Guid.Empty)
         {
-            var winner = Players.FirstOrDefault(p => p.Id == top.PlayerId);
+            var winner = Players.FirstOrDefault(p => p.Id == winnerMatchPlayerId);
             winner?.SetMvp();
         }
 
