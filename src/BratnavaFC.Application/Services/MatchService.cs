@@ -21,7 +21,7 @@ public class MatchService : IMatchService
 
     public async Task<IEnumerable<MatchEntity>> GetAllAsync(Guid groupId, CancellationToken cancellationToken = default)
     {
-        EnsureGroupId(groupId);
+        await EnsureGroupExistsAsync(groupId, cancellationToken);
 
         return await _context.Matches
             .Where(m => m.GroupId == groupId)
@@ -33,7 +33,7 @@ public class MatchService : IMatchService
 
     public async Task<MatchEntity?> GetByIdAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken = default)
     {
-        EnsureGroupId(groupId);
+        await EnsureGroupExistsAsync(groupId, cancellationToken);
 
         return await _context.Matches
             .Where(m => m.GroupId == groupId && m.Id == matchId)
@@ -45,12 +45,7 @@ public class MatchService : IMatchService
 
     public async Task<MatchEntity> Create(Guid groupId, MatchEntity match, CancellationToken cancellationToken)
     {
-        EnsureGroupId(groupId);
-
-        if (match.GroupId != groupId)
-            throw new InvalidOperationException("GroupId do match não bate com o GroupId da request.");
-
-        match.CreateDate = DateTime.UtcNow;
+        await EnsureGroupExistsAsync(groupId, cancellationToken);
 
         _repository.Add(match);
 
@@ -61,9 +56,10 @@ public class MatchService : IMatchService
         return match;
     }
 
+
     public async Task UpdateAsync(Guid groupId, Guid matchId, UpdateMatchDto dto, CancellationToken cancellationToken)
     {
-        EnsureGroupId(groupId);
+        await EnsureGroupExistsAsync(groupId, cancellationToken);
 
         var match = await _context.Matches
             .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, cancellationToken);
@@ -77,7 +73,7 @@ public class MatchService : IMatchService
 
     public async Task DeleteAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
-        EnsureGroupId(groupId);
+        await EnsureGroupExistsAsync(groupId, cancellationToken);
 
         var entity = await _context.Matches
             .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, cancellationToken);
@@ -92,7 +88,7 @@ public class MatchService : IMatchService
 
     public async Task SyncPlayersFromGroupAsync(Guid groupId, MatchEntity match, CancellationToken cancellationToken)
     {
-        EnsureGroupId(groupId);
+        await EnsureGroupExistsAsync(groupId, cancellationToken);
 
         if (match == null) throw new InvalidOperationException("Partida não encontrada.");
 
@@ -114,7 +110,7 @@ public class MatchService : IMatchService
 
     public async Task SyncPlayersFromGroupAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
-        EnsureGroupId(groupId);
+        await EnsureGroupExistsAsync(groupId, cancellationToken);
 
         var match = await _context.Matches
             .Where(m => m.GroupId == groupId && m.Id == matchId)
@@ -141,7 +137,7 @@ public class MatchService : IMatchService
 
     public async Task AcceptInviteAsync(Guid groupId, Guid matchId, Guid playerId, CancellationToken cancellationToken)
     {
-        EnsureGroupId(groupId);
+        await EnsureGroupExistsAsync(groupId, cancellationToken);
 
         var match = await LoadMatchForActions(groupId, matchId, cancellationToken);
         match.AcceptInvite(playerId);
@@ -151,7 +147,7 @@ public class MatchService : IMatchService
 
     public async Task RejectInviteAsync(Guid groupId, Guid matchId, Guid playerId, CancellationToken cancellationToken)
     {
-        EnsureGroupId(groupId);
+        await EnsureGroupExistsAsync(groupId, cancellationToken);
 
         var match = await LoadMatchForActions(groupId, matchId, cancellationToken);
         match.RejectInvite(playerId);
@@ -161,7 +157,7 @@ public class MatchService : IMatchService
 
     public async Task StartMatchAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
-        EnsureGroupId(groupId);
+        await EnsureGroupExistsAsync(groupId, cancellationToken);
 
         var match = await _context.Matches
             .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, cancellationToken);
@@ -174,7 +170,7 @@ public class MatchService : IMatchService
 
     public async Task EndMatchAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
-        EnsureGroupId(groupId);
+        await EnsureGroupExistsAsync(groupId, cancellationToken);
 
         var match = await _context.Matches
             .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, cancellationToken);
@@ -187,7 +183,7 @@ public class MatchService : IMatchService
 
     public async Task VoteAsync(Guid groupId, Guid matchId, Guid voterMatchPlayerId, Guid votedMatchPlayerId, CancellationToken cancellationToken)
     {
-        EnsureGroupId(groupId);
+        await EnsureGroupExistsAsync(groupId, cancellationToken);
 
         var match = await LoadMatchForActions(groupId, matchId, cancellationToken);
         var vote = match.CreateVote(voterMatchPlayerId, votedMatchPlayerId);
@@ -198,7 +194,7 @@ public class MatchService : IMatchService
 
     public async Task<MatchPlayerEntity?> GetMvpAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken = default)
     {
-        EnsureGroupId(groupId);
+        await EnsureGroupExistsAsync(groupId, cancellationToken);
 
         var match = await LoadMatchForActions(groupId, matchId, cancellationToken);
         return match.GetComputedMvp();
@@ -206,7 +202,7 @@ public class MatchService : IMatchService
 
     public async Task SetScoreAsync(Guid groupId, Guid matchId, int teamAGoals, int teamBGoals, CancellationToken cancellationToken)
     {
-        EnsureGroupId(groupId);
+        await EnsureGroupExistsAsync(groupId, cancellationToken);
 
         var match = await _context.Matches
             .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, cancellationToken);
@@ -219,7 +215,7 @@ public class MatchService : IMatchService
 
     public async Task SetTeamColorsAsync(Guid groupId, Guid matchId, Guid? teamAColorId, Guid? teamBColorId, bool randomize, CancellationToken cancellationToken)
     {
-        EnsureGroupId(groupId);
+        await EnsureGroupExistsAsync(groupId, cancellationToken);
 
         var match = await _context.Matches
             .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, cancellationToken);
@@ -253,7 +249,7 @@ public class MatchService : IMatchService
 
     public async Task FinalizeMatchAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
-        EnsureGroupId(groupId);
+        await EnsureGroupExistsAsync(groupId, cancellationToken);
 
         var match = await LoadMatchForActions(groupId, matchId, cancellationToken);
         match.FinalizeByVotes();
@@ -273,11 +269,19 @@ public class MatchService : IMatchService
         return match;
     }
 
-    private static void EnsureGroupId(Guid groupId)
-    {
-        if (groupId == Guid.Empty)
-            throw new InvalidOperationException("GroupId é obrigatório.");
-    }
+private async Task EnsureGroupExistsAsync(Guid groupId, CancellationToken ct)
+{
+    if (groupId == Guid.Empty)
+        throw new InvalidOperationException("GroupId é obrigatório.");
+
+    var exists = await _context.Groups
+        .AsNoTracking()
+        .AnyAsync(g => g.Id == groupId, ct);
+
+    if (!exists)
+        throw new InvalidOperationException("Group não encontrado.");
+}
+
 
     public async Task<MatchDetailsDto?> GetDetailsAsync(Guid matchId, CancellationToken ct)
     {
