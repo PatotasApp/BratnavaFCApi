@@ -109,6 +109,9 @@ public class MatchEntity : BaseEntity
     {
         EnsureStatus(MatchStatus.Created, "Só é possível setar cores quando a partida está Criada.");
 
+        if (teamAColorId.HasValue && teamBColorId.HasValue && teamAColorId.Value == teamBColorId.Value)
+            throw new InvalidOperationException("Os dois times não podem possuir a mesma cor.");
+
         TeamAColorId = teamAColorId;
         TeamBColorId = teamBColorId;
     }
