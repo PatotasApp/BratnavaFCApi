@@ -33,4 +33,6 @@ public interface IMatchService
 
     Task FinalizeMatchAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken);
     Task<MatchDetailsDto?> GetDetailsAsync(Guid matchId, CancellationToken ct);
+
+    Task AssignTeamsAsync(Guid groupId, Guid matchId, AssignTeamsDto dto, CancellationToken ct);
 }

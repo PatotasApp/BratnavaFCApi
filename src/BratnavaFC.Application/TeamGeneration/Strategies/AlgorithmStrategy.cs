@@ -1,12 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Models;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace BratnavaFC.Application.TeamGeneration;
 
@@ -50,15 +51,20 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
     // Tie-breaker: very small factor to prefer taking a higher WinRate when costs are equal.
     private const double TinyPreferHigherWinRate = 0.0001;
 
+    // tolerância aceitável de desequilíbrio (winrate)
+    private const double BalanceTolerance = 0.05;
+
     // -----------------------------
     // DEPENDENCIES
     // -----------------------------
     private readonly IPlayerStatsService _statsService;
-    private readonly ILogger<AlgorithmStrategy>? _logger;
+    private readonly ILogger _logger;
 
-    public AlgorithmStrategy(IPlayerStatsService statsService, ILogger<AlgorithmStrategy>? logger = null)
+    public AlgorithmStrategy(
+        IPlayerStatsService statsService,
+        ILogger<AlgorithmStrategy> logger = null)
     {
-        _statsService = statsService ?? throw new ArgumentNullException(nameof(statsService));
+        _statsService = statsService;
         _logger = logger;
     }
 
@@ -397,19 +403,44 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         return sum;
     }
 
-    private static DraftOutcome PickBetter(DraftOutcome? currentBest, DraftOutcome challenger)
+    private static DraftOutcome PickBetter(
+            DraftOutcome? current,
+            DraftOutcome challenger)
     {
-        if (currentBest is null) return challenger;
-
-        // Strictly smaller score wins.
-        if (challenger.Score < currentBest.Score) return challenger;
-
-        // If score ties, prefer smaller BalanceDiff.
-        if (Math.Abs(challenger.Score - currentBest.Score) < 1e-9 &&
-            challenger.BalanceDiff < currentBest.BalanceDiff)
+        if (current is null)
             return challenger;
 
-        return currentBest;
+        // 1️⃣ Menor BalanceDiff SEMPRE vence
+        if (challenger.BalanceDiff < current.BalanceDiff - BalanceTolerance)
+            return challenger;
+
+        if (current.BalanceDiff < challenger.BalanceDiff - BalanceTolerance)
+            return current;
+
+        // 2️⃣ Balance praticamente igual → menor GKDiff
+        if (challenger.GoalkeeperDiff < current.GoalkeeperDiff)
+            return challenger;
+
+        if (current.GoalkeeperDiff < challenger.GoalkeeperDiff)
+            return current;
+
+        // 3️⃣ Sinergia maior vence
+        if (challenger.SynergyTotal > current.SynergyTotal)
+            return challenger;
+
+        if (current.SynergyTotal > challenger.SynergyTotal)
+            return current;
+
+        // 4️⃣ Último desempate: soma total de winrate maior
+        var sumCurrent =
+            current.TeamA.Sum(x => x.Stats.WinRate) +
+            current.TeamB.Sum(x => x.Stats.WinRate);
+
+        var sumChallenger =
+            challenger.TeamA.Sum(x => x.Stats.WinRate) +
+            challenger.TeamB.Sum(x => x.Stats.WinRate);
+
+        return sumChallenger > sumCurrent ? challenger : current;
     }
 
     // -----------------------------

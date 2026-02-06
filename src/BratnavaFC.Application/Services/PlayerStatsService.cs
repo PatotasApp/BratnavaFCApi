@@ -21,7 +21,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
         if (players.Count == 0) return new List<PlayerStats>();
 
         var playerIds = players.Select(p => p.Id).ToHashSet();
-        var matches = await LoadMatchesAsync(playerIds, cancellationToken);
+        var matches = await LoadFinalizedMatchesAsync(playerIds, cancellationToken);
 
         var perPlayer = InitializePlayerAccumulators(playerIds);
         var pairTotals = new Dictionary<PairKey, PairAccumulator>();
@@ -46,6 +46,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
             result.Add(new PlayerStats
             {
                 PlayerId = pl.Id,
+                Name = pl.Name,
                 Wins = acc.Wins,
                 Ties = acc.Ties,
                 Losses = acc.Losses,
@@ -179,6 +180,15 @@ public sealed class PlayerStatsService : IPlayerStatsService
             .AsNoTracking()
             .Include(m => m.Players)
             .Where(m => m.Players.Any(mp => playerIds.Contains(mp.PlayerId)))
+            .ToListAsync(cancellationToken);
+    }
+
+    private Task<List<MatchEntity>> LoadFinalizedMatchesAsync(HashSet<Guid> playerIds, CancellationToken cancellationToken)
+    {
+        return _context.Matches
+            .AsNoTracking()
+            .Include(m => m.Players)
+            .Where(m => m.Status == Domain.Enums.MatchStatus.Finalized &&  m.Players.Any(mp => playerIds.Contains(mp.PlayerId)))
             .ToListAsync(cancellationToken);
     }
 

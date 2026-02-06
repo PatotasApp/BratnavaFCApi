@@ -221,6 +221,7 @@ public class MatchesController : ControllerBase
         }
     }
 
+    [Authorize(Roles = "Admin,GodMode")]
     [HttpGet("{matchId:guid}/details")]
     public async Task<ActionResult<MatchDetailsDto>> GetDetails(
     [FromRoute] Guid matchId,
@@ -231,6 +232,19 @@ public class MatchesController : ControllerBase
 
         return Ok(details);
     }
+
+    [Authorize(Roles = "Admin,GodMode")]
+    [HttpPut("group/{groupId:guid}/{matchId:guid}/teams")]
+    public async Task<IActionResult> AssignTeams(
+    Guid groupId,
+    Guid matchId,
+    [FromBody] AssignTeamsDto dto,
+    CancellationToken cancellationToken)
+    {
+        await _service.AssignTeamsAsync(groupId, matchId, dto, cancellationToken);
+        return NoContent();
+    }
+
     private static MatchDto ToDto(MatchEntity e) =>
         new(
             e.Id,

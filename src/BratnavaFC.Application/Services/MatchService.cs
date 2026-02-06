@@ -2,6 +2,7 @@ using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Abstractions;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
+using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -378,6 +379,25 @@ public class MatchService : IMatchService
 
             VoteCounts = voteCounts,
         };
+    }
+    public async Task AssignTeamsAsync(Guid groupId, Guid matchId, AssignTeamsDto dto, CancellationToken ct)
+    {
+        if (groupId == Guid.Empty) throw new InvalidOperationException("GroupId é obrigatório.");
+        if (matchId == Guid.Empty) throw new InvalidOperationException("MatchId é obrigatório.");
+
+        dto.TeamAMatchPlayerIds ??= [];
+        dto.TeamBMatchPlayerIds ??= [];
+
+        var match = await _context.Matches
+            .Include(m => m.Players)
+            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct);
+
+        if (match is null)
+            throw new InvalidOperationException("Partida não encontrada.");
+
+        match.AssignTeams(dto.TeamAMatchPlayerIds, dto.TeamBMatchPlayerIds);
+
+        await _context.SaveChangesAsync(ct);
     }
 
     private static PlayerInMatchDto ToPlayerDto(dynamic mp) => new PlayerInMatchDto

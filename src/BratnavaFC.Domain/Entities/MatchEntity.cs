@@ -236,4 +236,53 @@ public class MatchEntity : BaseEntity
         if (mp == null) throw new InvalidOperationException("Jogador não encontrado nesta partida.");
         return mp;
     }
+
+    public void AssignTeams(
+    IReadOnlyCollection<Guid> teamAPlayerIds,
+    IReadOnlyCollection<Guid> teamBPlayerIds)
+    {
+        EnsureStatus(MatchStatus.Created, "Só é possível atribuir times quando a partida está Criada.");
+
+        teamAPlayerIds ??= Array.Empty<Guid>();
+        teamBPlayerIds ??= Array.Empty<Guid>();
+
+        if (teamAPlayerIds.Count == 0 || teamBPlayerIds.Count == 0)
+            throw new InvalidOperationException("Os dois times devem ter ao menos 1 jogador.");
+
+        if (teamAPlayerIds.Count != teamAPlayerIds.Distinct().Count())
+            throw new InvalidOperationException("Time A contém IDs repetidos.");
+
+        if (teamBPlayerIds.Count != teamBPlayerIds.Distinct().Count())
+            throw new InvalidOperationException("Time B contém IDs repetidos.");
+
+        var both = teamAPlayerIds.Intersect(teamBPlayerIds).ToList();
+        if (both.Count > 0)
+            throw new InvalidOperationException("Há jogadores atribuídos aos dois times ao mesmo tempo.");
+
+        var playersByPlayerId = Players.ToDictionary(p => p.PlayerId, p => p);
+
+        var requested = teamAPlayerIds.Concat(teamBPlayerIds).ToList();
+
+        var missing = requested.Where(id => !playersByPlayerId.ContainsKey(id)).Distinct().ToList();
+        if (missing.Count > 0)
+            throw new InvalidOperationException("Há jogadores que não pertencem a esta partida.");
+
+        var notAccepted = requested
+            .Select(id => playersByPlayerId[id])
+            .Where(mp => mp.InviteResponse != InviteResponse.Accepted)
+            .ToList();
+
+        if (notAccepted.Count > 0)
+            throw new InvalidOperationException("Há jogadores que ainda não aceitaram o convite.");
+
+        foreach (var mp in Players)
+            mp.SetTeam(0);
+
+        foreach (var playerId in teamAPlayerIds)
+            playersByPlayerId[playerId].SetTeam(1);
+
+        foreach (var playerId in teamBPlayerIds)
+            playersByPlayerId[playerId].SetTeam(2);
+    }
+
 }
