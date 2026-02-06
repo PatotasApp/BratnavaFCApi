@@ -285,4 +285,32 @@ public class MatchEntity : BaseEntity
             playersByPlayerId[playerId].SetTeam(2);
     }
 
+    public void SwapPlayers(Guid matchPlayerAId, Guid matchPlayerBId)
+    {
+        EnsureStatus(MatchStatus.Created, "Só é possível trocar jogadores quando a partida está Criada.");
+
+        if (matchPlayerAId == Guid.Empty || matchPlayerBId == Guid.Empty)
+            throw new InvalidOperationException("Os dois jogadores são obrigatórios.");
+
+        if (matchPlayerAId == matchPlayerBId)
+            throw new InvalidOperationException("Não é possível trocar o mesmo jogador.");
+
+        var mpA = Players.FirstOrDefault(p => p.Id == matchPlayerAId);
+        var mpB = Players.FirstOrDefault(p => p.Id == matchPlayerBId);
+
+        if (mpA == null || mpB == null)
+            throw new InvalidOperationException("Jogador não encontrado nesta partida.");
+
+        if (mpA.Team == 0 || mpB.Team == 0)
+            throw new InvalidOperationException("Não é possível trocar jogadores não atribuídos a times.");
+
+        if (mpA.Team == mpB.Team)
+            throw new InvalidOperationException("Os dois jogadores estão no mesmo time.");
+
+        var teamA = mpA.Team;
+        mpA.SetTeam(mpB.Team);
+        mpB.SetTeam(teamA);
+    }
+
+
 }

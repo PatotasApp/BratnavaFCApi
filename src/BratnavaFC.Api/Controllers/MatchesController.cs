@@ -1,4 +1,5 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Services;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
@@ -244,6 +245,32 @@ public class MatchesController : ControllerBase
         await _service.AssignTeamsAsync(groupId, matchId, dto, cancellationToken);
         return NoContent();
     }
+
+    [Authorize(Roles = "Admin,GodMode")]
+    [HttpPost("group/{groupId:guid}/{matchId:guid}/swap")]
+    public async Task<IActionResult> SwapPlayers(
+    Guid groupId,
+    Guid matchId,
+    [FromBody] SwapPlayersDto dto,
+    CancellationToken ct)
+    {
+        try
+        {
+            await _service.SwapPlayersByPlayerIdAsync(
+                groupId,
+                matchId,
+                dto.PlayerAId,
+                dto.PlayerBId,
+                ct);
+
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
 
     private static MatchDto ToDto(MatchEntity e) =>
         new(
