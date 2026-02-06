@@ -1,6 +1,5 @@
 ﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos;
-using BratnavaFC.Domain.Entities;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BratnavaFC.Api.Controllers;
@@ -17,47 +16,41 @@ public class TeamColorsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAll(CancellationToken ct)
     {
-        var colors = await _service.GetAllAsync(cancellationToken);
+        var colors = await _service.GetAllAsync(ct);
         return Ok(colors);
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> Get(Guid id, CancellationToken ct)
     {
-        var color = await _service.GetByIdAsync(id, cancellationToken);
-        if (color == null) return NotFound();
-        return Ok(color);
+        var color = await _service.GetByIdAsync(id, ct);
+        return color is null ? NotFound() : Ok(color);
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateTeamColorDto dto, CancellationToken cancellationToken)
+    public async Task<IActionResult> Create([FromBody] CreateTeamColorDto dto, CancellationToken ct)
     {
-        if (dto == null) return BadRequest();
-        var entity = new TeamColorEntity(dto.Name, dto.HexValue);
-        var created = await _service.CreateAsync(entity, cancellationToken);
+        if (dto is null) return BadRequest(new { error = "Body é obrigatório." });
+
+        var created = await _service.CreateAsync(dto, ct);
         return CreatedAtAction(nameof(Get), new { id = created.Id }, created);
     }
 
     [HttpPut("{id:guid}")]
-    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateTeamColorDto dto, CancellationToken cancellationToken)
+    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateTeamColorDto dto, CancellationToken ct)
     {
-        if (dto == null) return BadRequest();
-        var existing = await _service.GetByIdAsync(id, cancellationToken);
-        if (existing == null) return NotFound();
+        if (dto is null) return BadRequest(new { error = "Body é obrigatório." });
 
-        existing.SetName(dto.Name);
-        existing.SetHexValue(dto.HexValue);
-
-        await _service.UpdateAsync(existing, cancellationToken);
+        await _service.UpdateAsync(id, dto, ct);
         return NoContent();
     }
 
     [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
-        await _service.DeleteAsync(id, cancellationToken);
+        await _service.DeleteAsync(id, ct);
         return NoContent();
     }
 }
