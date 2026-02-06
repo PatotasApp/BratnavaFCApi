@@ -1,50 +1,56 @@
+using System;
 using System.Text.RegularExpressions;
 
 namespace BratnavaFC.Domain.Entities;
 
 public class TeamColorEntity : BaseEntity
 {
-    private static readonly Regex HexRegex = new("^#(?:[0-9a-fA-F]{6})$", RegexOptions.Compiled);
+    private static readonly Regex HexRegex = new(@"^#?[0-9A-Fa-f]{6}$", RegexOptions.Compiled);
 
-    // EF Core
-    private TeamColorEntity() { }
+    private TeamColorEntity() { } // EF
 
-    public TeamColorEntity(string name, string hexValue)
+    public TeamColorEntity(Guid groupId, string name, string hexValue)
     {
+        if (groupId == Guid.Empty)
+            throw new InvalidOperationException("GroupId é obrigatório.");
+
+        GroupId = groupId;
+        IsActive = true;
+
         SetName(name);
         SetHexValue(hexValue);
     }
+
+    public Guid GroupId { get; private set; }
+    public bool IsActive { get; private set; }
 
     public string Name { get; private set; } = string.Empty;
     public string HexValue { get; private set; } = string.Empty;
 
-    public void Update(string name, string hexValue)
+    public void SetName(string name)
     {
-        SetName(name);
-        SetHexValue(hexValue);
-    }
-
-    private void SetName(string name)
-    {
-        name = (name ?? string.Empty).Trim();
-
         if (string.IsNullOrWhiteSpace(name))
             throw new InvalidOperationException("Nome da cor é obrigatório.");
 
-        if (name.Length > 40)
-            throw new InvalidOperationException("Nome da cor deve ter no máximo 40 caracteres.");
-
-        Name = name;
+        Name = name.Trim();
     }
 
-    private void SetHexValue(string hexValue)
+    public void SetHexValue(string hex)
     {
-        hexValue = (hexValue ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(hex))
+            throw new InvalidOperationException("Hex da cor é obrigatório.");
 
-        // aceita #RRGGBB (mais consistente pra UI)
-        if (!HexRegex.IsMatch(hexValue))
-            throw new InvalidOperationException("HexValue inválido. Use o formato #RRGGBB (ex: #12AB34).");
+        hex = hex.Trim();
 
-        HexValue = hexValue.ToUpperInvariant();
+        if (!HexRegex.IsMatch(hex))
+            throw new InvalidOperationException("Hex inválido. Use o formato #RRGGBB (ex: #1A2B3C).");
+
+        if (!hex.StartsWith('#'))
+            hex = "#" + hex;
+
+        HexValue = hex.ToUpperInvariant();
     }
+
+    public void Inactivate() => IsActive = false;
+    public void Activate() => IsActive = true;
 }

@@ -1,14 +1,19 @@
-﻿using BratnavaFC.Domain.Dtos;
-using BratnavaFC.Domain.Entities;
+﻿using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using BratnavaFC.Domain.Dtos;
 
 namespace BratnavaFC.Application.Abstractions;
 
 public interface ITeamColorService
 {
-    Task<IEnumerable<TeamColorEntity>> GetAllAsync(CancellationToken ct);
-    Task<TeamColorEntity?> GetByIdAsync(Guid id, CancellationToken ct);
+    Task<IReadOnlyList<TeamColorDto>> GetAllAsync(Guid groupId, bool includeInactive, CancellationToken ct);
+    Task<TeamColorDto> GetByIdAsync(Guid groupId, Guid colorId, CancellationToken ct);
 
-    Task<TeamColorEntity> CreateAsync(CreateTeamColorDto dto, CancellationToken ct);
-    Task UpdateAsync(Guid id, UpdateTeamColorDto dto, CancellationToken ct);
-    Task DeleteAsync(Guid id, CancellationToken ct);
+    Task<TeamColorDto> CreateAsync(CreateTeamColorDto dto, CancellationToken ct);
+    Task<TeamColorDto> UpdateAsync(Guid groupId, Guid colorId, UpdateTeamColorDto dto, CancellationToken ct);
+
+    Task InactivateAsync(Guid groupId, Guid colorId, CancellationToken ct);
+    Task ActivateAsync(Guid groupId, Guid colorId, CancellationToken ct);
 }

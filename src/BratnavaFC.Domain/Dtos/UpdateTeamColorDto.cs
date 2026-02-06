@@ -6,5 +6,9 @@ using System.Threading.Tasks;
 
 namespace BratnavaFC.Domain.Dtos
 {
-    public record UpdateTeamColorDto(string Name, string HexValue);
+    public sealed class UpdateTeamColorDto
+    {
+        public string Name { get; set; } = string.Empty;
+        public string HexValue { get; set; } = string.Empty;
+    }
 }

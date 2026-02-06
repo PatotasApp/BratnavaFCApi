@@ -208,6 +208,14 @@ public class AppDbContext : DbContext
         {
             builder.HasKey(x => x.Id);
 
+            builder.Property(x => x.GroupId)
+                .IsRequired();
+
+            builder.HasOne<GroupEntity>()
+                .WithMany()
+                .HasForeignKey(x => x.GroupId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             builder.Property(x => x.Name)
                 .IsRequired()
                 .HasMaxLength(100);
@@ -215,6 +223,14 @@ public class AppDbContext : DbContext
             builder.Property(x => x.HexValue)
                 .IsRequired()
                 .HasMaxLength(10);
+
+            builder.Property(x => x.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            builder.HasQueryFilter(x => x.IsActive);
+
+            builder.HasIndex(x => new { x.GroupId, x.Name }).IsUnique(false);
         });
     }
 

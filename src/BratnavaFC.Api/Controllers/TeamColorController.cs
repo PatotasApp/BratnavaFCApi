@@ -6,51 +6,55 @@ namespace BratnavaFC.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class TeamColorsController : ControllerBase
+public class TeamColorController : ControllerBase
 {
     private readonly ITeamColorService _service;
 
-    public TeamColorsController(ITeamColorService service)
+    public TeamColorController(ITeamColorService service)
     {
         _service = service;
     }
 
-    [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct)
+    [HttpGet("group/{groupId:guid}")]
+    public async Task<IActionResult> GetAll(Guid groupId, [FromQuery] bool includeInactive, CancellationToken ct)
     {
-        var colors = await _service.GetAllAsync(ct);
-        return Ok(colors);
+        var result = await _service.GetAllAsync(groupId, includeInactive, ct);
+        return Ok(result);
     }
 
-    [HttpGet("{id:guid}")]
-    public async Task<IActionResult> Get(Guid id, CancellationToken ct)
+    [HttpGet("group/{groupId:guid}/{colorId:guid}")]
+    public async Task<IActionResult> Get(Guid groupId, Guid colorId, CancellationToken ct)
     {
-        var color = await _service.GetByIdAsync(id, ct);
-        return color is null ? NotFound() : Ok(color);
+        var result = await _service.GetByIdAsync(groupId, colorId, ct);
+        return Ok(result);
     }
 
-    [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateTeamColorDto dto, CancellationToken ct)
+    [HttpPost("group/{groupId:guid}")]
+    public async Task<IActionResult> Create(Guid groupId, [FromBody] CreateTeamColorDto dto, CancellationToken ct)
     {
-        if (dto is null) return BadRequest(new { error = "Body é obrigatório." });
-
+        dto.GroupId = groupId;
         var created = await _service.CreateAsync(dto, ct);
-        return CreatedAtAction(nameof(Get), new { id = created.Id }, created);
+        return CreatedAtAction(nameof(Get), new { groupId, colorId = created.Id }, created);
     }
 
-    [HttpPut("{id:guid}")]
-    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateTeamColorDto dto, CancellationToken ct)
+    [HttpPut("group/{groupId:guid}/{colorId:guid}")]
+    public async Task<IActionResult> Update(Guid groupId, Guid colorId, [FromBody] UpdateTeamColorDto dto, CancellationToken ct)
     {
-        if (dto is null) return BadRequest(new { error = "Body é obrigatório." });
+        var updated = await _service.UpdateAsync(groupId, colorId, dto, ct);
+        return Ok(updated);
+    }
 
-        await _service.UpdateAsync(id, dto, ct);
+    [HttpDelete("group/{groupId:guid}/{colorId:guid}")]
+    public async Task<IActionResult> Inactivate(Guid groupId, Guid colorId, CancellationToken ct)
+    {
+        await _service.InactivateAsync(groupId, colorId, ct);
         return NoContent();
     }
 
-    [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    [HttpPut("group/{groupId:guid}/{colorId:guid}/activate")]
+    public async Task<IActionResult> Activate(Guid groupId, Guid colorId, CancellationToken ct)
     {
-        await _service.DeleteAsync(id, ct);
+        await _service.ActivateAsync(groupId, colorId, ct);
         return NoContent();
     }
 }

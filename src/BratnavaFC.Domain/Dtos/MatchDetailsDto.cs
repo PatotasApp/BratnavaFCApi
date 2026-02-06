@@ -29,9 +29,12 @@
 public sealed class TeamColorDto
 {
     public Guid Id { get; set; }
-    public string Name { get; set; } = "";
-    public string HexValue { get; set; } = "";
+    public Guid GroupId { get; set; }
+    public bool IsActive { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string HexValue { get; set; } = string.Empty;
 }
+
 
 public sealed class MatchMvpDto
 {
