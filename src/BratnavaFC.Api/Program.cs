@@ -57,13 +57,13 @@ builder.Services.AddScoped<IPlayerStatsService, PlayerStatsService>();
 builder.Services.AddScoped<ITeamColorService, TeamColorService>();
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
 builder.Services.AddScoped<IUserService, UserService>();
-builder.Services.AddScoped<IPlayerService, PlayerService>();
+// builder.Services.AddScoped<IPlayerService, PlayerService>();
 builder.Services.AddScoped<PasswordHasher<UserEntity>>();
 builder.Services.AddScoped<IGroupService, GroupService>();
 builder.Services.AddScoped<TeamGenerationService>();
 
 var jwtSecret = builder.Configuration["Jwt:SecretKey"]
-    ?? throw new InvalidOperationException("Jwt:SecretKey não configurado.");
+    ?? throw new InvalidOperationException("Jwt:SecretKey nï¿½o configurado.");
 
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "TeamManagement";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "account";

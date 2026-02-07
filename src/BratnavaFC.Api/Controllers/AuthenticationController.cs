@@ -16,7 +16,7 @@ public sealed class AuthenticationController : ControllerBase
     }
 
     [HttpPost("login")]
-    public async Task<IActionResult> LoginAsync([FromBody] LoginContracts.Request request, CancellationToken cancellationToken)
+    public async Task<IActionResult> LoginAsync([FromBody] LoginDto request, CancellationToken cancellationToken)
     {
         if (request == null) return BadRequest();
         var response = await _authenticationService.LoginAsync(request, cancellationToken);
@@ -24,7 +24,7 @@ public sealed class AuthenticationController : ControllerBase
     }
 
     [HttpPost("refresh-token")]
-    public async Task<IActionResult> RefreshTokenAsync([FromBody] LoginContracts.RefreshTokenRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> RefreshTokenAsync([FromBody] RefreshTokenDto request, CancellationToken cancellationToken)
     {
         if (request == null) return BadRequest();
         var response = await _authenticationService.RefreshTokenAsync(request, cancellationToken);
