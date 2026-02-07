@@ -23,7 +23,7 @@ namespace BratnavaFC.Api.Controllers
             return Ok();
         }
 
-        [HttpDelete("{playerId}")]
+        [HttpDelete("{playerId:guid}")]
         public async Task<IActionResult> DeletePlayer(Guid playerId, CancellationToken cancellationToken)
         {
             var request = new PlayerContracts.DeletePlayerRequest(playerId);
@@ -31,17 +31,17 @@ namespace BratnavaFC.Api.Controllers
             return Ok();
         }
 
-        [HttpGet("{playerId}")]
+        [HttpGet("{playerId:guid}")]
         public async Task<IActionResult> GetPlayer(Guid playerId, CancellationToken cancellationToken)
         {
             var player = await _playerService.GetByIdAsync(playerId, cancellationToken);
             return Ok(player);
         }
 
-        [HttpPut]
-        public async Task<IActionResult> UpdatePlayer([FromBody] PlayerContracts.UpdatePlayerRequest request, CancellationToken cancellationToken)
+        [HttpPut("{playerId:guid}")]
+        public async Task<IActionResult> UpdatePlayer(Guid playerId, [FromBody] PlayerContracts.UpdatePlayerRequest request, CancellationToken cancellationToken)
         {
-            await _playerService.UpdateAsync(request, cancellationToken);
+            await _playerService.UpdateAsync(playerId, request, cancellationToken);
             return Ok();
         }
     }

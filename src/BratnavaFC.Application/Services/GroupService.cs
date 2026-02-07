@@ -22,7 +22,7 @@ public class GroupService : IGroupService
         _repository = repository;
     }
 
-    public async Task CreateAsync(GroupContracts.CreateGroupRequest request, CancellationToken cancellationToken)
+    public async Task<Guid> CreateAsync(GroupContracts.CreateGroupRequest request, CancellationToken cancellationToken)
     {
         try
         {
@@ -48,6 +48,8 @@ public class GroupService : IGroupService
 
             _repository.Add(newGroup);
             await _repository.SaveChangesAsync(cancellationToken);
+
+            return newGroup.Id;
         }
         catch (System.Exception ex)
         {
@@ -76,11 +78,11 @@ public class GroupService : IGroupService
         }
     }
 
-    public async Task UpdateAsync(GroupContracts.UpdateGroupRequest request, CancellationToken cancellationToken)
+    public async Task UpdateAsync(Guid groupId, GroupContracts.UpdateGroupRequest request, CancellationToken cancellationToken)
     {
         try
         {
-            var group = await _repository.GetByIdAsync(request.Id, cancellationToken);
+            var group = await _repository.GetByIdAsync(groupId, cancellationToken);
 
             if (group == null)
             {

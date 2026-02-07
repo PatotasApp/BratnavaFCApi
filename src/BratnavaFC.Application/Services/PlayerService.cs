@@ -4,6 +4,7 @@ using BratnavaFC.Domain.Abstractions;
 using BratnavaFC.Domain.Dtos.Players;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace BratnavaFC.Application.Services;
@@ -21,10 +22,31 @@ public class PlayerService : IPlayerService
         _context = context;
     }
 
-    public async Task CreateAsync(PlayerContracts.CreatePlayerRequest request, CancellationToken cancellationToken)
+    public async Task<Guid> CreateAsync(PlayerContracts.CreatePlayerRequest request, CancellationToken cancellationToken)
     {
         try
         {
+            var groupExists = await _context.Groups.AsNoTracking().AnyAsync(x => x.Id == request.GroupId, cancellationToken);
+
+            if (!groupExists)
+            {
+                throw new ApplicationException("Group does not exist.");
+            }
+
+            var userExists = await _context.Users.AsNoTracking().AnyAsync(x => x.Id == request.UserId, cancellationToken);
+
+            if (!userExists)
+            {
+                throw new ApplicationException("User does not exist.");
+            }
+
+            var playerExists = await _context.Players.AsNoTracking().AnyAsync(x => x.UserId == request.UserId && x.GroupId == request.GroupId, cancellationToken);
+
+            if (playerExists)
+            {
+                throw new ApplicationException("Player already exists in the group.");
+            }
+
             var player = new PlayerEntity
             {
                 Name = request.Name,
@@ -36,6 +58,8 @@ public class PlayerService : IPlayerService
 
             _repository.Add(player);
             await _repository.SaveChangesAsync(cancellationToken);
+
+            return player.Id;
         }
         catch (System.Exception ex)
         {
@@ -49,7 +73,7 @@ public class PlayerService : IPlayerService
         try
         {
             var player = await _repository.GetByIdAsync(request.PlayerId, cancellationToken);
-            
+
             if (player == null)
             {
                 throw new ApplicationException("PlayerEntity not found.");
@@ -91,11 +115,12 @@ public class PlayerService : IPlayerService
         }
     }
 
-    public async Task UpdateAsync(PlayerContracts.UpdatePlayerRequest request, CancellationToken cancellationToken)
+    public async Task UpdateAsync(Guid playerId, PlayerContracts.UpdatePlayerRequest request, CancellationToken cancellationToken)
     {
         try
         {
-            var player = await _repository.GetByIdAsync(request.Id, cancellationToken);
+            var player = await _repository.GetByIdAsync(playerId, cancellationToken);
+            
             if (player == null)
             {
                 throw new ApplicationException("PlayerEntity not found.");

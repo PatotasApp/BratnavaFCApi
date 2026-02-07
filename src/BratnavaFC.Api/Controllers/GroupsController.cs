@@ -18,8 +18,8 @@ namespace BratnavaFC.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateGroupAsync([FromBody] GroupContracts.CreateGroupRequest request, CancellationToken cancellationToken)
         {
-            await _groupService.CreateAsync(request, cancellationToken);
-            return Ok();
+            var newGroupId = await _groupService.CreateAsync(request, cancellationToken);
+            return Ok(newGroupId);
         }
 
         [HttpDelete("{groupId:guid}")]
@@ -32,7 +32,7 @@ namespace BratnavaFC.Api.Controllers
         [HttpPut("{groupId:guid}")]
         public async Task<IActionResult> UpdateGroupAsync(Guid groupId, [FromBody] GroupContracts.UpdateGroupRequest request, CancellationToken cancellationToken)
         {
-            await _groupService.UpdateAsync(new GroupContracts.UpdateGroupRequest(groupId, request.Name, request.ScheduleMatchDate, request.Status), cancellationToken);
+            await _groupService.UpdateAsync(groupId, new GroupContracts.UpdateGroupRequest(request.Name, request.ScheduleMatchDate, request.Status), cancellationToken);
             return Ok();
         }
 
