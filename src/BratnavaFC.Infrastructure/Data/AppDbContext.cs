@@ -20,6 +20,7 @@ public class AppDbContext : DbContext
     public DbSet<GroupEntity> Groups => Set<GroupEntity>();
     public DbSet<GroupAdminEntity> GroupAdmins => Set<GroupAdminEntity>();
     public DbSet<PlayerEntity> Players => Set<PlayerEntity>();
+    public DbSet<GroupSettingsEntity> GroupSettings => Set<GroupSettingsEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -232,6 +233,32 @@ public class AppDbContext : DbContext
 
             builder.HasIndex(x => new { x.GroupId, x.Name }).IsUnique(false);
         });
+
+        modelBuilder.Entity<GroupSettingsEntity>(builder =>
+        {
+            builder.HasKey(x => x.Id);
+
+            builder.Property(x => x.GroupId)
+                .IsRequired();
+
+            builder.HasOne<GroupEntity>()
+                .WithOne()  
+                .HasForeignKey<GroupSettingsEntity>(x => x.GroupId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Property(x => x.MinPlayers).IsRequired();
+            builder.Property(x => x.MaxPlayers).IsRequired();
+
+            builder.Property(x => x.DefaultPlaceName)
+                .HasMaxLength(200);
+
+            builder.Property(x => x.DefaultDayOfWeek);
+            builder.Property(x => x.DefaultKickoffTime);
+
+            builder.HasIndex(x => x.GroupId).IsUnique();
+        });
+
+
     }
 
     public override int SaveChanges()
