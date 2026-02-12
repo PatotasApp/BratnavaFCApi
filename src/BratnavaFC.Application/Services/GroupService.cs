@@ -1,9 +1,10 @@
-using Microsoft.EntityFrameworkCore;
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Abstractions;
 using BratnavaFC.Domain.Dtos.Groups;
 using BratnavaFC.Domain.Entities;
+using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System.Linq;
 
@@ -82,21 +83,25 @@ public class GroupService : IGroupService
     {
         try
         {
-            var group = await _repository.GetByIdAsync(groupId, cancellationToken);
+            var group = await _context.Groups
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(x => x.Id == groupId, cancellationToken);
 
             if (group == null)
-            {
                 throw new ApplicationException("Group not found.");
-            }
 
             group.Name = request.Name;
             group.ScheduleMatchDate = request.ScheduleMatchDate;
-            group.Status = request.Status;
 
-            _repository.Update(group);
-            _ = await _repository.SaveChangesAsync(cancellationToken);
+            if (request.Status == Status.Inactive && group.Status != Status.Inactive)
+                group.Inactivate();
+            else if (request.Status == Status.Active && group.Status != Status.Active)
+                group.Reactivate();
+
+            _context.Groups.Update(group);
+            await _context.SaveChangesAsync(cancellationToken);
         }
-        catch (System.Exception ex)
+        catch (Exception ex)
         {
             _logger.LogError(ex, "Error trying to update group.");
             throw;
@@ -140,4 +145,31 @@ public class GroupService : IGroupService
                                     .Select(g => new GroupContracts.GetResponse(g.Group.Id, g.Group.Name, g.Group.ScheduleMatchDate, g.Group.Admins.Select(x => x.UserId).ToArray(), g.Group.Status, g.Group.Players!.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name)).ToList()))
                                     .ToListAsync(cancellationToken);
     }
+
+    public async Task InactivateAsync(Guid groupId, CancellationToken cancellationToken)
+    {
+        var group = await _context.Groups
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.Id == groupId, cancellationToken);
+
+        if (group is null) throw new ApplicationException("Group not found.");
+
+        group.Inactivate();
+        _context.Groups.Update(group);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task ReactivateAsync(Guid groupId, CancellationToken cancellationToken)
+    {
+        var group = await _context.Groups
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.Id == groupId, cancellationToken);
+
+        if (group is null) throw new ApplicationException("Group not found.");
+
+        group.Reactivate();
+        _context.Groups.Update(group);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
 }

@@ -44,5 +44,20 @@ namespace BratnavaFC.Api.Controllers
             await _playerService.UpdateAsync(playerId, request, cancellationToken);
             return Ok();
         }
+
+        [HttpPut("{playerId:guid}/inactivate")]
+        public async Task<IActionResult> InactivateAsync(Guid playerId, CancellationToken cancellationToken)
+        {
+            await _playerService.InactivateAsync(playerId, cancellationToken);
+            return NoContent();
+        }
+
+        [HttpPut("{playerId:guid}/reactivate")]
+        public async Task<IActionResult> ReactivateAsync(Guid playerId, CancellationToken cancellationToken)
+        {
+            await _playerService.ReactivateAsync(playerId, cancellationToken);
+            return NoContent();
+        }
+
     }
 }

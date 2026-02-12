@@ -1,7 +1,4 @@
-using System;
 using BratnavaFC.Domain.Dtos.Players;
-
-namespace BratnavaFC.Application.Abstractions;
 
 public interface IPlayerService
 {
@@ -9,4 +6,7 @@ public interface IPlayerService
     Task UpdateAsync(Guid playerId, PlayerContracts.UpdatePlayerRequest request, CancellationToken cancellationToken);
     Task DeleteAsync(PlayerContracts.DeletePlayerRequest request, CancellationToken cancellationToken);
     Task<PlayerContracts.GetResponse> GetByIdAsync(Guid playerId, CancellationToken cancellationToken);
+
+    Task InactivateAsync(Guid playerId, CancellationToken cancellationToken);
+    Task ReactivateAsync(Guid playerId, CancellationToken cancellationToken);
 }

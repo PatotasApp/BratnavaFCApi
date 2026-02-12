@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using BratnavaFC.Domain.Enums;
-
 namespace BratnavaFC.Domain.Entities;
 
 public enum UserRole
@@ -11,7 +7,7 @@ public enum UserRole
     GodMode = 3
 }
 
-public sealed class UserEntity : BaseEntity
+public sealed class UserEntity : InactivatableEntity
 {
     public string UserName { get; set; }
     public string FirstName { get; set; } = null!;
@@ -24,6 +20,4 @@ public sealed class UserEntity : BaseEntity
     public UserRole Role { get; set; } = UserRole.User;
     public List<PlayerEntity> Players { get; set; } = [];
     public List<GroupAdminEntity> Admins { get; set; } = [];
-
-    public Status Status { get; set; }
 }

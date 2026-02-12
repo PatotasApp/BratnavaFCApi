@@ -49,5 +49,20 @@ namespace BratnavaFC.Api.Controllers
             var response = await _groupService.GetByAdminIdAsync(adminId, cancellationToken);
             return Ok(response);
         }
+
+        [HttpPut("{groupId:guid}/inactivate")]
+        public async Task<IActionResult> InactivateAsync(Guid groupId, CancellationToken cancellationToken)
+        {
+            await _groupService.InactivateAsync(groupId, cancellationToken);
+            return NoContent();
+        }
+
+        [HttpPut("{groupId:guid}/reactivate")]
+        public async Task<IActionResult> ReactivateAsync(Guid groupId, CancellationToken cancellationToken)
+        {
+            await _groupService.ReactivateAsync(groupId, cancellationToken);
+            return NoContent();
+        }
+
     }
 }

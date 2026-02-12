@@ -150,9 +150,14 @@ public class AppDbContext : DbContext
                 .HasForeignKey(x => x.PlayerId);
 
             builder.Property(x => x.Status)
-                .HasDefaultValue(Status.Active);
+                .HasConversion<short>()
+                .HasDefaultValue(Status.Active)
+                .IsRequired();
+
+            builder.Property(x => x.InactivatedAt);
 
             builder.HasQueryFilter(x => x.Status != Status.Inactive);
+
         });
 
         modelBuilder.Entity<UserEntity>(builder =>
@@ -169,9 +174,14 @@ public class AppDbContext : DbContext
                 .HasForeignKey(x => x.UserId);
 
             builder.Property(x => x.Status)
-                .HasDefaultValue(Status.Active);
+                .HasConversion<short>()
+                .HasDefaultValue(Status.Active)
+                .IsRequired();
+
+            builder.Property(x => x.InactivatedAt);
 
             builder.HasQueryFilter(x => x.Status != Status.Inactive);
+
         });
 
         modelBuilder.Entity<GroupEntity>(builder =>
@@ -185,9 +195,14 @@ public class AppDbContext : DbContext
                 .HasForeignKey(x => x.GroupId);
 
             builder.Property(x => x.Status)
-                .HasDefaultValue(Status.Active);
+                .HasConversion<short>()
+                .HasDefaultValue(Status.Active)
+                .IsRequired();
+
+            builder.Property(x => x.InactivatedAt);
 
             builder.HasQueryFilter(x => x.Status != Status.Inactive);
+
         });
 
         modelBuilder.Entity<GroupAdminEntity>(builder =>

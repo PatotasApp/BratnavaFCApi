@@ -1,11 +1,12 @@
-using System;
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Abstractions;
 using BratnavaFC.Domain.Dtos.Players;
 using BratnavaFC.Domain.Entities;
+using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System;
 
 namespace BratnavaFC.Application.Services;
 
@@ -53,7 +54,6 @@ public class PlayerService : IPlayerService
                 UserId = request.UserId,
                 GroupId = request.GroupId,
                 SkillPoints = request.SkillPoints,
-                Status = request.Status
             };
 
             _repository.Add(player);
@@ -119,24 +119,58 @@ public class PlayerService : IPlayerService
     {
         try
         {
-            var player = await _repository.GetByIdAsync(playerId, cancellationToken);
-            
+            // para conseguir atualizar mesmo se o player estiver inativo
+            var player = await _context.Players
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(x => x.Id == playerId, cancellationToken);
+
             if (player == null)
-            {
                 throw new ApplicationException("PlayerEntity not found.");
-            }
 
             player.Name = request.Name;
             player.SkillPoints = request.SkillPoints;
-            player.Status = request.Status;
 
-            _repository.Update(player);
-            await _repository.SaveChangesAsync(cancellationToken);
+            // garante consistência do Status/InactivatedAt
+            if (request.Status == Status.Inactive && player.Status != Status.Inactive)
+                player.Inactivate();
+            else if (request.Status == Status.Active && player.Status != Status.Active)
+                player.Reactivate();
+
+            _context.Players.Update(player);
+            await _context.SaveChangesAsync(cancellationToken);
         }
-        catch (System.Exception ex)
+        catch (Exception ex)
         {
             _logger.LogError(ex, "Error updating player");
             throw;
         }
     }
+
+
+    public async Task InactivateAsync(Guid playerId, CancellationToken cancellationToken)
+    {
+        var player = await _context.Players
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.Id == playerId, cancellationToken);
+
+        if (player is null) throw new ApplicationException("PlayerEntity not found.");
+
+        player.Inactivate();
+        _context.Players.Update(player);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task ReactivateAsync(Guid playerId, CancellationToken cancellationToken)
+    {
+        var player = await _context.Players
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.Id == playerId, cancellationToken);
+
+        if (player is null) throw new ApplicationException("PlayerEntity not found.");
+
+        player.Reactivate();
+        _context.Players.Update(player);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
 }

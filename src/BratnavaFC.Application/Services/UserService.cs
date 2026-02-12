@@ -80,4 +80,31 @@ public class UserService : IUserService
                                       GroupAdminIds = u.Admins.Select(x => x.GroupId).ToArray()
                                   }).FirstOrDefaultAsync(x => x.Id == userId, cancellationToken);
     }
+
+    public async Task InactivateAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var user = await _appDbContext.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.Id == userId, cancellationToken);
+
+        if (user is null) throw new ApplicationException("User not found.");
+
+        user.Inactivate();
+        _appDbContext.Users.Update(user);
+        await _appDbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task ReactivateAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var user = await _appDbContext.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.Id == userId, cancellationToken);
+
+        if (user is null) throw new ApplicationException("User not found.");
+
+        user.Reactivate();
+        _appDbContext.Users.Update(user);
+        await _appDbContext.SaveChangesAsync(cancellationToken);
+    }
+
 }

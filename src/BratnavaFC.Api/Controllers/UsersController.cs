@@ -34,4 +34,19 @@ public sealed class UsersController : ControllerBase
 
         return Ok(user);
     }
+
+    [HttpPut("{userId:guid}/inactivate")]
+    public async Task<IActionResult> InactivateAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        await _userService.InactivateAsync(userId, cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPut("{userId:guid}/reactivate")]
+    public async Task<IActionResult> ReactivateAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        await _userService.ReactivateAsync(userId, cancellationToken);
+        return NoContent();
+    }
+
 }
