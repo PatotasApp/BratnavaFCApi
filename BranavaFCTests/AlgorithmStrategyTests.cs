@@ -1,15 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using BratnavaFC.Application.Abstractions;
-using BratnavaFC.Application.TeamGeneration;
+﻿using BratnavaFC.Application.TeamGeneration;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Models;
-using Xunit;
 
-namespace BratnavaFC.Tests;
+namespace BranavaFC.Tests;
 
 public class AlgorithmStrategyTests
 {
@@ -122,12 +115,12 @@ public class AlgorithmStrategyTests
         var teamB = result.TeamB.ToHashSet();
 
         bool aWithC =
-            (teamA.Contains(id["A"]) && teamA.Contains(id["C"])) ||
-            (teamB.Contains(id["A"]) && teamB.Contains(id["C"]));
+            teamA.Contains(id["A"]) && teamA.Contains(id["C"]) ||
+            teamB.Contains(id["A"]) && teamB.Contains(id["C"]);
 
         bool bWithD =
-            (teamA.Contains(id["B"]) && teamA.Contains(id["D"])) ||
-            (teamB.Contains(id["B"]) && teamB.Contains(id["D"]));
+            teamA.Contains(id["B"]) && teamA.Contains(id["D"]) ||
+            teamB.Contains(id["B"]) && teamB.Contains(id["D"]);
 
         Assert.True(aWithC || bWithD,
             "Expected at least one strong synergy pair to be kept together (A+C or B+D).\n" +
@@ -146,9 +139,9 @@ public class AlgorithmStrategyTests
     {
         var bytes = new byte[16];
         bytes[15] = (byte)(n & 0xFF);
-        bytes[14] = (byte)((n >> 8) & 0xFF);
-        bytes[13] = (byte)((n >> 16) & 0xFF);
-        bytes[12] = (byte)((n >> 24) & 0xFF);
+        bytes[14] = (byte)(n >> 8 & 0xFF);
+        bytes[13] = (byte)(n >> 16 & 0xFF);
+        bytes[12] = (byte)(n >> 24 & 0xFF);
         return new Guid(bytes);
     }
 

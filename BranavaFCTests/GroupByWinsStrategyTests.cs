@@ -1,15 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using BratnavaFC.Application.Abstractions;
-using BratnavaFC.Application.TeamGeneration;
+﻿using BratnavaFC.Application.TeamGeneration;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Models;
-using Xunit;
 
-namespace BratnavaFC.Tests;
+namespace BranavaFC.Tests;
 
 public class GroupByWinsStrategyTests
 {

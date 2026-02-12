@@ -1,15 +1,9 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.TeamGeneration;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Models;
 using Microsoft.Extensions.Logging.Abstractions;
-using Xunit;
 
-namespace BratnavaFC.Tests;
+namespace BranavaFC.Tests;
 
 public class FactoryTests
 {
