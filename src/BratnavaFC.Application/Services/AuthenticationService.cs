@@ -40,7 +40,10 @@ public sealed class AuthenticationService : IAuthenticationService
     {
         try
         {
-            var user = await _db.Users.FirstOrDefaultAsync(x => x.Email == request.Email, cancellationToken);
+            if(string.IsNullOrWhiteSpace(request.Username))
+                throw new ApplicationException("Username is required.");
+
+            var user = await _db.Users.FirstOrDefaultAsync(x => x.UserName == request.Username.Trim().ToLower(), cancellationToken);
 
             if (user is null)
                 throw new ApplicationException("User not found");
@@ -122,6 +125,7 @@ public sealed class AuthenticationService : IAuthenticationService
             Subject = new ClaimsIdentity(new[]
             {
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+                new Claim(JwtRegisteredClaimNames.UniqueName, user.UserName),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email),
                 new Claim(JwtRegisteredClaimNames.Name, user.FirstName),
                 new Claim(ClaimTypes.Role, role)
