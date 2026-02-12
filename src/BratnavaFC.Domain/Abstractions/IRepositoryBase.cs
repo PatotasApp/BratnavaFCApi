@@ -1,4 +1,4 @@
-using BratnavaFC.Domain.Entities;
+﻿using BratnavaFC.Domain.Entities;
 
 public interface IRepositoryBase<T> where T : BaseEntity
 {

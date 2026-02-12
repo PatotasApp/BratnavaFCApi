@@ -1,4 +1,4 @@
-namespace BratnavaFC.Domain.Dtos.Authentication;
+﻿namespace BratnavaFC.Domain.Dtos.Authentication;
 
 public static class LoginContracts
 {

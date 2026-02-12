@@ -1,4 +1,4 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Infrastructure.Data;
@@ -279,10 +279,10 @@ public sealed class MatchService : IMatchService
         }
 
         if (teamAColorId.HasValue)
-            await EnsureTeamColorExistsAsync(teamAColorId.Value, "Cor do time A não encontrada.", ct);
+            await EnsureTeamColorExistsAsync(teamAColorId.Value, "Cor do time A nao encontrada.", ct);
 
         if (teamBColorId.HasValue)
-            await EnsureTeamColorExistsAsync(teamBColorId.Value, "Cor do time B não encontrada.", ct);
+            await EnsureTeamColorExistsAsync(teamBColorId.Value, "Cor do time B nao encontrada.", ct);
 
         match.SetTeamColors(teamAColorId, teamBColorId);
 
@@ -325,23 +325,23 @@ public sealed class MatchService : IMatchService
         EnsureMatchId(matchId);
 
         if (playerAId == Guid.Empty || playerBId == Guid.Empty)
-            throw new InvalidOperationException("PlayerId é obrigatório.");
+            throw new InvalidOperationException("PlayerId a© obrigata³rio.");
 
         if (playerAId == playerBId)
-            throw new InvalidOperationException("Não é possível trocar o mesmo jogador.");
+            throw new InvalidOperationException("Na£o a© possa­vel trocar o mesmo jogador.");
 
         var match = await _context.Matches
             .Include(m => m.Players)
             .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct);
 
         if (match is null)
-            throw new InvalidOperationException("Partida não encontrada.");
+            throw new InvalidOperationException("Partida na£o encontrada.");
 
         var mpA = match.Players.FirstOrDefault(p => p.PlayerId == playerAId);
         var mpB = match.Players.FirstOrDefault(p => p.PlayerId == playerBId);
 
         if (mpA is null || mpB is null)
-            throw new InvalidOperationException("Um ou ambos os jogadores não pertencem a esta partida.");
+            throw new InvalidOperationException("Um ou ambos os jogadores na£o pertencem a esta partida.");
 
         match.SwapPlayers(mpA.Id, mpB.Id);
 
@@ -357,7 +357,7 @@ public sealed class MatchService : IMatchService
             .Include(m => m.Players)
             .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct);
 
-        return match ?? throw new InvalidOperationException("Partida não encontrada.");
+        return match ?? throw new InvalidOperationException("Partida na£o encontrada.");
     }
 
     private async Task<MatchEntity?> LoadMatchForSimpleUpdateOrNullAsync(Guid groupId, Guid matchId, CancellationToken ct)
@@ -378,7 +378,7 @@ public sealed class MatchService : IMatchService
             .Include(m => m.Votes)
             .FirstOrDefaultAsync(ct);
 
-        return match ?? throw new InvalidOperationException("Partida não encontrada.");
+        return match ?? throw new InvalidOperationException("Partida na£o encontrada.");
     }
 
     private async Task<MatchEntity> LoadMatchForPlayersUpdateAsync(Guid groupId, Guid matchId, CancellationToken ct)
@@ -390,7 +390,7 @@ public sealed class MatchService : IMatchService
             .Include(m => m.Players)
             .FirstOrDefaultAsync(ct);
 
-        return match ?? throw new InvalidOperationException("Partida não encontrada.");
+        return match ?? throw new InvalidOperationException("Partida na£o encontrada.");
     }
 
     private async Task SyncPlayersFromGroupCoreAsync(Guid groupId, MatchEntity match, CancellationToken ct)
@@ -420,7 +420,7 @@ public sealed class MatchService : IMatchService
             .AnyAsync(g => g.Id == groupId, ct);
 
         if (!exists)
-            throw new InvalidOperationException("Group não encontrado.");
+            throw new InvalidOperationException("Group na£o encontrado.");
     }
 
     private async Task EnsureTeamColorExistsAsync(Guid colorId, string errorMessage, CancellationToken ct)
@@ -436,13 +436,13 @@ public sealed class MatchService : IMatchService
     private static void EnsureGroupId(Guid groupId)
     {
         if (groupId == Guid.Empty)
-            throw new InvalidOperationException("GroupId é obrigatório.");
+            throw new InvalidOperationException("GroupId a© obrigata³rio.");
     }
 
     private static void EnsureMatchId(Guid matchId)
     {
         if (matchId == Guid.Empty)
-            throw new InvalidOperationException("MatchId é obrigatório.");
+            throw new InvalidOperationException("MatchId a© obrigata³rio.");
     }
 
     private static PlayerInMatchDto ToPlayerDto(MatchPlayerEntity mp) => new()

@@ -1,4 +1,4 @@
-using BratnavaFC.Domain.Enums;
+ï»¿using BratnavaFC.Domain.Enums;
 
 namespace BratnavaFC.Domain.Entities;
 
@@ -8,7 +8,7 @@ public class MatchPlayerEntity : BaseEntity
 
     public MatchPlayerEntity(Guid playerId)
     {
-        if (playerId == Guid.Empty) throw new InvalidOperationException("PlayerId é obrigatório.");
+        if (playerId == Guid.Empty) throw new InvalidOperationException("PlayerId e obrigatorio.");
         PlayerId = playerId;
         Team = 0; 
     }
@@ -48,13 +48,13 @@ public class MatchPlayerEntity : BaseEntity
         PlayerId = player.Id;
 
         if (GroupId != Guid.Empty && player.GroupId != GroupId)
-            throw new InvalidOperationException("Player não pertence ao Group do MatchPlayer.");
+            throw new InvalidOperationException("Player nao pertence ao Group do MatchPlayer.");
     }
 
     public void AssignGroup(Guid groupId)
     {
         if (groupId == Guid.Empty)
-            throw new InvalidOperationException("GroupId é obrigatório.");
+            throw new InvalidOperationException("GroupId e obrigatorio.");
 
         GroupId = groupId;
     }

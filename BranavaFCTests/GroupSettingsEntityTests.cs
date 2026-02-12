@@ -11,15 +11,15 @@ public class GroupSettingsEntityTests
         var ex = Assert.Throws<InvalidOperationException>(() =>
             new GroupSettingsEntity(Guid.Empty, 6, 12, null, null, null));
 
-        Assert.Equal("GroupId é obrigatório.", ex.Message);
+        Assert.Equal("GroupId e obrigatorio.", ex.Message);
     }
 
     [Theory]
     [InlineData(0, 10, "MinPlayers deve ser maior que 0.")]
     [InlineData(-1, 10, "MinPlayers deve ser maior que 0.")]
     [InlineData(1, 0, "MaxPlayers deve ser maior que 0.")]
-    [InlineData(10, 9, "MinPlayers não pode ser maior que MaxPlayers.")]
-    [InlineData(1, 23, "MaxPlayers não pode ser maior que 22.")]
+    [InlineData(10, 9, "MinPlayers nao pode ser maior que MaxPlayers.")]
+    [InlineData(1, 23, "MaxPlayers nao pode ser maior que 22.")]
     public void Ctor_WithInvalidLimits_ShouldThrow(int min, int max, string msg)
     {
         // Arrange
@@ -77,6 +77,6 @@ public class GroupSettingsEntityTests
         var ex = Assert.Throws<InvalidOperationException>(() =>
             s.Update(6, 12, null, DayOfWeek.Monday, new TimeSpan(hours, minutes, seconds)));
 
-        Assert.Equal("DefaultKickoffTime inválido.", ex.Message);
+        Assert.Equal("DefaultKickoffTime invalido.", ex.Message);
     }
 }

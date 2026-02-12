@@ -1,4 +1,4 @@
-namespace BratnavaFC.Domain.Enums;
+﻿namespace BratnavaFC.Domain.Enums;
 
 public enum Status
 {

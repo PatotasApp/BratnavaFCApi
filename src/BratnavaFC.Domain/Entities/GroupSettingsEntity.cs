@@ -15,7 +15,7 @@ public sealed class GroupSettingsEntity : BaseEntity
         TimeSpan? defaultKickoffTime)
     {
         if (groupId == Guid.Empty)
-            throw new InvalidOperationException("GroupId é obrigatório.");
+            throw new InvalidOperationException("GroupId e obrigatorio.");
 
         GroupId = groupId;
 
@@ -55,10 +55,10 @@ public sealed class GroupSettingsEntity : BaseEntity
             throw new InvalidOperationException("MaxPlayers deve ser maior que 0.");
 
         if (minPlayers > maxPlayers)
-            throw new InvalidOperationException("MinPlayers não pode ser maior que MaxPlayers.");
+            throw new InvalidOperationException("MinPlayers nao pode ser maior que MaxPlayers.");
 
         if (maxPlayers > 22)
-            throw new InvalidOperationException("MaxPlayers não pode ser maior que 22.");
+            throw new InvalidOperationException("MaxPlayers nao pode ser maior que 22.");
 
         MinPlayers = minPlayers;
         MaxPlayers = maxPlayers;
@@ -74,7 +74,7 @@ public sealed class GroupSettingsEntity : BaseEntity
         if (kickoffTime.HasValue)
         {
             if (kickoffTime.Value < TimeSpan.Zero || kickoffTime.Value >= TimeSpan.FromDays(1))
-                throw new InvalidOperationException("DefaultKickoffTime inválido.");
+                throw new InvalidOperationException("DefaultKickoffTime invalido.");
         }
 
         DefaultDayOfWeek = dayOfWeek;

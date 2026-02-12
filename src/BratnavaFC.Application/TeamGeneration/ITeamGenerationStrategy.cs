@@ -1,4 +1,4 @@
-using BratnavaFC.Domain.Dtos;
+﻿using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Models;
 
 namespace BratnavaFC.Application.TeamGeneration;

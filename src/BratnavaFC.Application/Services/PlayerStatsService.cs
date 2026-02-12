@@ -31,7 +31,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
         var playerIds = players.Select(p => p.Id).ToHashSet();
 
-        // Só finalized (como você tinha)
+        // So finalized (como voce tinha)
         var matches = await LoadFinalizedMatchesAsync(playerIds, cancellationToken);
 
         var perPlayer = InitializePlayerAccumulators(playerIds);
@@ -73,7 +73,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
         Guid groupId,
         CancellationToken cancellationToken = default)
     {
-        // (mantém do jeito que você já tinha; aqui usamos PlayerEntity do banco, ok)
+        // (mantem do jeito que voce ja tinha; aqui usamos PlayerEntity do banco, ok)
         var players = await _context.Players
             .AsNoTracking()
             .Where(p => p.GroupId == groupId)

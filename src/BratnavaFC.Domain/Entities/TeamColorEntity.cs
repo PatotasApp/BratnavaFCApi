@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using System.Text.RegularExpressions;
 
 namespace BratnavaFC.Domain.Entities;
@@ -12,7 +12,7 @@ public class TeamColorEntity : BaseEntity
     public TeamColorEntity(Guid groupId, string name, string hexValue)
     {
         if (groupId == Guid.Empty)
-            throw new InvalidOperationException("GroupId é obrigatório.");
+            throw new InvalidOperationException("GroupId e obrigatorio.");
 
         GroupId = groupId;
         IsActive = true;
@@ -30,7 +30,7 @@ public class TeamColorEntity : BaseEntity
     public void SetName(string name)
     {
         if (string.IsNullOrWhiteSpace(name))
-            throw new InvalidOperationException("Nome da cor é obrigatório.");
+            throw new InvalidOperationException("Nome da cor e obrigatorio.");
 
         Name = name.Trim();
     }
@@ -38,12 +38,12 @@ public class TeamColorEntity : BaseEntity
     public void SetHexValue(string hex)
     {
         if (string.IsNullOrWhiteSpace(hex))
-            throw new InvalidOperationException("Hex da cor é obrigatório.");
+            throw new InvalidOperationException("Hex da cor e obrigatorio.");
 
         hex = hex.Trim();
 
         if (!HexRegex.IsMatch(hex))
-            throw new InvalidOperationException("Hex inválido. Use o formato #RRGGBB (ex: #1A2B3C).");
+            throw new InvalidOperationException("Hex invalido. Use o formato #RRGGBB (ex: #1A2B3C).");
 
         if (!hex.StartsWith('#'))
             hex = "#" + hex;

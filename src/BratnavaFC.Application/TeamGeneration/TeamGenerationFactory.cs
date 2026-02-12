@@ -1,4 +1,4 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.TeamGeneration.Strategies;
 using BratnavaFC.Domain.Models;
 using Microsoft.Extensions.Logging;

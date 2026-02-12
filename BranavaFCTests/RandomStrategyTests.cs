@@ -51,10 +51,10 @@ public class RandomStrategyTests
 
         var result = await strategy.GenerateTeamsAsync(players, settings);
 
-        // GK deve ficar em Unassigned porque excluímos goleiros
+        // GK deve ficar em Unassigned porque excluimos goleiros
         Assert.Contains(players[0].Id, result.Unassigned);
 
-        // Os times devem ser preenchidos só com jogadores de linha (pode sobrar 1 unassigned)
+        // Os times devem ser preenchidos so com jogadores de linha (pode sobrar 1 unassigned)
         Assert.True(result.TeamA.Count + result.TeamB.Count <= 3);
     }
 }

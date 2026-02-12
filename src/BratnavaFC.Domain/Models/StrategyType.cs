@@ -1,4 +1,4 @@
-namespace BratnavaFC.Domain.Models;
+﻿namespace BratnavaFC.Domain.Models;
 
 public enum StrategyType
 {

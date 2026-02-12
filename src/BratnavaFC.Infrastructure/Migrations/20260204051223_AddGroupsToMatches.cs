@@ -43,7 +43,7 @@ WHERE p.""Id"" = mp.""PlayerId""
 ");
 
             // 2) Backfill Matches.GroupId = algum GroupId dos MatchPlayers
-            // Postgres não suporta MIN(uuid), então fazemos MIN(text)::uuid
+            // Postgres nao suporta MIN(uuid), entao fazemos MIN(text)::uuid
             migrationBuilder.Sql(@"
 UPDATE ""Matches"" m
 SET ""GroupId"" = sub.""GroupId""
@@ -60,7 +60,7 @@ WHERE m.""Id"" = sub.""MatchId""
 ");
 
             // 3) Se sobrar Match antigo sem GroupId (normalmente sem MatchPlayers),
-            // garante que existe pelo menos 1 Group e seta um padrão
+            // garante que existe pelo menos 1 Group e seta um padrao
             migrationBuilder.Sql(@"
 INSERT INTO ""Groups"" (""Id"", ""CreateDate"", ""Name"", ""Status"")
 SELECT '11111111-1111-1111-1111-111111111111', NOW(), 'Legacy', 1

@@ -20,7 +20,7 @@ public class GroupSettingsServiceTests
 
         // Assert
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Group não encontrado.");
+            .WithMessage("Group nao encontrado.");
     }
 
     [Fact]

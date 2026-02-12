@@ -1,4 +1,4 @@
-namespace BratnavaFC.Domain.Entities;
+﻿namespace BratnavaFC.Domain.Entities;
 
 public enum UserRole
 {

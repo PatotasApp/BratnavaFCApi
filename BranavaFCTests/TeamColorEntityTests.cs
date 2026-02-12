@@ -12,7 +12,7 @@ public class TeamColorEntityTests
         var ex = Assert.Throws<InvalidOperationException>(() =>
             new TeamColorEntity(Guid.Empty, "Azul", "#0011AA"));
 
-        Assert.Equal("GroupId é obrigatório.", ex.Message);
+        Assert.Equal("GroupId e obrigatorio.", ex.Message);
     }
 
     [Theory]
@@ -25,7 +25,7 @@ public class TeamColorEntityTests
 
         // Act + Assert
         var ex = Assert.Throws<InvalidOperationException>(() => c.SetName(name));
-        Assert.Equal("Nome da cor é obrigatório.", ex.Message);
+        Assert.Equal("Nome da cor e obrigatorio.", ex.Message);
     }
 
     [Theory]
@@ -38,7 +38,7 @@ public class TeamColorEntityTests
 
         // Act + Assert
         var ex = Assert.Throws<InvalidOperationException>(() => c.SetHexValue(hex));
-        Assert.Equal("Hex da cor é obrigatório.", ex.Message);
+        Assert.Equal("Hex da cor e obrigatorio.", ex.Message);
     }
 
     [Theory]
@@ -53,7 +53,7 @@ public class TeamColorEntityTests
 
         // Act + Assert
         var ex = Assert.Throws<InvalidOperationException>(() => c.SetHexValue(hex));
-        Assert.Equal("Hex inválido. Use o formato #RRGGBB (ex: #1A2B3C).", ex.Message);
+        Assert.Equal("Hex invalido. Use o formato #RRGGBB (ex: #1A2B3C).", ex.Message);
     }
 
     [Fact]

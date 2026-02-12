@@ -32,7 +32,7 @@ public class MatchEntityTests
         var ex = Assert.Throws<InvalidOperationException>(() =>
             new MatchEntity(Guid.Empty, DateTime.UtcNow, "X"));
 
-        Assert.Equal("GroupId é obrigatório.", ex.Message);
+        Assert.Equal("GroupId e obrigatorio.", ex.Message);
     }
 
     [Fact]
@@ -54,7 +54,7 @@ public class MatchEntityTests
         var ex = Assert.Throws<InvalidOperationException>(() =>
             match.UpdateDetails(match.GroupId, DateTime.UtcNow, "Novo", match.Id, match.Id));
 
-        Assert.Equal("Partida já Finalizada. Não é possível atualizar seus dados.", ex.Message);
+        Assert.Equal("Partida ja Finalizada. Nao e possivel atualizar seus dados.", ex.Message);
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public class MatchEntityTests
         match.AddPlayer(mp2, p2);
 
         mp1.InviteResponse = InviteResponse.Accepted;
-        mp2.InviteResponse = InviteResponse.None; // não aceitou
+        mp2.InviteResponse = InviteResponse.None; // nao aceitou
 
         // Act + Assert
         var ex = Assert.Throws<InvalidOperationException>(() =>
@@ -101,7 +101,7 @@ public class MatchEntityTests
                 new[] { p1.Id },
                 new[] { p2.Id }));
 
-        Assert.Equal("Há jogadores que ainda não aceitaram o convite.", ex.Message);
+        Assert.Equal("Ha jogadores que ainda nao aceitaram o convite.", ex.Message);
     }
 
     [Fact]
@@ -113,7 +113,7 @@ public class MatchEntityTests
 
         // Act + Assert
         var ex = Assert.Throws<InvalidOperationException>(() => match.Start());
-        Assert.Equal("Não é possível iniciar a partida sem os times estarem definidos.", ex.Message);
+        Assert.Equal("Nao e possivel iniciar a partida sem os times estarem definidos.", ex.Message);
     }
 
     [Fact]
@@ -151,7 +151,7 @@ public class MatchEntityTests
 
         // Act
         var vote = match.CreateVote(mp1.Id, mp2.Id);
-        match.Votes.Add(vote); // normalmente é o serviço/repo que adiciona
+        match.Votes.Add(vote); // normalmente e o servico/repo que adiciona
 
         // Assert
         Assert.Equal(mp2.Id, mp1.VotedForId);
@@ -159,7 +159,7 @@ public class MatchEntityTests
 
         // Act + Assert (mesmo voter tentando votar de novo)
         var ex = Assert.Throws<InvalidOperationException>(() => match.CreateVote(mp1.Id, mp2.Id));
-        Assert.Equal("Esse jogador já votou.", ex.Message);
+        Assert.Equal("Esse jogador ja votou.", ex.Message);
     }
 
     [Fact]
@@ -212,7 +212,7 @@ public class MatchEntityTests
 
         // Act + Assert
         var ex = Assert.Throws<InvalidOperationException>(() => match.SetTeamColors(colorId, colorId));
-        Assert.Equal("Os dois times não podem possuir a mesma cor.", ex.Message);
+        Assert.Equal("Os dois times nao podem possuir a mesma cor.", ex.Message);
     }
 
     [Fact]
@@ -224,6 +224,6 @@ public class MatchEntityTests
 
         // Act + Assert
         var ex = Assert.Throws<InvalidOperationException>(() => match.SetTeamColorsRandomly(Array.Empty<TeamColorEntity>()));
-        Assert.Equal("Não há cores cadastradas para sortear.", ex.Message);
+        Assert.Equal("Nao ha cores cadastradas para sortear.", ex.Message);
     }
 }

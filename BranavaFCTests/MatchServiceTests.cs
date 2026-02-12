@@ -36,7 +36,7 @@ public sealed class MatchServiceTests
         repo.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .Returns<CancellationToken>(ct => db.SaveChangesAsync(ct));
 
-        // Se sua interface não tiver esses métodos, remova.
+        // Se sua interface nao tiver esses metodos, remova.
         repo.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((MatchEntity?)null);
 
@@ -169,7 +169,7 @@ public sealed class MatchServiceTests
     }
 
     // ============================================================
-    // ✅ TESTES DE STATUS (não pode executar ação em status inválido)
+    // ✅ TESTES DE STATUS (nao pode executar acao em status invalido)
     // ============================================================
 
     [Theory]
@@ -187,7 +187,7 @@ public sealed class MatchServiceTests
         Func<Task> act = () => sut.AcceptInviteAsync(group.Id, match.Id, players[0].Id, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Só é possível aceitar convite quando a partida está Criada.");
+            .WithMessage("So e possivel aceitar convite quando a partida esta Criada.");
     }
 
     [Theory]
@@ -205,7 +205,7 @@ public sealed class MatchServiceTests
         Func<Task> act = () => sut.RejectInviteAsync(group.Id, match.Id, players[0].Id, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Só é possível recusar convite quando a partida está Criada.");
+            .WithMessage("So e possivel recusar convite quando a partida esta Criada.");
     }
 
     [Theory]
@@ -229,7 +229,7 @@ public sealed class MatchServiceTests
         Func<Task> act = () => sut.AssignTeamsAsync(group.Id, match.Id, dto, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Só é possível atribuir times quando a partida está Criada.");
+            .WithMessage("So e possivel atribuir times quando a partida esta Criada.");
     }
 
     [Theory]
@@ -247,7 +247,7 @@ public sealed class MatchServiceTests
         Func<Task> act = () => sut.SwapPlayersByPlayerIdAsync(group.Id, match.Id, players[0].Id, players[1].Id, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Só é possível trocar jogadores quando a partida está Criada.");
+            .WithMessage("So e possivel trocar jogadores quando a partida esta Criada.");
     }
 
     [Theory]
@@ -265,7 +265,7 @@ public sealed class MatchServiceTests
         Func<Task> act = () => sut.StartMatchAsync(group.Id, match.Id, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("A partida só pode ser iniciada se estiver Criada.");
+            .WithMessage("A partida so pode ser iniciada se estiver Criada.");
     }
 
     [Theory]
@@ -291,7 +291,7 @@ public sealed class MatchServiceTests
         Func<Task> act = () => sut.EndMatchAsync(group.Id, match.Id, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("A partida só pode ser encerrada se estiver Iniciada.");
+            .WithMessage("A partida so pode ser encerrada se estiver Iniciada.");
     }
 
     [Theory]
@@ -316,7 +316,7 @@ public sealed class MatchServiceTests
         Func<Task> act = () => sut.SetScoreAsync(group.Id, match.Id, 1, 0, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Só é possível setar placar quando a partida está Encerrada.");
+            .WithMessage("So e possivel setar placar quando a partida esta Encerrada.");
     }
 
     [Theory]
@@ -344,7 +344,7 @@ public sealed class MatchServiceTests
         Func<Task> act = () => sut.VoteAsync(group.Id, match.Id, voterMpId, votedMpId, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Só é possível votar no MVP quando a partida está Encerrada.");
+            .WithMessage("So e possivel votar no MVP quando a partida esta Encerrada.");
     }
 
     [Theory]
@@ -369,11 +369,11 @@ public sealed class MatchServiceTests
         Func<Task> act = () => sut.FinalizeMatchAsync(group.Id, match.Id, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("A partida só pode ser finalizada se estiver Encerrada.");
+            .WithMessage("A partida so pode ser finalizada se estiver Encerrada.");
     }
 
     // =========================
-    // ✅ CORREÇÃO: SetTeamColors status
+    // ✅ CORREcaO: SetTeamColors status
     // =========================
     [Theory]
     [MemberData(nameof(StatusNotCreated))]
@@ -400,9 +400,9 @@ public sealed class MatchServiceTests
         );
 
         // ✅ IMPORTANTE:
-        // Para testar o "status inválido", não pode passar IDs inexistentes,
-        // porque o service valida existência antes do domínio.
-        // Então: (null, null, randomize=false) força cair no guard de status do domínio.
+        // Para testar o "status invalido", nao pode passar IDs inexistentes,
+        // porque o service valida existencia antes do dominio.
+        // Entao: (null, null, randomize=false) forca cair no guard de status do dominio.
         Func<Task> act = () => sut.SetTeamColorsAsync(
             group.Id,
             match.Id,
@@ -413,7 +413,7 @@ public sealed class MatchServiceTests
 
         // Assert
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Só é possível setar cores quando a partida está Criada.");
+            .WithMessage("So e possivel setar cores quando a partida esta Criada.");
     }
 
     [Fact]
@@ -430,7 +430,7 @@ public sealed class MatchServiceTests
         Func<Task> act = () => sut.SetTeamColorsAsync(group.Id, match.Id, Guid.NewGuid(), null, false, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Cor do time A não encontrada.");
+            .WithMessage("Cor do time A nao encontrada.");
     }
 
 }

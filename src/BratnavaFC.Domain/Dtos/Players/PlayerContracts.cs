@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using BratnavaFC.Domain.Enums;
 
 namespace BratnavaFC.Domain.Dtos.Players;

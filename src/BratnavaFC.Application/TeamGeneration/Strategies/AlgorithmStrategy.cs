@@ -55,13 +55,13 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
     // Tie-breaker: very small factor to prefer taking a higher WinRate when costs are equal.
     private const double TinyPreferHigherWinRate = 0.0001;
 
-    // tolerância aceitável de desequilíbrio (winrate)
+    // tolerancia aceitavel de desequilibrio (winrate)
     private const double BalanceTolerance = 0.05;
 
     // -----------------------------
     // NEUTRAL RULE (insufficient sample)
     // -----------------------------
-    // Se o jogador tiver menos que X partidas, ele é tratado como "neutro".
+    // Se o jogador tiver menos que X partidas, ele e tratado como "neutro".
     private const int MinMatchesToBeNonNeutral = 3;
 
     // WinRate neutro (empate perfeito).
@@ -107,7 +107,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
 
         if (maxAssignable == 0)
         {
-            // ninguém alocável -> tudo unassigned
+            // ninguem alocavel -> tudo unassigned
             return new TeamsResultDto(
                 new List<Guid>(),
                 new List<Guid>(),
@@ -458,7 +458,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         if (current.SynergyTotal > challenger.SynergyTotal)
             return current;
 
-        // 4️⃣ Último desempate: soma total de winrate maior (effective winrate)
+        // 4️⃣ ultimo desempate: soma total de winrate maior (effective winrate)
         var sumCurrent =
             current.TeamA.Sum(x => EffectiveWinRate(x.Stats)) +
             current.TeamB.Sum(x => EffectiveWinRate(x.Stats));
@@ -510,7 +510,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         if (!settings.IncludeGoalkeepers)
             unassigned.AddRange(allPlayers.Where(p => p.IsGoalkeeper).Select(p => p.Id));
 
-        // Remove duplicados caso algum cenário esquisito ocorra
+        // Remove duplicados caso algum cenario esquisito ocorra
         unassigned = unassigned.Distinct().ToList();
 
         return new TeamsResultDto(teamA, teamB, unassigned);

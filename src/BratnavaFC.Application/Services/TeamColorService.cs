@@ -45,14 +45,14 @@ public sealed class TeamColorService : ITeamColorService
             .FirstOrDefaultAsync(c => c.GroupId == groupId && c.Id == colorId, ct);
 
         if (entity is null)
-            throw new InvalidOperationException("Cor do time não encontrada para este grupo.");
+            throw new InvalidOperationException("Cor do time nao encontrada para este grupo.");
 
         return ToDto(entity);
     }
 
     public async Task<TeamColorDto> CreateAsync(CreateTeamColorDto dto, CancellationToken ct)
     {
-        if (dto is null) throw new InvalidOperationException("Payload inválido.");
+        if (dto is null) throw new InvalidOperationException("Payload invalido.");
         await EnsureGroupExistsAsync(dto.GroupId, ct);
 
         var entity = new TeamColorEntity(dto.GroupId, dto.Name, dto.HexValue);
@@ -65,7 +65,7 @@ public sealed class TeamColorService : ITeamColorService
 
     public async Task<TeamColorDto> UpdateAsync(Guid groupId, Guid colorId, UpdateTeamColorDto dto, CancellationToken ct)
     {
-        if (dto is null) throw new InvalidOperationException("Payload inválido.");
+        if (dto is null) throw new InvalidOperationException("Payload invalido.");
         await EnsureGroupExistsAsync(groupId, ct);
 
         var entity = await _context.TeamColors
@@ -73,7 +73,7 @@ public sealed class TeamColorService : ITeamColorService
             .FirstOrDefaultAsync(c => c.GroupId == groupId && c.Id == colorId, ct);
 
         if (entity is null)
-            throw new InvalidOperationException("Cor do time não encontrada para este grupo.");
+            throw new InvalidOperationException("Cor do time nao encontrada para este grupo.");
 
         entity.SetName(dto.Name);
         entity.SetHexValue(dto.HexValue);
@@ -92,7 +92,7 @@ public sealed class TeamColorService : ITeamColorService
             .FirstOrDefaultAsync(c => c.GroupId == groupId && c.Id == colorId, ct);
 
         if (entity is null)
-            throw new InvalidOperationException("Cor do time não encontrada para este grupo.");
+            throw new InvalidOperationException("Cor do time nao encontrada para este grupo.");
 
         entity.Inactivate();
         await _context.SaveChangesAsync(ct);
@@ -107,7 +107,7 @@ public sealed class TeamColorService : ITeamColorService
             .FirstOrDefaultAsync(c => c.GroupId == groupId && c.Id == colorId, ct);
 
         if (entity is null)
-            throw new InvalidOperationException("Cor do time não encontrada para este grupo.");
+            throw new InvalidOperationException("Cor do time nao encontrada para este grupo.");
 
         entity.Activate();
         await _context.SaveChangesAsync(ct);
@@ -116,14 +116,14 @@ public sealed class TeamColorService : ITeamColorService
     private async Task EnsureGroupExistsAsync(Guid groupId, CancellationToken ct)
     {
         if (groupId == Guid.Empty)
-            throw new InvalidOperationException("GroupId é obrigatório.");
+            throw new InvalidOperationException("GroupId e obrigatorio.");
 
         var exists = await _context.Groups
             .AsNoTracking()
             .AnyAsync(g => g.Id == groupId, ct);
 
         if (!exists)
-            throw new InvalidOperationException("Group não encontrado.");
+            throw new InvalidOperationException("Group nao encontrado.");
     }
 
     private static TeamColorDto ToDto(TeamColorEntity e) => new()

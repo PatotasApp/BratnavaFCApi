@@ -113,13 +113,13 @@ public sealed class GroupSettingsService : IGroupSettingsService
     private async Task EnsureGroupExistsAsync(Guid groupId, CancellationToken ct)
     {
         if (groupId == Guid.Empty)
-            throw new InvalidOperationException("GroupId é obrigatório.");
+            throw new InvalidOperationException("GroupId e obrigatorio.");
 
         var exists = await _context.Groups
             .AsNoTracking()
             .AnyAsync(g => g.Id == groupId, ct);
 
         if (!exists)
-            throw new InvalidOperationException("Group não encontrado.");
+            throw new InvalidOperationException("Group nao encontrado.");
     }
 }

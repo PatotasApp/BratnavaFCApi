@@ -41,8 +41,8 @@ namespace BratnavaFC.Infrastructure.Migrations
                 onDelete: ReferentialAction.Restrict);
 
             // OPCIONAL (recomendado):
-            // se você NÃO quer que novos TeamColors caiam nesse GroupId "por padrão" quando esquecerem de enviar,
-            // remova o default depois da migração:
+            // se voce NaO quer que novos TeamColors caiam nesse GroupId "por padrao" quando esquecerem de enviar,
+            // remova o default depois da migracao:
             //
             // migrationBuilder.AlterColumn<Guid>(
             //     name: "GroupId",

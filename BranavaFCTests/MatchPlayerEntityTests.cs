@@ -9,7 +9,7 @@ public class MatchPlayerEntityTests
     {
         // Arrange + Act + Assert
         var ex = Assert.Throws<InvalidOperationException>(() => new MatchPlayerEntity(Guid.Empty));
-        Assert.Equal("PlayerId é obrigatório.", ex.Message);
+        Assert.Equal("PlayerId e obrigatorio.", ex.Message);
     }
 
     [Theory]
@@ -32,7 +32,7 @@ public class MatchPlayerEntityTests
 
         // Act + Assert
         var ex = Assert.Throws<InvalidOperationException>(() => mp.AssignGroup(Guid.Empty));
-        Assert.Equal("GroupId é obrigatório.", ex.Message);
+        Assert.Equal("GroupId e obrigatorio.", ex.Message);
     }
 
     [Fact]

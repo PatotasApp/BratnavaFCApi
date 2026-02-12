@@ -42,7 +42,7 @@ public class TeamGenerationServiceTests
     public async Task GenerateAsync_RandomStrategy_Returns_Valid_Teams()
     {
         // Arrange
-        var stats = new Mock<IPlayerStatsService>(MockBehavior.Loose); // Random não precisa de stats
+        var stats = new Mock<IPlayerStatsService>(MockBehavior.Loose); // Random nao precisa de stats
         var svc = new TeamGenerationService(stats.Object, NullLoggerFactory.Instance);
 
         var players = TestHelpers.Players(("A", false), ("B", false), ("C", false), ("D", false));

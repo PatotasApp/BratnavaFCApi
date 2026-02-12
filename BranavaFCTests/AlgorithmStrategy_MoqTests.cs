@@ -16,7 +16,7 @@ public class AlgorithmStrategy_MoqTests
             ("E", false), ("F", false), ("G", false), ("H", false), ("I", false), ("J", false)
         );
 
-        // devolve stats básicos pros 12
+        // devolve stats basicos pros 12
         var statsList = new List<PlayerStats>();
         foreach (var p in players)
         {

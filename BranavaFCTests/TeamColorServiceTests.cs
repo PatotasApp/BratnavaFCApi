@@ -24,7 +24,7 @@ public class TeamColorServiceTests
 
         // Assert
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Cor do time não encontrada para este grupo.");
+            .WithMessage("Cor do time nao encontrada para este grupo.");
     }
 
     [Fact]
@@ -39,7 +39,7 @@ public class TeamColorServiceTests
 
         // Assert
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Payload inválido.");
+            .WithMessage("Payload invalido.");
     }
 
     [Fact]
@@ -91,6 +91,6 @@ public class TeamColorServiceTests
 
         // Assert
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Cor do time não encontrada para este grupo.");
+            .WithMessage("Cor do time nao encontrada para este grupo.");
     }
 }

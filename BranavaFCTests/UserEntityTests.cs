@@ -17,7 +17,7 @@ public class UserEntityTests
             "  Luis  ",
             "  Mello  ",
             "  luis@email.com  ",
-            "hash", // aqui sem espaços porque Password NÃO dá trim no domínio
+            "hash", // aqui sem espacos porque Password NaO da trim no dominio
             "  11 99999-9999  ",
             birth,
             UserRole.Admin);

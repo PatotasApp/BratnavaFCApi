@@ -1,4 +1,4 @@
-using System.Text;
+ï»¿using System.Text;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -62,7 +62,7 @@ builder.Services.AddScoped<IGroupService, GroupService>();
 builder.Services.AddScoped<TeamGenerationService>();
 
 var jwtSecret = builder.Configuration["Jwt:SecretKey"]
-    ?? throw new InvalidOperationException("Jwt:SecretKey não configurado.");
+    ?? throw new InvalidOperationException("Jwt:SecretKey nao configurado.");
 
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "TeamManagement";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "account";

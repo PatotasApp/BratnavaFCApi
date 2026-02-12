@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using BratnavaFC.Application.TeamGeneration;
 using Xunit;
 

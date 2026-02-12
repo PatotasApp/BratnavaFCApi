@@ -129,7 +129,7 @@ public class UserServiceTests
         captured!.UserName.Should().Be("user2");
         captured.Email.Should().Be("b@test.com");
 
-        // Ele começa com "temp", mas depois SetPasswordHash(hashed) troca:
+        // Ele comeca com "temp", mas depois SetPasswordHash(hashed) troca:
         captured.Password.Should().NotBeNullOrWhiteSpace();
         captured.Password.Should().NotBe("temp");
     }

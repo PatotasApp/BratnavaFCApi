@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -72,8 +72,8 @@ public sealed class GroupByWinsStrategy : ITeamGenerationStrategy
         var assigned = new HashSet<Guid>(teamA.Concat(teamB));
 
         // Unassigned:
-        // - tudo que não entrou por falta de slot
-        // - e, se IncludeGoalkeepers=false, os GKs também
+        // - tudo que nao entrou por falta de slot
+        // - e, se IncludeGoalkeepers=false, os GKs tambem
         var unassigned = players
             .Where(p => !assigned.Contains(p.Id))
             .Select(p => p.Id)
@@ -133,7 +133,7 @@ public sealed class GroupByWinsStrategy : ITeamGenerationStrategy
         var first = ordered[0];
         var second = ordered[1];
 
-        // Mantém exatamente a regra que você tinha:
+        // Mantem exatamente a regra que voce tinha:
         // o com MENOS wins vai pro TeamA, o com MAIS wins vai pro TeamB
         if (first.Stats.Wins <= second.Stats.Wins)
         {

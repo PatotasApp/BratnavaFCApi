@@ -38,7 +38,7 @@ public sealed class TeamColorDto
 
 public sealed class MatchMvpDto
 {
-    public Guid MatchPlayerId { get; set; }   // MVP é um MatchPlayer (pelo teu método)
+    public Guid MatchPlayerId { get; set; }   // MVP e um MatchPlayer (pelo teu metodo)
     public Guid PlayerId { get; set; }
     public string PlayerName { get; set; } = "";
     public short Team { get; set; }
