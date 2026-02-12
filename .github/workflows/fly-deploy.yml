@@ -3,7 +3,8 @@ name: Fly Deploy
 on:
   push:
     branches:
-      - main   # Se quiser deploy só na main
+      - main
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -16,12 +17,29 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - run: dotnet restore BratnavaFC.sln
+      - name: Force UTF-8 locale (pt_BR)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y locales
+          sudo locale-gen pt_BR.UTF-8
+          sudo update-locale LANG=pt_BR.UTF-8 LC_ALL=pt_BR.UTF-8
+          echo "LANG=pt_BR.UTF-8" >> $GITHUB_ENV
+          echo "LC_ALL=pt_BR.UTF-8" >> $GITHUB_ENV
+          echo "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=0" >> $GITHUB_ENV
 
-      - run: dotnet test BratnavaFC.sln --no-build
+      - name: Restore
+        run: dotnet restore
+
+      - name: Test
+        run: dotnet test ./BranavaFCTests/BranavaFC.Tests.csproj -c Release
+        env:
+          LANG: pt_BR.UTF-8
+          LC_ALL: pt_BR.UTF-8
+          DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: "0"
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
-      - run: flyctl deploy --remote-only
+      - name: Deploy
+        run: flyctl deploy --remote-only
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_DEPLOY }}
