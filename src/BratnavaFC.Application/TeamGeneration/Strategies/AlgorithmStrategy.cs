@@ -2,7 +2,6 @@
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Models;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
@@ -17,6 +16,10 @@ namespace BratnavaFC.Application.TeamGeneration;
 /// (with small penalties for GK imbalance and small bonus for synergy).
 ///
 /// All knobs are constants (edit this file to tune).
+///
+/// CHANGE: Players with fewer than X matches are treated as neutral:
+/// - Their effective winrate becomes 0.50
+/// - Their synergy becomes NeutralSynergy (0.50)
 /// </summary>
 public sealed class AlgorithmStrategy : ITeamGenerationStrategy
 {
@@ -53,6 +56,19 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
 
     // tolerância aceitável de desequilíbrio (winrate)
     private const double BalanceTolerance = 0.05;
+
+    // -----------------------------
+    // NEUTRAL RULE (insufficient sample)
+    // -----------------------------
+    // Se o jogador tiver menos que X partidas, ele é tratado como "neutro".
+    private const int MinMatchesToBeNonNeutral = 3;
+
+    // WinRate neutro (empate perfeito).
+    private const double NeutralWinRate = 0.50;
+
+    private static int TotalMatches(PlayerStats s) => (s?.Wins ?? 0) + (s?.Ties ?? 0) + (s?.Losses ?? 0);
+    private static bool IsNeutral(PlayerStats s) => TotalMatches(s) < MinMatchesToBeNonNeutral;
+    private static double EffectiveWinRate(PlayerStats s) => IsNeutral(s) ? NeutralWinRate : s.WinRate;
 
     // -----------------------------
     // DEPENDENCIES
@@ -94,10 +110,10 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         // load stats
         var statsById = await LoadStatsByPlayerId(candidatePlayers).ConfigureAwait(false);
 
-        // build ordered candidates
+        // build ordered candidates (ORDER BY effective winrate, not raw winrate)
         var candidates = candidatePlayers
             .Select(p => new PlayerWithStats(p, GetOrCreateStats(statsById, p.Id)))
-            .OrderByDescending(x => x.Stats.WinRate)
+            .OrderByDescending(x => EffectiveWinRate(x.Stats))
             .ThenBy(x => x.PlayerEntity.Id)
             .ToList();
 
@@ -293,9 +309,9 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
             waiting.RemoveAt(bestIdx);
         }
 
-        // compute outcome stats
-        var sumA = teamA.Sum(x => x.Stats.WinRate);
-        var sumB = teamB.Sum(x => x.Stats.WinRate);
+        // compute outcome stats (use effective winrate)
+        var sumA = teamA.Sum(x => EffectiveWinRate(x.Stats));
+        var sumB = teamB.Sum(x => EffectiveWinRate(x.Stats));
 
         var outcome = new DraftOutcome(teamA, teamB, waiting)
         {
@@ -317,8 +333,8 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         if (teamA.Count < teamB.Count) return true;
         if (teamB.Count < teamA.Count) return false;
 
-        var sumA = teamA.Sum(x => x.Stats.WinRate);
-        var sumB = teamB.Sum(x => x.Stats.WinRate);
+        var sumA = teamA.Sum(x => EffectiveWinRate(x.Stats));
+        var sumB = teamB.Sum(x => EffectiveWinRate(x.Stats));
 
         return sumA <= sumB;
     }
@@ -328,8 +344,8 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         List<PlayerWithStats> targetTeam,
         List<PlayerWithStats> otherTeam)
     {
-        var sumTarget = targetTeam.Sum(x => x.Stats.WinRate);
-        var sumOther = otherTeam.Sum(x => x.Stats.WinRate);
+        var sumTarget = targetTeam.Sum(x => EffectiveWinRate(x.Stats));
+        var sumOther = otherTeam.Sum(x => EffectiveWinRate(x.Stats));
 
         var gkTarget = targetTeam.Count(x => x.PlayerEntity.IsGoalkeeper);
         var gkOther = otherTeam.Count(x => x.PlayerEntity.IsGoalkeeper);
@@ -341,7 +357,9 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         {
             var c = waiting[i];
 
-            var newSumTarget = sumTarget + c.Stats.WinRate;
+            var cWr = EffectiveWinRate(c.Stats);
+
+            var newSumTarget = sumTarget + cWr;
             var balanceAfter = Math.Abs(newSumTarget - sumOther);
 
             var synergyGain = ComputeSynergyGain(c, targetTeam);
@@ -354,8 +372,8 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
                        + (GoalkeeperWeight * gkImbalanceAfter)
                        - (SynergyWeight * synergyGain);
 
-            // tiny preference for higher WinRate when equal
-            cost -= (c.Stats.WinRate * TinyPreferHigherWinRate);
+            // tiny preference for higher WinRate when equal (use effective winrate)
+            cost -= (cWr * TinyPreferHigherWinRate);
 
             if (cost < bestCost)
             {
@@ -380,6 +398,10 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
 
     private double GetPairSynergy(PlayerStats candidateStats, Guid memberId, PlayerStats memberStats)
     {
+        // If any side has insufficient sample, treat synergy as neutral.
+        if (IsNeutral(candidateStats) || IsNeutral(memberStats))
+            return NeutralSynergy;
+
         if (candidateStats.SynergyWith is not null && candidateStats.SynergyWith.TryGetValue(memberId, out var v))
             return Clamp01(v);
 
@@ -431,14 +453,14 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         if (current.SynergyTotal > challenger.SynergyTotal)
             return current;
 
-        // 4️⃣ Último desempate: soma total de winrate maior
+        // 4️⃣ Último desempate: soma total de winrate maior (effective winrate)
         var sumCurrent =
-            current.TeamA.Sum(x => x.Stats.WinRate) +
-            current.TeamB.Sum(x => x.Stats.WinRate);
+            current.TeamA.Sum(x => EffectiveWinRate(x.Stats)) +
+            current.TeamB.Sum(x => EffectiveWinRate(x.Stats));
 
         var sumChallenger =
-            challenger.TeamA.Sum(x => x.Stats.WinRate) +
-            challenger.TeamB.Sum(x => x.Stats.WinRate);
+            challenger.TeamA.Sum(x => EffectiveWinRate(x.Stats)) +
+            challenger.TeamB.Sum(x => EffectiveWinRate(x.Stats));
 
         return sumChallenger > sumCurrent ? challenger : current;
     }
@@ -485,7 +507,13 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         if (_logger is null) return;
 
         var pool = string.Join(", ",
-            seedPool.Select(p => $"{p.PlayerEntity.Name}(wr={p.Stats.WinRate:0.000}{(p.PlayerEntity.IsGoalkeeper ? ",GK" : "")})"));
+            seedPool.Select(p =>
+            {
+                var wr = EffectiveWinRate(p.Stats);
+                var m = TotalMatches(p.Stats);
+                var neutral = IsNeutral(p.Stats) ? ",NEUTRAL" : "";
+                return $"{p.PlayerEntity.Name}(wr={wr:0.000},m={m}{neutral}{(p.PlayerEntity.IsGoalkeeper ? ",GK" : "")})";
+            }));
 
         _logger.LogInformation(
             "[TeamGen] SeedPool Top{TopN} | PlayersPerTeam={PerTeam} IncludeGoalkeepers={IncGK} MaxAssignable={MaxAssign} | Pool: {Pool}",
@@ -521,10 +549,23 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
     }
 
     private static string FmtSeed(PlayerWithStats? s)
-        => s is null ? "null" : $"{s.PlayerEntity.Name}(wr={s.Stats.WinRate:0.000}{(s.PlayerEntity.IsGoalkeeper ? ",GK" : "")})";
+    {
+        if (s is null) return "null";
+
+        var wr = EffectiveWinRate(s.Stats);
+        var m = TotalMatches(s.Stats);
+        var neutral = IsNeutral(s.Stats) ? ",NEUTRAL" : "";
+        return $"{s.PlayerEntity.Name}(wr={wr:0.000},m={m}{neutral}{(s.PlayerEntity.IsGoalkeeper ? ",GK" : "")})";
+    }
 
     private static string FormatTeam(List<PlayerWithStats> team)
-        => string.Join(", ", team.Select(p => $"{p.PlayerEntity.Name}(wr={p.Stats.WinRate:0.000}{(p.PlayerEntity.IsGoalkeeper ? ",GK" : "")})"));
+        => string.Join(", ", team.Select(p =>
+        {
+            var wr = EffectiveWinRate(p.Stats);
+            var m = TotalMatches(p.Stats);
+            var neutral = IsNeutral(p.Stats) ? ",NEUTRAL" : "";
+            return $"{p.PlayerEntity.Name}(wr={wr:0.000},m={m}{neutral}{(p.PlayerEntity.IsGoalkeeper ? ",GK" : "")})";
+        }));
 
     // -----------------------------
     // INTERNAL TYPES

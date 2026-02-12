@@ -355,6 +355,7 @@ public sealed class MatchService : IMatchService
         EnsureMatchId(matchId);
 
         var match = await _context.Matches
+            .Include(m => m.Players)
             .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct);
 
         return match ?? throw new InvalidOperationException("Partida não encontrada.");
