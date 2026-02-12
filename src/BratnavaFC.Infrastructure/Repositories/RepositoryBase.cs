@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using BratnavaFC.Infrastructure.Data;
 using BratnavaFC.Domain.Entities;
-using BratnavaFC.Domain.Abstractions;
 
 namespace BratnavaFC.Infrastructure.Repositories;
 
@@ -20,6 +19,14 @@ public class RepositoryBase<T> : IRepositoryBase<T> where T : BaseEntity
     {
         return await _dbSet.FindAsync(id, cancellationToken);
     }
+
+    public async Task<T?> GetByIdIncludingInactiveAsync(Guid id, CancellationToken cancellationToken)
+    {
+        return await _context.Set<T>()
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+    }
+
 
     public async Task<IEnumerable<T>> GetAllAsync(CancellationToken cancellationToken)
     {

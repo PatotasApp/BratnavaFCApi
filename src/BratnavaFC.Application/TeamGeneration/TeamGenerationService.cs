@@ -1,31 +1,50 @@
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos;
-using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Models;
 using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
 namespace BratnavaFC.Application.TeamGeneration;
 
-public class TeamGenerationService
+public sealed class TeamGenerationService
 {
     private readonly IPlayerStatsService _statsService;
     private readonly ILoggerFactory _loggerFactory;
 
     public TeamGenerationService(IPlayerStatsService statsService, ILoggerFactory loggerFactory)
     {
-        _statsService = statsService;
-        _loggerFactory = loggerFactory;
+        _statsService = statsService ?? throw new ArgumentNullException(nameof(statsService));
+        _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
     }
 
-    public async Task<TeamsResultDto> GenerateAsync(List<PlayerEntity> players, TeamGenerationSettings settings, StrategyType strategyType)
+    public Task<TeamsResultDto> GenerateAsync(
+        List<PlayerRequestDto> players,
+        StrategyType strategyType,
+        int playersPerTeam,
+        bool includeGoalkeepers,
+        CancellationToken cancellationToken = default)
     {
-        if (players == null) throw new ArgumentNullException(nameof(players));
-        if (settings == null) throw new ArgumentNullException(nameof(settings));
+        if (players is null) throw new ArgumentNullException(nameof(players));
+
+        var settings = new TeamGenerationSettings
+        {
+            PlayersPerTeam = playersPerTeam,
+            IncludeGoalkeepers = includeGoalkeepers
+        };
 
         var strategy = TeamGenerationFactory.Create(strategyType, _statsService, _loggerFactory);
-        return await strategy.GenerateTeamsAsync(players, settings);
+        return strategy.GenerateTeamsAsync(players, settings, cancellationToken);
+    }
+
+    public Task<TeamsResultDto> GenerateAsync(TeamGenerationRequestDto request, CancellationToken cancellationToken = default)
+    {
+        if (request is null) throw new ArgumentNullException(nameof(request));
+        if (request.Players is null) throw new InvalidOperationException("Players is required.");
+
+        return GenerateAsync(
+            request.Players,
+            request.StrategyType,
+            request.PlayersPerTeam,
+            request.IncludeGoalkeepers,
+            cancellationToken);
     }
 }

@@ -1,11 +1,12 @@
 ﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos;
-using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Models;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BratnavaFC.Application.TeamGeneration;
@@ -74,24 +75,27 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
     // DEPENDENCIES
     // -----------------------------
     private readonly IPlayerStatsService _statsService;
-    private readonly ILogger _logger;
+    private readonly ILogger<AlgorithmStrategy> _logger;
 
     public AlgorithmStrategy(
         IPlayerStatsService statsService,
-        ILogger<AlgorithmStrategy> logger = null)
+        ILogger<AlgorithmStrategy>? logger = null)
     {
-        _statsService = statsService;
-        _logger = logger;
+        _statsService = statsService ?? throw new ArgumentNullException(nameof(statsService));
+        _logger = logger ?? NullLogger<AlgorithmStrategy>.Instance;
     }
 
-    public async Task<TeamsResultDto> GenerateTeamsAsync(List<PlayerEntity> players, TeamGenerationSettings settings)
+    public async Task<TeamsResultDto> GenerateTeamsAsync(
+        List<PlayerRequestDto> players,
+        TeamGenerationSettings settings,
+        CancellationToken cancellationToken = default)
     {
         if (players is null) throw new ArgumentNullException(nameof(players));
         if (settings is null) throw new ArgumentNullException(nameof(settings));
         if (settings.PlayersPerTeam <= 0) throw new ArgumentOutOfRangeException(nameof(settings.PlayersPerTeam));
 
-        var result = new TeamsResultDto([], [], []);
-        if (players.Count == 0) return result;
+        if (players.Count == 0)
+            return new TeamsResultDto(new List<Guid>(), new List<Guid>(), new List<Guid>());
 
         // candidates: optionally exclude goalkeepers
         var candidatePlayers = settings.IncludeGoalkeepers
@@ -103,18 +107,21 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
 
         if (maxAssignable == 0)
         {
-            result.Unassigned.AddRange(players.Select(p => p.Id));
-            return result;
+            // ninguém alocável -> tudo unassigned
+            return new TeamsResultDto(
+                new List<Guid>(),
+                new List<Guid>(),
+                players.Select(p => p.Id).ToList());
         }
 
         // load stats
-        var statsById = await LoadStatsByPlayerId(candidatePlayers).ConfigureAwait(false);
+        var statsById = await LoadStatsByPlayerId(candidatePlayers, cancellationToken).ConfigureAwait(false);
 
         // build ordered candidates (ORDER BY effective winrate, not raw winrate)
         var candidates = candidatePlayers
-            .Select(p => new PlayerWithStats(p, GetOrCreateStats(statsById, p.Id)))
+            .Select(p => new PlayerWithStats(p, GetOrCreateStats(statsById, p.Id, p.Name)))
             .OrderByDescending(x => EffectiveWinRate(x.Stats))
-            .ThenBy(x => x.PlayerEntity.Id)
+            .ThenBy(x => x.Player.Id)
             .ToList();
 
         // seed pool (TopN, or all if TopN is huge)
@@ -128,15 +135,14 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
 
         if (allPairs.Count == 0)
         {
-            _logger?.LogInformation("[TeamGen] No seed pairs available. Using single greedy draft.");
+            _logger.LogInformation("[TeamGen] No seed pairs available. Using single greedy draft.");
             var single = RunGreedyDraft(candidates, perTeam, seedA: null, seedB: null, maxAssignable);
-            FillResult(result, single, players, settings);
-            return result;
+            return BuildResult(single, players, settings);
         }
 
         var pairsToEvaluate = PickPairsToEvaluate(allPairs, seedPool);
 
-        _logger?.LogInformation(
+        _logger.LogInformation(
             "[TeamGen] SeedPairs total={TotalPairs} | evaluating={EvalPairs} | SeedPoolTopN={TopN} | MaxSeedPairsToEvaluate={MaxEval}",
             allPairs.Count, pairsToEvaluate.Count, SeedPoolTopN, MaxSeedPairsToEvaluate);
 
@@ -162,8 +168,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
 
         LogBest(best);
 
-        FillResult(result, best, players, settings);
-        return result;
+        return BuildResult(best, players, settings);
     }
 
     // -----------------------------
@@ -203,11 +208,11 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
 
         void AddPair(PlayerWithStats x, PlayerWithStats y)
         {
-            if (x.PlayerEntity.Id == y.PlayerEntity.Id) return;
+            if (x.Player.Id == y.Player.Id) return;
 
             // normalize key
-            var a = x.PlayerEntity.Id;
-            var b = y.PlayerEntity.Id;
+            var a = x.Player.Id;
+            var b = y.Player.Id;
             var key = a.CompareTo(b) < 0 ? (a, b) : (b, a);
 
             if (used.Add(key))
@@ -227,15 +232,15 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
             AddPair(seedPoolSortedByWinRateDesc[i], seedPoolSortedByWinRateDesc[i + 1]);
         }
 
-        // if still not enough (small pool / duplicates), just fill from allPairs
+        // if still not enough, fill from allPairs
         if (selected.Count < maxEval)
         {
             foreach (var p in allPairs)
             {
                 if (selected.Count >= maxEval) break;
 
-                var a = p.A.PlayerEntity.Id;
-                var b = p.B.PlayerEntity.Id;
+                var a = p.A.Player.Id;
+                var b = p.B.Player.Id;
                 var key = a.CompareTo(b) < 0 ? (a, b) : (b, a);
                 if (used.Add(key))
                     selected.Add(p);
@@ -264,13 +269,13 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         // apply seeds
         if (seedA is not null)
         {
-            var s = waiting.FirstOrDefault(x => x.PlayerEntity.Id == seedA.PlayerEntity.Id);
+            var s = waiting.FirstOrDefault(x => x.Player.Id == seedA.Player.Id);
             if (s is not null) { teamA.Add(s); waiting.Remove(s); }
         }
 
         if (seedB is not null)
         {
-            var s = waiting.FirstOrDefault(x => x.PlayerEntity.Id == seedB.PlayerEntity.Id);
+            var s = waiting.FirstOrDefault(x => x.Player.Id == seedB.Player.Id);
             if (s is not null) { teamB.Add(s); waiting.Remove(s); }
         }
 
@@ -316,7 +321,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         var outcome = new DraftOutcome(teamA, teamB, waiting)
         {
             BalanceDiff = Math.Abs(sumA - sumB),
-            GoalkeeperDiff = Math.Abs(teamA.Count(x => x.PlayerEntity.IsGoalkeeper) - teamB.Count(x => x.PlayerEntity.IsGoalkeeper)),
+            GoalkeeperDiff = Math.Abs(teamA.Count(x => x.Player.IsGoalkeeper) - teamB.Count(x => x.Player.IsGoalkeeper)),
             SynergyTotal = ComputeTeamSynergyTotal(teamA) + ComputeTeamSynergyTotal(teamB)
         };
 
@@ -347,8 +352,8 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         var sumTarget = targetTeam.Sum(x => EffectiveWinRate(x.Stats));
         var sumOther = otherTeam.Sum(x => EffectiveWinRate(x.Stats));
 
-        var gkTarget = targetTeam.Count(x => x.PlayerEntity.IsGoalkeeper);
-        var gkOther = otherTeam.Count(x => x.PlayerEntity.IsGoalkeeper);
+        var gkTarget = targetTeam.Count(x => x.Player.IsGoalkeeper);
+        var gkOther = otherTeam.Count(x => x.Player.IsGoalkeeper);
 
         double bestCost = double.PositiveInfinity;
         int bestIdx = 0;
@@ -364,7 +369,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
 
             var synergyGain = ComputeSynergyGain(c, targetTeam);
 
-            var newGkTarget = gkTarget + (c.PlayerEntity.IsGoalkeeper ? 1 : 0);
+            var newGkTarget = gkTarget + (c.Player.IsGoalkeeper ? 1 : 0);
             var gkImbalanceAfter = Math.Abs(newGkTarget - gkOther);
 
             // Lower cost is better
@@ -391,7 +396,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
 
         double sum = 0;
         foreach (var member in team)
-            sum += GetPairSynergy(candidate.Stats, member.PlayerEntity.Id, member.Stats);
+            sum += GetPairSynergy(candidate.Stats, member.Player.Id, member.Stats);
 
         return sum;
     }
@@ -420,14 +425,14 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         double sum = 0.0;
         for (int i = 0; i < team.Count; i++)
             for (int j = i + 1; j < team.Count; j++)
-                sum += GetPairSynergy(team[i].Stats, team[j].PlayerEntity.Id, team[j].Stats);
+                sum += GetPairSynergy(team[i].Stats, team[j].Player.Id, team[j].Stats);
 
         return sum;
     }
 
     private static DraftOutcome PickBetter(
-            DraftOutcome? current,
-            DraftOutcome challenger)
+        DraftOutcome? current,
+        DraftOutcome challenger)
     {
         if (current is null)
             return challenger;
@@ -469,33 +474,46 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
     // STATS LOADING
     // -----------------------------
 
-    private async Task<Dictionary<Guid, PlayerStats>> LoadStatsByPlayerId(List<PlayerEntity> players)
+    private async Task<Dictionary<Guid, PlayerStats>> LoadStatsByPlayerId(
+        List<PlayerRequestDto> players,
+        CancellationToken cancellationToken)
     {
-        var statsList = await _statsService.EnrichPlayersAsync(players).ConfigureAwait(false);
+        var statsList = await _statsService.EnrichPlayersAsync(players, cancellationToken).ConfigureAwait(false);
         return statsList.ToDictionary(s => s.PlayerId, s => s);
     }
 
-    private static PlayerStats GetOrCreateStats(Dictionary<Guid, PlayerStats> statsByPlayerId, Guid playerId)
+    private static PlayerStats GetOrCreateStats(Dictionary<Guid, PlayerStats> statsByPlayerId, Guid playerId, string? name)
         => statsByPlayerId.TryGetValue(playerId, out var s)
             ? s
-            : new PlayerStats { PlayerId = playerId, Wins = 0, Ties = 0, Losses = 0, WinRate = 0.0, SynergyWith = new() };
+            : new PlayerStats
+            {
+                PlayerId = playerId,
+                Name = name ?? string.Empty,
+                Wins = 0,
+                Ties = 0,
+                Losses = 0,
+                WinRate = 0.0,
+                SynergyWith = new()
+            };
 
     // -----------------------------
-    // RESULT FILL
+    // RESULT BUILD
     // -----------------------------
 
-    private static void FillResult(TeamsResultDto result, DraftOutcome best, List<PlayerEntity> allPlayers, TeamGenerationSettings settings)
+    private static TeamsResultDto BuildResult(DraftOutcome best, List<PlayerRequestDto> allPlayers, TeamGenerationSettings settings)
     {
-        result.TeamA.Clear();
-        result.TeamB.Clear();
-        result.Unassigned.Clear();
+        var teamA = best.TeamA.Select(x => x.Player.Id).ToList();
+        var teamB = best.TeamB.Select(x => x.Player.Id).ToList();
 
-        result.TeamA.AddRange(best.TeamA.Select(x => x.PlayerEntity.Id));
-        result.TeamB.AddRange(best.TeamB.Select(x => x.PlayerEntity.Id));
-        result.Unassigned.AddRange(best.Waiting.Select(x => x.PlayerEntity.Id));
+        var unassigned = best.Waiting.Select(x => x.Player.Id).ToList();
 
         if (!settings.IncludeGoalkeepers)
-            result.Unassigned.AddRange(allPlayers.Where(p => p.IsGoalkeeper).Select(p => p.Id));
+            unassigned.AddRange(allPlayers.Where(p => p.IsGoalkeeper).Select(p => p.Id));
+
+        // Remove duplicados caso algum cenário esquisito ocorra
+        unassigned = unassigned.Distinct().ToList();
+
+        return new TeamsResultDto(teamA, teamB, unassigned);
     }
 
     // -----------------------------
@@ -504,7 +522,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
 
     private void LogSeedPool(List<PlayerWithStats> seedPool, TeamGenerationSettings settings, int maxAssignable)
     {
-        if (_logger is null) return;
+        if (_logger == NullLogger<AlgorithmStrategy>.Instance) return;
 
         var pool = string.Join(", ",
             seedPool.Select(p =>
@@ -512,7 +530,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
                 var wr = EffectiveWinRate(p.Stats);
                 var m = TotalMatches(p.Stats);
                 var neutral = IsNeutral(p.Stats) ? ",NEUTRAL" : "";
-                return $"{p.PlayerEntity.Name}(wr={wr:0.000},m={m}{neutral}{(p.PlayerEntity.IsGoalkeeper ? ",GK" : "")})";
+                return $"{p.Player.Name}(wr={wr:0.000},m={m}{neutral}{(p.Player.IsGoalkeeper ? ",GK" : "")})";
             }));
 
         _logger.LogInformation(
@@ -522,7 +540,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
 
     private void LogOutcome(string label, PlayerWithStats? seedA, PlayerWithStats? seedB, DraftOutcome outcome)
     {
-        if (_logger is null) return;
+        if (_logger == NullLogger<AlgorithmStrategy>.Instance) return;
 
         var seedTxt = $"{FmtSeed(seedA)} vs {FmtSeed(seedB)}";
 
@@ -538,7 +556,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
 
     private void LogBest(DraftOutcome best)
     {
-        if (_logger is null) return;
+        if (_logger == NullLogger<AlgorithmStrategy>.Instance) return;
 
         _logger.LogInformation(
             "[TeamGen] BEST CHOSEN | Score={Score:0.000} | BalanceDiff={Balance:0.000} | GKDiff={GKDiff} | SynergyTotal={Syn:0.000}",
@@ -555,7 +573,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         var wr = EffectiveWinRate(s.Stats);
         var m = TotalMatches(s.Stats);
         var neutral = IsNeutral(s.Stats) ? ",NEUTRAL" : "";
-        return $"{s.PlayerEntity.Name}(wr={wr:0.000},m={m}{neutral}{(s.PlayerEntity.IsGoalkeeper ? ",GK" : "")})";
+        return $"{s.Player.Name}(wr={wr:0.000},m={m}{neutral}{(s.Player.IsGoalkeeper ? ",GK" : "")})";
     }
 
     private static string FormatTeam(List<PlayerWithStats> team)
@@ -564,7 +582,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
             var wr = EffectiveWinRate(p.Stats);
             var m = TotalMatches(p.Stats);
             var neutral = IsNeutral(p.Stats) ? ",NEUTRAL" : "";
-            return $"{p.PlayerEntity.Name}(wr={wr:0.000},m={m}{neutral}{(p.PlayerEntity.IsGoalkeeper ? ",GK" : "")})";
+            return $"{p.Player.Name}(wr={wr:0.000},m={m}{neutral}{(p.Player.IsGoalkeeper ? ",GK" : "")})";
         }));
 
     // -----------------------------
@@ -573,12 +591,12 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
 
     private sealed class PlayerWithStats
     {
-        public PlayerEntity PlayerEntity { get; }
+        public PlayerRequestDto Player { get; }
         public PlayerStats Stats { get; }
 
-        public PlayerWithStats(PlayerEntity playerEntity, PlayerStats stats)
+        public PlayerWithStats(PlayerRequestDto player, PlayerStats stats)
         {
-            PlayerEntity = playerEntity ?? throw new ArgumentNullException(nameof(playerEntity));
+            Player = player ?? throw new ArgumentNullException(nameof(player));
             Stats = stats ?? throw new ArgumentNullException(nameof(stats));
         }
     }

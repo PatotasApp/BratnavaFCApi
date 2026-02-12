@@ -1,22 +1,19 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+﻿using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Models;
-using BratnavaFC.Domain.Dtos;
-using BratnavaFC.Domain.Entities;
 
-namespace BratnavaFC.Application.TeamGeneration;
+namespace BratnavaFC.Application.TeamGeneration.Strategies;
 
-public class ManualStrategy : ITeamGenerationStrategy
+public sealed class ManualStrategy : ITeamGenerationStrategy
 {
-    public Task<TeamsResultDto> GenerateTeamsAsync(List<PlayerEntity> players, TeamGenerationSettings settings)
+    public Task<TeamsResultDto> GenerateTeamsAsync(
+        List<PlayerRequestDto> players,
+        TeamGenerationSettings settings,
+        CancellationToken cancellationToken = default)
     {
-        if (players == null) throw new ArgumentNullException(nameof(players));
-        var result = new TeamsResultDto([], [], []);
+        if (players is null) throw new ArgumentNullException(nameof(players));
+        if (settings is null) throw new ArgumentNullException(nameof(settings));
 
-
-        result.Unassigned.AddRange(players.Select(p => p.Id));
-        return Task.FromResult(result);
+        return Task.FromResult(
+            new TeamsResultDto(new List<Guid>(), new List<Guid>(), players.Select(p => p.Id).ToList()));
     }
 }

@@ -1,5 +1,7 @@
 using BratnavaFC.Domain.Dtos.Groups;
 
+namespace BratnavaFC.Application.Abstractions;
+
 public interface IGroupService
 {
     Task<Guid> CreateAsync(GroupContracts.CreateGroupRequest request, CancellationToken cancellationToken);

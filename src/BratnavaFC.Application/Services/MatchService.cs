@@ -1,5 +1,4 @@
 using BratnavaFC.Application.Abstractions;
-using BratnavaFC.Domain.Abstractions;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Infrastructure.Data;

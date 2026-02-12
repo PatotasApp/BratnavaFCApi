@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.TeamGeneration;
 using BratnavaFC.Domain.Dtos;
-using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Models;
 using Xunit;
 
@@ -17,8 +16,6 @@ public class AlgorithmStrategyTests
     [Fact]
     public async Task AlgorithmStrategy_Balances_12Players_2Goalkeepers_Realistic()
     {
-        // 12 players: 2 GK + 10 linha (6 por time)
-        // IDs determinísticos para evitar flakiness por desempate (ThenBy(Id)).
         var players = NewPlayersDeterministic(
             ("GK1", true), ("GK2", true),
             ("P1", false), ("P2", false), ("P3", false), ("P4", false), ("P5", false),
@@ -27,27 +24,23 @@ public class AlgorithmStrategyTests
 
         var id = players.ToDictionary(p => p.Name, p => p.Id);
 
-        // WinRates "vida real" (sem extremos). Total ~6.36 => alvo ~3.18 por time
         var stats = new Dictionary<Guid, PlayerStats>
         {
-            // GKs
-            [id["GK1"]] = PS(id["GK1"], wins: 12, winRate: 0.54),
-            [id["GK2"]] = PS(id["GK2"], wins: 10, winRate: 0.50),
+            [id["GK1"]] = PS(id["GK1"], "GK1", wins: 12, winRate: 0.54),
+            [id["GK2"]] = PS(id["GK2"], "GK2", wins: 10, winRate: 0.50),
 
-            // Linha
-            [id["P1"]] = PS(id["P1"], wins: 18, winRate: 0.70),
-            [id["P2"]] = PS(id["P2"], wins: 16, winRate: 0.66),
-            [id["P3"]] = PS(id["P3"], wins: 14, winRate: 0.62),
-            [id["P4"]] = PS(id["P4"], wins: 13, winRate: 0.58),
-            [id["P5"]] = PS(id["P5"], wins: 12, winRate: 0.55),
-            [id["P6"]] = PS(id["P6"], wins: 11, winRate: 0.52),
-            [id["P7"]] = PS(id["P7"], wins: 10, winRate: 0.48),
-            [id["P8"]] = PS(id["P8"], wins: 9, winRate: 0.45),
-            [id["P9"]] = PS(id["P9"], wins: 7, winRate: 0.40),
-            [id["P10"]] = PS(id["P10"], wins: 6, winRate: 0.36),
+            [id["P1"]] = PS(id["P1"], "P1", wins: 18, winRate: 0.70),
+            [id["P2"]] = PS(id["P2"], "P2", wins: 16, winRate: 0.66),
+            [id["P3"]] = PS(id["P3"], "P3", wins: 14, winRate: 0.62),
+            [id["P4"]] = PS(id["P4"], "P4", wins: 13, winRate: 0.58),
+            [id["P5"]] = PS(id["P5"], "P5", wins: 12, winRate: 0.55),
+            [id["P6"]] = PS(id["P6"], "P6", wins: 11, winRate: 0.52),
+            [id["P7"]] = PS(id["P7"], "P7", wins: 10, winRate: 0.48),
+            [id["P8"]] = PS(id["P8"], "P8", wins: 9, winRate: 0.45),
+            [id["P9"]] = PS(id["P9"], "P9", wins: 7, winRate: 0.40),
+            [id["P10"]] = PS(id["P10"], "P10", wins: 6, winRate: 0.36),
         };
 
-        // Sinergias pontuais e plausíveis (0.55 ~ 0.85)
         AddSynergy(stats, id["P1"], id["P3"], 0.82);
         AddSynergy(stats, id["P2"], id["P4"], 0.75);
         AddSynergy(stats, id["P5"], id["P6"], 0.70);
@@ -66,17 +59,13 @@ public class AlgorithmStrategyTests
         Assert.Equal(6, result.TeamB.Count);
         Assert.Empty(result.Unassigned);
 
-        // 2 goleiros -> o ideal é 1 por time. Eu deixo a asserção "forte",
-        // mas com diagnóstico bom caso falhe.
         var gkA = CountGoalkeepers(players, result.TeamA);
         var gkB = CountGoalkeepers(players, result.TeamB);
         Assert.True(gkA == 1 && gkB == 1,
             $"Expected 1 GK per team. TeamA GK={gkA}, TeamB GK={gkB}\n" +
             DumpTeams(players, stats, result));
 
-        // Balanceamento por soma WinRate: tolerância realista p/ 6x6.
-        // (Se você quiser mais "apertado", tente 0.25 -> 0.20 conforme o algoritmo evoluir)
-        AssertBalancedByWinRateSum(players, result, stats, maxDiff: 0.25);
+        AssertBalancedByWinRateSum(result, stats, maxDiff: 0.25);
     }
 
     [Fact]
@@ -90,52 +79,45 @@ public class AlgorithmStrategyTests
 
         var id = players.ToDictionary(p => p.Name, p => p.Id);
 
-        // Construído para existir solução bem equilibrada e ainda assim permitir "colar" pelo menos 1 dupla forte.
         var stats = new Dictionary<Guid, PlayerStats>
         {
-            [id["GK1"]] = PS(id["GK1"], wins: 12, winRate: 0.53),
-            [id["GK2"]] = PS(id["GK2"], wins: 10, winRate: 0.49),
+            [id["GK1"]] = PS(id["GK1"], "GK1", wins: 12, winRate: 0.53),
+            [id["GK2"]] = PS(id["GK2"], "GK2", wins: 10, winRate: 0.49),
 
-            [id["A"]] = PS(id["A"], wins: 18, winRate: 0.71),
-            [id["B"]] = PS(id["B"], wins: 16, winRate: 0.66),
-            [id["C"]] = PS(id["C"], wins: 14, winRate: 0.62),
-            [id["D"]] = PS(id["D"], wins: 13, winRate: 0.58),
-            [id["E"]] = PS(id["E"], wins: 12, winRate: 0.55),
-            [id["F"]] = PS(id["F"], wins: 11, winRate: 0.52),
-            [id["G"]] = PS(id["G"], wins: 10, winRate: 0.48),
-            [id["H"]] = PS(id["H"], wins: 9, winRate: 0.45),
-            [id["I"]] = PS(id["I"], wins: 7, winRate: 0.40),
-            [id["J"]] = PS(id["J"], wins: 6, winRate: 0.36),
+            [id["A"]] = PS(id["A"], "A", wins: 18, winRate: 0.71),
+            [id["B"]] = PS(id["B"], "B", wins: 16, winRate: 0.66),
+            [id["C"]] = PS(id["C"], "C", wins: 14, winRate: 0.62),
+            [id["D"]] = PS(id["D"], "D", wins: 13, winRate: 0.58),
+            [id["E"]] = PS(id["E"], "E", wins: 12, winRate: 0.55),
+            [id["F"]] = PS(id["F"], "F", wins: 11, winRate: 0.52),
+            [id["G"]] = PS(id["G"], "G", wins: 10, winRate: 0.48),
+            [id["H"]] = PS(id["H"], "H", wins: 9, winRate: 0.45),
+            [id["I"]] = PS(id["I"], "I", wins: 7, winRate: 0.40),
+            [id["J"]] = PS(id["J"], "J", wins: 6, winRate: 0.36),
         };
 
-        // Duplas fortes (plausíveis)
         AddSynergy(stats, id["A"], id["C"], 0.85);
         AddSynergy(stats, id["B"], id["D"], 0.78);
-        // Média
         AddSynergy(stats, id["E"], id["F"], 0.65);
 
         var fake = new FakeStatsService(stats);
         var strategy = new AlgorithmStrategy(fake);
-        var settings = new TeamGenerationSettings { PlayersPerTeam = 6, IncludeGoalkeepers = true };
 
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 6, IncludeGoalkeepers = true };
         var result = await strategy.GenerateTeamsAsync(players, settings);
 
         Assert.Equal(6, result.TeamA.Count);
         Assert.Equal(6, result.TeamB.Count);
         Assert.Empty(result.Unassigned);
 
-        // GKs: esperamos 1 por time (com mensagem boa se falhar)
         var gkA = CountGoalkeepers(players, result.TeamA);
         var gkB = CountGoalkeepers(players, result.TeamB);
         Assert.True(gkA == 1 && gkB == 1,
             $"Expected 1 GK per team. TeamA GK={gkA}, TeamB GK={gkB}\n" +
             DumpTeams(players, stats, result));
 
-        // Balanceamento ainda precisa ficar bom
-        AssertBalancedByWinRateSum(players, result, stats, maxDiff: 0.30);
+        AssertBalancedByWinRateSum(result, stats, maxDiff: 0.30);
 
-        // E deve manter pelo menos uma dupla forte no mesmo time (quando o balance permitir).
-        // Se isso falhar, o dump ajuda a ver por que o greedy decidiu separar.
         var teamA = result.TeamA.ToHashSet();
         var teamB = result.TeamB.ToHashSet();
 
@@ -154,23 +136,14 @@ public class AlgorithmStrategyTests
 
     // ----------------- helpers -----------------
 
-    private static List<PlayerEntity> NewPlayersDeterministic(params (string name, bool isGk)[] specs)
+    private static List<PlayerRequestDto> NewPlayersDeterministic(params (string name, bool isGk)[] specs)
     {
-        // IDs estáveis (evita testes “às vezes passa/às vezes falha” por desempate de Guid.NewGuid)
-        // Guid = 00000000-0000-0000-0000-0000000000XX
         int i = 1;
-        return specs.Select(s => new PlayerEntity
-        {
-            Id = GuidFromInt(i++),
-            Name = s.name,
-            IsGoalkeeper = s.isGk
-        }).ToList();
+        return specs.Select(s => new PlayerRequestDto(GuidFromInt(i++), s.name, s.isGk)).ToList();
     }
 
     private static Guid GuidFromInt(int n)
     {
-        // 16 bytes; coloca n no final para ficar previsível.
-        // (Não precisa ser criptograficamente bom, só determinístico.)
         var bytes = new byte[16];
         bytes[15] = (byte)(n & 0xFF);
         bytes[14] = (byte)((n >> 8) & 0xFF);
@@ -179,10 +152,11 @@ public class AlgorithmStrategyTests
         return new Guid(bytes);
     }
 
-    private static PlayerStats PS(Guid playerId, int wins, double winRate)
+    private static PlayerStats PS(Guid playerId, string name, int wins, double winRate)
         => new PlayerStats
         {
             PlayerId = playerId,
+            Name = name,
             Wins = wins,
             Ties = 0,
             Losses = 0,
@@ -199,14 +173,13 @@ public class AlgorithmStrategyTests
         sb.SynergyWith[a] = value01;
     }
 
-    private static int CountGoalkeepers(List<PlayerEntity> players, List<Guid> teamIds)
+    private static int CountGoalkeepers(List<PlayerRequestDto> players, List<Guid> teamIds)
     {
         var lookup = players.ToDictionary(p => p.Id, p => p);
         return teamIds.Count(id => lookup[id].IsGoalkeeper);
     }
 
     private static void AssertBalancedByWinRateSum(
-        List<PlayerEntity> players,
         TeamsResultDto result,
         Dictionary<Guid, PlayerStats> stats,
         double maxDiff)
@@ -217,19 +190,20 @@ public class AlgorithmStrategyTests
 
         Assert.True(diff <= maxDiff,
             $"Teams not balanced enough by WinRate sum. TeamA={sumA:0.000}, TeamB={sumB:0.000}, diff={diff:0.000}, maxDiff={maxDiff:0.000}\n" +
-            DumpTeams(players, stats, result));
+            DumpTeams(null, stats, result));
     }
 
-    private static string DumpTeams(List<PlayerEntity> players, Dictionary<Guid, PlayerStats> stats, TeamsResultDto result)
+    private static string DumpTeams(List<PlayerRequestDto>? players, Dictionary<Guid, PlayerStats> stats, TeamsResultDto result)
     {
-        var lookup = players.ToDictionary(p => p.Id, p => p);
+        var nameById = players?.ToDictionary(p => p.Id, p => p.Name)
+                      ?? stats.ToDictionary(k => k.Key, v => v.Value.Name);
 
         string fmt(List<Guid> ids) =>
             string.Join(", ", ids.Select(id =>
             {
-                var p = lookup[id];
                 var s = stats[id];
-                return $"{p.Name}(wr={s.WinRate:0.00}{(p.IsGoalkeeper ? ",GK" : "")})";
+                var name = nameById.TryGetValue(id, out var n) ? n : id.ToString();
+                return $"{name}(wr={s.WinRate:0.00})";
             }));
 
         return
@@ -247,7 +221,7 @@ public class AlgorithmStrategyTests
             _stats = stats ?? new Dictionary<Guid, PlayerStats>();
         }
 
-        public Task<List<PlayerStats>> EnrichPlayersAsync(List<PlayerEntity> players, CancellationToken cancellationToken = default)
+        public Task<List<PlayerStats>> EnrichPlayersAsync(List<PlayerRequestDto> players, CancellationToken cancellationToken = default)
         {
             var list = players.Select(p =>
             {
@@ -257,11 +231,12 @@ public class AlgorithmStrategyTests
                 return new PlayerStats
                 {
                     PlayerId = p.Id,
+                    Name = p.Name,
                     Wins = 0,
                     Ties = 0,
                     Losses = 0,
                     WinRate = 0.0,
-                    SynergyWith = new()
+                    SynergyWith = new Dictionary<Guid, double>()
                 };
             }).ToList();
 

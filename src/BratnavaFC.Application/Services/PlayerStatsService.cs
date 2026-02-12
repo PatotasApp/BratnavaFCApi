@@ -1,9 +1,15 @@
 ﻿using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
 using BratnavaFC.Domain.Models;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace BratnavaFC.Application.Services;
 
@@ -17,7 +23,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
     }
 
     public async Task<List<PlayerStats>> EnrichPlayersAsync(
-        List<PlayerEntity> players,
+        List<PlayerRequestDto> players,
         CancellationToken cancellationToken = default)
     {
         if (players is null) throw new ArgumentNullException(nameof(players));
@@ -25,7 +31,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
         var playerIds = players.Select(p => p.Id).ToHashSet();
 
-        // Carrega partidas FINALIZED e os jogadores por time (TeamAPlayers/TeamBPlayers)
+        // Só finalized (como você tinha)
         var matches = await LoadFinalizedMatchesAsync(playerIds, cancellationToken);
 
         var perPlayer = InitializePlayerAccumulators(playerIds);
@@ -67,7 +73,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
         Guid groupId,
         CancellationToken cancellationToken = default)
     {
-        // 1) Players do grupo
+        // (mantém do jeito que você já tinha; aqui usamos PlayerEntity do banco, ok)
         var players = await _context.Players
             .AsNoTracking()
             .Where(p => p.GroupId == groupId)
@@ -87,25 +93,17 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
         var playerIds = players.Select(p => p.Id).ToHashSet();
 
-        // 2) Matches do grupo: carrega TeamAPlayers / TeamBPlayers
-        // (e carrega Players também, caso você ainda guarde MVP / outros campos só lá)
         var matches = await _context.Matches
             .AsNoTracking()
             .Where(m => m.GroupId == groupId)
             .Include(m => m.Players)
             .ToListAsync(cancellationToken);
 
-        // filtra defensivamente: mantém só matches que tenham pelo menos 1 player do grupo em A ou B
         var matchesFiltered = matches
             .Select(m =>
             {
                 var (teamA, teamB) = GetTeams(m, groupId, playerIds);
-                return new
-                {
-                    Match = m,
-                    TeamA = teamA,
-                    TeamB = teamB
-                };
+                return new { Match = m, TeamA = teamA, TeamB = teamB };
             })
             .Where(x => x.TeamA.Count > 0 || x.TeamB.Count > 0)
             .ToList();
@@ -114,7 +112,6 @@ public sealed class PlayerStatsService : IPlayerStatsService
         var totalFinalized = matchesFiltered.Count(x => x.Match.Status == MatchStatus.Finalized);
         var totalWithScore = matchesFiltered.Count(x => x.Match.TeamAGoals.HasValue && x.Match.TeamBGoals.HasValue);
 
-        // 3) Acumuladores
         var perPlayer = InitializePlayerAccumulators(playerIds);
         var mvpCounts = playerIds.ToDictionary(id => id, _ => 0);
         var pairTotals = new Dictionary<PairKey, PairAccumulator>();
@@ -131,10 +128,8 @@ public sealed class PlayerStatsService : IPlayerStatsService
                 mvpCounts);
         }
 
-        // 4) mapa de nomes
         var playerNameById = players.ToDictionary(p => p.Id, p => p.Name);
 
-        // 5) monta report
         var items = new List<PlayerVisualStatsItem>(players.Count);
 
         foreach (var pl in players)
@@ -186,18 +181,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
         };
     }
 
-    private Task<List<MatchEntity>> LoadMatchesAsync(HashSet<Guid> playerIds, CancellationToken cancellationToken)
-    {
-        return _context.Matches
-            .AsNoTracking()
-            .Where(m =>
-                m.TeamAPlayers.Any(mp => playerIds.Contains(mp.PlayerId)) ||
-                m.TeamBPlayers.Any(mp => playerIds.Contains(mp.PlayerId)))
-            .Include(m => m.TeamAPlayers)
-            .Include(m => m.TeamBPlayers)
-            .Include(m => m.Players)
-            .ToListAsync(cancellationToken);
-    }
+    // ----------------- internals -----------------
 
     private Task<List<MatchEntity>> LoadFinalizedMatchesAsync(HashSet<Guid> playerIds, CancellationToken cancellationToken)
     {
@@ -218,7 +202,6 @@ public sealed class PlayerStatsService : IPlayerStatsService
         var dict = new Dictionary<Guid, PlayerAccumulator>(playerIds.Count);
         foreach (var id in playerIds)
             dict[id] = PlayerAccumulator.Empty;
-
         return dict;
     }
 
@@ -230,7 +213,6 @@ public sealed class PlayerStatsService : IPlayerStatsService
     {
         var (teamA, teamB) = GetTeams(match, match.GroupId, trackedPlayerIds);
 
-        // participantes são quem está em TeamAPlayers/TeamBPlayers
         var participants = teamA.Concat(teamB)
             .GroupBy(p => p.PlayerId)
             .Select(g => g.First())
@@ -241,7 +223,6 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
         var outcome = GetMatchOutcome(match);
 
-        // W/D/L por time vencedor (TeamAGoals/TeamBGoals)
         foreach (var mp in participants)
         {
             var playerId = mp.PlayerId;
@@ -270,7 +251,6 @@ public sealed class PlayerStatsService : IPlayerStatsService
             perPlayer[playerId] = acc;
         }
 
-        // sinergia: jogaram juntos no mesmo time (A ou B)
         AddTeamSynergy(teamA, outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamA, pairTotals);
         AddTeamSynergy(teamB, outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamB, pairTotals);
     }
@@ -292,8 +272,6 @@ public sealed class PlayerStatsService : IPlayerStatsService
         if (participants.Count == 0)
             return;
 
-        // MVP counts (se o IsMvp estiver nos itens de TeamA/TeamB, ok.
-        // Se por algum motivo só existir em match.Players, você pode ajustar o GetTeams pra puxar de lá.)
         foreach (var mp in participants)
         {
             if (mp.IsMvp == true && mvpCounts.ContainsKey(mp.PlayerId))
@@ -362,8 +340,6 @@ public sealed class PlayerStatsService : IPlayerStatsService
         Guid groupId,
         HashSet<Guid> trackedPlayerIds)
     {
-        // Preferência: TeamAPlayers / TeamBPlayers
-        // Fallback: match.Players + Team (caso suas listas não estejam populadas por algum motivo)
         var teamA = (match.TeamAPlayers ?? new List<MatchPlayerEntity>())
             .Where(mp => mp.GroupId == groupId && trackedPlayerIds.Contains(mp.PlayerId))
             .ToList();
@@ -401,7 +377,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
     private static Dictionary<Guid, double> BuildSynergyMap(
         Guid playerId,
-        List<PlayerEntity> allPlayers,
+        List<PlayerRequestDto> allPlayers,
         Dictionary<PairKey, PairAccumulator> pairTotals)
     {
         var map = new Dictionary<Guid, double>(Math.Max(0, allPlayers.Count - 1));

@@ -16,14 +16,11 @@ public sealed class UsersController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> CreateAsync(
-        [FromBody] CreateUserDto dto,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> CreateAsync([FromBody] CreateUserDto dto, CancellationToken cancellationToken)
     {
         if (dto == null) return BadRequest();
 
         await _userService.CreateUserAsync(dto, cancellationToken);
-
         return StatusCode(StatusCodes.Status201Created);
     }
 
@@ -31,7 +28,6 @@ public sealed class UsersController : ControllerBase
     public async Task<IActionResult> GetUserAsync(Guid userId, CancellationToken cancellationToken)
     {
         var user = await _userService.GetUserByIdAsync(userId, cancellationToken);
-
         return Ok(user);
     }
 
@@ -48,5 +44,4 @@ public sealed class UsersController : ControllerBase
         await _userService.ReactivateAsync(userId, cancellationToken);
         return NoContent();
     }
-
 }

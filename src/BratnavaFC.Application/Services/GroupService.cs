@@ -1,12 +1,10 @@
 using BratnavaFC.Application.Abstractions;
-using BratnavaFC.Domain.Abstractions;
 using BratnavaFC.Domain.Dtos.Groups;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using System.Linq;
 
 namespace BratnavaFC.Application.Services;
 
@@ -27,54 +25,21 @@ public class GroupService : IGroupService
     {
         try
         {
-            var adminExists = await _context.Users
-                 .AnyAsync(u => request.UserAdminIds.Contains(u.Id), cancellationToken);
-
-            if (!adminExists)
-            {
+            var adminsExist = await _context.Users.AnyAsync(u => request.UserAdminIds.Contains(u.Id), cancellationToken);
+            if (!adminsExist)
                 throw new ApplicationException("User admin does not exists.");
-            }
 
-            GroupEntity newGroup = new()
-            {
-                Name = request.Name,
-                ScheduleMatchDate = request.ScheduleMatchDate              
-            };          
+            var group = new GroupEntity(request.Name, request.ScheduleMatchDate);
+            group.SetAdmins(request.UserAdminIds);
 
-            newGroup.Admins = request.UserAdminIds.Select(adminId => new GroupAdminEntity()
-            {
-                GroupId = newGroup.Id,
-                UserId = adminId
-            }).ToList();
-
-            _repository.Add(newGroup);
+            _repository.Add(group);
             await _repository.SaveChangesAsync(cancellationToken);
 
-            return newGroup.Id;
+            return group.Id;
         }
-        catch (System.Exception ex)
+        catch (Exception ex)
         {
             _logger.LogError(ex, "Error trying to create group.");
-            throw;
-        }
-    }
-
-    public async Task DeleteAsync(GroupContracts.DeleteGroupRequest request, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var group = await _repository.GetByIdAsync(request.GroupId, cancellationToken);
-            if (group == null)
-            {
-                throw new ApplicationException("Group not found.");
-            }
-
-            _repository.Remove(group);
-            _ = await _repository.SaveChangesAsync(cancellationToken);
-        }
-        catch (System.Exception ex)
-        {
-            _logger.LogError(ex, "Error trying to delete group.");
             throw;
         }
     }
@@ -83,27 +48,82 @@ public class GroupService : IGroupService
     {
         try
         {
-            var group = await _context.Groups
-                .IgnoreQueryFilters()
-                .FirstOrDefaultAsync(x => x.Id == groupId, cancellationToken);
-
+            var group = await _repository.GetByIdIncludingInactiveAsync(groupId, cancellationToken);
             if (group == null)
                 throw new ApplicationException("Group not found.");
 
-            group.Name = request.Name;
-            group.ScheduleMatchDate = request.ScheduleMatchDate;
+            group.Rename(request.Name);
+            group.Reschedule(request.ScheduleMatchDate);
 
             if (request.Status == Status.Inactive && group.Status != Status.Inactive)
                 group.Inactivate();
             else if (request.Status == Status.Active && group.Status != Status.Active)
                 group.Reactivate();
 
-            _context.Groups.Update(group);
-            await _context.SaveChangesAsync(cancellationToken);
+            _repository.Update(group);
+            await _repository.SaveChangesAsync(cancellationToken);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error trying to update group.");
+            throw;
+        }
+    }
+
+    public async Task DeleteAsync(GroupContracts.DeleteGroupRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var group = await _repository.GetByIdIncludingInactiveAsync(request.GroupId, cancellationToken);
+            if (group == null)
+                throw new ApplicationException("Group not found.");
+
+            _repository.Remove(group);
+            await _repository.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error trying to delete group.");
+            throw;
+        }
+    }
+
+    public async Task InactivateAsync(Guid groupId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var group = await _repository.GetByIdIncludingInactiveAsync(groupId, cancellationToken);
+            if (group == null)
+                throw new ApplicationException("Group not found.");
+
+            group.Inactivate();
+
+            _repository.Update(group);
+            await _repository.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error trying to inactivate group.");
+            throw;
+        }
+    }
+
+    public async Task ReactivateAsync(Guid groupId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var group = await _repository.GetByIdIncludingInactiveAsync(groupId, cancellationToken);
+            if (group == null)
+                throw new ApplicationException("Group not found.");
+
+            group.Reactivate();
+
+            _repository.Update(group);
+            await _repository.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error trying to reactivate group.");
             throw;
         }
     }
@@ -117,11 +137,9 @@ public class GroupService : IGroupService
                 .FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
 
             if (group == null)
-            {
                 throw new ApplicationException("Group not found.");
-            }
 
-            var players = group.Players!.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name)).ToList();
+            var players = group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name)).ToList();
 
             return new GroupContracts.GetResponse(
                 group.Id,
@@ -132,7 +150,7 @@ public class GroupService : IGroupService
                 players
             );
         }
-        catch (System.Exception ex)
+        catch (Exception ex)
         {
             _logger.LogError(ex, "Error trying to get group by id.");
             throw;
@@ -141,35 +159,18 @@ public class GroupService : IGroupService
 
     public Task<List<GroupContracts.GetResponse>> GetByAdminIdAsync(Guid adminId, CancellationToken cancellationToken)
     {
-        return _context.GroupAdmins.Include(x => x.Group).ThenInclude(x => x.Players).Where(x => x.UserId == adminId)
-                                    .Select(g => new GroupContracts.GetResponse(g.Group.Id, g.Group.Name, g.Group.ScheduleMatchDate, g.Group.Admins.Select(x => x.UserId).ToArray(), g.Group.Status, g.Group.Players!.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name)).ToList()))
-                                    .ToListAsync(cancellationToken);
+        return _context.GroupAdmins
+            .Include(x => x.Group)
+            .ThenInclude(x => x.Players)
+            .Where(x => x.UserId == adminId)
+            .Select(g => new GroupContracts.GetResponse(
+                g.Group.Id,
+                g.Group.Name,
+                g.Group.ScheduleMatchDate,
+                g.Group.Admins.Select(x => x.UserId).ToArray(),
+                g.Group.Status,
+                g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name)).ToList()
+            ))
+            .ToListAsync(cancellationToken);
     }
-
-    public async Task InactivateAsync(Guid groupId, CancellationToken cancellationToken)
-    {
-        var group = await _context.Groups
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(x => x.Id == groupId, cancellationToken);
-
-        if (group is null) throw new ApplicationException("Group not found.");
-
-        group.Inactivate();
-        _context.Groups.Update(group);
-        await _context.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task ReactivateAsync(Guid groupId, CancellationToken cancellationToken)
-    {
-        var group = await _context.Groups
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(x => x.Id == groupId, cancellationToken);
-
-        if (group is null) throw new ApplicationException("Group not found.");
-
-        group.Reactivate();
-        _context.Groups.Update(group);
-        await _context.SaveChangesAsync(cancellationToken);
-    }
-
 }

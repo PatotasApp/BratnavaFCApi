@@ -7,7 +7,6 @@ using BratnavaFC.Infrastructure.Data;
 using BratnavaFC.Infrastructure.Repositories;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Application.Abstractions;
-using BratnavaFC.Domain.Abstractions;
 using BratnavaFC.Application.TeamGeneration;
 using Microsoft.AspNetCore.Identity;
 using BratnavaFC.Domain.Entities;

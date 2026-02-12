@@ -1,5 +1,7 @@
 using BratnavaFC.Domain.Dtos.Players;
 
+namespace BratnavaFC.Application.Abstractions;
+
 public interface IPlayerService
 {
     Task<Guid> CreateAsync(PlayerContracts.CreatePlayerRequest request, CancellationToken cancellationToken);
