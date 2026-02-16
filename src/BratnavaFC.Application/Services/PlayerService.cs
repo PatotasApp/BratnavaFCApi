@@ -21,19 +21,15 @@ public class PlayerService : IPlayerService
         _context = context;
     }
 
-    public async Task<Guid> CreateAsync(CreatePlayerDto request, CancellationToken cancellationToken)
+    public async Task<PlayerDto> CreateAsync(CreatePlayerDto request, CancellationToken cancellationToken)
     {
         try
         {
-            var groupExists = await _context.Groups.AsNoTracking().AnyAsync(x => x.Id == request.GroupId, cancellationToken);
-            if (!groupExists) throw new ApplicationException("Group does not exist.");
+            var group = await _context.Groups.FirstOrDefaultAsync(x => x.Id == request.GroupId, cancellationToken);
+            if (group == null) throw new ApplicationException("Group does not exist.");
 
             var userExists = await _context.Users.AsNoTracking().AnyAsync(x => x.Id == request.UserId, cancellationToken);
             if (!userExists) throw new ApplicationException("User does not exist.");
-
-            var playerExists = await _context.Players.AsNoTracking()
-                .AnyAsync(x => x.UserId == request.UserId && x.GroupId == request.GroupId, cancellationToken);
-            if (playerExists) throw new ApplicationException("Player already exists in the group.");
 
             var player = new PlayerEntity(
                 request.Name,
@@ -43,10 +39,18 @@ public class PlayerService : IPlayerService
                 request.IsGoalkeeper,
                 request.Status);
 
-            _repository.Add(player);
-            await _repository.SaveChangesAsync(cancellationToken);
+            group.AddPlayer(player);
 
-            return player.Id;
+            await _context.SaveChangesAsync(cancellationToken);
+
+            return new PlayerDto(
+                player.Id,
+                player.Name,
+                player.UserId,
+                player.SkillPoints,
+                player.IsGoalkeeper,
+                player.Status
+            );
         }
         catch (Exception ex)
         {
@@ -55,7 +59,7 @@ public class PlayerService : IPlayerService
         }
     }
 
-    public async Task UpdateAsync(Guid playerId, UpdatePlayerDto request, CancellationToken cancellationToken)
+    public async Task<PlayerDto> UpdateAsync(Guid playerId, UpdatePlayerDto request, CancellationToken cancellationToken)
     {
         try
         {
@@ -73,6 +77,15 @@ public class PlayerService : IPlayerService
 
             _repository.Update(player);
             await _repository.SaveChangesAsync(cancellationToken);
+
+            return new PlayerDto(
+                player.Id,
+                player.Name,
+                player.UserId,
+                player.SkillPoints,
+                player.IsGoalkeeper,
+                player.Status
+            );
         }
         catch (Exception ex)
         {

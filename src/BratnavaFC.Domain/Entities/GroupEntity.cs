@@ -20,6 +20,18 @@ public class GroupEntity : InactivatableEntity
         Reschedule(scheduleMatchDate);
     }
 
+    public void AddPlayer(PlayerEntity player)
+    {
+        if (player == null)
+            throw new InvalidOperationException("Player is required.");
+
+        if(_players.Any(p => p.UserId == player.UserId))
+            throw new InvalidOperationException("Player already exists in the group.");
+
+        _players.Add(player);
+        Touch();
+    }
+
     public void Rename(string name)
     {
         if (string.IsNullOrWhiteSpace(name))
