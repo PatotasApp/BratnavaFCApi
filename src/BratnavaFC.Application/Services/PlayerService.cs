@@ -21,7 +21,7 @@ public class PlayerService : IPlayerService
         _context = context;
     }
 
-    public async Task<Guid> CreateAsync(PlayerContracts.CreatePlayerRequest request, CancellationToken cancellationToken)
+    public async Task<Guid> CreateAsync(CreatePlayerDto request, CancellationToken cancellationToken)
     {
         try
         {
@@ -55,7 +55,7 @@ public class PlayerService : IPlayerService
         }
     }
 
-    public async Task UpdateAsync(Guid playerId, PlayerContracts.UpdatePlayerRequest request, CancellationToken cancellationToken)
+    public async Task UpdateAsync(Guid playerId, UpdatePlayerDto request, CancellationToken cancellationToken)
     {
         try
         {
@@ -81,11 +81,11 @@ public class PlayerService : IPlayerService
         }
     }
 
-    public async Task DeleteAsync(PlayerContracts.DeletePlayerRequest request, CancellationToken cancellationToken)
+    public async Task DeleteAsync(Guid playerId, CancellationToken cancellationToken)
     {
         try
         {
-            var player = await _repository.GetByIdIncludingInactiveAsync(request.PlayerId, cancellationToken);
+            var player = await _repository.GetByIdIncludingInactiveAsync(playerId, cancellationToken);
             if (player == null) throw new ApplicationException("PlayerEntity not found.");
 
             _repository.Remove(player);
@@ -98,19 +98,19 @@ public class PlayerService : IPlayerService
         }
     }
 
-    public async Task<PlayerContracts.GetResponse> GetByIdAsync(Guid playerId, CancellationToken cancellationToken)
+    public async Task<PlayerDto> GetByIdAsync(Guid playerId, CancellationToken cancellationToken)
     {
         try
         {
             var player = await _repository.GetByIdAsync(playerId, cancellationToken);
             if (player == null) throw new ApplicationException("PlayerEntity not found.");
 
-            return new PlayerContracts.GetResponse(
+            return new PlayerDto(
                 player.Id,
                 player.Name,
                 player.UserId,
-                player.GroupId,
                 player.SkillPoints,
+                player.IsGoalkeeper,
                 player.Status
             );
         }

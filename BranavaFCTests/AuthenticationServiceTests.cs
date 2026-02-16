@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
-using static BratnavaFC.Domain.Dtos.Authentication.LoginContracts;
 
 namespace BranavaFC.Tests;
 
@@ -39,8 +38,8 @@ public class AuthenticationServiceTests
 
         var sut = new AuthenticationService(db, logger.Object, hasher, config);
 
-        var request = new LoginContracts.Request(
-            Email: "test@mail.com",
+        var request = new LoginDto(
+            Username: "test@mail.com",
             Password: "123"
         );
 
@@ -71,8 +70,8 @@ public class AuthenticationServiceTests
 
         var sut = new AuthenticationService(db, logger.Object, hasher, config);
 
-        var request = new LoginContracts.Request(
-            Email: "mail@test.com",
+        var request = new LoginDto(
+            Username: "mail@test.com",
             Password: "wrong"
         );
 
@@ -102,8 +101,8 @@ public class AuthenticationServiceTests
 
         var sut = new AuthenticationService(db, logger.Object, hasher, config);
 
-        var request = new LoginContracts.Request(
-            Email: "mail@test.com",
+        var request = new LoginDto(
+            Username: "mail@test.com",
             Password: "pw"
         );
 
@@ -138,7 +137,7 @@ public class AuthenticationServiceTests
 
         var sut = new AuthenticationService(db, logger.Object, hasher, config);
 
-        var request = new LoginContracts.RefreshTokenRequest(
+        var request = new RefreshTokenDto(
             RefreshToken: "nope"
         );
 
@@ -184,7 +183,7 @@ public class AuthenticationServiceTests
 
         var sut = new AuthenticationService(db, logger, hasher, config);
 
-        var request = new LoginContracts.RefreshTokenRequest(expiredToken);
+        var request = new RefreshTokenDto(expiredToken);
 
         // Act
         Func<Task> act = () => sut.RefreshTokenAsync(request, CancellationToken.None);
@@ -223,11 +222,11 @@ public class AuthenticationServiceTests
 
         // Act
 
-        var request = new LoginContracts.RefreshTokenRequest(
+        var request = new RefreshTokenDto(
             RefreshToken: "nope"
         );
 
-        var res = await sut.RefreshTokenAsync(new LoginContracts.RefreshTokenRequest(
+        var res = await sut.RefreshTokenAsync(new RefreshTokenDto(
             RefreshToken: "old"
         ), CancellationToken.None);
 

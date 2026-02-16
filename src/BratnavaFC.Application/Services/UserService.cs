@@ -27,11 +27,13 @@ public class UserService : IUserService
     {
         try
         {
+            var username = dto.UserName?.Trim().ToLower();
+
             var existing = await _db.Users
                 .IgnoreQueryFilters()
-                .FirstOrDefaultAsync(x => x.Email == dto.Email || x.UserName == dto.UserName, cancellationToken);
+                .FirstOrDefaultAsync(x => x.Email == dto.Email || x.UserName == username, cancellationToken);
 
-            if (existing?.UserName == dto.UserName)
+            if (existing?.UserName == username)
                 throw new ApplicationException($"User already exists with the user name '{dto.UserName}'.");
 
             if (existing?.Email == dto.Email)
