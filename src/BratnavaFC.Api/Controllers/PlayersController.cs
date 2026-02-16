@@ -20,8 +20,8 @@ public class PlayersController : ControllerBase
     {
         if (request == null) return BadRequest();
 
-        await _playerService.CreateAsync(request, cancellationToken);
-        return Ok();
+        var playerCreated = await _playerService.CreateAsync(request, cancellationToken);
+        return Ok(playerCreated);
     }
 
     [HttpDelete("{playerId:guid}")]
@@ -43,8 +43,8 @@ public class PlayersController : ControllerBase
     {
         if (request == null) return BadRequest();
 
-        await _playerService.UpdateAsync(playerId, request, cancellationToken);
-        return Ok();
+        var playerUpdated = await _playerService.UpdateAsync(playerId, request, cancellationToken);
+        return Ok(playerUpdated);
     }
 
     [HttpPut("{playerId:guid}/inactivate")]
