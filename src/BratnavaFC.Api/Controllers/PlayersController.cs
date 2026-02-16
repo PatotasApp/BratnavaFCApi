@@ -16,7 +16,7 @@ public class PlayersController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> CreatePlayer([FromBody] PlayerContracts.CreatePlayerRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> CreatePlayer([FromBody] CreatePlayerDto request, CancellationToken cancellationToken)
     {
         if (request == null) return BadRequest();
 
@@ -27,7 +27,7 @@ public class PlayersController : ControllerBase
     [HttpDelete("{playerId:guid}")]
     public async Task<IActionResult> DeletePlayer(Guid playerId, CancellationToken cancellationToken)
     {
-        await _playerService.DeleteAsync(new PlayerContracts.DeletePlayerRequest(playerId), cancellationToken);
+        await _playerService.DeleteAsync(playerId, cancellationToken);
         return Ok();
     }
 
@@ -39,7 +39,7 @@ public class PlayersController : ControllerBase
     }
 
     [HttpPut("{playerId:guid}")]
-    public async Task<IActionResult> UpdatePlayer(Guid playerId, [FromBody] PlayerContracts.UpdatePlayerRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> UpdatePlayer(Guid playerId, [FromBody] UpdatePlayerDto request, CancellationToken cancellationToken)
     {
         if (request == null) return BadRequest();
 

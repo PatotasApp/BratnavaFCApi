@@ -21,7 +21,7 @@ public class GroupService : IGroupService
         _repository = repository;
     }
 
-    public async Task<Guid> CreateAsync(GroupContracts.CreateGroupRequest request, CancellationToken cancellationToken)
+    public async Task<Guid> CreateAsync(CreateGroupDto request, CancellationToken cancellationToken)
     {
         try
         {
@@ -44,7 +44,7 @@ public class GroupService : IGroupService
         }
     }
 
-    public async Task UpdateAsync(Guid groupId, GroupContracts.UpdateGroupRequest request, CancellationToken cancellationToken)
+    public async Task UpdateAsync(Guid groupId, UpdateGroupDto request, CancellationToken cancellationToken)
     {
         try
         {
@@ -70,11 +70,11 @@ public class GroupService : IGroupService
         }
     }
 
-    public async Task DeleteAsync(GroupContracts.DeleteGroupRequest request, CancellationToken cancellationToken)
+    public async Task DeleteAsync(Guid groupId, CancellationToken cancellationToken)
     {
         try
         {
-            var group = await _repository.GetByIdIncludingInactiveAsync(request.GroupId, cancellationToken);
+            var group = await _repository.GetByIdIncludingInactiveAsync(groupId, cancellationToken);
             if (group == null)
                 throw new ApplicationException("Group not found.");
 
@@ -128,7 +128,7 @@ public class GroupService : IGroupService
         }
     }
 
-    public async Task<GroupContracts.GetResponse> GetByIdAsync(Guid groupId, CancellationToken cancellationToken)
+    public async Task<GroupDto> GetByIdAsync(Guid groupId, CancellationToken cancellationToken)
     {
         try
         {
@@ -139,9 +139,9 @@ public class GroupService : IGroupService
             if (group == null)
                 throw new ApplicationException("Group not found.");
 
-            var players = group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name)).ToList();
+            var players = group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, p.SkillPoints, p.IsGoalkeeper, p.Status)).ToList();
 
-            return new GroupContracts.GetResponse(
+            return new GroupDto(
                 group.Id,
                 group.Name,
                 group.ScheduleMatchDate,
@@ -157,19 +157,19 @@ public class GroupService : IGroupService
         }
     }
 
-    public Task<List<GroupContracts.GetResponse>> GetByAdminIdAsync(Guid adminId, CancellationToken cancellationToken)
+    public Task<List<GroupDto>> GetByAdminIdAsync(Guid adminId, CancellationToken cancellationToken)
     {
         return _context.GroupAdmins
             .Include(x => x.Group)
             .ThenInclude(x => x.Players)
             .Where(x => x.UserId == adminId)
-            .Select(g => new GroupContracts.GetResponse(
+            .Select(g => new GroupDto(
                 g.Group.Id,
                 g.Group.Name,
                 g.Group.ScheduleMatchDate,
                 g.Group.Admins.Select(x => x.UserId).ToArray(),
                 g.Group.Status,
-                g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name)).ToList()
+                g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, p.SkillPoints, p.IsGoalkeeper, p.Status)).ToList()
             ))
             .ToListAsync(cancellationToken);
     }

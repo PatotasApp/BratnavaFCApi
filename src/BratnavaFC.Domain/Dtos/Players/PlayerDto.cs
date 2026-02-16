@@ -1,3 +1,5 @@
-﻿namespace BratnavaFC.Domain.Dtos.Players;
+﻿using BratnavaFC.Domain.Enums;
 
-public sealed record PlayerDto(Guid Id, string Name);
+namespace BratnavaFC.Domain.Dtos.Players;
+
+public sealed record PlayerDto(Guid Id, string Name, Guid UserId, decimal SkillPoints, bool IsGoalkeeper, Status Status);

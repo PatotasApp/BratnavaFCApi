@@ -21,7 +21,7 @@ public class PlayerServiceTests
 
         var sut = new PlayerService(repo.Object, logger.Object, db);
 
-        var req = new PlayerContracts.CreatePlayerRequest
+        var req = new CreatePlayerDto
         (
             Name: "A",
             UserId: Guid.NewGuid(),
@@ -53,7 +53,7 @@ public class PlayerServiceTests
         var repo = new Mock<IRepositoryBase<PlayerEntity>>();
         var sut = new PlayerService(repo.Object, logger.Object, db);
 
-        var req = new PlayerContracts.CreatePlayerRequest
+        var req = new CreatePlayerDto
         (
             Name: "A",
             UserId: Guid.NewGuid(),
@@ -92,7 +92,7 @@ public class PlayerServiceTests
         var repo = new Mock<IRepositoryBase<PlayerEntity>>();
         var sut = new PlayerService(repo.Object, logger.Object, db);
 
-        var req = new PlayerContracts.CreatePlayerRequest
+        var req = new CreatePlayerDto
         (
             Name: "A",
             UserId: user.Id,
@@ -135,7 +135,7 @@ public class PlayerServiceTests
 
         var sut = new PlayerService(repo.Object, logger.Object, db);
 
-        var req = new PlayerContracts.CreatePlayerRequest
+        var req = new CreatePlayerDto
         (
             Name: "  Caio  ",
             UserId: user.Id,
@@ -174,9 +174,10 @@ public class PlayerServiceTests
 
         var sut = new PlayerService(repo.Object, logger.Object, db);
 
-        var req = new PlayerContracts.UpdatePlayerRequest
+        var req = new UpdatePlayerDto
         (
             Name: "X",
+            GroupId: Guid.NewGuid(),
             SkillPoints: 0,
             IsGoalkeeper: false,
             Status: Status.Active

@@ -36,11 +36,12 @@ public sealed class AuthenticationService : IAuthenticationService
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
     }
 
-    public async Task<LoginContracts.Response> LoginAsync(LoginContracts.Request request, CancellationToken cancellationToken)
+    public async Task<TokenDto> LoginAsync(LoginDto request, CancellationToken cancellationToken)
     {
         try
         {
-            var user = await _db.Users.FirstOrDefaultAsync(x => x.Email == request.Email, cancellationToken);
+            var username = request.Username.Trim().ToLower();
+            var user = await _db.Users.FirstOrDefaultAsync(x => x.UserName == username, cancellationToken);
 
             if (user is null)
                 throw new ApplicationException("User not found");
@@ -62,7 +63,7 @@ public sealed class AuthenticationService : IAuthenticationService
 
             var jwt = CreateToken(user, _configuration);
 
-            return new LoginContracts.Response(jwt, refreshToken.Token);
+            return new TokenDto(jwt, refreshToken.Token);
         }
         catch (Exception ex)
         {
@@ -71,7 +72,7 @@ public sealed class AuthenticationService : IAuthenticationService
         }
     }
 
-    public async Task<LoginContracts.Response> RefreshTokenAsync(LoginContracts.RefreshTokenRequest request, CancellationToken cancellationToken)
+    public async Task<TokenDto> RefreshTokenAsync(RefreshTokenDto request, CancellationToken cancellationToken)
     {
         try
         {
@@ -95,7 +96,7 @@ public sealed class AuthenticationService : IAuthenticationService
 
             await _db.SaveChangesAsync(cancellationToken);
 
-            return new LoginContracts.Response(newJwt, newRefreshToken);
+            return new TokenDto(newJwt, newRefreshToken);
         }
         catch (Exception ex)
         {
@@ -122,6 +123,7 @@ public sealed class AuthenticationService : IAuthenticationService
             Subject = new ClaimsIdentity(new[]
             {
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+                new Claim(JwtRegisteredClaimNames.UniqueName, user.UserName.Trim().ToLower()),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email),
                 new Claim(JwtRegisteredClaimNames.Name, user.FirstName),
                 new Claim(ClaimTypes.Role, role)

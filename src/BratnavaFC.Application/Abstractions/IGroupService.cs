@@ -4,12 +4,11 @@ namespace BratnavaFC.Application.Abstractions;
 
 public interface IGroupService
 {
-    Task<Guid> CreateAsync(GroupContracts.CreateGroupRequest request, CancellationToken cancellationToken);
-    Task UpdateAsync(Guid groupId, GroupContracts.UpdateGroupRequest request, CancellationToken cancellationToken);
-    Task DeleteAsync(GroupContracts.DeleteGroupRequest request, CancellationToken cancellationToken);
-    Task<GroupContracts.GetResponse> GetByIdAsync(Guid groupId, CancellationToken cancellationToken);
-    Task<List<GroupContracts.GetResponse>> GetByAdminIdAsync(Guid adminId, CancellationToken cancellationToken);
-
+    Task<Guid> CreateAsync(CreateGroupDto request, CancellationToken cancellationToken);
+    Task UpdateAsync(Guid groupId, UpdateGroupDto request, CancellationToken cancellationToken);
+    Task DeleteAsync(Guid groupId, CancellationToken cancellationToken);
+    Task<GroupDto> GetByIdAsync(Guid groupId, CancellationToken cancellationToken);
+    Task<List<GroupDto>> GetByAdminIdAsync(Guid adminId, CancellationToken cancellationToken);
     Task InactivateAsync(Guid groupId, CancellationToken cancellationToken);
     Task ReactivateAsync(Guid groupId, CancellationToken cancellationToken);
 }
