@@ -271,6 +271,44 @@ public class MatchesController : ControllerBase
         }
     }
 
+    [Authorize(Roles = "Admin,GodMode")]
+    [HttpPost("group/{groupId:guid}/{matchId:guid}/goals")]
+    public async Task<IActionResult> AddGoal(
+    Guid groupId,
+    Guid matchId,
+    [FromBody] AddGoalRequestDto dto,
+    CancellationToken ct)
+    {
+        try
+        {
+            await _service.AddGoalAsync(groupId, matchId, dto, ct);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [Authorize(Roles = "Admin,GodMode")]
+    [HttpDelete("group/{groupId:guid}/{matchId:guid}/goals/{goalId:guid}")]
+    public async Task<IActionResult> RemoveGoal(
+        Guid groupId,
+        Guid matchId,
+        Guid goalId,
+        CancellationToken ct)
+    {
+        try
+        {
+            await _service.RemoveGoalAsync(groupId, matchId, goalId, ct);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
 
     private static MatchDto ToDto(MatchEntity e) =>
         new(

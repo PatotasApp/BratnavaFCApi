@@ -48,6 +48,7 @@ public sealed class MatchService : IMatchService
             .Include(m => m.Group)
             .Include(m => m.TeamAColor)
             .Include(m => m.TeamBColor)
+            .Include(m => m.Goals)
             .Include(m => m.Players).ThenInclude(mp => mp.Player)
             .Include(m => m.Votes).ThenInclude(v => v.Voter)
             .Include(m => m.Votes).ThenInclude(v => v.VotedFor)
@@ -65,6 +66,26 @@ public sealed class MatchService : IMatchService
         var teamAPlayers = match.Players.Where(p => p.Team == 1).ToList();
         var teamBPlayers = match.Players.Where(p => p.Team == 2).ToList();
         var unassigned = match.Players.Where(p => p.Team == 0).ToList();
+
+        var playerNameByPlayerId = match.Players.ToDictionary(
+            p => p.PlayerId,
+            p => p.Player?.Name ?? string.Empty
+        );
+
+        var goals = match.Goals
+            .OrderBy(g => g.TimeSeconds ?? int.MaxValue)
+            .ThenBy(g => g.CreateDate)
+            .Select(g => new GoalDto
+            {
+                GoalId = g.Id,
+                ScorerPlayerId = g.ScorerPlayerId,
+                ScorerName = playerNameByPlayerId.TryGetValue(g.ScorerPlayerId, out var sn) ? sn : string.Empty,
+                AssistPlayerId = g.AssistPlayerId,
+                AssistName = g.AssistPlayerId.HasValue && playerNameByPlayerId.TryGetValue(g.AssistPlayerId.Value, out var an) ? an : null,
+                TimeSeconds = g.TimeSeconds,
+                Time = MatchTimeParser.FormatFromSeconds(g.TimeSeconds)
+            })
+            .ToList();
 
         var voteCounts = match.Votes
             .Where(v => v.VotedForId != Guid.Empty)
@@ -135,6 +156,7 @@ public sealed class MatchService : IMatchService
             }).ToList(),
 
             VoteCounts = voteCounts,
+            Goals = goals
         };
     }
 
@@ -444,6 +466,64 @@ public sealed class MatchService : IMatchService
         if (matchId == Guid.Empty)
             throw new InvalidOperationException("MatchId a© obrigata³rio.");
     }
+
+    public async Task AddGoalAsync(Guid groupId, Guid matchId, AddGoalRequestDto dto, CancellationToken ct)
+    {
+        await EnsureGroupExistsAsync(groupId, ct);
+        EnsureMatchId(matchId);
+
+        if (dto is null) throw new ArgumentNullException(nameof(dto));
+
+        var match = await _context.Matches
+            .Include(m => m.Players)
+            .Include(m => m.Goals)
+            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct)
+            ?? throw new InvalidOperationException("Partida nao encontrada.");
+
+        var beforeIds = match.Goals.Select(g => g.Id).ToHashSet();
+
+        var seconds = MatchTimeParser.ParseToSeconds(dto.Time);
+
+        match.AddGoal(dto.ScorerPlayerId, dto.AssistPlayerId, seconds);
+
+        var createdGoal = match.Goals.FirstOrDefault(g => !beforeIds.Contains(g.Id));
+        if (createdGoal is null)
+            throw new InvalidOperationException("Falha ao identificar o gol criado.");
+
+        var entry = _context.Entry(createdGoal);
+        if (entry.State == EntityState.Detached)
+            _context.Add(createdGoal);
+        else
+            entry.State = EntityState.Added;
+
+        await _context.SaveChangesAsync(ct);
+    }
+
+    public async Task RemoveGoalAsync(Guid groupId, Guid matchId, Guid goalId, CancellationToken ct)
+    {
+        await EnsureGroupExistsAsync(groupId, ct);
+        EnsureMatchId(matchId);
+
+        if (goalId == Guid.Empty)
+            throw new InvalidOperationException("GoalId e obrigatorio.");
+
+        var match = await _context.Matches
+            .Include(m => m.Goals)
+            .Include(m => m.Players) // mantenha se o recalculo depender de time/jogador
+            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct)
+            ?? throw new InvalidOperationException("Partida nao encontrada.");
+
+        var goal = match.Goals.FirstOrDefault(g => g.Id == goalId);
+        if (goal is null)
+            return; 
+
+        match.RemoveGoal(goalId);
+
+        _context.Goals.Remove(goal);
+
+        await _context.SaveChangesAsync(ct);
+    }
+
 
     private static PlayerInMatchDto ToPlayerDto(MatchPlayerEntity mp) => new()
     {

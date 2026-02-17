@@ -1,4 +1,6 @@
-﻿public sealed class MatchDetailsDto
+﻿using BratnavaFC.Domain.Dtos;
+
+public sealed class MatchDetailsDto
 {
     public Guid MatchId { get; set; }
     public Guid GroupId { get; set; }
@@ -23,6 +25,9 @@
 
     public List<VoteDto> Votes { get; set; } = [];
     public List<VoteCountDto> VoteCounts { get; set; } = [];
+
+    public List<GoalDto> Goals { get; set; } = [];
+
 
 }
 

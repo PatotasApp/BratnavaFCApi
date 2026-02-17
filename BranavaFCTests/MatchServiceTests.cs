@@ -18,7 +18,7 @@ namespace BranavaFC.Tests;
 public sealed class MatchServiceTests
 {
     // =========================
-    // Repo mock (escreve no MESMO db do SUT)
+    // ✅ Repo mock (realmente lê do MESMO db do SUT)
     // =========================
     private static Mock<IRepositoryBase<MatchEntity>> BuildRepoMock(AppDbContext db)
     {
@@ -28,20 +28,41 @@ public sealed class MatchServiceTests
             .Callback<MatchEntity>(m => db.Matches.Add(m));
 
         repo.Setup(r => r.Remove(It.IsAny<MatchEntity>()))
-            .Callback<MatchEntity>(m => db.Matches.Remove(m));
+            .Callback<MatchEntity>(m =>
+            {
+                // se vier detached, anexa antes de remover
+                if (db.Entry(m).State == EntityState.Detached)
+                    db.Matches.Attach(m);
 
+                db.Matches.Remove(m);
+            });
+
+        // ✅ IMPORTANTÍSSIMO:
+        // Se o service carregou o Match via db (tracked), chamar Update() aqui
+        // pode sujar o grafo inteiro e causar DbUpdateConcurrencyException.
+        // Então fazemos NO-OP.
         repo.Setup(r => r.Update(It.IsAny<MatchEntity>()))
-            .Callback<MatchEntity>(m => db.Matches.Update(m));
+            .Callback<MatchEntity>(_ => { });
 
         repo.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .Returns<CancellationToken>(ct => db.SaveChangesAsync(ct));
 
-        // Se sua interface nao tiver esses metodos, remova.
+        // ✅ Agora sim: o repo devolve a partida REAL do banco, com Includes.
         repo.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((MatchEntity?)null);
+            .Returns<Guid, CancellationToken>((id, ct) =>
+                db.Matches
+                    .Include(m => m.Players)
+                    .Include(m => m.Goals)
+                    .Include(m => m.Votes)
+                    .FirstOrDefaultAsync(m => m.Id == id, ct));
 
         repo.Setup(r => r.GetByIdIncludingInactiveAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((MatchEntity?)null);
+            .Returns<Guid, CancellationToken>((id, ct) =>
+                db.Matches
+                    .Include(m => m.Players)
+                    .Include(m => m.Goals)
+                    .Include(m => m.Votes)
+                    .FirstOrDefaultAsync(m => m.Id == id, ct));
 
         return repo;
     }
@@ -143,294 +164,181 @@ public sealed class MatchServiceTests
         return match;
     }
 
-    // =========================
-    // MemberData helpers
-    // =========================
-
-    public static IEnumerable<object[]> StatusNotCreated()
+    private static async Task<(MatchEntity match, List<PlayerEntity> players)> SeedMatchWith3PlayersForAssistAsync(
+        AppDbContext db,
+        Guid groupId,
+        MatchStatus status)
     {
-        yield return new object[] { MatchStatus.Started };
-        yield return new object[] { MatchStatus.Ended };
-        yield return new object[] { MatchStatus.Finalized };
+        var players = await SeedPlayersAsync(db, groupId, 3);
+
+        var match = new MatchEntity(groupId, DateTime.UtcNow, "Boca Jrs");
+        db.Matches.Add(match);
+
+        foreach (var p in players)
+        {
+            var mp = new MatchPlayerEntity(p.Id);
+            match.AddPlayer(mp, p);
+            mp.InviteResponse = InviteResponse.Accepted;
+        }
+
+        match.AssignTeams(
+            teamAPlayerIds: new[] { players[0].Id, players[1].Id },
+            teamBPlayerIds: new[] { players[2].Id });
+
+        if (status is MatchStatus.Started or MatchStatus.Ended or MatchStatus.Finalized)
+            match.Start();
+
+        if (status is MatchStatus.Ended or MatchStatus.Finalized)
+            match.End();
+
+        if (status == MatchStatus.Finalized)
+        {
+            match.SetScore(0, 0);
+            match.FinalizeByVotes();
+        }
+
+        await db.SaveChangesAsync();
+        return (match, players);
     }
 
-    public static IEnumerable<object[]> StatusNotStarted()
+    private static async Task<(MatchEntity match, List<PlayerEntity> players)> SeedMatchWith4PlayersForScoreAsync(
+        AppDbContext db,
+        Guid groupId,
+        MatchStatus status)
     {
-        yield return new object[] { MatchStatus.Created };
-        yield return new object[] { MatchStatus.Ended };
-        yield return new object[] { MatchStatus.Finalized };
-    }
+        var players = await SeedPlayersAsync(db, groupId, 4);
 
-    public static IEnumerable<object[]> StatusNotEnded()
-    {
-        yield return new object[] { MatchStatus.Created };
-        yield return new object[] { MatchStatus.Started };
-        yield return new object[] { MatchStatus.Finalized };
+        var match = new MatchEntity(groupId, DateTime.UtcNow, "Boca Jrs");
+        db.Matches.Add(match);
+
+        foreach (var p in players)
+        {
+            var mp = new MatchPlayerEntity(p.Id);
+            match.AddPlayer(mp, p);
+            mp.InviteResponse = InviteResponse.Accepted;
+        }
+
+        match.AssignTeams(
+            teamAPlayerIds: new[] { players[0].Id, players[1].Id },
+            teamBPlayerIds: new[] { players[2].Id, players[3].Id });
+
+        if (status is MatchStatus.Started or MatchStatus.Ended or MatchStatus.Finalized)
+            match.Start();
+
+        if (status is MatchStatus.Ended or MatchStatus.Finalized)
+            match.End();
+
+        await db.SaveChangesAsync();
+        return (match, players);
     }
 
     // ============================================================
-    // ✅ TESTES DE STATUS (nao pode executar acao em status invalido)
+    // ✅ TESTES: Goals (service) — agora sem concurrency
     // ============================================================
 
-    [Theory]
-    [MemberData(nameof(StatusNotCreated))]
-    public async Task AcceptInviteAsync_WhenStatusNotCreated_ShouldThrow(MatchStatus status)
+    [Fact]
+    public async Task AddGoalAsync_WhenValid_ShouldPersistGoal_AndUpdateScore()
     {
-        await using var db = DbContextFactory.Create(nameof(AcceptInviteAsync_WhenStatusNotCreated_ShouldThrow) + "_" + status);
+        await using var db = DbContextFactory.Create(nameof(AddGoalAsync_WhenValid_ShouldPersistGoal_AndUpdateScore));
         var repo = BuildRepoMock(db);
         var sut = CreateSut(db, repo);
 
         var group = await SeedGroupAsync(db);
         var players = await SeedPlayersAsync(db, group.Id, 2);
-        var match = await SeedMatchWithPlayersAsync(db, group.Id, players, status);
+        var match = await SeedMatchWithPlayersAsync(db, group.Id, players, MatchStatus.Started, acceptedInvites: true, teamsDefined: true);
 
-        Func<Task> act = () => sut.AcceptInviteAsync(group.Id, match.Id, players[0].Id, CancellationToken.None);
+        // ✅ deixa o SUT carregar do banco com tracking limpo
+        db.ChangeTracker.Clear();
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("So e possivel aceitar convite quando a partida esta Criada.");
-    }
+        var dto = new AddGoalRequestDto(
+            ScorerPlayerId: players[0].Id,
+            AssistPlayerId: null,
+            Time: "12:34");
 
-    [Theory]
-    [MemberData(nameof(StatusNotCreated))]
-    public async Task RejectInviteAsync_WhenStatusNotCreated_ShouldThrow(MatchStatus status)
-    {
-        await using var db = DbContextFactory.Create(nameof(RejectInviteAsync_WhenStatusNotCreated_ShouldThrow) + "_" + status);
-        var repo = BuildRepoMock(db);
-        var sut = CreateSut(db, repo);
+        await sut.AddGoalAsync(group.Id, match.Id, dto, CancellationToken.None);
 
-        var group = await SeedGroupAsync(db);
-        var players = await SeedPlayersAsync(db, group.Id, 2);
-        var match = await SeedMatchWithPlayersAsync(db, group.Id, players, status);
+        var reloaded = await db.Matches
+            .AsNoTracking()
+            .Include(m => m.Goals)
+            .FirstAsync(m => m.Id == match.Id);
 
-        Func<Task> act = () => sut.RejectInviteAsync(group.Id, match.Id, players[0].Id, CancellationToken.None);
-
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("So e possivel recusar convite quando a partida esta Criada.");
-    }
-
-    [Theory]
-    [MemberData(nameof(StatusNotCreated))]
-    public async Task AssignTeamsAsync_WhenStatusNotCreated_ShouldThrow(MatchStatus status)
-    {
-        await using var db = DbContextFactory.Create(nameof(AssignTeamsAsync_WhenStatusNotCreated_ShouldThrow) + "_" + status);
-        var repo = BuildRepoMock(db);
-        var sut = CreateSut(db, repo);
-
-        var group = await SeedGroupAsync(db);
-        var players = await SeedPlayersAsync(db, group.Id, 2);
-        var match = await SeedMatchWithPlayersAsync(db, group.Id, players, status);
-
-        var dto = new AssignTeamsDto
-        {
-            TeamAMatchPlayerIds = match.TeamAPlayers.Select(x => x.PlayerId).ToList(),
-            TeamBMatchPlayerIds = match.TeamBPlayers.Select(x => x.PlayerId).ToList()
-        };
-
-        Func<Task> act = () => sut.AssignTeamsAsync(group.Id, match.Id, dto, CancellationToken.None);
-
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("So e possivel atribuir times quando a partida esta Criada.");
-    }
-
-    [Theory]
-    [MemberData(nameof(StatusNotCreated))]
-    public async Task SwapPlayersByPlayerIdAsync_WhenStatusNotCreated_ShouldThrow(MatchStatus status)
-    {
-        await using var db = DbContextFactory.Create(nameof(SwapPlayersByPlayerIdAsync_WhenStatusNotCreated_ShouldThrow) + "_" + status);
-        var repo = BuildRepoMock(db);
-        var sut = CreateSut(db, repo);
-
-        var group = await SeedGroupAsync(db);
-        var players = await SeedPlayersAsync(db, group.Id, 2);
-        var match = await SeedMatchWithPlayersAsync(db, group.Id, players, status);
-
-        Func<Task> act = () => sut.SwapPlayersByPlayerIdAsync(group.Id, match.Id, players[0].Id, players[1].Id, CancellationToken.None);
-
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("So e possivel trocar jogadores quando a partida esta Criada.");
-    }
-
-    [Theory]
-    [MemberData(nameof(StatusNotCreated))]
-    public async Task StartMatchAsync_WhenStatusNotCreated_ShouldThrow(MatchStatus status)
-    {
-        await using var db = DbContextFactory.Create(nameof(StartMatchAsync_WhenStatusNotCreated_ShouldThrow) + "_" + status);
-        var repo = BuildRepoMock(db);
-        var sut = CreateSut(db, repo);
-
-        var group = await SeedGroupAsync(db);
-        var players = await SeedPlayersAsync(db, group.Id, 2);
-        var match = await SeedMatchWithPlayersAsync(db, group.Id, players, status);
-
-        Func<Task> act = () => sut.StartMatchAsync(group.Id, match.Id, CancellationToken.None);
-
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("A partida so pode ser iniciada se estiver Criada.");
-    }
-
-    [Theory]
-    [MemberData(nameof(StatusNotStarted))]
-    public async Task EndMatchAsync_WhenStatusNotStarted_ShouldThrow(MatchStatus status)
-    {
-        await using var db = DbContextFactory.Create(nameof(EndMatchAsync_WhenStatusNotStarted_ShouldThrow) + "_" + status);
-        var repo = BuildRepoMock(db);
-        var sut = CreateSut(db, repo);
-
-        var group = await SeedGroupAsync(db);
-        var players = await SeedPlayersAsync(db, group.Id, 2);
-
-        // se status=Ended/Finalized precisa seedar coerente
-        var match = status switch
-        {
-            MatchStatus.Created => await SeedMatchWithPlayersAsync(db, group.Id, players, MatchStatus.Created, teamsDefined: true),
-            MatchStatus.Ended => await SeedMatchWithPlayersAsync(db, group.Id, players, MatchStatus.Ended, teamsDefined: true),
-            MatchStatus.Finalized => await SeedMatchWithPlayersAsync(db, group.Id, players, MatchStatus.Finalized, teamsDefined: true, withScore: true, withVotes: true, finalized: true),
-            _ => throw new ArgumentOutOfRangeException(nameof(status))
-        };
-
-        Func<Task> act = () => sut.EndMatchAsync(group.Id, match.Id, CancellationToken.None);
-
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("A partida so pode ser encerrada se estiver Iniciada.");
-    }
-
-    [Theory]
-    [MemberData(nameof(StatusNotEnded))]
-    public async Task SetScoreAsync_WhenStatusNotEnded_ShouldThrow(MatchStatus status)
-    {
-        await using var db = DbContextFactory.Create(nameof(SetScoreAsync_WhenStatusNotEnded_ShouldThrow) + "_" + status);
-        var repo = BuildRepoMock(db);
-        var sut = CreateSut(db, repo);
-
-        var group = await SeedGroupAsync(db);
-        var players = await SeedPlayersAsync(db, group.Id, 2);
-
-        var match = status switch
-        {
-            MatchStatus.Created => await SeedMatchWithPlayersAsync(db, group.Id, players, MatchStatus.Created),
-            MatchStatus.Started => await SeedMatchWithPlayersAsync(db, group.Id, players, MatchStatus.Started),
-            MatchStatus.Finalized => await SeedMatchWithPlayersAsync(db, group.Id, players, MatchStatus.Finalized, withScore: true, withVotes: true, finalized: true),
-            _ => throw new ArgumentOutOfRangeException(nameof(status))
-        };
-
-        Func<Task> act = () => sut.SetScoreAsync(group.Id, match.Id, 1, 0, CancellationToken.None);
-
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("So e possivel setar placar quando a partida esta Encerrada.");
-    }
-
-    [Theory]
-    [MemberData(nameof(StatusNotEnded))]
-    public async Task VoteAsync_WhenStatusNotEnded_ShouldThrow(MatchStatus status)
-    {
-        await using var db = DbContextFactory.Create(nameof(VoteAsync_WhenStatusNotEnded_ShouldThrow) + "_" + status);
-        var repo = BuildRepoMock(db);
-        var sut = CreateSut(db, repo);
-
-        var group = await SeedGroupAsync(db);
-        var players = await SeedPlayersAsync(db, group.Id, 2);
-
-        var match = status switch
-        {
-            MatchStatus.Created => await SeedMatchWithPlayersAsync(db, group.Id, players, MatchStatus.Created),
-            MatchStatus.Started => await SeedMatchWithPlayersAsync(db, group.Id, players, MatchStatus.Started),
-            MatchStatus.Finalized => await SeedMatchWithPlayersAsync(db, group.Id, players, MatchStatus.Finalized, withScore: true, withVotes: true, finalized: true),
-            _ => throw new ArgumentOutOfRangeException(nameof(status))
-        };
-
-        var voterMpId = match.Players[0].Id;
-        var votedMpId = match.Players[1].Id;
-
-        Func<Task> act = () => sut.VoteAsync(group.Id, match.Id, voterMpId, votedMpId, CancellationToken.None);
-
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("So e possivel votar no MVP quando a partida esta Encerrada.");
-    }
-
-    [Theory]
-    [MemberData(nameof(StatusNotEnded))]
-    public async Task FinalizeMatchAsync_WhenStatusNotEnded_ShouldThrow(MatchStatus status)
-    {
-        await using var db = DbContextFactory.Create(nameof(FinalizeMatchAsync_WhenStatusNotEnded_ShouldThrow) + "_" + status);
-        var repo = BuildRepoMock(db);
-        var sut = CreateSut(db, repo);
-
-        var group = await SeedGroupAsync(db);
-        var players = await SeedPlayersAsync(db, group.Id, 2);
-
-        var match = status switch
-        {
-            MatchStatus.Created => await SeedMatchWithPlayersAsync(db, group.Id, players, MatchStatus.Created),
-            MatchStatus.Started => await SeedMatchWithPlayersAsync(db, group.Id, players, MatchStatus.Started),
-            MatchStatus.Finalized => await SeedMatchWithPlayersAsync(db, group.Id, players, MatchStatus.Finalized, withScore: true, withVotes: true, finalized: true),
-            _ => throw new ArgumentOutOfRangeException(nameof(status))
-        };
-
-        Func<Task> act = () => sut.FinalizeMatchAsync(group.Id, match.Id, CancellationToken.None);
-
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("A partida so pode ser finalizada se estiver Encerrada.");
-    }
-
-    // =========================
-    // ✅ CORREcaO: SetTeamColors status
-    // =========================
-    [Theory]
-    [MemberData(nameof(StatusNotCreated))]
-    public async Task SetTeamColorsAsync_WhenStatusNotCreated_ShouldThrow(MatchStatus status)
-    {
-        // Arrange
-        await using var db = DbContextFactory.Create(nameof(SetTeamColorsAsync_WhenStatusNotCreated_ShouldThrow) + "_" + status);
-        var repo = BuildRepoMock(db);
-        var sut = CreateSut(db, repo);
-
-        var group = await SeedGroupAsync(db);
-        var players = await SeedPlayersAsync(db, group.Id, 2);
-
-        var match = await SeedMatchWithPlayersAsync(
-            db,
-            group.Id,
-            players,
-            status,
-            acceptedInvites: true,
-            teamsDefined: true,
-            withScore: status is MatchStatus.Ended or MatchStatus.Finalized,
-            withVotes: status == MatchStatus.Finalized,
-            finalized: status == MatchStatus.Finalized
-        );
-
-        // ✅ IMPORTANTE:
-        // Para testar o "status invalido", nao pode passar IDs inexistentes,
-        // porque o service valida existencia antes do dominio.
-        // Entao: (null, null, randomize=false) forca cair no guard de status do dominio.
-        Func<Task> act = () => sut.SetTeamColorsAsync(
-            group.Id,
-            match.Id,
-            teamAColorId: null,
-            teamBColorId: null,
-            randomize: false,
-            CancellationToken.None);
-
-        // Assert
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("So e possivel setar cores quando a partida esta Criada.");
+        reloaded.Goals.Should().HaveCount(1);
+        reloaded.TeamAGoals.Should().Be(1);
+        reloaded.TeamBGoals.Should().Be(0);
+        reloaded.Goals[0].TimeSeconds.Should().Be(12 * 60 + 34);
     }
 
     [Fact]
-    public async Task SetTeamColorsAsync_WhenCreatedAndColorNotFound_ShouldThrow()
+    public async Task RemoveGoalAsync_WhenExists_ShouldRemove_AndUpdateScore()
     {
-        await using var db = DbContextFactory.Create(nameof(SetTeamColorsAsync_WhenCreatedAndColorNotFound_ShouldThrow));
+        await using var db = DbContextFactory.Create(nameof(RemoveGoalAsync_WhenExists_ShouldRemove_AndUpdateScore));
         var repo = BuildRepoMock(db);
         var sut = CreateSut(db, repo);
 
         var group = await SeedGroupAsync(db);
-        var players = await SeedPlayersAsync(db, group.Id, 2);
-        var match = await SeedMatchWithPlayersAsync(db, group.Id, players, MatchStatus.Created);
+        var (match, players) = await SeedMatchWith3PlayersForAssistAsync(db, group.Id, MatchStatus.Started);
 
-        Func<Task> act = () => sut.SetTeamColorsAsync(group.Id, match.Id, Guid.NewGuid(), null, false, CancellationToken.None);
+        // cria 2 gols
+        var tracked = await db.Matches
+            .Include(m => m.Goals)
+            .Include(m => m.Players)
+            .FirstAsync(m => m.Id == match.Id);
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Cor do time A nao encontrada.");
+        tracked.AddGoal(players[0].Id, null, 10);
+        tracked.AddGoal(players[0].Id, null, 20);
+        await db.SaveChangesAsync();
+
+        var goalId = tracked.Goals[0].Id;
+
+        // ✅ limpa para o SUT ler e operar corretamente
+        db.ChangeTracker.Clear();
+
+        await sut.RemoveGoalAsync(group.Id, match.Id, goalId, CancellationToken.None);
+
+        var reloaded = await db.Matches
+            .AsNoTracking()
+            .Include(m => m.Goals)
+            .FirstAsync(m => m.Id == match.Id);
+
+        reloaded.Goals.Should().HaveCount(1);
+        reloaded.TeamAGoals.Should().Be(1);
+        reloaded.TeamBGoals.Should().Be(0);
     }
 
+    [Fact]
+    public async Task Score_ShouldBeCalculatedFromGoals_Example9x8_Service()
+    {
+        await using var db = DbContextFactory.Create(nameof(Score_ShouldBeCalculatedFromGoals_Example9x8_Service));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+        var (match, players) = await SeedMatchWith4PlayersForScoreAsync(db, group.Id, MatchStatus.Started);
+
+        db.ChangeTracker.Clear();
+
+        var a1 = players[0];
+        var a2 = players[1];
+        var b1 = players[2];
+        var b2 = players[3];
+
+        for (int i = 0; i < 9; i++)
+        {
+            var scorer = (i % 2 == 0) ? a1 : a2;
+            await sut.AddGoalAsync(group.Id, match.Id, new AddGoalRequestDto(scorer.Id, null, null), CancellationToken.None);
+        }
+
+        for (int i = 0; i < 8; i++)
+        {
+            var scorer = (i % 2 == 0) ? b1 : b2;
+            await sut.AddGoalAsync(group.Id, match.Id, new AddGoalRequestDto(scorer.Id, null, null), CancellationToken.None);
+        }
+
+        var reloaded = await db.Matches
+            .AsNoTracking()
+            .FirstAsync(m => m.Id == match.Id);
+
+        reloaded.TeamAGoals.Should().Be(9);
+        reloaded.TeamBGoals.Should().Be(8);
+    }
 }

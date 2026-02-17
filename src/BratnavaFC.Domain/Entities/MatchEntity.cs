@@ -26,6 +26,7 @@ public class MatchEntity : BaseEntity
 
     public List<MatchPlayerEntity> Players { get; private set; } = [];
     public List<VoteEntity> Votes { get; private set; } = [];
+    public List<GoalEntity> Goals { get; private set; } = [];
 
     public MatchStatus Status { get; private set; }
 
@@ -324,5 +325,74 @@ public class MatchEntity : BaseEntity
         mpB.SetTeam(teamA);
     }
 
+    public void AddGoal(Guid scorerPlayerId, Guid? assistPlayerId, int? timeSeconds)
+    {
+        if (Status != MatchStatus.Started && Status != MatchStatus.Ended)
+            throw new InvalidOperationException("So e possivel registrar gols quando a partida esta Iniciada ou Encerrada.");
 
+        if (scorerPlayerId == Guid.Empty)
+            throw new InvalidOperationException("PlayerId do gol e obrigatorio.");
+
+        var scorerMp = Players.FirstOrDefault(p => p.PlayerId == scorerPlayerId);
+        if (scorerMp is null)
+            throw new InvalidOperationException("O jogador do gol nao pertence a esta partida.");
+
+        if (scorerMp.Team == 0)
+            throw new InvalidOperationException("Nao e possivel registrar gol de jogador nao atribuido a um time.");
+
+        if (assistPlayerId.HasValue)
+        {
+            if (assistPlayerId.Value == Guid.Empty)
+                throw new InvalidOperationException("AssistPlayerId invalido.");
+
+            if (assistPlayerId.Value == scorerPlayerId)
+                throw new InvalidOperationException("Assistente nao pode ser o mesmo jogador do gol.");
+
+            var assistMp = Players.FirstOrDefault(p => p.PlayerId == assistPlayerId.Value);
+            if (assistMp is null)
+                throw new InvalidOperationException("O jogador da assistencia nao pertence a esta partida.");
+
+            if (assistMp.Team == 0)
+                throw new InvalidOperationException("Nao e possivel registrar assistencia de jogador nao atribuido a um time.");
+
+            if (assistMp.Team != scorerMp.Team)
+                throw new InvalidOperationException("A assistencia so pode ser de um jogador do mesmo time do autor do gol.");
+        }
+
+        var goal = new GoalEntity(Id, GroupId, scorerPlayerId, assistPlayerId, timeSeconds);
+        Goals.Add(goal);
+
+        RecalculateScoreFromGoals();
+    }
+
+    public void RemoveGoal(Guid goalId)
+    {
+        if (Status == MatchStatus.Finalized)
+            throw new InvalidOperationException("Partida finalizada. Nao e possivel remover gols.");
+
+        var idx = Goals.FindIndex(g => g.Id == goalId);
+        if (idx < 0) return;
+
+        Goals.RemoveAt(idx);
+
+        RecalculateScoreFromGoals();
+    }
+
+    private void RecalculateScoreFromGoals()
+    {
+        var countA = 0;
+        var countB = 0;
+
+        var teamByPlayerId = Players.ToDictionary(p => p.PlayerId, p => p.Team);
+
+        foreach (var g in Goals)
+        {
+            if (!teamByPlayerId.TryGetValue(g.ScorerPlayerId, out var team)) continue;
+            if (team == 1) countA++;
+            else if (team == 2) countB++;
+        }
+
+        TeamAGoals = countA;
+        TeamBGoals = countB;
+    }
 }

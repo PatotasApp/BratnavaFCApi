@@ -21,6 +21,7 @@ public class AppDbContext : DbContext
     public DbSet<GroupAdminEntity> GroupAdmins => Set<GroupAdminEntity>();
     public DbSet<PlayerEntity> Players => Set<PlayerEntity>();
     public DbSet<GroupSettingsEntity> GroupSettings => Set<GroupSettingsEntity>();
+    public DbSet<GoalEntity> Goals => Set<GoalEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -273,7 +274,42 @@ public class AppDbContext : DbContext
             builder.HasIndex(x => x.GroupId).IsUnique();
         });
 
+        modelBuilder.Entity<GoalEntity>(builder =>
+        {
+            builder.HasKey(x => x.Id);
+            builder.Property(x => x.Id).ValueGeneratedNever();
 
+            builder.Property(x => x.MatchId).IsRequired();
+            builder.Property(x => x.GroupId).IsRequired();
+
+            builder.Property(x => x.ScorerPlayerId).IsRequired();
+            builder.Property(x => x.AssistPlayerId).IsRequired(false);
+
+            builder.Property(x => x.TimeSeconds).IsRequired(false);
+
+            builder.HasOne(x => x.Match)
+                .WithMany(m => m.Goals)
+                .HasForeignKey(x => x.MatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(x => x.Group)
+                .WithMany()
+                .HasForeignKey(x => x.GroupId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasOne(x => x.ScorerPlayer)
+                .WithMany()
+                .HasForeignKey(x => x.ScorerPlayerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasOne(x => x.AssistPlayer)
+                .WithMany()
+                .HasForeignKey(x => x.AssistPlayerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasIndex(x => new { x.MatchId, x.ScorerPlayerId });
+            builder.HasIndex(x => new { x.MatchId, x.AssistPlayerId });
+        });
     }
 
     public override int SaveChanges()
