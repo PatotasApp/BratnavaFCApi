@@ -1,4 +1,5 @@
 ﻿using BratnavaFC.Domain.Entities;
+using BratnavaFC.Domain.Enums;
 
 namespace BranavaFC.Tests;
 
@@ -97,5 +98,33 @@ public class GroupEntityTests
         Assert.Contains(group.Admins, x => x.UserId == a);
         Assert.Contains(group.Admins, x => x.UserId == b);
         Assert.NotNull(group.UpdateDate);
+    }
+
+    [Fact]
+    public void AddPlayer_Null_ShouldThrow()
+    {
+        // Arrange
+        var group = new GroupEntity("G", null);
+
+        // Act + Assert
+        var ex = Assert.Throws<InvalidOperationException>(() => group.AddPlayer(null!));
+        Assert.Equal("Player is required.", ex.Message);
+    }
+
+    [Fact]
+    public void AddPlayer_WhenUserAlreadyExists_ShouldThrow()
+    {
+        // Arrange
+        var group = new GroupEntity("G", null);
+        var userId = Guid.NewGuid();
+        var player1 = new PlayerEntity("P1", userId, group.Id, 0, false, Status.Active);
+        var player2 = new PlayerEntity("P2", userId, group.Id, 0, false, Status.Active);
+
+        // Act
+        group.AddPlayer(player1);
+        var ex = Assert.Throws<InvalidOperationException>(() => group.AddPlayer(player2));
+
+        // Assert
+        Assert.Equal("Player already exists in the group.", ex.Message);
     }
 }

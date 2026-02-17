@@ -16,7 +16,7 @@ public class GroupsController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> CreateGroupAsync([FromBody] GroupContracts.CreateGroupRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> CreateGroupAsync([FromBody] CreateGroupDto request, CancellationToken cancellationToken)
     {
         if (request == null) return BadRequest();
 
@@ -27,12 +27,12 @@ public class GroupsController : ControllerBase
     [HttpDelete("{groupId:guid}")]
     public async Task<IActionResult> DeleteGroupAsync(Guid groupId, CancellationToken cancellationToken)
     {
-        await _groupService.DeleteAsync(new GroupContracts.DeleteGroupRequest(groupId), cancellationToken);
+        await _groupService.DeleteAsync(groupId, cancellationToken);
         return Ok();
     }
 
     [HttpPut("{groupId:guid}")]
-    public async Task<IActionResult> UpdateGroupAsync(Guid groupId, [FromBody] GroupContracts.UpdateGroupRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> UpdateGroupAsync(Guid groupId, [FromBody] UpdateGroupDto request, CancellationToken cancellationToken)
     {
         if (request == null) return BadRequest();
 
