@@ -14,7 +14,6 @@ public class MatchEntityTests
         var p1 = new PlayerEntity("A", Guid.NewGuid(), groupId, 0, false, Status.Active);
         var p2 = new PlayerEntity("B", Guid.NewGuid(), groupId, 0, false, Status.Active);
 
-        // ✅ importante: criar MatchPlayerEntity com o PlayerId correto (consistente)
         var mp1 = new MatchPlayerEntity(p1.Id);
         var mp2 = new MatchPlayerEntity(p2.Id);
 
@@ -130,7 +129,6 @@ public class MatchEntityTests
         match.AddPlayer(mp1, p1);
 
         var mp2 = new MatchPlayerEntity(p1.Id);
-
         match.AddPlayer(mp2, p1);
 
         Assert.Single(match.Players);
@@ -260,20 +258,16 @@ public class MatchEntityTests
         Assert.Equal("Nao ha cores cadastradas para sortear.", ex.Message);
     }
 
-    // =========================
-    // ✅ NOVA FEATURE: Goals
-    // =========================
-
     [Fact]
     public void AddGoal_WhenNotStartedOrEnded_ShouldThrow()
     {
-        var (match, p1, _, mp1, mp2) = CreateMatchWithTwoPlayers();
+        var (match, _, _, mp1, mp2) = CreateMatchWithTwoPlayers();
 
         match.AssignTeams(new[] { mp1.PlayerId }, new[] { mp2.PlayerId });
         // status ainda Created
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
-            match.AddGoal(p1.Id, assistPlayerId: null, timeSeconds: 10));
+            match.AddGoalByMatchPlayer(mp1.Id, assistMatchPlayerId: null, timeSeconds: 10));
 
         Assert.Equal("So e possivel registrar gols quando a partida esta Iniciada ou Encerrada.", ex.Message);
     }
@@ -282,11 +276,12 @@ public class MatchEntityTests
     public void AddGoal_WhenScorerNotInMatch_ShouldThrow()
     {
         var (match, _, _, mp1, mp2) = CreateMatchWithTwoPlayers();
+
         match.AssignTeams(new[] { mp1.PlayerId }, new[] { mp2.PlayerId });
         match.Start();
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
-            match.AddGoal(Guid.NewGuid(), assistPlayerId: null, timeSeconds: 10));
+            match.AddGoalByMatchPlayer(Guid.NewGuid(), assistMatchPlayerId: null, timeSeconds: 10));
 
         Assert.Equal("O jogador do gol nao pertence a esta partida.", ex.Message);
     }
@@ -294,17 +289,16 @@ public class MatchEntityTests
     [Fact]
     public void AddGoal_WhenScorerUnassigned_ShouldThrow()
     {
-        var (match, p1, _, mp1, mp2) = CreateMatchWithTwoPlayers();
+        var (match, _, _, mp1, mp2) = CreateMatchWithTwoPlayers();
 
         match.AssignTeams(new[] { mp1.PlayerId }, new[] { mp2.PlayerId });
         match.Start();
 
         // ✅ força o scorer ficar sem time
-        var scorerMp = match.Players.First(x => x.PlayerId == p1.Id);
-        scorerMp.SetTeam(0);
+        mp1.SetTeam(0);
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
-            match.AddGoal(p1.Id, assistPlayerId: null, timeSeconds: 10));
+            match.AddGoalByMatchPlayer(mp1.Id, assistMatchPlayerId: null, timeSeconds: 10));
 
         Assert.Equal("Nao e possivel registrar gol de jogador nao atribuido a um time.", ex.Message);
     }
@@ -312,12 +306,13 @@ public class MatchEntityTests
     [Fact]
     public void AddGoal_WhenAssistNotInMatch_ShouldThrow()
     {
-        var (match, p1, _, mp1, mp2) = CreateMatchWithTwoPlayers();
+        var (match, _, _, mp1, mp2) = CreateMatchWithTwoPlayers();
+
         match.AssignTeams(new[] { mp1.PlayerId }, new[] { mp2.PlayerId });
         match.Start();
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
-            match.AddGoal(p1.Id, assistPlayerId: Guid.NewGuid(), timeSeconds: 10));
+            match.AddGoalByMatchPlayer(mp1.Id, assistMatchPlayerId: Guid.NewGuid(), timeSeconds: 10));
 
         Assert.Equal("O jogador da assistencia nao pertence a esta partida.", ex.Message);
     }
@@ -325,12 +320,13 @@ public class MatchEntityTests
     [Fact]
     public void AddGoal_WhenAssistIsScorer_ShouldThrow()
     {
-        var (match, p1, _, mp1, mp2) = CreateMatchWithTwoPlayers();
+        var (match, _, _, mp1, mp2) = CreateMatchWithTwoPlayers();
+
         match.AssignTeams(new[] { mp1.PlayerId }, new[] { mp2.PlayerId });
         match.Start();
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
-            match.AddGoal(p1.Id, assistPlayerId: p1.Id, timeSeconds: 10));
+            match.AddGoalByMatchPlayer(mp1.Id, assistMatchPlayerId: mp1.Id, timeSeconds: 10));
 
         Assert.Equal("Assistente nao pode ser o mesmo jogador do gol.", ex.Message);
     }
@@ -338,13 +334,13 @@ public class MatchEntityTests
     [Fact]
     public void AddGoal_WhenAssistFromOtherTeam_ShouldThrow()
     {
-        var (match, p1, p2, mp1, mp2) = CreateMatchWithTwoPlayers();
+        var (match, _, _, mp1, mp2) = CreateMatchWithTwoPlayers();
 
         match.AssignTeams(new[] { mp1.PlayerId }, new[] { mp2.PlayerId });
         match.Start();
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
-            match.AddGoal(p1.Id, assistPlayerId: p2.Id, timeSeconds: 10));
+            match.AddGoalByMatchPlayer(mp1.Id, assistMatchPlayerId: mp2.Id, timeSeconds: 10));
 
         Assert.Equal("A assistencia so pode ser de um jogador do mesmo time do autor do gol.", ex.Message);
     }
@@ -352,8 +348,11 @@ public class MatchEntityTests
     [Fact]
     public void AddGoal_WhenTimeNegative_ShouldThrow()
     {
-        var (match, a1, _, _) = CreateMatchWithThreePlayers_TwoInA_OneInB();
-        var ex = Assert.Throws<InvalidOperationException>(() => match.AddGoal(a1.Id, null, -1));
+        var (match, _, _, _) = CreateMatchWithThreePlayers_TwoInA_OneInB();
+
+        var a1Mp = match.Players.First(p => p.Team == 1); // qualquer do time A
+        var ex = Assert.Throws<InvalidOperationException>(() => match.AddGoalByMatchPlayer(a1Mp.Id, null, -1));
+
         Assert.Equal("Tempo do gol nao pode ser negativo.", ex.Message);
     }
 
@@ -362,12 +361,15 @@ public class MatchEntityTests
     {
         var (match, a1, _, _) = CreateMatchWithThreePlayers_TwoInA_OneInB();
 
-        match.AddGoal(a1.Id, null, null);
+        var a1Mp = match.Players.First(p => p.PlayerId == a1.Id);
+
+        match.AddGoalByMatchPlayer(a1Mp.Id, null, null);
 
         Assert.Single(match.Goals);
         Assert.Equal(1, match.TeamAGoals);
         Assert.Equal(0, match.TeamBGoals);
         Assert.Null(match.Goals[0].TimeSeconds);
+        Assert.Equal(a1Mp.Id, match.Goals[0].ScorerMatchPlayerId);
     }
 
     [Fact]
@@ -375,7 +377,9 @@ public class MatchEntityTests
     {
         var (match, a1, _, _) = CreateMatchWithThreePlayers_TwoInA_OneInB(start: true, end: true);
 
-        match.AddGoal(a1.Id, null, 10);
+        var a1Mp = match.Players.First(p => p.PlayerId == a1.Id);
+
+        match.AddGoalByMatchPlayer(a1Mp.Id, null, 10);
 
         Assert.Single(match.Goals);
         Assert.Equal(1, match.TeamAGoals);
@@ -386,10 +390,15 @@ public class MatchEntityTests
     public void AddGoal_WhenAssistUnassigned_ShouldThrow()
     {
         var (match, a1, a2, _) = CreateMatchWithThreePlayers_TwoInA_OneInB();
+
+        var scorerMp = match.Players.First(p => p.PlayerId == a1.Id);
         var assistMp = match.Players.First(p => p.PlayerId == a2.Id);
+
         assistMp.SetTeam(0);
 
-        var ex = Assert.Throws<InvalidOperationException>(() => match.AddGoal(a1.Id, a2.Id, 10));
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            match.AddGoalByMatchPlayer(scorerMp.Id, assistMp.Id, 10));
+
         Assert.Equal("Nao e possivel registrar assistencia de jogador nao atribuido a um time.", ex.Message);
     }
 
@@ -398,16 +407,19 @@ public class MatchEntityTests
     {
         var (match, a1, a2, _) = CreateMatchWithThreePlayers_TwoInA_OneInB();
 
-        match.AddGoal(
-            scorerPlayerId: a1.Id,
-            assistPlayerId: a2.Id,
+        var scorerMp = match.Players.First(p => p.PlayerId == a1.Id);
+        var assistMp = match.Players.First(p => p.PlayerId == a2.Id);
+
+        match.AddGoalByMatchPlayer(
+            scorerMatchPlayerId: scorerMp.Id,
+            assistMatchPlayerId: assistMp.Id,
             timeSeconds: 12 * 60 + 34);
 
         Assert.Single(match.Goals);
 
         var g = match.Goals[0];
-        Assert.Equal(a1.Id, g.ScorerPlayerId);
-        Assert.Equal(a2.Id, g.AssistPlayerId);
+        Assert.Equal(scorerMp.Id, g.ScorerMatchPlayerId);
+        Assert.Equal(assistMp.Id, g.AssistMatchPlayerId);
         Assert.Equal(12 * 60 + 34, g.TimeSeconds);
 
         Assert.Equal(1, match.TeamAGoals);
@@ -417,11 +429,12 @@ public class MatchEntityTests
     [Fact]
     public void RemoveGoal_WhenNotFinalized_ShouldRemoveAndRecalculateScore()
     {
-        var (match, p1, _, mp1, mp2) = CreateMatchWithTwoPlayers();
+        var (match, _, _, mp1, mp2) = CreateMatchWithTwoPlayers();
+
         match.AssignTeams(new[] { mp1.PlayerId }, new[] { mp2.PlayerId });
         match.Start();
 
-        match.AddGoal(p1.Id, assistPlayerId: null, timeSeconds: 10);
+        match.AddGoalByMatchPlayer(mp1.Id, assistMatchPlayerId: null, timeSeconds: 10);
         var goalId = match.Goals[0].Id;
 
         match.RemoveGoal(goalId);
@@ -436,7 +449,9 @@ public class MatchEntityTests
     {
         var (match, a1, _, _) = CreateMatchWithThreePlayers_TwoInA_OneInB();
 
-        match.AddGoal(a1.Id, null, 10);
+        var scorerMp = match.Players.First(p => p.PlayerId == a1.Id);
+
+        match.AddGoalByMatchPlayer(scorerMp.Id, null, 10);
         Assert.Equal(1, match.TeamAGoals);
 
         match.RemoveGoal(Guid.NewGuid());
@@ -449,7 +464,8 @@ public class MatchEntityTests
     [Fact]
     public void RemoveGoal_WhenFinalized_ShouldThrow()
     {
-        var (match, p1, _, mp1, mp2) = CreateMatchWithTwoPlayers();
+        var (match, _, _, mp1, mp2) = CreateMatchWithTwoPlayers();
+
         match.AssignTeams(new[] { mp1.PlayerId }, new[] { mp2.PlayerId });
         match.Start();
         match.End();
@@ -465,16 +481,21 @@ public class MatchEntityTests
     {
         var (match, a1, a2, b1, b2) = CreateMatchWithFourPlayers_TwoInA_TwoInB();
 
+        var a1Mp = match.Players.First(p => p.PlayerId == a1.Id);
+        var a2Mp = match.Players.First(p => p.PlayerId == a2.Id);
+        var b1Mp = match.Players.First(p => p.PlayerId == b1.Id);
+        var b2Mp = match.Players.First(p => p.PlayerId == b2.Id);
+
         for (int i = 0; i < 9; i++)
         {
-            var scorer = (i % 2 == 0) ? a1 : a2;
-            match.AddGoal(scorer.Id, assistPlayerId: null, timeSeconds: i);
+            var scorerMp = (i % 2 == 0) ? a1Mp : a2Mp;
+            match.AddGoalByMatchPlayer(scorerMp.Id, assistMatchPlayerId: null, timeSeconds: i);
         }
 
         for (int i = 0; i < 8; i++)
         {
-            var scorer = (i % 2 == 0) ? b1 : b2;
-            match.AddGoal(scorer.Id, assistPlayerId: null, timeSeconds: 100 + i);
+            var scorerMp = (i % 2 == 0) ? b1Mp : b2Mp;
+            match.AddGoalByMatchPlayer(scorerMp.Id, assistMatchPlayerId: null, timeSeconds: 100 + i);
         }
 
         Assert.Equal(17, match.Goals.Count);

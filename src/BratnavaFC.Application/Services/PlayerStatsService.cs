@@ -188,11 +188,6 @@ public sealed class PlayerStatsService : IPlayerStatsService
         return _context.Matches
             .AsNoTracking()
             .Where(m => m.Status == MatchStatus.Finalized)
-            .Where(m =>
-                m.TeamAPlayers.Any(mp => playerIds.Contains(mp.PlayerId)) ||
-                m.TeamBPlayers.Any(mp => playerIds.Contains(mp.PlayerId)))
-            .Include(m => m.TeamAPlayers)
-            .Include(m => m.TeamBPlayers)
             .Include(m => m.Players)
             .ToListAsync(cancellationToken);
     }

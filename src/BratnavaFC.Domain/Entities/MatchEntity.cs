@@ -96,7 +96,6 @@ public class MatchEntity : BaseEntity
         Status = MatchStatus.Started;
     }
 
-
     public void End()
     {
         EnsureStatus(MatchStatus.Started, "A partida so pode ser encerrada se estiver Iniciada.");
@@ -220,7 +219,7 @@ public class MatchEntity : BaseEntity
             throw new InvalidOperationException("Player nao pertence ao mesmo Group da partida.");
 
         if (Players.Any(p => p.PlayerId == playerEntity.Id))
-            return;  
+            return;
 
         matchPlayer.AssignToMatch(this);
         matchPlayer.AssignGroup(GroupId);
@@ -250,9 +249,7 @@ public class MatchEntity : BaseEntity
         return mp;
     }
 
-    public void AssignTeams(
-    IReadOnlyCollection<Guid> teamAPlayerIds,
-    IReadOnlyCollection<Guid> teamBPlayerIds)
+    public void AssignTeams(IReadOnlyCollection<Guid> teamAPlayerIds, IReadOnlyCollection<Guid> teamBPlayerIds)
     {
         EnsureStatus(MatchStatus.Created, "So e possivel atribuir times quando a partida esta Criada.");
 
@@ -325,30 +322,35 @@ public class MatchEntity : BaseEntity
         mpB.SetTeam(teamA);
     }
 
-    public void AddGoal(Guid scorerPlayerId, Guid? assistPlayerId, int? timeSeconds)
+    public void AddGoalByMatchPlayer(Guid scorerMatchPlayerId, Guid? assistMatchPlayerId, int? timeSeconds)
     {
         if (Status != MatchStatus.Started && Status != MatchStatus.Ended)
             throw new InvalidOperationException("So e possivel registrar gols quando a partida esta Iniciada ou Encerrada.");
 
-        if (scorerPlayerId == Guid.Empty)
-            throw new InvalidOperationException("PlayerId do gol e obrigatorio.");
+        if (scorerMatchPlayerId == Guid.Empty)
+            throw new InvalidOperationException("MatchPlayerId do gol e obrigatorio.");
 
-        var scorerMp = Players.FirstOrDefault(p => p.PlayerId == scorerPlayerId);
+        if (timeSeconds.HasValue && timeSeconds.Value < 0)
+            throw new InvalidOperationException("Tempo do gol nao pode ser negativo.");
+
+        var scorerMp = Players.FirstOrDefault(p => p.Id == scorerMatchPlayerId);
         if (scorerMp is null)
             throw new InvalidOperationException("O jogador do gol nao pertence a esta partida.");
 
         if (scorerMp.Team == 0)
             throw new InvalidOperationException("Nao e possivel registrar gol de jogador nao atribuido a um time.");
 
-        if (assistPlayerId.HasValue)
-        {
-            if (assistPlayerId.Value == Guid.Empty)
-                throw new InvalidOperationException("AssistPlayerId invalido.");
+        MatchPlayerEntity? assistMp = null;
 
-            if (assistPlayerId.Value == scorerPlayerId)
+        if (assistMatchPlayerId.HasValue)
+        {
+            if (assistMatchPlayerId.Value == Guid.Empty)
+                throw new InvalidOperationException("AssistMatchPlayerId invalido.");
+
+            if (assistMatchPlayerId.Value == scorerMatchPlayerId)
                 throw new InvalidOperationException("Assistente nao pode ser o mesmo jogador do gol.");
 
-            var assistMp = Players.FirstOrDefault(p => p.PlayerId == assistPlayerId.Value);
+            assistMp = Players.FirstOrDefault(p => p.Id == assistMatchPlayerId.Value);
             if (assistMp is null)
                 throw new InvalidOperationException("O jogador da assistencia nao pertence a esta partida.");
 
@@ -359,7 +361,13 @@ public class MatchEntity : BaseEntity
                 throw new InvalidOperationException("A assistencia so pode ser de um jogador do mesmo time do autor do gol.");
         }
 
-        var goal = new GoalEntity(Id, GroupId, scorerPlayerId, assistPlayerId, timeSeconds);
+        var goal = new GoalEntity(
+            matchId: Id,
+            groupId: GroupId,
+            scorerMatchPlayerId: scorerMp.Id,
+            assistMatchPlayerId: assistMp?.Id,
+            timeSeconds: timeSeconds);
+
         Goals.Add(goal);
 
         RecalculateScoreFromGoals();
@@ -383,11 +391,12 @@ public class MatchEntity : BaseEntity
         var countA = 0;
         var countB = 0;
 
-        var teamByPlayerId = Players.ToDictionary(p => p.PlayerId, p => p.Team);
+        var teamByMatchPlayerId = Players.ToDictionary(p => p.Id, p => p.Team);
 
         foreach (var g in Goals)
         {
-            if (!teamByPlayerId.TryGetValue(g.ScorerPlayerId, out var team)) continue;
+            if (!teamByMatchPlayerId.TryGetValue(g.ScorerMatchPlayerId, out var team)) continue;
+
             if (team == 1) countA++;
             else if (team == 2) countB++;
         }

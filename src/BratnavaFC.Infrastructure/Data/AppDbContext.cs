@@ -64,6 +64,12 @@ public class AppDbContext : DbContext
                 .HasDefaultValue(MatchStatus.Created)
                 .IsRequired();
 
+            builder.HasMany(x => x.Goals)
+                .WithOne(x => x.Match)
+                .HasForeignKey(x => x.MatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+
             builder.HasIndex(x => new { x.GroupId, x.PlayedAt });
         });
 
@@ -99,6 +105,16 @@ public class AppDbContext : DbContext
             builder.HasMany(x => x.ReceivedVotes)
                 .WithOne(x => x.VotedFor)
                 .HasForeignKey(x => x.VotedForId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasMany(x => x.GoalsScored)
+                .WithOne(g => g.ScorerMatchPlayer)
+                .HasForeignKey(g => g.ScorerMatchPlayerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasMany(x => x.GoalsAssisted)
+                .WithOne(g => g.AssistMatchPlayer)
+                .HasForeignKey(g => g.AssistMatchPlayerId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             builder.HasIndex(x => new { x.MatchId, x.PlayerId })
@@ -282,8 +298,8 @@ public class AppDbContext : DbContext
             builder.Property(x => x.MatchId).IsRequired();
             builder.Property(x => x.GroupId).IsRequired();
 
-            builder.Property(x => x.ScorerPlayerId).IsRequired();
-            builder.Property(x => x.AssistPlayerId).IsRequired(false);
+            builder.Property(x => x.ScorerMatchPlayerId).IsRequired();
+            builder.Property(x => x.AssistMatchPlayerId).IsRequired(false);
 
             builder.Property(x => x.TimeSeconds).IsRequired(false);
 
@@ -297,18 +313,18 @@ public class AppDbContext : DbContext
                 .HasForeignKey(x => x.GroupId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            builder.HasOne(x => x.ScorerPlayer)
-                .WithMany()
-                .HasForeignKey(x => x.ScorerPlayerId)
+            builder.HasOne(x => x.ScorerMatchPlayer)
+                .WithMany(mp => mp.GoalsScored)
+                .HasForeignKey(x => x.ScorerMatchPlayerId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            builder.HasOne(x => x.AssistPlayer)
-                .WithMany()
-                .HasForeignKey(x => x.AssistPlayerId)
+            builder.HasOne(x => x.AssistMatchPlayer)
+                .WithMany(mp => mp.GoalsAssisted)
+                .HasForeignKey(x => x.AssistMatchPlayerId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            builder.HasIndex(x => new { x.MatchId, x.ScorerPlayerId });
-            builder.HasIndex(x => new { x.MatchId, x.AssistPlayerId });
+            builder.HasIndex(x => new { x.MatchId, x.ScorerMatchPlayerId });
+            builder.HasIndex(x => new { x.MatchId, x.AssistMatchPlayerId });
         });
     }
 

@@ -41,18 +41,70 @@ public sealed class MatchService : IMatchService
             .FirstOrDefaultAsync(ct);
     }
 
+    public async Task<List<GoalDto>> GetGoalsAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        await EnsureGroupExistsAsync(groupId, ct);
+        EnsureMatchId(matchId);
+
+        var match = await _context.Matches
+            .AsNoTracking()
+            .Where(m => m.GroupId == groupId && m.Id == matchId)
+            .Include(m => m.Goals)
+            .Include(m => m.Players).ThenInclude(mp => mp.Player)
+            .FirstOrDefaultAsync(ct)
+            ?? throw new InvalidOperationException("Partida nao encontrada.");
+
+        var mpById = match.Players.ToDictionary(x => x.Id, x => x);
+
+        var goals = match.Goals
+            .OrderBy(g => g.TimeSeconds ?? int.MaxValue)
+            .ThenBy(g => g.CreateDate)
+            .Select(g =>
+            {
+                mpById.TryGetValue(g.ScorerMatchPlayerId, out var scorerMp);
+                MatchPlayerEntity? assistMp = null;
+
+                if (g.AssistMatchPlayerId.HasValue)
+                    mpById.TryGetValue(g.AssistMatchPlayerId.Value, out assistMp);
+
+                return new GoalDto
+                {
+                    GoalId = g.Id,
+
+                    ScorerMatchPlayerId = g.ScorerMatchPlayerId,
+                    ScorerPlayerId = scorerMp?.PlayerId ?? Guid.Empty,
+                    ScorerName = scorerMp?.Player?.Name ?? string.Empty,
+
+                    AssistMatchPlayerId = g.AssistMatchPlayerId,
+                    AssistPlayerId = assistMp?.PlayerId,
+                    AssistName = assistMp?.Player?.Name,
+
+                    TimeSeconds = g.TimeSeconds,
+                    Time = MatchTimeParser.FormatFromSeconds(g.TimeSeconds)
+                };
+            })
+            .ToList();
+
+        return goals;
+    }
+
+
     public async Task<MatchDetailsDto?> GetDetailsAsync(Guid matchId, CancellationToken ct)
     {
         var match = await _context.Matches
-            .AsNoTracking()
+            .AsNoTrackingWithIdentityResolution()
             .Include(m => m.Group)
             .Include(m => m.TeamAColor)
             .Include(m => m.TeamBColor)
             .Include(m => m.Goals)
             .Include(m => m.Players).ThenInclude(mp => mp.Player)
+            .Include(m => m.Players).ThenInclude(mp => mp.GoalsScored)
+            .Include(m => m.Players).ThenInclude(mp => mp.GoalsAssisted)
             .Include(m => m.Votes).ThenInclude(v => v.Voter)
             .Include(m => m.Votes).ThenInclude(v => v.VotedFor)
             .FirstOrDefaultAsync(m => m.Id == matchId, ct);
+
+
 
         if (match is null) return null;
 
@@ -72,18 +124,35 @@ public sealed class MatchService : IMatchService
             p => p.Player?.Name ?? string.Empty
         );
 
+        var mpById = match.Players.ToDictionary(p => p.Id);
+        var nameByMatchPlayerId = match.Players.ToDictionary(p => p.Id, p => p.Player?.Name ?? string.Empty);
+
         var goals = match.Goals
             .OrderBy(g => g.TimeSeconds ?? int.MaxValue)
             .ThenBy(g => g.CreateDate)
-            .Select(g => new GoalDto
+            .Select(g =>
             {
-                GoalId = g.Id,
-                ScorerPlayerId = g.ScorerPlayerId,
-                ScorerName = playerNameByPlayerId.TryGetValue(g.ScorerPlayerId, out var sn) ? sn : string.Empty,
-                AssistPlayerId = g.AssistPlayerId,
-                AssistName = g.AssistPlayerId.HasValue && playerNameByPlayerId.TryGetValue(g.AssistPlayerId.Value, out var an) ? an : null,
-                TimeSeconds = g.TimeSeconds,
-                Time = MatchTimeParser.FormatFromSeconds(g.TimeSeconds)
+                mpById.TryGetValue(g.ScorerMatchPlayerId, out var scorerMp);
+                MatchPlayerEntity? assistMp = null;
+                if (g.AssistMatchPlayerId.HasValue)
+                    mpById.TryGetValue(g.AssistMatchPlayerId.Value, out assistMp);
+
+                return new GoalDto
+                {
+                    GoalId = g.Id,
+
+                    ScorerMatchPlayerId = g.ScorerMatchPlayerId,
+                    AssistMatchPlayerId = g.AssistMatchPlayerId,
+
+                    ScorerPlayerId = scorerMp?.PlayerId ?? Guid.Empty,
+                    ScorerName = scorerMp?.Player?.Name ?? string.Empty,
+
+                    AssistPlayerId = assistMp?.PlayerId,
+                    AssistName = assistMp?.Player?.Name,
+
+                    TimeSeconds = g.TimeSeconds,
+                    Time = MatchTimeParser.FormatFromSeconds(g.TimeSeconds)
+                };
             })
             .ToList();
 
@@ -480,21 +549,22 @@ public sealed class MatchService : IMatchService
             .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct)
             ?? throw new InvalidOperationException("Partida nao encontrada.");
 
-        var beforeIds = match.Goals.Select(g => g.Id).ToHashSet();
+        var scorerMp = match.Players.FirstOrDefault(p => p.PlayerId == dto.ScorerPlayerId)
+            ?? throw new InvalidOperationException("O jogador do gol nao pertence a esta partida.");
+
+        MatchPlayerEntity? assistMp = null;
+        if (dto.AssistPlayerId.HasValue)
+        {
+            assistMp = match.Players.FirstOrDefault(p => p.PlayerId == dto.AssistPlayerId.Value)
+                ?? throw new InvalidOperationException("O jogador da assistencia nao pertence a esta partida.");
+        }
 
         var seconds = MatchTimeParser.ParseToSeconds(dto.Time);
 
-        match.AddGoal(dto.ScorerPlayerId, dto.AssistPlayerId, seconds);
-
-        var createdGoal = match.Goals.FirstOrDefault(g => !beforeIds.Contains(g.Id));
-        if (createdGoal is null)
-            throw new InvalidOperationException("Falha ao identificar o gol criado.");
-
-        var entry = _context.Entry(createdGoal);
-        if (entry.State == EntityState.Detached)
-            _context.Add(createdGoal);
-        else
-            entry.State = EntityState.Added;
+        match.AddGoalByMatchPlayer(
+            scorerMatchPlayerId: scorerMp.Id,
+            assistMatchPlayerId: assistMp?.Id,
+            timeSeconds: seconds);
 
         await _context.SaveChangesAsync(ct);
     }
@@ -524,6 +594,66 @@ public sealed class MatchService : IMatchService
         await _context.SaveChangesAsync(ct);
     }
 
+    public async Task AddGoalsBulkAsync(Guid groupId, Guid matchId, AddGoalsBulkRequestDto dto, CancellationToken ct)
+    {
+        await EnsureGroupExistsAsync(groupId, ct);
+        EnsureMatchId(matchId);
+
+        if (dto is null) throw new ArgumentNullException(nameof(dto));
+
+        var goals = dto.Goals ?? new List<AddGoalRequestDto>();
+
+        if (goals.Count == 0)
+            throw new InvalidOperationException("A lista de gols nao pode ser vazia.");
+
+        var match = await _context.Matches
+            .Include(m => m.Players)
+                .ThenInclude(mp => mp.Player)
+            .Include(m => m.Goals)
+            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct)
+            ?? throw new InvalidOperationException("Partida nao encontrada.");
+
+        var mpByPlayerId = match.Players.ToDictionary(p => p.PlayerId, p => p);
+
+        await using var tx = await _context.Database.BeginTransactionAsync(ct);
+
+        try
+        {
+            foreach (var item in goals)
+            {
+                if (item.ScorerPlayerId == Guid.Empty)
+                    throw new InvalidOperationException("ScorerPlayerId e obrigatorio.");
+
+                if (!mpByPlayerId.TryGetValue(item.ScorerPlayerId, out var scorerMp))
+                    throw new InvalidOperationException("O jogador do gol nao pertence a esta partida.");
+
+                MatchPlayerEntity? assistMp = null;
+                if (item.AssistPlayerId.HasValue)
+                {
+                    if (item.AssistPlayerId.Value == Guid.Empty)
+                        throw new InvalidOperationException("AssistPlayerId invalido.");
+
+                    if (!mpByPlayerId.TryGetValue(item.AssistPlayerId.Value, out assistMp))
+                        throw new InvalidOperationException("O jogador da assistencia nao pertence a esta partida.");
+                }
+
+                var seconds = MatchTimeParser.ParseToSeconds(item.Time);
+
+                match.AddGoalByMatchPlayer(
+                    scorerMatchPlayerId: scorerMp.Id,
+                    assistMatchPlayerId: assistMp?.Id,
+                    timeSeconds: seconds);
+            }
+
+            await _context.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
 
     private static PlayerInMatchDto ToPlayerDto(MatchPlayerEntity mp) => new()
     {

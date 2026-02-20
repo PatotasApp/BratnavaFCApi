@@ -31,6 +31,9 @@ public class MatchPlayerEntity : BaseEntity
 
     public InviteResponse InviteResponse { get; set; } = InviteResponse.None;
 
+    public List<GoalEntity> GoalsScored { get; private set; } = new();
+    public List<GoalEntity> GoalsAssisted { get; private set; } = new();
+
     public void SetMvp() => IsMvp = true;
     public void RevokeMvp() => IsMvp = null;
 

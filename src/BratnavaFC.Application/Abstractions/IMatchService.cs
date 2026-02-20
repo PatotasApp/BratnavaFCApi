@@ -40,4 +40,6 @@ public interface IMatchService
 
     Task AddGoalAsync(Guid groupId, Guid matchId, AddGoalRequestDto dto, CancellationToken ct);
     Task RemoveGoalAsync(Guid groupId, Guid matchId, Guid goalId, CancellationToken ct);
+    Task AddGoalsBulkAsync(Guid groupId, Guid matchId, AddGoalsBulkRequestDto dto, CancellationToken ct);
+    Task<List<GoalDto>> GetGoalsAsync(Guid groupId, Guid matchId, CancellationToken ct);
 }

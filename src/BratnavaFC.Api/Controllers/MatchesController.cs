@@ -234,6 +234,13 @@ public class MatchesController : ControllerBase
         return Ok(details);
     }
 
+    [HttpGet("group/{groupId:guid}/{matchId:guid}/goals")]
+    public async Task<IActionResult> GetGoals(Guid groupId, Guid matchId, CancellationToken cancellationToken)
+    {
+        var goals = await _service.GetGoalsAsync(groupId, matchId, cancellationToken);
+        return Ok(goals);
+    }
+
     [Authorize(Roles = "Admin,GodMode")]
     [HttpPut("group/{groupId:guid}/{matchId:guid}/teams")]
     public async Task<IActionResult> AssignTeams(
@@ -301,6 +308,25 @@ public class MatchesController : ControllerBase
         try
         {
             await _service.RemoveGoalAsync(groupId, matchId, goalId, ct);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [Authorize(Roles = "Admin,GodMode")]
+    [HttpPost("group/{groupId:guid}/{matchId:guid}/goals/bulk")]
+    public async Task<IActionResult> AddGoalsBulk(
+    Guid groupId,
+    Guid matchId,
+    [FromBody] AddGoalsBulkRequestDto dto,
+    CancellationToken ct)
+    {
+        try
+        {
+            await _service.AddGoalsBulkAsync(groupId, matchId, dto, ct);
             return NoContent();
         }
         catch (InvalidOperationException ex)

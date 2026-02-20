@@ -232,41 +232,29 @@ public sealed class MatchServiceTests
         return (match, players);
     }
 
-    // ============================================================
-    // ✅ TESTES: Goals (service) — agora sem concurrency
-    // ============================================================
-
     [Fact]
-    public async Task AddGoalAsync_WhenValid_ShouldPersistGoal_AndUpdateScore()
+    public void AddGoal_WhenValidWithAssistSameTeam_ShouldAddGoal_AndRecalculateScore()
     {
-        await using var db = DbContextFactory.Create(nameof(AddGoalAsync_WhenValid_ShouldPersistGoal_AndUpdateScore));
-        var repo = BuildRepoMock(db);
-        var sut = CreateSut(db, repo);
+        var (match, mpA1, mpA2, _) = CreateMatchWithThreePlayers_TwoInA_OneInB();
 
-        var group = await SeedGroupAsync(db);
-        var players = await SeedPlayersAsync(db, group.Id, 2);
-        var match = await SeedMatchWithPlayersAsync(db, group.Id, players, MatchStatus.Started, acceptedInvites: true, teamsDefined: true);
+        match.AddGoalByMatchPlayer(
+            scorerMatchPlayerId: mpA1.Id,
+            assistMatchPlayerId: mpA2.Id,
+            timeSeconds: 12 * 60 + 34);
 
-        // ✅ deixa o SUT carregar do banco com tracking limpo
-        db.ChangeTracker.Clear();
+        Assert.Single(match.Goals);
 
-        var dto = new AddGoalRequestDto(
-            ScorerPlayerId: players[0].Id,
-            AssistPlayerId: null,
-            Time: "12:34");
+        var g = match.Goals[0];
 
-        await sut.AddGoalAsync(group.Id, match.Id, dto, CancellationToken.None);
+        Assert.Equal(mpA1.Id, g.ScorerMatchPlayerId);
+        Assert.Equal(mpA2.Id, g.AssistMatchPlayerId);
+        Assert.Equal(12 * 60 + 34, g.TimeSeconds);
 
-        var reloaded = await db.Matches
-            .AsNoTracking()
-            .Include(m => m.Goals)
-            .FirstAsync(m => m.Id == match.Id);
-
-        reloaded.Goals.Should().HaveCount(1);
-        reloaded.TeamAGoals.Should().Be(1);
-        reloaded.TeamBGoals.Should().Be(0);
-        reloaded.Goals[0].TimeSeconds.Should().Be(12 * 60 + 34);
+        Assert.Equal(1, match.TeamAGoals);
+        Assert.Equal(0, match.TeamBGoals);
     }
+
+
 
     [Fact]
     public async Task RemoveGoalAsync_WhenExists_ShouldRemove_AndUpdateScore()
@@ -284,13 +272,16 @@ public sealed class MatchServiceTests
             .Include(m => m.Players)
             .FirstAsync(m => m.Id == match.Id);
 
-        tracked.AddGoal(players[0].Id, null, 10);
-        tracked.AddGoal(players[0].Id, null, 20);
+        var scorerMpId = tracked.Players
+            .First(mp => mp.PlayerId == players[0].Id)
+            .Id;
+
+        tracked.AddGoalByMatchPlayer(scorerMpId, null, 10);
+        tracked.AddGoalByMatchPlayer(scorerMpId, null, 20);
         await db.SaveChangesAsync();
 
         var goalId = tracked.Goals[0].Id;
 
-        // ✅ limpa para o SUT ler e operar corretamente
         db.ChangeTracker.Clear();
 
         await sut.RemoveGoalAsync(group.Id, match.Id, goalId, CancellationToken.None);
@@ -341,4 +332,43 @@ public sealed class MatchServiceTests
         reloaded.TeamAGoals.Should().Be(9);
         reloaded.TeamBGoals.Should().Be(8);
     }
+
+    private static (
+    MatchEntity match,
+    MatchPlayerEntity mpA1,
+    MatchPlayerEntity mpA2,
+    MatchPlayerEntity mpB1)
+CreateMatchWithThreePlayers_TwoInA_OneInB(
+    bool start = true,
+    bool end = false)
+    {
+        var groupId = Guid.NewGuid();
+        var match = new MatchEntity(groupId, DateTime.UtcNow, "Boca Jrs");
+
+        var playerA1 = new PlayerEntity("A1", Guid.NewGuid(), groupId, 0, false, Status.Active);
+        var playerA2 = new PlayerEntity("A2", Guid.NewGuid(), groupId, 0, false, Status.Active);
+        var playerB1 = new PlayerEntity("B1", Guid.NewGuid(), groupId, 0, false, Status.Active);
+
+        var mpA1 = new MatchPlayerEntity(playerA1.Id);
+        var mpA2 = new MatchPlayerEntity(playerA2.Id);
+        var mpB1 = new MatchPlayerEntity(playerB1.Id);
+
+        match.AddPlayer(mpA1, playerA1);
+        match.AddPlayer(mpA2, playerA2);
+        match.AddPlayer(mpB1, playerB1);
+
+        mpA1.InviteResponse = InviteResponse.Accepted;
+        mpA2.InviteResponse = InviteResponse.Accepted;
+        mpB1.InviteResponse = InviteResponse.Accepted;
+
+        match.AssignTeams(
+            teamAPlayerIds: new[] { playerA1.Id, playerA2.Id },
+            teamBPlayerIds: new[] { playerB1.Id });
+
+        if (start) match.Start();
+        if (end) match.End();
+
+        return (match, mpA1, mpA2, mpB1);
+    }
+
 }
