@@ -29,7 +29,6 @@ public class GroupEntity : InactivatableEntity
             throw new InvalidOperationException("Player already exists in the group.");
 
         _players.Add(player);
-        Touch();
     }
 
     public void Rename(string name)
@@ -38,13 +37,11 @@ public class GroupEntity : InactivatableEntity
             throw new InvalidOperationException("Group name is required.");
 
         Name = name.Trim();
-        Touch();
     }
 
     public void Reschedule(DateTimeOffset? scheduleMatchDate)
     {
         ScheduleMatchDate = scheduleMatchDate;
-        Touch();
     }
 
     public void SetAdmins(IEnumerable<Guid> userAdminIds)
@@ -61,7 +58,5 @@ public class GroupEntity : InactivatableEntity
                 UserId = adminId
             });
         }
-
-        Touch();
     }
 }

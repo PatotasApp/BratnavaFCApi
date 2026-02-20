@@ -2,7 +2,9 @@
 using BratnavaFC.Domain.Dtos.Players;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
+using BratnavaFC.Infrastructure.Repositories;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -106,7 +108,7 @@ public class PlayerServiceTests
         var act = async () => await sut.CreateAsync(req, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<ApplicationException>()
+        await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("Player already exists in the group.");
     }
 
@@ -124,16 +126,9 @@ public class PlayerServiceTests
         await db.SaveChangesAsync();
 
         var logger = new Mock<ILogger<PlayerService>>();
-        var repo = new Mock<IRepositoryBase<PlayerEntity>>();
 
-        PlayerEntity? captured = null;
-        repo.Setup(r => r.Add(It.IsAny<PlayerEntity>()))
-            .Callback<PlayerEntity>(p => captured = p);
-
-        repo.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(1);
-
-        var sut = new PlayerService(repo.Object, logger.Object, db);
+        var repo = new RepositoryBase<PlayerEntity>(db);  
+        var sut = new PlayerService(repo, logger.Object, db);
 
         var req = new CreatePlayerDto
         (
@@ -146,18 +141,17 @@ public class PlayerServiceTests
         );
 
         // Act
-        var id = await sut.CreateAsync(req, CancellationToken.None);
+        var player = await sut.CreateAsync(req, CancellationToken.None);
 
         // Assert
-        id.Should().NotBe(Guid.Empty);
+        player.Should().NotBeNull();
+        player.Id.Should().NotBe(Guid.Empty);
 
-        captured.Should().NotBeNull();
-        captured!.Name.Should().Be("Caio");
-        captured.UserId.Should().Be(user.Id);
-        captured.GroupId.Should().Be(group.Id);
-
-        repo.Verify(r => r.Add(It.IsAny<PlayerEntity>()), Times.Once);
-        repo.Verify(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        var created = await db.Players.IgnoreQueryFilters().FirstOrDefaultAsync(p => p.Id == player.Id);
+        created.Should().NotBeNull();
+        created!.Name.Should().Be("Caio");
+        created.UserId.Should().Be(user.Id);
+        created.GroupId.Should().Be(group.Id);
     }
 
     [Fact]

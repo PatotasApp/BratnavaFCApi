@@ -25,22 +25,30 @@ public class PlayerService : IPlayerService
     {
         try
         {
-            var group = await _context.Groups.FirstOrDefaultAsync(x => x.Id == request.GroupId, cancellationToken);
-            if (group == null) throw new ApplicationException("Group does not exist.");
+            var groupExists = await _context.Groups
+                .AnyAsync(x => x.Id == request.GroupId, cancellationToken);
 
-            var userExists = await _context.Users.AsNoTracking().AnyAsync(x => x.Id == request.UserId, cancellationToken);
+            if (!groupExists) throw new ApplicationException("Group does not exist.");
+
+            var userExists = await _context.Users
+                .AnyAsync(x => x.Id == request.UserId, cancellationToken);
+
             if (!userExists) throw new ApplicationException("User does not exist.");
 
+            var alreadyExists = await _context.Players
+                .AnyAsync(p => p.GroupId == request.GroupId && p.UserId == request.UserId, cancellationToken);
+
+            if (alreadyExists) throw new InvalidOperationException("Player already exists in the group.");
+
             var player = new PlayerEntity(
-                request.Name,
+                request.Name,  
                 request.UserId,
                 request.GroupId,
                 request.SkillPoints,
                 request.IsGoalkeeper,
                 request.Status);
 
-            group.AddPlayer(player);
-
+            _context.Players.Add(player);           
             await _context.SaveChangesAsync(cancellationToken);
 
             return new PlayerDto(

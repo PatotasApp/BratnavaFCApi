@@ -51,7 +51,6 @@ public sealed class UserEntity : InactivatableEntity
             throw new InvalidOperationException("UserName is required.");
 
         UserName = userName.Trim();
-        Touch();
     }
 
     public void SetEmail(string email)
@@ -60,7 +59,6 @@ public sealed class UserEntity : InactivatableEntity
             throw new InvalidOperationException("Email is required.");
 
         Email = email.Trim();
-        Touch();
     }
 
     public void SetPasswordHash(string passwordHashed)
@@ -69,7 +67,6 @@ public sealed class UserEntity : InactivatableEntity
             throw new InvalidOperationException("Password hash is required.");
 
         Password = passwordHashed;
-        Touch();
     }
 
     public void UpdateProfile(string firstName, string lastName, DateTimeOffset? birthDate, string? phone)
@@ -84,12 +81,10 @@ public sealed class UserEntity : InactivatableEntity
         LastName = lastName.Trim();
         BirthDate = birthDate;
         Phone = string.IsNullOrWhiteSpace(phone) ? null : phone.Trim();
-        Touch();
     }
 
     public void SetRole(UserRole role)
     {
         Role = role;
-        Touch();
     }
 }

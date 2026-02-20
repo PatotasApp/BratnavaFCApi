@@ -71,7 +71,7 @@ public class AuthenticationServiceTests
         var sut = new AuthenticationService(db, logger.Object, hasher, config);
 
         var request = new LoginDto(
-            Username: "mail@test.com",
+            Username: "u",
             Password: "wrong"
         );
 
@@ -102,7 +102,7 @@ public class AuthenticationServiceTests
         var sut = new AuthenticationService(db, logger.Object, hasher, config);
 
         var request = new LoginDto(
-            Username: "mail@test.com",
+            Username: "u",
             Password: "pw"
         );
 

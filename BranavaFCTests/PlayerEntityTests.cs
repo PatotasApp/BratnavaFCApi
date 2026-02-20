@@ -21,7 +21,6 @@ public class PlayerEntityTests
         Assert.Equal(groupId, p.GroupId);
         Assert.Equal(12.5m, p.SkillPoints);
         Assert.True(p.IsGoalkeeper);
-        Assert.NotNull(p.UpdateDate);
     }
 
     [Theory]

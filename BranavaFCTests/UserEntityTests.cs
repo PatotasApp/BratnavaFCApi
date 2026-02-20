@@ -31,7 +31,6 @@ public class UserEntityTests
         Assert.Equal("11 99999-9999", u.Phone);
         Assert.Equal(birth, u.BirthDate);
         Assert.Equal(UserRole.Admin, u.Role);
-        Assert.NotNull(u.UpdateDate);
     }
 
     [Theory]
@@ -121,6 +120,5 @@ public class UserEntityTests
 
         // Assert
         Assert.Equal(UserRole.GodMode, u.Role);
-        Assert.NotNull(u.UpdateDate);
     }
 }

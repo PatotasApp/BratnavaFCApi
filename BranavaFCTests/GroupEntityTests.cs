@@ -17,7 +17,6 @@ public class GroupEntityTests
         // Assert
         Assert.Equal("Bratnava FC", group.Name);
         Assert.Equal(schedule, group.ScheduleMatchDate);
-        Assert.NotNull(group.UpdateDate);
     }
 
     [Theory]
@@ -46,8 +45,6 @@ public class GroupEntityTests
 
         // Assert
         Assert.Equal("New Name", group.Name);
-        Assert.NotNull(group.UpdateDate);
-        Assert.True(group.UpdateDate >= before);
     }
 
     [Fact]
@@ -63,8 +60,6 @@ public class GroupEntityTests
 
         // Assert
         Assert.Equal(schedule, group.ScheduleMatchDate);
-        Assert.NotNull(group.UpdateDate);
-        Assert.True(group.UpdateDate >= before);
     }
 
     [Fact]
@@ -97,7 +92,6 @@ public class GroupEntityTests
 
         Assert.Contains(group.Admins, x => x.UserId == a);
         Assert.Contains(group.Admins, x => x.UserId == b);
-        Assert.NotNull(group.UpdateDate);
     }
 
     [Fact]

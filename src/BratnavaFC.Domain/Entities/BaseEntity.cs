@@ -8,9 +8,4 @@ public abstract class BaseEntity
 
     // EF
     protected BaseEntity() { }
-
-    public void Touch()
-    {
-        UpdateDate = DateTime.UtcNow;
-    }
 }

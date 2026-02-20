@@ -31,7 +31,6 @@ public class PlayerEntity : InactivatableEntity
             throw new InvalidOperationException("Player name is required.");
 
         Name = name.Trim();
-        Touch();
     }
 
     public void SetUser(Guid userId)
@@ -40,7 +39,6 @@ public class PlayerEntity : InactivatableEntity
             throw new InvalidOperationException("UserId is required.");
 
         UserId = userId;
-        Touch();
     }
 
     public void SetGroup(Guid groupId)
@@ -49,7 +47,6 @@ public class PlayerEntity : InactivatableEntity
             throw new InvalidOperationException("GroupId is required.");
 
         GroupId = groupId;
-        Touch();
     }
 
     public void SetSkillPoints(decimal skillPoints)
@@ -58,12 +55,10 @@ public class PlayerEntity : InactivatableEntity
             throw new InvalidOperationException("SkillPoints cannot be negative.");
 
         SkillPoints = skillPoints;
-        Touch();
     }
 
     public void SetGoalkeeper(bool isGoalkeeper)
     {
         IsGoalkeeper = isGoalkeeper;
-        Touch();
     }
 }
