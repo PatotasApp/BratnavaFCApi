@@ -19,7 +19,11 @@ builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "BratnavaFC API", Version = "v1" });
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "BratnavaFC API",
+        Version = "v1"
+    });
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
@@ -47,9 +51,33 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 
+// =====================
+// 🔥 CORS LIBERADO TOTAL
+// =====================
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy
+            .AllowAnyOrigin()
+            .AllowAnyMethod()
+            .AllowAnyHeader();
+    });
+});
+
+
+// =====================
+// DATABASE
+// =====================
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(connectionString));
+
+
+// =====================
+// DEPENDENCY INJECTION
+// =====================
 builder.Services.AddScoped(typeof(IRepositoryBase<>), typeof(RepositoryBase<>));
 builder.Services.AddScoped<IMatchService, MatchService>();
 builder.Services.AddScoped<IPlayerStatsService, PlayerStatsService>();
@@ -57,10 +85,14 @@ builder.Services.AddScoped<ITeamColorService, TeamColorService>();
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IPlayerService, PlayerService>();
-builder.Services.AddScoped<PasswordHasher<UserEntity>>();
 builder.Services.AddScoped<IGroupService, GroupService>();
 builder.Services.AddScoped<TeamGenerationService>();
+builder.Services.AddScoped<PasswordHasher<UserEntity>>();
 
+
+// =====================
+// JWT
+// =====================
 var jwtSecret = builder.Configuration["Jwt:SecretKey"]
     ?? throw new InvalidOperationException("Jwt:SecretKey nao configurado.");
 
@@ -87,8 +119,16 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
+
+// =====================
+// BUILD APP
+// =====================
 var app = builder.Build();
 
+
+// =====================
+// MIDDLEWARE PIPELINE
+// =====================
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
@@ -96,6 +136,9 @@ app.UseSwaggerUI(c =>
 });
 
 app.UseHttpsRedirection();
+
+// 🔥 CORS TEM QUE VIR ANTES DO AUTH
+app.UseCors("AllowAll");
 
 app.UseAuthentication();
 app.UseAuthorization();

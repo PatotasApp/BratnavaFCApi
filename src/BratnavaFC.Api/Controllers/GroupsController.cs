@@ -67,4 +67,13 @@ public class GroupsController : ControllerBase
         var response = await _groupService.GetByAdminIdAsync(adminId, cancellationToken);
         return Ok(response);
     }
+
+    [HttpPost("{groupId:guid}/admins")]
+    public async Task<IActionResult> AddAdminAsync(Guid groupId, [FromBody] AddAdminToGroupDto request, CancellationToken cancellationToken)
+    {
+        if (request == null) return BadRequest();
+
+        await _groupService.AddAdminToGroupAsync(groupId, request, cancellationToken);
+        return NoContent();
+    }
 }

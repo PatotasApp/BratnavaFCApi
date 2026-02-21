@@ -11,4 +11,5 @@ public interface IGroupService
     Task<List<GroupDto>> GetByAdminIdAsync(Guid adminId, CancellationToken cancellationToken);
     Task InactivateAsync(Guid groupId, CancellationToken cancellationToken);
     Task ReactivateAsync(Guid groupId, CancellationToken cancellationToken);
+    Task AddAdminToGroupAsync(Guid groupId, AddAdminToGroupDto request, CancellationToken cancellationToken);
 }

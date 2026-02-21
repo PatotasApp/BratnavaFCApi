@@ -173,4 +173,41 @@ public class GroupService : IGroupService
             ))
             .ToListAsync(cancellationToken);
     }
+
+    public async Task AddAdminToGroupAsync(Guid groupId, AddAdminToGroupDto request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var userExists = await _context.Users.AnyAsync(u => u.Id == request.UserId, cancellationToken);
+            if (!userExists)
+                throw new ApplicationException("User admin does not exists.");
+
+            var group = await _context.Groups
+                .Include(g => g.Admins)
+                .FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
+
+            if (group is null)
+                throw new ApplicationException("Group not found.");
+
+            var alreadyAdmin = group.Admins.Any(a => a.UserId == request.UserId);
+            if (alreadyAdmin)
+                return;
+
+            var newAdmins = group.Admins
+                .Select(a => a.UserId)
+                .Append(request.UserId)
+                .Distinct()
+                .ToArray();
+
+            group.SetAdmins(newAdmins);
+
+            _context.Groups.Update(group);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error trying to add admin to group. GroupId={GroupId} UserId={UserId}", groupId, request?.UserId);
+            throw;
+        }
+    }
 }
