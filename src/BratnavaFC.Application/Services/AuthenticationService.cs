@@ -126,12 +126,13 @@ public sealed class AuthenticationService : IAuthenticationService
                 new Claim(JwtRegisteredClaimNames.UniqueName, user.UserName.Trim().ToLower()),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email),
                 new Claim(JwtRegisteredClaimNames.Name, user.FirstName),
-                new Claim(ClaimTypes.Role, role)
+                new Claim("role", role)
             }),
             Expires = DateTime.UtcNow.AddSeconds(expiresSeconds),
             SigningCredentials = credentials,
             Issuer = issuer,
-            Audience = audience
+            Audience = audience,
+            
         };
 
         var handler = new JsonWebTokenHandler();

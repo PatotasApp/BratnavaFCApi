@@ -9,7 +9,7 @@ namespace BratnavaFC.Application.Abstractions;
 
 public interface IMatchService
 {
-    Task<IEnumerable<MatchEntity>> GetAllAsync(Guid groupId, CancellationToken cancellationToken = default);
+    Task<List<MatchDetailsDto>> GetAllAsync(Guid groupId, CancellationToken ct = default);
     Task<MatchEntity?> GetByIdAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken = default);
 
     Task<MatchEntity> Create(Guid groupId, MatchEntity match, CancellationToken cancellationToken);
@@ -42,4 +42,6 @@ public interface IMatchService
     Task RemoveGoalAsync(Guid groupId, Guid matchId, Guid goalId, CancellationToken ct);
     Task AddGoalsBulkAsync(Guid groupId, Guid matchId, AddGoalsBulkRequestDto dto, CancellationToken ct);
     Task<List<GoalDto>> GetGoalsAsync(Guid groupId, Guid matchId, CancellationToken ct);
+    Task GoToMatchMakingAsync(Guid groupId, Guid matchId, CancellationToken ct);
+    Task GoToPostGameAsync(Guid groupId, Guid matchId, CancellationToken ct);
 }

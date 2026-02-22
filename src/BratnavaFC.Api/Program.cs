@@ -11,6 +11,7 @@ using BratnavaFC.Application.TeamGeneration;
 using Microsoft.AspNetCore.Identity;
 using BratnavaFC.Domain.Entities;
 using Microsoft.OpenApi.Models;
+using System.IdentityModel.Tokens.Jwt;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -88,6 +89,7 @@ builder.Services.AddScoped<IPlayerService, PlayerService>();
 builder.Services.AddScoped<IGroupService, GroupService>();
 builder.Services.AddScoped<TeamGenerationService>();
 builder.Services.AddScoped<PasswordHasher<UserEntity>>();
+builder.Services.AddScoped<IGroupSettingsService, GroupSettingsService>();
 
 
 // =====================
@@ -99,10 +101,15 @@ var jwtSecret = builder.Configuration["Jwt:SecretKey"]
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "TeamManagement";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "account";
 
+JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
+
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        // 🔥 evita trocar "role" -> ClaimTypes.Role automaticamente
+        options.MapInboundClaims = false;
+
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -112,8 +119,9 @@ builder.Services
             ValidIssuer = jwtIssuer,
             ValidAudience = jwtAudience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
-            RoleClaimType = ClaimTypes.Role,
-            NameClaimType = ClaimTypes.Name
+
+            RoleClaimType = "role",
+            NameClaimType = "name"
         };
     });
 

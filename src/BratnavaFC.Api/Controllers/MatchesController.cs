@@ -23,7 +23,7 @@ public class MatchesController : ControllerBase
     public async Task<IActionResult> GetAll(Guid groupId, CancellationToken cancellationToken)
     {
         var matches = await _service.GetAllAsync(groupId, cancellationToken);
-        return Ok(matches.Select(ToDto));
+        return Ok(matches);
     }
 
     [HttpGet("group/{groupId:guid}/{matchId:guid}")]
@@ -222,15 +222,16 @@ public class MatchesController : ControllerBase
         }
     }
 
-    [Authorize(Roles = "Admin,GodMode")]
-    [HttpGet("{matchId:guid}/details")]
+    [HttpGet("group/{groupId:guid}/{matchId:guid}/details")]
     public async Task<ActionResult<MatchDetailsDto>> GetDetails(
-    [FromRoute] Guid matchId,
-    CancellationToken cancellationToken)
+        [FromRoute] Guid groupId,
+        [FromRoute] Guid matchId,
+        CancellationToken cancellationToken)
     {
+        // se quiser validar groupId, crie GetDetailsAsync(groupId, matchId)
         var details = await _service.GetDetailsAsync(matchId, cancellationToken);
         if (details is null) return NotFound();
-
+        if (details.GroupId != groupId) return NotFound();
         return Ok(details);
     }
 
@@ -308,6 +309,36 @@ public class MatchesController : ControllerBase
         try
         {
             await _service.RemoveGoalAsync(groupId, matchId, goalId, ct);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [Authorize(Roles = "Admin,GodMode")]
+    [HttpPost("group/{groupId:guid}/{matchId:guid}/matchmaking")]
+    public async Task<IActionResult> GoToMatchMaking(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        try
+        {
+            await _service.GoToMatchMakingAsync(groupId, matchId, ct);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [Authorize(Roles = "Admin,GodMode")]
+    [HttpPost("group/{groupId:guid}/{matchId:guid}/postgame")]
+    public async Task<IActionResult> GoToPostGame(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        try
+        {
+            await _service.GoToPostGameAsync(groupId, matchId, ct);
             return NoContent();
         }
         catch (InvalidOperationException ex)

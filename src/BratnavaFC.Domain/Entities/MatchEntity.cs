@@ -1,7 +1,6 @@
 ﻿using BratnavaFC.Domain.Enums;
 
 namespace BratnavaFC.Domain.Entities;
-
 public class MatchEntity : BaseEntity
 {
     private MatchEntity() { } // EF
@@ -13,6 +12,7 @@ public class MatchEntity : BaseEntity
         GroupId = groupId;
         PlayedAt = playedAt;
         PlaceName = placeName ?? throw new ArgumentNullException(nameof(placeName));
+
         Status = MatchStatus.Created;
     }
 
@@ -38,6 +38,29 @@ public class MatchEntity : BaseEntity
 
     public TeamColorEntity? TeamAColor { get; private set; }
     public TeamColorEntity? TeamBColor { get; private set; }
+
+    public void OpenAcceptation()
+    {
+        EnsureStatus(MatchStatus.Created, "So e possivel abrir acceptation quando a partida esta Created.");
+        Status = MatchStatus.Acceptation;
+    }
+
+    public void GoToMatchMaking()
+    {
+        EnsureStatus(MatchStatus.Acceptation, "So e possivel ir para MatchMaking quando a partida esta em Acceptation.");
+
+        var acceptedCount = Players.Count(p => p.InviteResponse == InviteResponse.Accepted);
+        if (acceptedCount < 2)
+            throw new InvalidOperationException("Precisa de ao menos 2 jogadores aceitos para gerar times.");
+
+        Status = MatchStatus.MatchMaking;
+    }
+
+    public void GoToPostGame()
+    {
+        EnsureStatus(MatchStatus.Ended, "So e possivel ir para PostGame quando a partida esta Ended.");
+        Status = MatchStatus.PostGame;
+    }
 
     public void UpdateDetails(Guid groupIdFromRequest, DateTime playedAt, string placeName, Guid matchIdFromRoute, Guid? dtoId)
     {
@@ -67,7 +90,7 @@ public class MatchEntity : BaseEntity
 
     public void AcceptInvite(Guid playerId)
     {
-        EnsureStatus(MatchStatus.Created, "So e possivel aceitar convite quando a partida esta Criada.");
+        EnsureStatus(MatchStatus.Acceptation, "So e possivel aceitar convite quando a partida esta em Acceptation.");
         if (playerId == Guid.Empty) throw new InvalidOperationException("PlayerId e obrigatorio.");
 
         var mp = FindMatchPlayer(playerId);
@@ -76,7 +99,7 @@ public class MatchEntity : BaseEntity
 
     public void RejectInvite(Guid playerId)
     {
-        EnsureStatus(MatchStatus.Created, "So e possivel recusar convite quando a partida esta Criada.");
+        EnsureStatus(MatchStatus.Acceptation, "So e possivel recusar convite quando a partida esta em Acceptation.");
         if (playerId == Guid.Empty) throw new InvalidOperationException("PlayerId e obrigatorio.");
 
         var mp = FindMatchPlayer(playerId);
@@ -85,7 +108,7 @@ public class MatchEntity : BaseEntity
 
     public void Start()
     {
-        EnsureStatus(MatchStatus.Created, "A partida so pode ser iniciada se estiver Criada.");
+        EnsureStatus(MatchStatus.MatchMaking, "A partida so pode ser iniciada se estiver em MatchMaking.");
 
         var hasTeamA = Players.Any(p => p.Team == 1);
         var hasTeamB = Players.Any(p => p.Team == 2);
@@ -98,13 +121,13 @@ public class MatchEntity : BaseEntity
 
     public void End()
     {
-        EnsureStatus(MatchStatus.Started, "A partida so pode ser encerrada se estiver Iniciada.");
+        EnsureStatus(MatchStatus.Started, "A partida so pode ser encerrada se estiver em Started.");
         Status = MatchStatus.Ended;
     }
 
     public void SetScore(int teamAGoals, int teamBGoals)
     {
-        EnsureStatus(MatchStatus.Ended, "So e possivel setar placar quando a partida esta Encerrada.");
+        EnsureStatus(MatchStatus.PostGame, "So e possivel setar placar quando a partida esta em PostGame.");
 
         if (teamAGoals < 0 || teamBGoals < 0)
             throw new InvalidOperationException("Placar nao pode ser negativo.");
@@ -115,7 +138,7 @@ public class MatchEntity : BaseEntity
 
     public void SetTeamColors(Guid? teamAColorId, Guid? teamBColorId)
     {
-        EnsureStatus(MatchStatus.Created, "So e possivel setar cores quando a partida esta Criada.");
+        EnsureStatus(MatchStatus.MatchMaking, "So e possivel setar cores quando a partida esta em MatchMaking.");
 
         if (teamAColorId.HasValue && teamBColorId.HasValue && teamAColorId.Value == teamBColorId.Value)
             throw new InvalidOperationException("Os dois times nao podem possuir a mesma cor.");
@@ -126,7 +149,7 @@ public class MatchEntity : BaseEntity
 
     public void SetTeamColorsRandomly(IReadOnlyList<TeamColorEntity> colors)
     {
-        EnsureStatus(MatchStatus.Created, "So e possivel sortear cores quando a partida esta Criada.");
+        EnsureStatus(MatchStatus.MatchMaking, "So e possivel sortear cores quando a partida esta em MatchMaking.");
 
         if (colors == null || colors.Count == 0)
             throw new InvalidOperationException("Nao ha cores cadastradas para sortear.");
@@ -137,13 +160,16 @@ public class MatchEntity : BaseEntity
         var a = shuffled[0].Id;
         var b = shuffled.Count > 1 ? shuffled[1].Id : shuffled[0].Id;
 
+        if (a == b)
+            throw new InvalidOperationException("Nao foi possivel sortear duas cores distintas.");
+
         TeamAColorId = a;
         TeamBColorId = b;
     }
 
     public VoteEntity CreateVote(Guid voterMatchPlayerId, Guid votedMatchPlayerId)
     {
-        EnsureStatus(MatchStatus.Ended, "So e possivel votar no MVP quando a partida esta Encerrada.");
+        EnsureStatus(MatchStatus.PostGame, "So e possivel votar no MVP quando a partida esta em PostGame.");
 
         if (voterMatchPlayerId == Guid.Empty || votedMatchPlayerId == Guid.Empty)
             throw new InvalidOperationException("O jogador que votou e o votado sao obrigatorios.");
@@ -184,10 +210,13 @@ public class MatchEntity : BaseEntity
 
     public void FinalizeByVotes()
     {
-        EnsureStatus(MatchStatus.Ended, "A partida so pode ser finalizada se estiver Encerrada.");
+        EnsureStatus(MatchStatus.PostGame, "A partida so pode ser finalizada se estiver em PostGame.");
+
+        if ((!TeamAGoals.HasValue || !TeamBGoals.HasValue) && Goals.Count > 0)
+            RecalculateScoreFromGoals();
 
         if (!TeamAGoals.HasValue || !TeamBGoals.HasValue)
-            throw new InvalidOperationException("Para finalizar a partida, o placar deve estar definido.");
+            throw new InvalidOperationException("Para finalizar a partida, o placar deve estar definido (placar ou gols).");
 
         foreach (var p in Players)
             p.RevokeMvp();
@@ -213,7 +242,7 @@ public class MatchEntity : BaseEntity
         ArgumentNullException.ThrowIfNull(matchPlayer);
         ArgumentNullException.ThrowIfNull(playerEntity);
 
-        EnsureStatus(MatchStatus.Created, "So e possivel adicionar/jogar convites quando a partida esta Criada.");
+        EnsureStatus(MatchStatus.Created, "So e possivel sincronizar jogadores quando a partida esta Created.");
 
         if (playerEntity.GroupId != GroupId)
             throw new InvalidOperationException("Player nao pertence ao mesmo Group da partida.");
@@ -251,7 +280,7 @@ public class MatchEntity : BaseEntity
 
     public void AssignTeams(IReadOnlyCollection<Guid> teamAPlayerIds, IReadOnlyCollection<Guid> teamBPlayerIds)
     {
-        EnsureStatus(MatchStatus.Created, "So e possivel atribuir times quando a partida esta Criada.");
+        EnsureStatus(MatchStatus.MatchMaking, "So e possivel atribuir times quando a partida esta em MatchMaking.");
 
         teamAPlayerIds ??= Array.Empty<Guid>();
         teamBPlayerIds ??= Array.Empty<Guid>();
@@ -297,7 +326,7 @@ public class MatchEntity : BaseEntity
 
     public void SwapPlayers(Guid matchPlayerAId, Guid matchPlayerBId)
     {
-        EnsureStatus(MatchStatus.Created, "So e possivel trocar jogadores quando a partida esta Criada.");
+        EnsureStatus(MatchStatus.MatchMaking, "So e possivel trocar jogadores quando a partida esta em MatchMaking.");
 
         if (matchPlayerAId == Guid.Empty || matchPlayerBId == Guid.Empty)
             throw new InvalidOperationException("Os dois jogadores sao obrigatorios.");
@@ -324,8 +353,8 @@ public class MatchEntity : BaseEntity
 
     public void AddGoalByMatchPlayer(Guid scorerMatchPlayerId, Guid? assistMatchPlayerId, int? timeSeconds)
     {
-        if (Status != MatchStatus.Started && Status != MatchStatus.Ended)
-            throw new InvalidOperationException("So e possivel registrar gols quando a partida esta Iniciada ou Encerrada.");
+        if (Status != MatchStatus.Started && Status != MatchStatus.PostGame)
+            throw new InvalidOperationException("So e possivel registrar gols quando a partida esta Started ou PostGame.");
 
         if (scorerMatchPlayerId == Guid.Empty)
             throw new InvalidOperationException("MatchPlayerId do gol e obrigatorio.");
