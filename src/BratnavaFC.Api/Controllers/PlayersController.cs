@@ -1,6 +1,8 @@
 ﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos.Players;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace BratnavaFC.Api.Controllers;
 
@@ -59,5 +61,36 @@ public class PlayersController : ControllerBase
     {
         await _playerService.ReactivateAsync(playerId, cancellationToken);
         return NoContent();
+    }
+
+    [HttpGet("mine")]
+    [Authorize(Roles = "User,Admin,GodMode")]
+    public async Task<IActionResult> GetMine(CancellationToken cancellationToken)
+    {
+        var userId = GetUserIdOrThrow();
+        var items = await _playerService.GetByUserIdAsync(userId, cancellationToken);
+        return Ok(items);
+    }
+
+    [HttpGet("by-user/{userId:guid}")]
+    [Authorize(Roles = "Admin,GodMode")]
+    public async Task<IActionResult> GetByUser(Guid userId, CancellationToken cancellationToken)
+    {
+        var items = await _playerService.GetByUserIdAsync(userId, cancellationToken);
+        return Ok(items);
+    }
+
+    private Guid GetUserIdOrThrow()
+    {
+        // padrão
+        var raw =
+            User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")
+            ?? User.FindFirstValue("userId");
+
+        if (!Guid.TryParse(raw, out var userId) || userId == Guid.Empty)
+            throw new UnauthorizedAccessException("Invalid user id in token.");
+
+        return userId;
     }
 }

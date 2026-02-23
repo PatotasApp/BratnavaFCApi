@@ -1,5 +1,6 @@
 ﻿using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
+using FluentAssertions;
 
 namespace BranavaFC.Tests;
 
@@ -16,11 +17,43 @@ public class PlayerEntityTests
         var p = new PlayerEntity("  Caio  ", userId, groupId, 12.5m, true, Status.Active);
 
         // Assert
-        Assert.Equal("Caio", p.Name);
-        Assert.Equal(userId, p.UserId);
-        Assert.Equal(groupId, p.GroupId);
-        Assert.Equal(12.5m, p.SkillPoints);
-        Assert.True(p.IsGoalkeeper);
+        p.Name.Should().Be("Caio");
+        p.UserId.Should().Be(userId);
+        p.GroupId.Should().Be(groupId);
+        p.SkillPoints.Should().Be(12.5m);
+        p.IsGoalkeeper.Should().BeTrue();
+        p.Status.Should().Be(Status.Active);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Ctor_WithInvalidName_ShouldThrow(string? name)
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        var groupId = Guid.NewGuid();
+
+        // Act
+        var act = () => new PlayerEntity(name!, userId, groupId, 0m, false, Status.Active);
+
+        // Assert
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("Player name is required.");
+    }
+
+    [Fact]
+    public void Rename_ShouldTrimName()
+    {
+        // Arrange
+        var p = new PlayerEntity("Ok", Guid.NewGuid(), Guid.NewGuid(), 0m, false, Status.Active);
+
+        // Act
+        p.Rename("  Marlon  ");
+
+        // Assert
+        p.Name.Should().Be("Marlon");
     }
 
     [Theory]
@@ -30,43 +63,68 @@ public class PlayerEntityTests
     public void Rename_WithInvalidName_ShouldThrow(string? name)
     {
         // Arrange
-        var p = new PlayerEntity("Ok", Guid.NewGuid(), Guid.NewGuid(), 0, false, Status.Active);
+        var p = new PlayerEntity("Ok", Guid.NewGuid(), Guid.NewGuid(), 0m, false, Status.Active);
 
-        // Act + Assert
-        var ex = Assert.Throws<InvalidOperationException>(() => p.Rename(name!));
-        Assert.Equal("Player name is required.", ex.Message);
+        // Act
+        var act = () => p.Rename(name!);
+
+        // Assert
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("Player name is required.");
     }
 
     [Fact]
     public void SetUser_WithEmpty_ShouldThrow()
     {
         // Arrange
-        var p = new PlayerEntity("Ok", Guid.NewGuid(), Guid.NewGuid(), 0, false, Status.Active);
+        var p = new PlayerEntity("Ok", Guid.NewGuid(), Guid.NewGuid(), 0m, false, Status.Active);
 
-        // Act + Assert
-        var ex = Assert.Throws<InvalidOperationException>(() => p.SetUser(Guid.Empty));
-        Assert.Equal("UserId is required.", ex.Message);
+        // Act
+        var act = () => p.SetUser(Guid.Empty);
+
+        // Assert
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("UserId is required.");
     }
 
     [Fact]
     public void SetGroup_WithEmpty_ShouldThrow()
     {
         // Arrange
-        var p = new PlayerEntity("Ok", Guid.NewGuid(), Guid.NewGuid(), 0, false, Status.Active);
+        var p = new PlayerEntity("Ok", Guid.NewGuid(), Guid.NewGuid(), 0m, false, Status.Active);
 
-        // Act + Assert
-        var ex = Assert.Throws<InvalidOperationException>(() => p.SetGroup(Guid.Empty));
-        Assert.Equal("GroupId is required.", ex.Message);
+        // Act
+        var act = () => p.SetGroup(Guid.Empty);
+
+        // Assert
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("GroupId is required.");
     }
 
     [Fact]
     public void SetSkillPoints_WithNegative_ShouldThrow()
     {
         // Arrange
-        var p = new PlayerEntity("Ok", Guid.NewGuid(), Guid.NewGuid(), 0, false, Status.Active);
+        var p = new PlayerEntity("Ok", Guid.NewGuid(), Guid.NewGuid(), 0m, false, Status.Active);
 
-        // Act + Assert
-        var ex = Assert.Throws<InvalidOperationException>(() => p.SetSkillPoints(-0.1m));
-        Assert.Equal("SkillPoints cannot be negative.", ex.Message);
+        // Act
+        var act = () => p.SetSkillPoints(-0.1m);
+
+        // Assert
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("SkillPoints cannot be negative.");
+    }
+
+    [Fact]
+    public void SetSkillPoints_WithValid_ShouldUpdate()
+    {
+        // Arrange
+        var p = new PlayerEntity("Ok", Guid.NewGuid(), Guid.NewGuid(), 0m, false, Status.Active);
+
+        // Act
+        p.SetSkillPoints(7.25m);
+
+        // Assert
+        p.SkillPoints.Should().Be(7.25m);
     }
 }

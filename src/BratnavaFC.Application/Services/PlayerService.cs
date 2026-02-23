@@ -1,4 +1,5 @@
 ﻿using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Dtos.Players;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
@@ -178,5 +179,30 @@ public class PlayerService : IPlayerService
             _logger.LogError(ex, "Error trying to reactivate player.");
             throw;
         }
+    }
+
+    public async Task<IReadOnlyList<MyPlayerDto>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        if (userId == Guid.Empty)
+            throw new InvalidOperationException("UserId is required.");
+
+        var list = await _context.Players
+            .AsNoTracking()
+            .Include(p => p.Group)
+            .Where(p => p.UserId == userId )
+            .OrderBy(p => p.Group.Name)
+            .Select(p => new MyPlayerDto(
+                p.Id,
+                p.UserId,
+                p.GroupId,
+                p.Name,
+                p.IsGoalkeeper,
+                p.SkillPoints,
+                p.Status,
+                p.Group.Name
+            ))
+            .ToListAsync(cancellationToken);
+
+        return list;
     }
 }
