@@ -1,6 +1,17 @@
-﻿using System;
-using System.Collections.Generic;
+﻿namespace BratnavaFC.Domain.Dtos;
 
-namespace BratnavaFC.Domain.Dtos;
+public sealed record PlayerWeightDto(Guid PlayerId, double Weight);
 
-public record TeamsResultDto(List<Guid> TeamA, List<Guid> TeamB, List<Guid> Unassigned);
+public sealed record TeamOptionDto(
+    List<PlayerWeightDto> TeamA,
+    List<PlayerWeightDto> TeamB,
+    List<PlayerWeightDto> Unassigned,
+    double TeamAWeight,
+    double TeamBWeight,
+    double BalanceDiff,
+    int GoalkeeperDiff,
+    double SynergyTotal,
+    double Score
+);
+
+public sealed record TeamsOptionsResultDto(List<TeamOptionDto> Options);

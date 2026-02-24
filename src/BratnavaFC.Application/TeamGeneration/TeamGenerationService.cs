@@ -16,11 +16,12 @@ public sealed class TeamGenerationService
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
     }
 
-    public Task<TeamsResultDto> GenerateAsync(
+    public Task<TeamsOptionsResultDto> GenerateAsync(
         List<PlayerRequestDto> players,
         StrategyType strategyType,
         int playersPerTeam,
         bool includeGoalkeepers,
+        int optionsCount = 3,
         CancellationToken cancellationToken = default)
     {
         if (players is null) throw new ArgumentNullException(nameof(players));
@@ -32,10 +33,13 @@ public sealed class TeamGenerationService
         };
 
         var strategy = TeamGenerationFactory.Create(strategyType, _statsService, _loggerFactory);
-        return strategy.GenerateTeamsAsync(players, settings, cancellationToken);
+        return strategy.GenerateTeamsAsync(players, settings, optionsCount, cancellationToken);
     }
 
-    public Task<TeamsResultDto> GenerateAsync(TeamGenerationRequestDto request, CancellationToken cancellationToken = default)
+    public Task<TeamsOptionsResultDto> GenerateAsync(
+        TeamGenerationRequestDto request,
+        int optionsCount = 3,
+        CancellationToken cancellationToken = default)
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
         if (request.Players is null) throw new InvalidOperationException("Players is required.");
@@ -45,6 +49,7 @@ public sealed class TeamGenerationService
             request.StrategyType,
             request.PlayersPerTeam,
             request.IncludeGoalkeepers,
+            optionsCount,
             cancellationToken);
     }
 }

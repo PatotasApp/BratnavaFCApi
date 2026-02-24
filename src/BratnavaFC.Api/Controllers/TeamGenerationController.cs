@@ -20,12 +20,15 @@ public class TeamGenerationController : ControllerBase
     }
 
     [HttpPost("generate")]
-    [ProducesResponseType(typeof(TeamsResultDto), StatusCodes.Status200OK)]
-    public async Task<ActionResult<TeamsResultDto>> Generate([FromBody] TeamGenerationRequestDto request, CancellationToken cancellationToken)
+    [ProducesResponseType(typeof(TeamsOptionsResultDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<TeamsOptionsResultDto>> Generate(
+        [FromBody] TeamGenerationRequestDto request,
+        [FromQuery] int count = 3,
+        CancellationToken cancellationToken = default)
     {
         if (request == null) return BadRequest();
 
-        var result = await _teamService.GenerateAsync(request, cancellationToken);
+        var result = await _teamService.GenerateAsync(request, count, cancellationToken);
         return Ok(result);
     }
 

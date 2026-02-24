@@ -1,7 +1,9 @@
-﻿using BratnavaFC.Application.TeamGeneration;
+﻿using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.TeamGeneration;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Models;
 using Microsoft.Extensions.Logging.Abstractions;
+using Xunit;
 
 namespace BranavaFC.Tests;
 
@@ -12,8 +14,8 @@ public class FactoryTests
     {
         var s = TeamGenerationFactory.Create(
             StrategyType.Manual,
-            statsService: new FakeStatsService(),
-            loggerFactory: NullLoggerFactory.Instance);
+            new FakeStatsService(),
+            NullLoggerFactory.Instance);
 
         Assert.NotNull(s);
         Assert.Equal("ManualStrategy", s.GetType().Name);
@@ -24,8 +26,8 @@ public class FactoryTests
     {
         var s = TeamGenerationFactory.Create(
             StrategyType.Random,
-            statsService: new FakeStatsService(),
-            loggerFactory: NullLoggerFactory.Instance);
+            new FakeStatsService(),
+            NullLoggerFactory.Instance);
 
         Assert.NotNull(s);
         Assert.Equal("RandomStrategy", s.GetType().Name);
@@ -36,8 +38,8 @@ public class FactoryTests
     {
         var s = TeamGenerationFactory.Create(
             StrategyType.Algorithm,
-            statsService: new FakeStatsService(),
-            loggerFactory: NullLoggerFactory.Instance);
+            new FakeStatsService(),
+            NullLoggerFactory.Instance);
 
         Assert.NotNull(s);
         Assert.Equal("AlgorithmStrategy", s.GetType().Name);
@@ -48,8 +50,8 @@ public class FactoryTests
     {
         var s = TeamGenerationFactory.Create(
             StrategyType.GroupByWins,
-            statsService: new FakeStatsService(),
-            loggerFactory: NullLoggerFactory.Instance);
+            new FakeStatsService(),
+            NullLoggerFactory.Instance);
 
         Assert.NotNull(s);
         Assert.Equal("GroupByWinsStrategy", s.GetType().Name);
@@ -57,7 +59,10 @@ public class FactoryTests
 
     private sealed class FakeStatsService : IPlayerStatsService
     {
-        public Task<List<PlayerStats>> EnrichPlayersAsync(List<PlayerRequestDto> players, CancellationToken cancellationToken = default)
+        // ✅ assinatura correta do seu IPlayerStatsService (SEM optionsCount)
+        public Task<List<PlayerStats>> EnrichPlayersAsync(
+            List<PlayerRequestDto> players,
+            CancellationToken cancellationToken = default)
             => Task.FromResult(new List<PlayerStats>());
 
         public Task<PlayerVisualStatsReport> GetVisualReportAsync(Guid groupId, CancellationToken cancellationToken = default)

@@ -85,19 +85,21 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         _logger = logger ?? NullLogger<AlgorithmStrategy>.Instance;
     }
 
-    public async Task<TeamsResultDto> GenerateTeamsAsync(
-        List<PlayerRequestDto> players,
-        TeamGenerationSettings settings,
-        CancellationToken cancellationToken = default)
+    public async Task<TeamsOptionsResultDto> GenerateTeamsAsync(
+    List<PlayerRequestDto> players,
+    TeamGenerationSettings settings,
+    int optionsCount = 3,
+    CancellationToken cancellationToken = default)
     {
         if (players is null) throw new ArgumentNullException(nameof(players));
         if (settings is null) throw new ArgumentNullException(nameof(settings));
         if (settings.PlayersPerTeam <= 0) throw new ArgumentOutOfRangeException(nameof(settings.PlayersPerTeam));
 
-        if (players.Count == 0)
-            return new TeamsResultDto(new List<Guid>(), new List<Guid>(), new List<Guid>());
+        optionsCount = Math.Max(1, optionsCount);
 
-        // candidates: optionally exclude goalkeepers
+        if (players.Count == 0)
+            return new TeamsOptionsResultDto(new List<TeamOptionDto>());
+
         var candidatePlayers = settings.IncludeGoalkeepers
             ? players.ToList()
             : players.Where(p => !p.IsGoalkeeper).ToList();
@@ -107,11 +109,21 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
 
         if (maxAssignable == 0)
         {
-            // ninguem alocavel -> tudo unassigned
-            return new TeamsResultDto(
-                new List<Guid>(),
-                new List<Guid>(),
-                players.Select(p => p.Id).ToList());
+            var allUnassigned = players.Select(p => new PlayerWeightDto(p.Id, 0.0)).ToList();
+
+            var opt = new TeamOptionDto(
+                TeamA: new(),
+                TeamB: new(),
+                Unassigned: allUnassigned,
+                TeamAWeight: 0,
+                TeamBWeight: 0,
+                BalanceDiff: 0,
+                GoalkeeperDiff: 0,
+                SynergyTotal: 0,
+                Score: 0
+            );
+
+            return new TeamsOptionsResultDto(new List<TeamOptionDto> { opt });
         }
 
         // load stats
@@ -124,20 +136,19 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
             .ThenBy(x => x.Player.Id)
             .ToList();
 
-        // seed pool (TopN, or all if TopN is huge)
+        // seed pool
         var seedPoolCount = Math.Min(SeedPoolTopN, candidates.Count);
         var seedPool = candidates.Take(seedPoolCount).ToList();
 
         LogSeedPool(seedPool, settings, maxAssignable);
 
-        // build seed pairs and choose which ones to evaluate (all or subset)
         var allPairs = BuildAllSeedPairs(seedPool);
 
         if (allPairs.Count == 0)
         {
             _logger.LogInformation("[TeamGen] No seed pairs available. Using single greedy draft.");
             var single = RunGreedyDraft(candidates, perTeam, seedA: null, seedB: null, maxAssignable);
-            return BuildResult(single, players, settings);
+            return new TeamsOptionsResultDto(new List<TeamOptionDto> { BuildOption(single, players, settings) });
         }
 
         var pairsToEvaluate = PickPairsToEvaluate(allPairs, seedPool);
@@ -146,29 +157,106 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
             "[TeamGen] SeedPairs total={TotalPairs} | evaluating={EvalPairs} | SeedPoolTopN={TopN} | MaxSeedPairsToEvaluate={MaxEval}",
             allPairs.Count, pairsToEvaluate.Count, SeedPoolTopN, MaxSeedPairsToEvaluate);
 
-        DraftOutcome? best = null;
+        var outcomes = new List<DraftOutcome>();
+        var seen = new HashSet<string>();
+
+        void AddOutcome(DraftOutcome o)
+        {
+            var key = BuildTeamsKey(o);
+            if (seen.Add(key))
+                outcomes.Add(o);
+        }
 
         foreach (var (a, b) in pairsToEvaluate)
         {
-            // A -> TeamA, B -> TeamB
             var out1 = RunGreedyDraft(candidates, perTeam, a, b, maxAssignable);
             LogOutcome("Seed(A->A,B->B)", a, b, out1);
-            best = PickBetter(best, out1);
+            AddOutcome(out1);
 
             if (EvaluateBothOrientations)
             {
-                // B -> TeamA, A -> TeamB
                 var out2 = RunGreedyDraft(candidates, perTeam, b, a, maxAssignable);
                 LogOutcome("Seed(B->A,A->B)", b, a, out2);
-                best = PickBetter(best, out2);
+                AddOutcome(out2);
             }
         }
 
-        best ??= RunGreedyDraft(candidates, perTeam, seedA: null, seedB: null, maxAssignable);
+        if (outcomes.Count == 0)
+        {
+            var fallback = RunGreedyDraft(candidates, perTeam, seedA: null, seedB: null, maxAssignable);
+            outcomes.Add(fallback);
+        }
 
-        LogBest(best);
+        // TOP N (menor Score é melhor)
+        var top = outcomes
+            .OrderBy(o => o.BalanceDiff)
+            .Take(optionsCount)
+            .ToList();
 
-        return BuildResult(best, players, settings);
+        var options = top.Select(o => BuildOption(o, players, settings)).ToList();
+
+        // logging do melhor (opcional)
+        LogBest(top[0]);
+
+        return new TeamsOptionsResultDto(options);
+    }
+
+    private static string BuildTeamsKey(DraftOutcome o)
+    {
+        var a = o.TeamA.Select(x => x.Player.Id).OrderBy(x => x).ToArray();
+        var b = o.TeamB.Select(x => x.Player.Id).OrderBy(x => x).ToArray();
+
+        var key1 = "A:" + string.Join(",", a) + "|B:" + string.Join(",", b);
+        var key2 = "A:" + string.Join(",", b) + "|B:" + string.Join(",", a);
+
+        return string.CompareOrdinal(key1, key2) <= 0 ? key1 : key2;
+    }
+
+    private TeamOptionDto BuildOption(DraftOutcome best, List<PlayerRequestDto> allPlayers, TeamGenerationSettings settings)
+    {
+        var teamA = best.TeamA
+            .Select(x => new PlayerWeightDto(x.Player.Id, EffectiveWinRate(x.Stats)))
+            .ToList();
+
+        var teamB = best.TeamB
+            .Select(x => new PlayerWeightDto(x.Player.Id, EffectiveWinRate(x.Stats)))
+            .ToList();
+
+        var teamAWeight = teamA.Sum(x => x.Weight);
+        var teamBWeight = teamB.Sum(x => x.Weight);
+
+        var unassignedIds = best.Waiting.Select(x => x.Player.Id).ToHashSet();
+
+        if (!settings.IncludeGoalkeepers)
+            foreach (var gk in allPlayers.Where(p => p.IsGoalkeeper))
+                unassignedIds.Add(gk.Id);
+
+        // Mapa de stats conhecidos (dos que estavam no draft)
+        var statsById = best.TeamA.Concat(best.TeamB).Concat(best.Waiting)
+            .GroupBy(x => x.Player.Id)
+            .ToDictionary(g => g.Key, g => g.First().Stats);
+
+        var unassigned = unassignedIds
+            .Select(id =>
+            {
+                if (statsById.TryGetValue(id, out var s))
+                    return new PlayerWeightDto(id, EffectiveWinRate(s));
+                return new PlayerWeightDto(id, 0.0);
+            })
+            .DistinctBy(x => x.PlayerId)
+            .ToList();
+
+        return new TeamOptionDto(
+            TeamA: teamA,
+            TeamB: teamB,
+            Unassigned: unassigned,
+            TeamAWeight: teamAWeight,
+            TeamBWeight: teamBWeight,
+            BalanceDiff: best.BalanceDiff,
+            GoalkeeperDiff: best.GoalkeeperDiff,
+            SynergyTotal: best.SynergyTotal,
+            Score: best.Score
+        );
     }
 
     // -----------------------------
@@ -495,26 +583,6 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
                 WinRate = 0.0,
                 SynergyWith = new()
             };
-
-    // -----------------------------
-    // RESULT BUILD
-    // -----------------------------
-
-    private static TeamsResultDto BuildResult(DraftOutcome best, List<PlayerRequestDto> allPlayers, TeamGenerationSettings settings)
-    {
-        var teamA = best.TeamA.Select(x => x.Player.Id).ToList();
-        var teamB = best.TeamB.Select(x => x.Player.Id).ToList();
-
-        var unassigned = best.Waiting.Select(x => x.Player.Id).ToList();
-
-        if (!settings.IncludeGoalkeepers)
-            unassigned.AddRange(allPlayers.Where(p => p.IsGoalkeeper).Select(p => p.Id));
-
-        // Remove duplicados caso algum cenario esquisito ocorra
-        unassigned = unassigned.Distinct().ToList();
-
-        return new TeamsResultDto(teamA, teamB, unassigned);
-    }
 
     // -----------------------------
     // LOGGING
