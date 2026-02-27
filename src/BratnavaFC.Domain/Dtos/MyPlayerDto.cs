@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,12 +8,13 @@ namespace BratnavaFC.Domain.Dtos
 {
     public sealed record MyPlayerDto(
         Guid PlayerId,
-        Guid UserId,
+        Guid? UserId,
         Guid GroupId,
         string PlayerName,
         bool IsGoalkeeper,
         decimal SkillPoints,
         BratnavaFC.Domain.Enums.Status Status,
-        string GroupName
+        string GroupName,
+        bool IsGuest
     );
 }

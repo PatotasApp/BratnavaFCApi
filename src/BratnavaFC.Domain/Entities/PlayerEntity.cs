@@ -1,14 +1,15 @@
-﻿namespace BratnavaFC.Domain.Entities;
+namespace BratnavaFC.Domain.Entities;
 
 public class PlayerEntity : InactivatableEntity
 {
     public string Name { get; private set; } = null!;
-    public Guid UserId { get; private set; }
-    public UserEntity User { get; private set; } = null!;
+    public Guid? UserId { get; private set; }
+    public UserEntity? User { get; private set; }
     public Guid GroupId { get; private set; }
     public GroupEntity Group { get; private set; } = null!;
     public decimal SkillPoints { get; private set; }
     public bool IsGoalkeeper { get; private set; }
+    public bool IsGuest { get; private set; }
 
     private readonly List<MatchPlayerEntity> _matchPlayers = new();
     public IReadOnlyCollection<MatchPlayerEntity> MatchPlayers => _matchPlayers;
@@ -16,13 +17,14 @@ public class PlayerEntity : InactivatableEntity
     // EF
     private PlayerEntity() { }
 
-    public PlayerEntity(string name, Guid userId, Guid groupId, decimal skillPoints, bool isGoalkeeper, BratnavaFC.Domain.Enums.Status status)
+    public PlayerEntity(string name, Guid? userId, Guid groupId, decimal skillPoints, bool isGoalkeeper, bool isGuest = false, BratnavaFC.Domain.Enums.Status status = Enums.Status.Active)
     {
         Rename(name);
-        SetUser(userId);
+        if (userId.HasValue) SetUser(userId.Value);
         SetGroup(groupId);
         SetSkillPoints(skillPoints);
         SetGoalkeeper(isGoalkeeper);
+        SetIsGuest(isGuest);
     }
 
     public void Rename(string name)
@@ -60,5 +62,10 @@ public class PlayerEntity : InactivatableEntity
     public void SetGoalkeeper(bool isGoalkeeper)
     {
         IsGoalkeeper = isGoalkeeper;
+    }
+
+    public void SetIsGuest(bool isGuest)
+    {
+        IsGuest = isGuest;
     }
 }

@@ -111,8 +111,8 @@ public class GroupEntityTests
         // Arrange
         var group = new GroupEntity("G", null);
         var userId = Guid.NewGuid();
-        var player1 = new PlayerEntity("P1", userId, group.Id, 0, false, Status.Active);
-        var player2 = new PlayerEntity("P2", userId, group.Id, 0, false, Status.Active);
+        var player1 = new PlayerEntity("P1", userId, group.Id, 0, false, false, Status.Active);
+        var player2 = new PlayerEntity("P2", userId, group.Id, 0, false, false, Status.Active);
 
         // Act
         group.AddPlayer(player1);

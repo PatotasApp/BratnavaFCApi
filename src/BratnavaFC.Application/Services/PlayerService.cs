@@ -1,4 +1,4 @@
-﻿using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Dtos.Players;
 using BratnavaFC.Domain.Entities;
@@ -31,35 +31,33 @@ public class PlayerService : IPlayerService
 
             if (!groupExists) throw new ApplicationException("Group does not exist.");
 
-            var userExists = await _context.Users
-                .AnyAsync(x => x.Id == request.UserId, cancellationToken);
+            // Apenas valida usuario se nao for convidado e o UserId for informado
+            if (!request.IsGuest && request.UserId.HasValue)
+            {
+                var userExists = await _context.Users
+                    .AnyAsync(x => x.Id == request.UserId.Value, cancellationToken);
 
-            if (!userExists) throw new ApplicationException("User does not exist.");
+                if (!userExists) throw new ApplicationException("User does not exist.");
 
-            var alreadyExists = await _context.Players
-                .AnyAsync(p => p.GroupId == request.GroupId && p.UserId == request.UserId, cancellationToken);
+                var alreadyExists = await _context.Players
+                    .AnyAsync(p => p.GroupId == request.GroupId && p.UserId == request.UserId.Value, cancellationToken);
 
-            if (alreadyExists) throw new InvalidOperationException("Player already exists in the group.");
+                if (alreadyExists) throw new InvalidOperationException("Player already exists in the group.");
+            }
 
             var player = new PlayerEntity(
-                request.Name,  
+                request.Name,
                 request.UserId,
                 request.GroupId,
                 request.SkillPoints,
                 request.IsGoalkeeper,
+                request.IsGuest,
                 request.Status);
 
-            _context.Players.Add(player);           
+            _context.Players.Add(player);
             await _context.SaveChangesAsync(cancellationToken);
 
-            return new PlayerDto(
-                player.Id,
-                player.Name,
-                player.UserId,
-                player.SkillPoints,
-                player.IsGoalkeeper,
-                player.Status
-            );
+            return MapToDto(player);
         }
         catch (Exception ex)
         {
@@ -78,6 +76,7 @@ public class PlayerService : IPlayerService
             player.Rename(request.Name);
             player.SetSkillPoints(request.SkillPoints);
             player.SetGoalkeeper(request.IsGoalkeeper);
+            player.SetIsGuest(request.IsGuest);
 
             if (request.Status == Status.Inactive && player.Status != Status.Inactive)
                 player.Inactivate();
@@ -87,14 +86,7 @@ public class PlayerService : IPlayerService
             _repository.Update(player);
             await _repository.SaveChangesAsync(cancellationToken);
 
-            return new PlayerDto(
-                player.Id,
-                player.Name,
-                player.UserId,
-                player.SkillPoints,
-                player.IsGoalkeeper,
-                player.Status
-            );
+            return MapToDto(player);
         }
         catch (Exception ex)
         {
@@ -127,14 +119,7 @@ public class PlayerService : IPlayerService
             var player = await _repository.GetByIdAsync(playerId, cancellationToken);
             if (player == null) throw new ApplicationException("PlayerEntity not found.");
 
-            return new PlayerDto(
-                player.Id,
-                player.Name,
-                player.UserId,
-                player.SkillPoints,
-                player.IsGoalkeeper,
-                player.Status
-            );
+            return MapToDto(player);
         }
         catch (Exception ex)
         {
@@ -189,7 +174,7 @@ public class PlayerService : IPlayerService
         var list = await _context.Players
             .AsNoTracking()
             .Include(p => p.Group)
-            .Where(p => p.UserId == userId )
+            .Where(p => p.UserId == userId)
             .OrderBy(p => p.Group.Name)
             .Select(p => new MyPlayerDto(
                 p.Id,
@@ -199,10 +184,21 @@ public class PlayerService : IPlayerService
                 p.IsGoalkeeper,
                 p.SkillPoints,
                 p.Status,
-                p.Group.Name
+                p.Group.Name,
+                p.IsGuest
             ))
             .ToListAsync(cancellationToken);
 
         return list;
     }
+
+    private static PlayerDto MapToDto(PlayerEntity player) => new(
+        player.Id,
+        player.Name,
+        player.UserId,
+        player.SkillPoints,
+        player.IsGoalkeeper,
+        player.IsGuest,
+        player.Status
+    );
 }

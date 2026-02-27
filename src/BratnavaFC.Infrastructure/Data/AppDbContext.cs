@@ -153,10 +153,13 @@ public class AppDbContext : DbContext
 
             builder.Property(x => x.Name).IsRequired();
             builder.Property(x => x.IsGoalkeeper).IsRequired();
+            builder.Property(x => x.IsGuest).IsRequired().HasDefaultValue(false);
 
             builder.HasOne(x => x.User)
                 .WithMany(x => x.Players)
-                .HasForeignKey(x => x.UserId);
+                .HasForeignKey(x => x.UserId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.SetNull);
 
             builder.HasOne(x => x.Group)
                 .WithMany(x => x.Players)

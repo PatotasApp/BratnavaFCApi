@@ -14,8 +14,8 @@ public sealed class MatchEntityTests
         var groupId = Guid.NewGuid();
         var match = new MatchEntity(groupId, DateTime.UtcNow, "Boca Jrs");
 
-        var p1 = new PlayerEntity("A", Guid.NewGuid(), groupId, 0, false, Status.Active);
-        var p2 = new PlayerEntity("B", Guid.NewGuid(), groupId, 0, false, Status.Active);
+        var p1 = new PlayerEntity("A", Guid.NewGuid(), groupId, 0, false, false, Status.Active);
+        var p2 = new PlayerEntity("B", Guid.NewGuid(), groupId, 0, false, false, Status.Active);
 
         var mp1 = new MatchPlayerEntity(p1.Id);
         var mp2 = new MatchPlayerEntity(p2.Id);
@@ -182,7 +182,7 @@ public sealed class MatchEntityTests
         var (match, p1, p2, _, _) = CreateMatchWithTwoPlayers_Created();
         match.OpenAcceptation();
 
-        var p3 = new PlayerEntity("C", Guid.NewGuid(), match.GroupId, 0, false, Status.Active);
+        var p3 = new PlayerEntity("C", Guid.NewGuid(), match.GroupId, 0, false, false, Status.Active);
         var mp3 = new MatchPlayerEntity(p3.Id);
 
         var ex = Assert.Throws<InvalidOperationException>(() => match.AddPlayer(mp3, p3));
@@ -194,7 +194,7 @@ public sealed class MatchEntityTests
     {
         var groupId = Guid.NewGuid();
         var match = new MatchEntity(groupId, DateTime.UtcNow, "Local");
-        var p1 = new PlayerEntity("A", Guid.NewGuid(), groupId, 0, false, Status.Active);
+        var p1 = new PlayerEntity("A", Guid.NewGuid(), groupId, 0, false, false, Status.Active);
 
         var mp1 = new MatchPlayerEntity(p1.Id);
         match.AddPlayer(mp1, p1);
@@ -452,9 +452,9 @@ public sealed class MatchEntityTests
         var groupId = Guid.NewGuid();
         var match = new MatchEntity(groupId, DateTime.UtcNow, "Local");
 
-        var p1 = new PlayerEntity("P1", Guid.NewGuid(), groupId, 0, false, Status.Active);
-        var p2 = new PlayerEntity("P2", Guid.NewGuid(), groupId, 0, false, Status.Active);
-        var p3 = new PlayerEntity("P3", Guid.NewGuid(), groupId, 0, false, Status.Active);
+        var p1 = new PlayerEntity("P1", Guid.NewGuid(), groupId, 0, false, false, Status.Active);
+        var p2 = new PlayerEntity("P2", Guid.NewGuid(), groupId, 0, false, false, Status.Active);
+        var p3 = new PlayerEntity("P3", Guid.NewGuid(), groupId, 0, false, false, Status.Active);
 
         match.AddPlayer(new MatchPlayerEntity(p1.Id), p1);
         match.AddPlayer(new MatchPlayerEntity(p2.Id), p2);

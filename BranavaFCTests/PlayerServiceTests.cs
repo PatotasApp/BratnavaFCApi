@@ -29,6 +29,7 @@ public class PlayerServiceTests
             GroupId: Guid.NewGuid(),
             SkillPoints: 0,
             IsGoalkeeper: false,
+            IsGuest: false,
             Status: Status.Active
         );
 
@@ -60,6 +61,7 @@ public class PlayerServiceTests
             GroupId: group.Id,
             SkillPoints: 0,
             IsGoalkeeper: false,
+            IsGuest: false,
             Status: Status.Active
         );
 
@@ -83,7 +85,7 @@ public class PlayerServiceTests
         db.Groups.Add(group);
         db.Users.Add(user);
 
-        var existing = new PlayerEntity("P", user.Id, group.Id, 0, false, Status.Active);
+        var existing = new PlayerEntity("P", user.Id, group.Id, 0, false, false, Status.Active);
         db.Players.Add(existing);
 
         await db.SaveChangesAsync();
@@ -98,6 +100,7 @@ public class PlayerServiceTests
             GroupId: group.Id,
             SkillPoints: 0,
             IsGoalkeeper: false,
+            IsGuest: false,
             Status: Status.Active
         );
 
@@ -132,6 +135,7 @@ public class PlayerServiceTests
             GroupId: group.Id,
             SkillPoints: 10,
             IsGoalkeeper: true,
+            IsGuest: false,
             Status: Status.Active
         );
 
@@ -171,6 +175,7 @@ public class PlayerServiceTests
             GroupId: Guid.NewGuid(),
             SkillPoints: 0,
             IsGoalkeeper: false,
+            IsGuest: false,
             Status: Status.Active
         );
 
@@ -194,7 +199,7 @@ public class PlayerServiceTests
         db.Groups.Add(group);
         db.Users.Add(user);
 
-        var existing = new PlayerEntity("Old", user.Id, group.Id, 1m, false, Status.Active);
+        var existing = new PlayerEntity("Old", user.Id, group.Id, 1m, false, false, Status.Active);
         db.Players.Add(existing);
 
         await db.SaveChangesAsync();
@@ -208,6 +213,7 @@ public class PlayerServiceTests
             GroupId: group.Id,
             SkillPoints: 9.5m,
             IsGoalkeeper: true,
+            IsGuest: false,
             Status: Status.Active
         );
 
@@ -239,7 +245,7 @@ public class PlayerServiceTests
         db.Groups.Add(group);
         db.Users.Add(user);
 
-        var existing = new PlayerEntity("Ok", user.Id, group.Id, 0m, false, Status.Active);
+        var existing = new PlayerEntity("Ok", user.Id, group.Id, 0m, false, false, Status.Active);
         db.Players.Add(existing);
 
         await db.SaveChangesAsync();
@@ -253,6 +259,7 @@ public class PlayerServiceTests
             GroupId: group.Id,
             SkillPoints: 0m,
             IsGoalkeeper: false,
+            IsGuest: false,
             Status: Status.Active
         );
 
@@ -277,7 +284,7 @@ public class PlayerServiceTests
         db.Groups.Add(group);
         db.Users.Add(user);
 
-        var existing = new PlayerEntity("Ok", user.Id, group.Id, 0m, false, Status.Active);
+        var existing = new PlayerEntity("Ok", user.Id, group.Id, 0m, false, false, Status.Active);
         db.Players.Add(existing);
 
         await db.SaveChangesAsync();
@@ -291,6 +298,7 @@ public class PlayerServiceTests
             GroupId: group.Id,
             SkillPoints: -1m,
             IsGoalkeeper: false,
+            IsGuest: false,
             Status: Status.Active
         );
 
