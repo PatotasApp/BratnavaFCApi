@@ -1,5 +1,6 @@
 ﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos.Users;
+using BratnavaFC.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BratnavaFC.Api.Controllers;
@@ -29,6 +30,55 @@ public sealed class UsersController : ControllerBase
     {
         var user = await _userService.GetUserByIdAsync(userId, cancellationToken);
         return Ok(user);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetAllAsync(
+        [FromQuery] string? search,
+        [FromQuery] Status? status,
+        [FromQuery] int? role,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] bool includeInactive = false,
+        CancellationToken cancellationToken = default)
+    {
+        var req = new ListUsersRequestDto
+        {
+            Search = search,
+            Status = status,
+            Role = role,
+            Page = page,
+            PageSize = pageSize,
+            IncludeInactive = includeInactive
+        };
+
+        var result = await _userService.GetAllAsync(req, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPut("{userId:guid}")]
+    public async Task<IActionResult> UpdateAsync(Guid userId, [FromBody] UpdateUserDto dto, CancellationToken cancellationToken)
+    {
+        if (dto == null) return BadRequest();
+
+        await _userService.UpdateAsync(userId, dto, cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPut("{userId:guid}/password")]
+    public async Task<IActionResult> ChangePasswordAsync(Guid userId, [FromBody] ChangePasswordDto dto, CancellationToken cancellationToken)
+    {
+        if (dto == null) return BadRequest();
+
+        try
+        {
+            await _userService.ChangePasswordAsync(userId, dto, cancellationToken);
+            return NoContent();
+        }
+        catch (ApplicationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPut("{userId:guid}/inactivate")]

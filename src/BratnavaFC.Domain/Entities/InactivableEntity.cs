@@ -26,4 +26,14 @@ public abstract class InactivatableEntity : BaseEntity
         Status = Status.Active;
         InactivatedAt = null;
     }
+
+    public void ChangeStatus(Status status)
+    {
+        if (status == Status.Active)
+            Reactivate();
+        else if (status == Status.Inactive)
+            Inactivate();
+        else
+            throw new InvalidOperationException("Invalid status transition.");
+    }
 }

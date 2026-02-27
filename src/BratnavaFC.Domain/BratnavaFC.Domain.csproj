@@ -9,7 +9,6 @@
   <ItemGroup>
     <Folder Include="Dtos\Authentication\" />
     <Folder Include="Dtos\Players\" />
-    <Folder Include="Dtos\Users\" />
   </ItemGroup>
 
 </Project>
