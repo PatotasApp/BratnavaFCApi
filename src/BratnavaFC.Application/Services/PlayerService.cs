@@ -196,6 +196,7 @@ public class PlayerService : IPlayerService
         player.Id,
         player.Name,
         player.UserId,
+        string.Empty,
         player.SkillPoints,
         player.IsGoalkeeper,
         player.IsGuest,
