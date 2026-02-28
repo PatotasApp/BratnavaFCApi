@@ -101,11 +101,12 @@ public sealed class MatchServiceTests
         bool acceptAllInvites = true,
         bool defineTeamsIfPossible = true,
         bool setScoreInPostGame = false,
-        (int a, int b)? score = null)
+        (int a, int b)? score = null,
+        DateTime? playedAtUtc = null)
     {
         var players = await SeedPlayersAsync(db, groupId, playersCount);
 
-        var match = new MatchEntity(groupId, DateTime.UtcNow, "Boca Jrs");
+        var match = new MatchEntity(groupId, playedAtUtc ?? DateTime.UtcNow, "Boca Jrs");
         db.Matches.Add(match);
 
         // Add players only allowed in Created
@@ -136,13 +137,11 @@ public sealed class MatchServiceTests
 
             if (defineTeamsIfPossible)
             {
-                // precisa ter ao menos 1 em cada time
                 if (players.Count < 2)
                     defineTeamsIfPossible = false;
                 else
                 {
                     var ids = players.Select(p => p.Id).ToList();
-                    // 1º metade no A, resto no B (garante B com >=1)
                     var split = Math.Max(1, ids.Count / 2);
                     var teamA = ids.Take(split).ToList();
                     var teamB = ids.Skip(split).ToList();
@@ -179,6 +178,18 @@ public sealed class MatchServiceTests
             match.SetScore(a, b);
         }
 
+        // PostGame -> Finalized (se pediu)
+        if (targetStatus >= MatchStatus.Finalized)
+        {
+            if (match.Status != MatchStatus.PostGame)
+                throw new InvalidOperationException("Seed pediu Finalized, mas match não está em PostGame.");
+
+            if (!match.TeamAGoals.HasValue || !match.TeamBGoals.HasValue)
+                match.SetScore(1, 0);
+
+            match.FinalizeByVotes();
+        }
+
         await db.SaveChangesAsync();
         return (match, players);
     }
@@ -197,7 +208,6 @@ public sealed class MatchServiceTests
         var group = await SeedGroupAsync(db);
         var players = await SeedPlayersAsync(db, group.Id, 3);
 
-        // Create recebe um MatchEntity "vazio" (sem players), e o service faz SyncPlayersFromGroupCore + OpenAcceptation
         var match = new MatchEntity(group.Id, DateTime.UtcNow, "Boca Jrs");
 
         await sut.Create(group.Id, match, CancellationToken.None);
@@ -210,6 +220,54 @@ public sealed class MatchServiceTests
         reloaded.Status.Should().Be(MatchStatus.Acceptation);
         reloaded.Players.Should().HaveCount(players.Count);
         reloaded.Players.All(p => p.Team == 0).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Create_WhenAlreadyExistsNonFinalizedMatch_ShouldThrow_AndNotCreateNew()
+    {
+        await using var db = DbContextFactory.Create(nameof(Create_WhenAlreadyExistsNonFinalizedMatch_ShouldThrow_AndNotCreateNew));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        // existe uma partida "em andamento" (!= Finalized)
+        await SeedMatchAsync(db, group.Id, playersCount: 2, targetStatus: MatchStatus.Acceptation, acceptAllInvites: false);
+
+        var beforeCount = await db.Matches.CountAsync();
+
+        var newMatch = new MatchEntity(group.Id, DateTime.UtcNow, "Boca Jrs");
+
+        var act = async () => await sut.Create(group.Id, newMatch, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("Ja existe uma partida em andamento (não finalizada) para este grupo.");
+
+        var afterCount = await db.Matches.CountAsync();
+        afterCount.Should().Be(beforeCount);
+    }
+
+    [Fact]
+    public async Task Create_WhenOnlyFinalizedMatchesExist_ShouldAllowCreating()
+    {
+        await using var db = DbContextFactory.Create(nameof(Create_WhenOnlyFinalizedMatchesExist_ShouldAllowCreating));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        // cria uma Finalized
+        await SeedMatchAsync(db, group.Id, playersCount: 2, targetStatus: MatchStatus.Finalized, acceptAllInvites: true, defineTeamsIfPossible: true, setScoreInPostGame: true);
+
+        var newMatch = new MatchEntity(group.Id, DateTime.UtcNow, "Boca Jrs");
+
+        await sut.Create(group.Id, newMatch, CancellationToken.None);
+
+        var reloaded = await db.Matches
+            .AsNoTracking()
+            .FirstAsync(m => m.Id == newMatch.Id);
+
+        reloaded.Status.Should().Be(MatchStatus.Acceptation);
     }
 
     [Fact]
@@ -290,6 +348,75 @@ public sealed class MatchServiceTests
     }
 
     // =========================
+    // CURRENT MATCH (new)
+    // =========================
+
+    [Fact]
+    public async Task GetCurrentAsync_WhenNone_ShouldReturnNull()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetCurrentAsync_WhenNone_ShouldReturnNull));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        var current = await sut.GetCurrentAsync(group.Id, CancellationToken.None);
+
+        current.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetCurrentAsync_WhenOnlyFinalized_ShouldReturnNull()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetCurrentAsync_WhenOnlyFinalized_ShouldReturnNull));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        await SeedMatchAsync(db, group.Id, playersCount: 2, targetStatus: MatchStatus.Finalized, acceptAllInvites: true, defineTeamsIfPossible: true, setScoreInPostGame: true);
+
+        var current = await sut.GetCurrentAsync(group.Id, CancellationToken.None);
+
+        current.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetCurrentAsync_WhenHasNonFinalized_ShouldReturnLatestByPlayedAt()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetCurrentAsync_WhenHasNonFinalized_ShouldReturnLatestByPlayedAt));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        // mais antiga (não finalizada)
+        var (m1, _) = await SeedMatchAsync(
+            db,
+            group.Id,
+            playersCount: 2,
+            targetStatus: MatchStatus.Acceptation,
+            acceptAllInvites: false,
+            playedAtUtc: DateTime.UtcNow.AddHours(-2));
+
+        // mais recente (não finalizada)
+        var (m2, _) = await SeedMatchAsync(
+            db,
+            group.Id,
+            playersCount: 2,
+            targetStatus: MatchStatus.MatchMaking,
+            acceptAllInvites: true,
+            defineTeamsIfPossible: true,
+            playedAtUtc: DateTime.UtcNow.AddHours(-1));
+
+        var current = await sut.GetCurrentAsync(group.Id, CancellationToken.None);
+
+        current.Should().NotBeNull();
+        current!.Id.Should().Be(m2.Id);
+        current.Status.Should().NotBe(MatchStatus.Finalized);
+    }
+
+    // =========================
     // MATCHMAKING
     // =========================
 
@@ -302,7 +429,6 @@ public sealed class MatchServiceTests
 
         var group = await SeedGroupAsync(db);
 
-        // Acceptation sem aceitar todos
         var (match, players) = await SeedMatchAsync(
             db,
             group.Id,
@@ -310,7 +436,6 @@ public sealed class MatchServiceTests
             targetStatus: MatchStatus.Acceptation,
             acceptAllInvites: false);
 
-        // aceita só 1
         await sut.AcceptInviteAsync(group.Id, match.Id, players[0].Id, CancellationToken.None);
 
         var act = async () => await sut.GoToMatchMakingAsync(group.Id, match.Id, CancellationToken.None);
@@ -531,7 +656,6 @@ public sealed class MatchServiceTests
             acceptAllInvites: true,
             defineTeamsIfPossible: true);
 
-        // players[0] está em algum time (1 ou 2) pois foi definido no seed
         await sut.AddGoalAsync(
             group.Id,
             match.Id,
@@ -596,7 +720,6 @@ public sealed class MatchServiceTests
             acceptAllInvites: true,
             defineTeamsIfPossible: true);
 
-        // cria 2 gols (PostGame aceita)
         await sut.AddGoalAsync(group.Id, match.Id, new AddGoalRequestDto(players[0].Id, null, "00:10"), CancellationToken.None);
         await sut.AddGoalAsync(group.Id, match.Id, new AddGoalRequestDto(players[0].Id, null, "00:20"), CancellationToken.None);
 
@@ -636,11 +759,11 @@ public sealed class MatchServiceTests
             defineTeamsIfPossible: true);
 
         var goals = new List<AddGoalRequestDto>
-    {
-        new(players[0].Id, null, "00:05"),
-        new(players[1].Id, players[0].Id, "00:10"),
-        new(players[2].Id, null, null),
-    };
+        {
+            new(players[0].Id, null, "00:05"),
+            new(players[1].Id, players[0].Id, "00:10"),
+            new(players[2].Id, null, null),
+        };
 
         var dto = new AddGoalsBulkRequestDto(goals);
 
@@ -672,10 +795,10 @@ public sealed class MatchServiceTests
             defineTeamsIfPossible: true);
 
         var goals = new List<AddGoalRequestDto>
-    {
-        new(players[0].Id, null, "00:05"),
-        new(Guid.NewGuid(), null, "00:06"), // inválido (não pertence)
-    };
+        {
+            new(players[0].Id, null, "00:05"),
+            new(Guid.NewGuid(), null, "00:06"),
+        };
 
         var dto = new AddGoalsBulkRequestDto(goals);
 
@@ -791,7 +914,6 @@ public sealed class MatchServiceTests
             defineTeamsIfPossible: true,
             setScoreInPostGame: false);
 
-        // adiciona 3 gols (recalcula placar)
         await sut.AddGoalAsync(group.Id, match.Id, new AddGoalRequestDto(players[0].Id, null, "00:01"), CancellationToken.None);
         await sut.AddGoalAsync(group.Id, match.Id, new AddGoalRequestDto(players[0].Id, null, "00:02"), CancellationToken.None);
         await sut.AddGoalAsync(group.Id, match.Id, new AddGoalRequestDto(players[1].Id, null, "00:03"), CancellationToken.None);
@@ -825,7 +947,6 @@ public sealed class MatchServiceTests
             setScoreInPostGame: true,
             score: (0, 0));
 
-        // 3 gols com tempos: 20s, null, 10s
         await sut.AddGoalAsync(group.Id, match.Id, new AddGoalRequestDto(players[0].Id, null, "00:20"), CancellationToken.None);
         await sut.AddGoalAsync(group.Id, match.Id, new AddGoalRequestDto(players[1].Id, null, null), CancellationToken.None);
         await sut.AddGoalAsync(group.Id, match.Id, new AddGoalRequestDto(players[2].Id, null, "00:10"), CancellationToken.None);
@@ -834,12 +955,43 @@ public sealed class MatchServiceTests
 
         goals.Should().HaveCount(3);
 
-        // ordem: 10s, 20s, null
         goals[0].TimeSeconds.Should().Be(10);
         goals[1].TimeSeconds.Should().Be(20);
         goals[2].TimeSeconds.Should().BeNull();
 
         goals.All(g => !string.IsNullOrWhiteSpace(g.ScorerName)).Should().BeTrue();
         goals.Select(g => g.ScorerPlayerId).Should().NotContain(Guid.Empty);
+    }
+
+    [Fact]
+    public async Task RewindOneStepAsync_WhenMatchMaking_ShouldRewindToAcceptation()
+    {
+        await using var db = DbContextFactory.Create(nameof(RewindOneStepAsync_WhenMatchMaking_ShouldRewindToAcceptation));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        var (match, _) = await SeedMatchAsync(
+            db,
+            group.Id,
+            playersCount: 2,
+            targetStatus: MatchStatus.MatchMaking,
+            acceptAllInvites: true,
+            defineTeamsIfPossible: true);
+
+        // sanity
+        var before = await db.Matches.AsNoTracking().FirstAsync(m => m.Id == match.Id);
+        before.Status.Should().Be(MatchStatus.MatchMaking);
+
+        await sut.RewindOneStepAsync(group.Id, match.Id, CancellationToken.None);
+
+        var after = await db.Matches
+            .AsNoTracking()
+            .Include(m => m.Players)
+            .FirstAsync(m => m.Id == match.Id);
+
+        after.Status.Should().Be(MatchStatus.Acceptation);
+        after.Players.All(p => p.Team == 0).Should().BeTrue();
     }
 }

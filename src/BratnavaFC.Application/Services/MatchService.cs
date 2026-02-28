@@ -1,6 +1,7 @@
 ﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
+using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -239,6 +240,13 @@ public sealed class MatchService : IMatchService
     public async Task<MatchEntity> Create(Guid groupId, MatchEntity match, CancellationToken ct)
     {
         await EnsureGroupExistsAsync(groupId, ct);
+
+        var hasOpenMatch = await _context.Matches
+            .AsNoTracking()
+            .AnyAsync(m => m.GroupId == groupId && m.Status != MatchStatus.Finalized, ct);
+
+        if (hasOpenMatch)
+            throw new InvalidOperationException("Ja existe uma partida em andamento (não finalizada) para este grupo.");
 
         _repository.Add(match);
 
@@ -622,6 +630,17 @@ public sealed class MatchService : IMatchService
         await _context.SaveChangesAsync(ct);
     }
 
+    public async Task<MatchEntity?> GetCurrentAsync(Guid groupId, CancellationToken ct = default)
+    {
+        await EnsureGroupExistsAsync(groupId, ct);
+
+        return await _context.Matches
+            .AsNoTracking()
+            .Where(m => m.GroupId == groupId && m.Status != MatchStatus.Finalized)
+            .OrderByDescending(m => m.PlayedAt)
+            .FirstOrDefaultAsync(ct);
+    }
+
     public async Task AddGoalsBulkAsync(Guid groupId, Guid matchId, AddGoalsBulkRequestDto dto, CancellationToken ct)
     {
         await EnsureGroupExistsAsync(groupId, ct);
@@ -681,6 +700,293 @@ public sealed class MatchService : IMatchService
             await tx.RollbackAsync(ct);
             throw;
         }
+    }
+
+    public async Task RewindOneStepAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        var match = await GetByIdAsync(groupId, matchId, ct) ?? throw new InvalidOperationException("Partida nao encontrada.");
+
+        if (match.GroupId != groupId)
+            throw new InvalidOperationException("Partida nao pertence a este grupo.");
+
+        match.RewindOneStep();
+
+        _context.Update(match);
+        await _context.SaveChangesAsync(ct);
+    }
+
+    public async Task<MatchHeaderDto?> GetHeaderAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        await EnsureGroupExistsAsync(groupId, ct);
+        EnsureMatchId(matchId);
+
+        return await _context.Matches
+            .AsNoTracking()
+            .Where(m => m.GroupId == groupId && m.Id == matchId)
+            .Select(m => new MatchHeaderDto
+            {
+                MatchId = m.Id,
+                GroupId = m.GroupId,
+                PlayedAt = m.PlayedAt,
+                PlaceName = m.PlaceName,
+                Status = (short)m.Status,
+                StatusName = m.Status.ToString(),
+                TeamAGoals = m.TeamAGoals,
+                TeamBGoals = m.TeamBGoals
+            })
+            .FirstOrDefaultAsync(ct);
+    }
+
+    public async Task<MatchAcceptationDto?> GetAcceptationAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        await EnsureGroupExistsAsync(groupId, ct);
+        EnsureMatchId(matchId);
+
+        return await _context.Matches
+            .AsNoTracking()
+            .Where(m => m.GroupId == groupId && m.Id == matchId)
+            .Select(m => new MatchAcceptationDto
+            {
+                MatchId = m.Id,
+                Status = (short)m.Status,
+                Players = m.Players
+                    .OrderBy(p => p.Player!.Name)
+                    .Select(mp => new PlayerInMatchDto
+                    {
+                        MatchPlayerId = mp.Id,
+                        PlayerId = mp.PlayerId,
+                        PlayerName = mp.Player!.Name,
+                        IsGoalkeeper = mp.Player!.IsGoalkeeper,
+                        Team = mp.Team,
+                        InviteResponse = (short)mp.InviteResponse
+                    })
+                    .ToList()
+            })
+            .FirstOrDefaultAsync(ct);
+    }
+
+    public async Task<MatchMatchMakingDto?> GetMatchMakingAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        await EnsureGroupExistsAsync(groupId, ct);
+        EnsureMatchId(matchId);
+
+        return await _context.Matches
+            .AsNoTracking()
+            .Where(m => m.GroupId == groupId && m.Id == matchId)
+            .Select(m => new MatchMatchMakingDto
+            {
+                MatchId = m.Id,
+                Status = (short)m.Status,
+
+                TeamAColor = m.TeamAColorId == null ? null : new TeamColorDto
+                {
+                    Id = m.TeamAColor!.Id,
+                    Name = m.TeamAColor!.Name,
+                    HexValue = m.TeamAColor!.HexValue
+                },
+
+                TeamBColor = m.TeamBColorId == null ? null : new TeamColorDto
+                {
+                    Id = m.TeamBColor!.Id,
+                    Name = m.TeamBColor!.Name,
+                    HexValue = m.TeamBColor!.HexValue
+                },
+
+                TeamAPlayers = m.Players
+                    .Where(p => p.Team == 1)
+                    .OrderByDescending(p => p.Player!.IsGoalkeeper)
+                    .ThenBy(p => p.Player!.Name)
+                    .Select(mp => new PlayerInMatchDto
+                    {
+                        MatchPlayerId = mp.Id,
+                        PlayerId = mp.PlayerId,
+                        PlayerName = mp.Player!.Name,
+                        IsGoalkeeper = mp.Player!.IsGoalkeeper,
+                        Team = mp.Team,
+                        InviteResponse = (short)mp.InviteResponse
+                    })
+                    .ToList(),
+
+                TeamBPlayers = m.Players
+                    .Where(p => p.Team == 2)
+                    .OrderByDescending(p => p.Player!.IsGoalkeeper)
+                    .ThenBy(p => p.Player!.Name)
+                    .Select(mp => new PlayerInMatchDto
+                    {
+                        MatchPlayerId = mp.Id,
+                        PlayerId = mp.PlayerId,
+                        PlayerName = mp.Player!.Name,
+                        IsGoalkeeper = mp.Player!.IsGoalkeeper,
+                        Team = mp.Team,
+                        InviteResponse = (short)mp.InviteResponse
+                    })
+                    .ToList(),
+
+                UnassignedPlayers = m.Players
+                    .Where(p => p.Team == 0)
+                    .OrderBy(p => p.Player!.Name)
+                    .Select(mp => new PlayerInMatchDto
+                    {
+                        MatchPlayerId = mp.Id,
+                        PlayerId = mp.PlayerId,
+                        PlayerName = mp.Player!.Name,
+                        IsGoalkeeper = mp.Player!.IsGoalkeeper,
+                        Team = mp.Team,
+                        InviteResponse = (short)mp.InviteResponse
+                    })
+                    .ToList(),
+            })
+            .FirstOrDefaultAsync(ct);
+    }
+
+    public async Task<MatchPostGameDto?> GetPostGameAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        await EnsureGroupExistsAsync(groupId, ct);
+        EnsureMatchId(matchId);
+
+        var baseData = await _context.Matches
+            .AsNoTracking()
+            .Where(m => m.GroupId == groupId && m.Id == matchId)
+            .Select(m => new
+            {
+                m.Id,
+                Status = (short)m.Status,
+                m.TeamAGoals,
+                m.TeamBGoals,
+
+                Players = m.Players.Select(p => new
+                {
+                    p.Id,
+                    p.PlayerId,
+                    PlayerName = p.Player!.Name,
+                    p.Team
+                }).ToList(),
+
+                Votes = m.Votes.Select(v => new
+                {
+                    v.VoterId,
+                    v.VotedForId
+                }).ToList(),
+
+                Goals = m.Goals.Select(g => new
+                {
+                    g.Id,
+                    g.ScorerMatchPlayerId,
+                    g.AssistMatchPlayerId,
+                    g.TimeSeconds,
+                    g.CreateDate
+                }).ToList()
+            })
+            .FirstOrDefaultAsync(ct);
+
+        if (baseData is null) return null;
+
+        var nameByMpId = baseData.Players.ToDictionary(x => x.Id, x => x.PlayerName);
+        var playerIdByMpId = baseData.Players.ToDictionary(x => x.Id, x => x.PlayerId);
+        var teamByMpId = baseData.Players.ToDictionary(x => x.Id, x => x.Team);
+
+        // voteCounts
+        var voteCounts = baseData.Votes
+            .Where(v => v.VotedForId != Guid.Empty)
+            .GroupBy(v => v.VotedForId)
+            .Select(g => new VoteCountDto
+            {
+                VotedForMatchPlayerId = g.Key,
+                VotedForName = nameByMpId.TryGetValue(g.Key, out var n) ? n : string.Empty,
+                Count = g.Count()
+            })
+            .OrderByDescending(x => x.Count)
+            .ThenBy(x => x.VotedForName)
+            .ToList();
+
+        MatchMvpDto? computedMvp = null;
+        var top = voteCounts.FirstOrDefault();
+        if (top is not null && top.VotedForMatchPlayerId != Guid.Empty)
+        {
+            var mpId = top.VotedForMatchPlayerId;
+            computedMvp = new MatchMvpDto
+            {
+                MatchPlayerId = mpId,
+                PlayerId = playerIdByMpId.TryGetValue(mpId, out var pid) ? pid : Guid.Empty,
+                PlayerName = nameByMpId.TryGetValue(mpId, out var pn) ? pn : string.Empty,
+                Team = teamByMpId.TryGetValue(mpId, out var t) ? t : (short)0
+            };
+        }
+
+        var goals = baseData.Goals
+            .OrderBy(g => g.TimeSeconds ?? int.MaxValue)
+            .ThenBy(g => g.CreateDate)
+            .Select(g =>
+            {
+                nameByMpId.TryGetValue(g.ScorerMatchPlayerId, out var scorerName);
+                playerIdByMpId.TryGetValue(g.ScorerMatchPlayerId, out var scorerPid);
+
+                string? assistName = null;
+                Guid? assistPid = null;
+                if (g.AssistMatchPlayerId.HasValue)
+                {
+                    nameByMpId.TryGetValue(g.AssistMatchPlayerId.Value, out assistName);
+                    if (playerIdByMpId.TryGetValue(g.AssistMatchPlayerId.Value, out var ap))
+                        assistPid = ap;
+                }
+
+                return new GoalDto
+                {
+                    GoalId = g.Id,
+                    ScorerMatchPlayerId = g.ScorerMatchPlayerId,
+                    AssistMatchPlayerId = g.AssistMatchPlayerId,
+                    ScorerPlayerId = scorerPid,
+                    ScorerName = scorerName ?? string.Empty,
+                    AssistPlayerId = assistPid,
+                    AssistName = assistName,
+                    TimeSeconds = g.TimeSeconds,
+                    Time = MatchTimeParser.FormatFromSeconds(g.TimeSeconds)
+                };
+            })
+            .ToList();
+
+        return new MatchPostGameDto
+        {
+            MatchId = baseData.Id,
+            Status = baseData.Status,
+            TeamAGoals = baseData.TeamAGoals,
+            TeamBGoals = baseData.TeamBGoals,
+            ComputedMvp = computedMvp,
+            VoteCounts = voteCounts,
+            Goals = goals
+        };
+    }
+
+    public async Task<IReadOnlyList<MatchHistoryItemDto>> GetHistoryAsync(Guid groupId, int take, CancellationToken cancellationToken)
+    {
+        if (groupId == Guid.Empty) throw new InvalidOperationException("GroupId e obrigatorio.");
+        if (take <= 0) take = 200;
+        if (take > 500) take = 500;
+
+        // Subquery p/ cores (sem include)
+        var colors = _context.TeamColors.AsNoTracking().Where(c => c.GroupId == groupId);
+
+        var query =
+            from m in _context.Matches.AsNoTracking()
+            where m.GroupId == groupId
+            orderby m.PlayedAt descending
+            join ca in colors on m.TeamAColorId equals ca.Id into caJoin
+            from ca in caJoin.DefaultIfEmpty()
+            join cb in colors on m.TeamBColorId equals cb.Id into cbJoin
+            from cb in cbJoin.DefaultIfEmpty()
+            select new MatchHistoryItemDto(
+                m.Id,
+                m.PlayedAt,
+                m.TeamAGoals ?? 0,
+                m.TeamBGoals ?? 0,
+                (int)m.Status,
+                m.Status.ToString(),
+                m.PlaceName,
+                ca != null ? ca.HexValue : null,
+                cb != null ? cb.HexValue : null
+            );
+
+        return await query.Take(take).ToListAsync(cancellationToken);
     }
 
     private static PlayerInMatchDto ToPlayerDto(MatchPlayerEntity mp) => new()

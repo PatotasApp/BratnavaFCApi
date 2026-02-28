@@ -179,7 +179,7 @@ public sealed class MatchEntityTests
     [Fact]
     public void AddPlayer_WhenNotCreated_ShouldThrow()
     {
-        var (match, p1, p2, _, _) = CreateMatchWithTwoPlayers_Created();
+        var (match, _, _, _, _) = CreateMatchWithTwoPlayers_Created();
         match.OpenAcceptation();
 
         var p3 = new PlayerEntity("C", Guid.NewGuid(), match.GroupId, 0, false, false, Status.Active);
@@ -230,12 +230,12 @@ public sealed class MatchEntityTests
         match.AcceptInvite(p1.Id);
         match.AcceptInvite(p2.Id);
 
-        match.GoToMatchMaking();  
+        match.GoToMatchMaking();
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
             match.AssignTeams(
                 teamAPlayerIds: new[] { p1.Id },
-                teamBPlayerIds: new[] { p3.Id })); 
+                teamBPlayerIds: new[] { p3.Id }));
 
         Assert.Equal("Ha jogadores que ainda nao aceitaram o convite.", ex.Message);
     }
@@ -247,7 +247,7 @@ public sealed class MatchEntityTests
 
         match.OpenAcceptation();
         match.AcceptInvite(p1.Id);
-        match.RejectInvite(p2.Id); // só 1 aceito
+        match.RejectInvite(p2.Id);
 
         var ex = Assert.Throws<InvalidOperationException>(() => match.GoToMatchMaking());
 
@@ -344,9 +344,8 @@ public sealed class MatchEntityTests
     [Fact]
     public void Finalize_WithGoalsButNoScore_ShouldRecalculateAndFinalize()
     {
-        var (match, p1, _, mp1, _) = CreateMatchWithTwoPlayers_PostGame();
+        var (match, _, _, mp1, _) = CreateMatchWithTwoPlayers_PostGame();
 
-        // gols em PostGame é permitido
         match.AddGoalByMatchPlayer(mp1.Id, null, 10);
 
         match.FinalizeByVotes();
@@ -395,9 +394,8 @@ public sealed class MatchEntityTests
     [Fact]
     public void AddGoal_WhenNotStartedOrPostGame_ShouldThrow()
     {
-        var (match, p1, p2, _, _) = CreateMatchWithTwoPlayers_MatchMaking(assignTeams: true);
+        var (match, p1, _, _, _) = CreateMatchWithTwoPlayers_MatchMaking(assignTeams: true);
 
-        // ainda MatchMaking
         var scorerMp = match.Players.First(x => x.PlayerId == p1.Id);
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
@@ -461,5 +459,113 @@ public sealed class MatchEntityTests
         match.AddPlayer(new MatchPlayerEntity(p3.Id), p3);
 
         return (match, p1, p2, p3);
+    }
+
+    [Fact]
+    public void Rewind_FromMatchMaking_ShouldGoToAcceptation_AndClearTeamsAndColors()
+    {
+        var (match, p1, p2, _, _) = CreateMatchWithTwoPlayers_MatchMaking(assignTeams: true);
+
+        // seta cores (se seu entity tiver esse método)
+        match.SetTeamColors(Guid.NewGuid(), Guid.NewGuid());
+
+        Assert.Equal(MatchStatus.MatchMaking, match.Status);
+        Assert.True(match.Players.Any(p => p.Team != 0));
+
+        match.RewindOneStep();
+
+        Assert.Equal(MatchStatus.Acceptation, match.Status);
+        Assert.All(match.Players, mp => Assert.Equal((short)0, mp.Team));
+        Assert.Null(match.TeamAColorId);
+        Assert.Null(match.TeamBColorId);
+    }
+
+    [Fact]
+    public void Rewind_FromStarted_ShouldGoToMatchMaking_AndClearGoalsAndScore()
+    {
+        var (match, p1, _, _, _) = CreateMatchWithTwoPlayers_Started();
+
+        // cria um gol se você tiver como (senão, ajuste)
+        var scorerMp = match.Players.First(x => x.PlayerId == p1.Id);
+        match.AddGoalByMatchPlayer(scorerMp.Id, null, 10);
+
+        Assert.Equal(MatchStatus.Started, match.Status);
+        Assert.NotEmpty(match.Goals);
+
+        match.RewindOneStep();
+
+        Assert.Equal(MatchStatus.MatchMaking, match.Status);
+        Assert.Empty(match.Goals);
+        Assert.Null(match.TeamAGoals);
+        Assert.Null(match.TeamBGoals);
+    }
+
+    [Fact]
+    public void Rewind_FromEnded_ShouldGoToStarted()
+    {
+        var (match, _, _, _, _) = CreateMatchWithTwoPlayers_Started();
+        match.End();
+
+        Assert.Equal(MatchStatus.Ended, match.Status);
+
+        match.RewindOneStep();
+
+        Assert.Equal(MatchStatus.Started, match.Status);
+    }
+
+    [Fact]
+    public void Rewind_FromPostGame_ShouldGoToEnded_AndClearVotesAndScore()
+    {
+        var (match, _, _, mp1, mp2) = CreateMatchWithTwoPlayers_PostGame();
+
+        // simula score e voto
+        match.SetScore(1, 0);
+        var vote = match.CreateVote(mp1.Id, mp2.Id);
+        match.Votes.Add(vote);
+
+        Assert.Equal(MatchStatus.PostGame, match.Status);
+        Assert.NotEmpty(match.Votes);
+        Assert.True(match.TeamAGoals.HasValue || match.TeamBGoals.HasValue);
+
+        match.RewindOneStep();
+
+        Assert.Equal(MatchStatus.Ended, match.Status);
+        Assert.Empty(match.Votes);
+        Assert.All(match.Players, p => Assert.Null(p.VotedForId));
+        Assert.Null(match.TeamAGoals);
+        Assert.Null(match.TeamBGoals);
+    }
+
+    [Fact]
+    public void Rewind_FromAcceptation_ShouldGoToCreated()
+    {
+        var (match, _, _, _, _) = CreateMatchWithTwoPlayers_Acceptation(acceptBoth: true);
+
+        Assert.Equal(MatchStatus.Acceptation, match.Status);
+
+        match.RewindOneStep();
+
+        Assert.Equal(MatchStatus.Created, match.Status);
+        Assert.All(match.Players, mp => Assert.Equal(InviteResponse.None, mp.InviteResponse));
+    }
+
+    [Fact]
+    public void Rewind_FromCreated_ShouldThrow()
+    {
+        var (match, _, _, _, _) = CreateMatchWithTwoPlayers_Created();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => match.RewindOneStep());
+        Assert.Equal("Nao e possivel voltar status quando a partida esta Created.", ex.Message);
+    }
+
+    [Fact]
+    public void Rewind_FromFinalized_ShouldThrow()
+    {
+        var (match, _, _, _, _) = CreateMatchWithTwoPlayers_PostGame();
+        match.SetScore(1, 0);
+        match.FinalizeByVotes();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => match.RewindOneStep());
+        Assert.Equal("Partida finalizada. Nao e possivel voltar status.", ex.Message);
     }
 }

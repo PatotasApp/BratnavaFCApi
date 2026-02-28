@@ -32,16 +32,24 @@ public interface IMatchService
     Task SetTeamColorsAsync(Guid groupId, Guid matchId, Guid? teamAColorId, Guid? teamBColorId, bool randomize, CancellationToken cancellationToken);
 
     Task FinalizeMatchAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken);
+
     Task<MatchDetailsDto?> GetDetailsAsync(Guid matchId, CancellationToken ct);
-
     Task AssignTeamsAsync(Guid groupId, Guid matchId, AssignTeamsDto dto, CancellationToken ct);
-
     Task SwapPlayersByPlayerIdAsync(Guid groupId, Guid matchId, Guid playerAId, Guid playerBId, CancellationToken ct);
-
     Task AddGoalAsync(Guid groupId, Guid matchId, AddGoalRequestDto dto, CancellationToken ct);
     Task RemoveGoalAsync(Guid groupId, Guid matchId, Guid goalId, CancellationToken ct);
     Task AddGoalsBulkAsync(Guid groupId, Guid matchId, AddGoalsBulkRequestDto dto, CancellationToken ct);
     Task<List<GoalDto>> GetGoalsAsync(Guid groupId, Guid matchId, CancellationToken ct);
     Task GoToMatchMakingAsync(Guid groupId, Guid matchId, CancellationToken ct);
     Task GoToPostGameAsync(Guid groupId, Guid matchId, CancellationToken ct);
+
+    Task<MatchHeaderDto?> GetHeaderAsync(Guid groupId, Guid matchId, CancellationToken ct);
+    Task<MatchAcceptationDto?> GetAcceptationAsync(Guid groupId, Guid matchId, CancellationToken ct);
+    Task<MatchMatchMakingDto?> GetMatchMakingAsync(Guid groupId, Guid matchId, CancellationToken ct);
+    Task<MatchPostGameDto?> GetPostGameAsync(Guid groupId, Guid matchId, CancellationToken ct);
+
+    Task<MatchEntity?> GetCurrentAsync(Guid groupId, CancellationToken ct);
+
+    Task RewindOneStepAsync(Guid groupId, Guid matchId, CancellationToken ct);
+    Task<IReadOnlyList<MatchHistoryItemDto>> GetHistoryAsync(Guid groupId, int take, CancellationToken cancellationToken);
 }
