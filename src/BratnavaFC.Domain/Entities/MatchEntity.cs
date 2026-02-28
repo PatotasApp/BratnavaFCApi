@@ -433,4 +433,34 @@ public class MatchEntity : BaseEntity
         TeamAGoals = countA;
         TeamBGoals = countB;
     }
+
+    public void RewindOneStep()
+    {
+        if (Status == MatchStatus.Finalized)
+            throw new InvalidOperationException("Partida finalizada. Nao e possivel voltar status.");
+
+        switch (Status)
+        {
+            case MatchStatus.Created:
+                throw new InvalidOperationException("Nao e possivel voltar status quando a partida esta Created.");
+
+            case MatchStatus.Acceptation:
+                Status = MatchStatus.Created;
+                break;
+            case MatchStatus.MatchMaking:
+                Status = MatchStatus.Acceptation;
+                break;
+            case MatchStatus.Started:
+                Status = MatchStatus.MatchMaking;
+                break;
+            case MatchStatus.Ended:
+                Status = MatchStatus.Started;
+                break;
+            case MatchStatus.PostGame:
+                Status = MatchStatus.Ended;
+                break;
+            default:
+                throw new InvalidOperationException("Status invalido para rewind.");
+        }
+    }
 }

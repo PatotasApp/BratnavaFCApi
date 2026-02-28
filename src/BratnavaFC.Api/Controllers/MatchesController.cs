@@ -33,13 +33,45 @@ public class MatchesController : ControllerBase
         return Ok(ToDto(match));
     }
 
-    // ✅ NOVO: partida em andamento (Status != Finalized)
     [HttpGet("group/{groupId:guid}/current")]
     public async Task<IActionResult> GetCurrent(Guid groupId, CancellationToken cancellationToken)
     {
         var match = await _service.GetCurrentAsync(groupId, cancellationToken);
         if (match is null) return NotFound();
         return Ok(ToDto(match));
+    }
+
+    // header leve (pra stepper / status)
+    [HttpGet("group/{groupId:guid}/{matchId:guid}/header")]
+    public async Task<IActionResult> GetHeader(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        var dto = await _service.GetHeaderAsync(groupId, matchId, ct);
+        if (dto is null) return NotFound();
+        return Ok(dto);
+    }
+
+    [HttpGet("group/{groupId:guid}/{matchId:guid}/acceptation")]
+    public async Task<IActionResult> GetAcceptation(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        var dto = await _service.GetAcceptationAsync(groupId, matchId, ct);
+        if (dto is null) return NotFound();
+        return Ok(dto);
+    }
+
+    [HttpGet("group/{groupId:guid}/{matchId:guid}/matchmaking")]
+    public async Task<IActionResult> GetMatchMaking(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        var dto = await _service.GetMatchMakingAsync(groupId, matchId, ct);
+        if (dto is null) return NotFound();
+        return Ok(dto);
+    }
+
+    [HttpGet("group/{groupId:guid}/{matchId:guid}/postgame")]
+    public async Task<IActionResult> GetPostGame(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        var dto = await _service.GetPostGameAsync(groupId, matchId, ct);
+        if (dto is null) return NotFound();
+        return Ok(dto);
     }
 
     [Authorize(Roles = "Admin,GodMode")]
@@ -357,6 +389,31 @@ public class MatchesController : ControllerBase
         {
             return BadRequest(new { error = ex.Message });
         }
+    }
+
+    [Authorize(Roles = "Admin,GodMode")]
+    [HttpPost("group/{groupId:guid}/{matchId:guid}/rewind")]
+    public async Task<IActionResult> Rewind(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        try
+        {
+            await _service.RewindOneStepAsync(groupId, matchId, ct);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpGet("group/{groupId:guid}/history")]
+    public async Task<IActionResult> GetHistory(
+    Guid groupId,
+    [FromQuery] int take = 200,
+    CancellationToken cancellationToken = default)
+    {
+        var items = await _service.GetHistoryAsync(groupId, take, cancellationToken);
+        return Ok(items);
     }
 
     private static MatchDto ToDto(MatchEntity e) =>

@@ -962,4 +962,36 @@ public sealed class MatchServiceTests
         goals.All(g => !string.IsNullOrWhiteSpace(g.ScorerName)).Should().BeTrue();
         goals.Select(g => g.ScorerPlayerId).Should().NotContain(Guid.Empty);
     }
+
+    [Fact]
+    public async Task RewindOneStepAsync_WhenMatchMaking_ShouldRewindToAcceptation()
+    {
+        await using var db = DbContextFactory.Create(nameof(RewindOneStepAsync_WhenMatchMaking_ShouldRewindToAcceptation));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        var (match, _) = await SeedMatchAsync(
+            db,
+            group.Id,
+            playersCount: 2,
+            targetStatus: MatchStatus.MatchMaking,
+            acceptAllInvites: true,
+            defineTeamsIfPossible: true);
+
+        // sanity
+        var before = await db.Matches.AsNoTracking().FirstAsync(m => m.Id == match.Id);
+        before.Status.Should().Be(MatchStatus.MatchMaking);
+
+        await sut.RewindOneStepAsync(group.Id, match.Id, CancellationToken.None);
+
+        var after = await db.Matches
+            .AsNoTracking()
+            .Include(m => m.Players)
+            .FirstAsync(m => m.Id == match.Id);
+
+        after.Status.Should().Be(MatchStatus.Acceptation);
+        after.Players.All(p => p.Team == 0).Should().BeTrue();
+    }
 }
