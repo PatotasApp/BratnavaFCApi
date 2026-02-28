@@ -443,6 +443,64 @@ public class GroupService_AcceptInviteTests
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("Invite is not pending.");
     }
+
+    [Fact]
+    public async Task WhenMatchInAcceptation_NewPlayer_ShouldAddToMatch()
+    {
+        await using var db  = DbContextFactory.Create(nameof(WhenMatchInAcceptation_NewPlayer_ShouldAddToMatch));
+        var sut = Builders.MakeSut(db);
+
+        var user  = Builders.MakeUser();
+        var group = Builders.MakeGroup();
+        db.Users.Add(user);
+        db.Groups.Add(group);
+
+        // Partida já aberta para aceites
+        var match = new MatchEntity(group.Id, DateTime.UtcNow, "Arena");
+        match.OpenAcceptation();
+        db.Matches.Add(match);
+
+        var invite = new GroupInviteEntity(group.Id, user.Id, null);
+        db.GroupInvites.Add(invite);
+        await db.SaveChangesAsync();
+
+        await sut.AcceptInviteAsync(invite.Id, user.Id, CancellationToken.None);
+
+        // Player criado deve estar na partida
+        var newPlayer = db.Players.First(p => p.UserId == user.Id && p.GroupId == group.Id);
+        var updatedMatch = db.Matches.Include(m => m.Players).First(m => m.Id == match.Id);
+        updatedMatch.Players.Should().HaveCount(1);
+        updatedMatch.Players.Should().Contain(mp => mp.PlayerId == newPlayer.Id);
+    }
+
+    [Fact]
+    public async Task WhenMatchInAcceptation_GuestPlayer_ShouldAddToMatch()
+    {
+        await using var db  = DbContextFactory.Create(nameof(WhenMatchInAcceptation_GuestPlayer_ShouldAddToMatch));
+        var sut = Builders.MakeSut(db);
+
+        var user   = Builders.MakeUser();
+        var group  = Builders.MakeGroup();
+        var guest  = new PlayerEntity("Zé da Pelada", null, group.Id, 7m, false, true, Status.Active);
+        db.Users.Add(user);
+        db.Groups.Add(group);
+        db.Players.Add(guest);
+
+        var match = new MatchEntity(group.Id, DateTime.UtcNow, "Arena");
+        match.OpenAcceptation();
+        db.Matches.Add(match);
+
+        var invite = new GroupInviteEntity(group.Id, user.Id, guest.Id);
+        db.GroupInvites.Add(invite);
+        await db.SaveChangesAsync();
+
+        await sut.AcceptInviteAsync(invite.Id, user.Id, CancellationToken.None);
+
+        // Guest player vinculado deve estar na partida
+        var updatedMatch = db.Matches.Include(m => m.Players).First(m => m.Id == match.Id);
+        updatedMatch.Players.Should().HaveCount(1);
+        updatedMatch.Players.Should().Contain(mp => mp.PlayerId == guest.Id);
+    }
 }
 
 // ─── GroupService — RejectInviteAsync ────────────────────────────────────────

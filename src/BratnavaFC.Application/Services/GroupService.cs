@@ -307,6 +307,8 @@ public class GroupService : IGroupService
             if (invite == null) throw new ApplicationException("Invite not found.");
             if (invite.Status != GroupInviteStatus.Pending) throw new InvalidOperationException("Invite is not pending.");
 
+            PlayerEntity thePlayer;
+
             if (invite.GuestPlayerId.HasValue)
             {
                 // Vincular ao guest player existente
@@ -318,6 +320,7 @@ public class GroupService : IGroupService
                 player.SetUser(userId);
                 player.SetIsGuest(false);
                 _context.Players.Update(player);
+                thePlayer = player;
             }
             else
             {
@@ -329,6 +332,19 @@ public class GroupService : IGroupService
                 var name = $"{user.FirstName} {user.LastName}".Trim();
                 var newPlayer = new PlayerEntity(name, userId, invite.GroupId, 0, false, false, Status.Active);
                 _context.Players.Add(newPlayer);
+                thePlayer = newPlayer;
+            }
+
+            // Se houver partida em Acceptation no grupo, incluir o novo jogador
+            var acceptationMatch = await _context.Matches
+                .Include(m => m.Players)
+                .FirstOrDefaultAsync(m => m.GroupId == invite.GroupId && m.Status == MatchStatus.Acceptation, cancellationToken);
+
+            if (acceptationMatch != null && !acceptationMatch.Players.Any(mp => mp.PlayerId == thePlayer.Id))
+            {
+                var mp = new MatchPlayerEntity(thePlayer.Id);
+                mp.AssignToMatch(acceptationMatch);   // também chama AssignGroup internamente
+                _context.MatchPlayers.Add(mp);
             }
 
             invite.Accept();
