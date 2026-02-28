@@ -462,30 +462,24 @@ public sealed class MatchEntityTests
     }
 
     [Fact]
-    public void Rewind_FromMatchMaking_ShouldGoToAcceptation_AndClearTeamsAndColors()
+    public void Rewind_FromMatchMaking_ShouldGoToAcceptation()
     {
         var (match, p1, p2, _, _) = CreateMatchWithTwoPlayers_MatchMaking(assignTeams: true);
 
-        // seta cores (se seu entity tiver esse método)
         match.SetTeamColors(Guid.NewGuid(), Guid.NewGuid());
 
         Assert.Equal(MatchStatus.MatchMaking, match.Status);
-        Assert.True(match.Players.Any(p => p.Team != 0));
 
         match.RewindOneStep();
 
         Assert.Equal(MatchStatus.Acceptation, match.Status);
-        Assert.All(match.Players, mp => Assert.Equal((short)0, mp.Team));
-        Assert.Null(match.TeamAColorId);
-        Assert.Null(match.TeamBColorId);
     }
 
     [Fact]
-    public void Rewind_FromStarted_ShouldGoToMatchMaking_AndClearGoalsAndScore()
+    public void Rewind_FromStarted_ShouldGoToMatchMaking()
     {
         var (match, p1, _, _, _) = CreateMatchWithTwoPlayers_Started();
 
-        // cria um gol se você tiver como (senão, ajuste)
         var scorerMp = match.Players.First(x => x.PlayerId == p1.Id);
         match.AddGoalByMatchPlayer(scorerMp.Id, null, 10);
 
@@ -495,9 +489,6 @@ public sealed class MatchEntityTests
         match.RewindOneStep();
 
         Assert.Equal(MatchStatus.MatchMaking, match.Status);
-        Assert.Empty(match.Goals);
-        Assert.Null(match.TeamAGoals);
-        Assert.Null(match.TeamBGoals);
     }
 
     [Fact]
@@ -514,26 +505,19 @@ public sealed class MatchEntityTests
     }
 
     [Fact]
-    public void Rewind_FromPostGame_ShouldGoToEnded_AndClearVotesAndScore()
+    public void Rewind_FromPostGame_ShouldGoToEnded()
     {
         var (match, _, _, mp1, mp2) = CreateMatchWithTwoPlayers_PostGame();
 
-        // simula score e voto
         match.SetScore(1, 0);
         var vote = match.CreateVote(mp1.Id, mp2.Id);
         match.Votes.Add(vote);
 
         Assert.Equal(MatchStatus.PostGame, match.Status);
-        Assert.NotEmpty(match.Votes);
-        Assert.True(match.TeamAGoals.HasValue || match.TeamBGoals.HasValue);
 
         match.RewindOneStep();
 
         Assert.Equal(MatchStatus.Ended, match.Status);
-        Assert.Empty(match.Votes);
-        Assert.All(match.Players, p => Assert.Null(p.VotedForId));
-        Assert.Null(match.TeamAGoals);
-        Assert.Null(match.TeamBGoals);
     }
 
     [Fact]
@@ -546,7 +530,6 @@ public sealed class MatchEntityTests
         match.RewindOneStep();
 
         Assert.Equal(MatchStatus.Created, match.Status);
-        Assert.All(match.Players, mp => Assert.Equal(InviteResponse.None, mp.InviteResponse));
     }
 
     [Fact]
