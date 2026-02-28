@@ -133,14 +133,20 @@ public class GroupService : IGroupService
         try
         {
             var group = await _context.Groups
-                .Include(g => g.Players).ThenInclude(p => p.User)
                 .Include(g => g.Admins)
                 .FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
 
             if (group == null)
                 throw new ApplicationException("Group not found.");
 
-            var players = group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, p.User?.UserName, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status)).ToList();
+            // IgnoreQueryFilters para trazer ativos e inativos — o admin precisa ver todos
+            var allPlayers = await _context.Players
+                .IgnoreQueryFilters()
+                .Include(p => p.User)
+                .Where(p => p.GroupId == groupId)
+                .ToListAsync(cancellationToken);
+
+            var players = allPlayers.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, p.User?.UserName, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status)).ToList();
 
             return new GroupDto(
                 group.Id,
