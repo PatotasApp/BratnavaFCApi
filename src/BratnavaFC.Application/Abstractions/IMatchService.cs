@@ -12,6 +12,8 @@ public interface IMatchService
     Task<List<MatchDetailsDto>> GetAllAsync(Guid groupId, CancellationToken ct = default);
     Task<MatchEntity?> GetByIdAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken = default);
 
+    Task<MatchEntity?> GetCurrentAsync(Guid groupId, CancellationToken ct = default);
+
     Task<MatchEntity> Create(Guid groupId, MatchEntity match, CancellationToken cancellationToken);
 
     Task UpdateAsync(Guid groupId, Guid matchId, UpdateMatchDto dto, CancellationToken cancellationToken);

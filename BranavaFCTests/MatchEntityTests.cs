@@ -179,7 +179,7 @@ public sealed class MatchEntityTests
     [Fact]
     public void AddPlayer_WhenNotCreated_ShouldThrow()
     {
-        var (match, p1, p2, _, _) = CreateMatchWithTwoPlayers_Created();
+        var (match, _, _, _, _) = CreateMatchWithTwoPlayers_Created();
         match.OpenAcceptation();
 
         var p3 = new PlayerEntity("C", Guid.NewGuid(), match.GroupId, 0, false, false, Status.Active);
@@ -230,12 +230,12 @@ public sealed class MatchEntityTests
         match.AcceptInvite(p1.Id);
         match.AcceptInvite(p2.Id);
 
-        match.GoToMatchMaking();  
+        match.GoToMatchMaking();
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
             match.AssignTeams(
                 teamAPlayerIds: new[] { p1.Id },
-                teamBPlayerIds: new[] { p3.Id })); 
+                teamBPlayerIds: new[] { p3.Id }));
 
         Assert.Equal("Ha jogadores que ainda nao aceitaram o convite.", ex.Message);
     }
@@ -247,7 +247,7 @@ public sealed class MatchEntityTests
 
         match.OpenAcceptation();
         match.AcceptInvite(p1.Id);
-        match.RejectInvite(p2.Id); // só 1 aceito
+        match.RejectInvite(p2.Id);
 
         var ex = Assert.Throws<InvalidOperationException>(() => match.GoToMatchMaking());
 
@@ -344,9 +344,8 @@ public sealed class MatchEntityTests
     [Fact]
     public void Finalize_WithGoalsButNoScore_ShouldRecalculateAndFinalize()
     {
-        var (match, p1, _, mp1, _) = CreateMatchWithTwoPlayers_PostGame();
+        var (match, _, _, mp1, _) = CreateMatchWithTwoPlayers_PostGame();
 
-        // gols em PostGame é permitido
         match.AddGoalByMatchPlayer(mp1.Id, null, 10);
 
         match.FinalizeByVotes();
@@ -395,9 +394,8 @@ public sealed class MatchEntityTests
     [Fact]
     public void AddGoal_WhenNotStartedOrPostGame_ShouldThrow()
     {
-        var (match, p1, p2, _, _) = CreateMatchWithTwoPlayers_MatchMaking(assignTeams: true);
+        var (match, p1, _, _, _) = CreateMatchWithTwoPlayers_MatchMaking(assignTeams: true);
 
-        // ainda MatchMaking
         var scorerMp = match.Players.First(x => x.PlayerId == p1.Id);
 
         var ex = Assert.Throws<InvalidOperationException>(() =>

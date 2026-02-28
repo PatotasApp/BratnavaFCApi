@@ -1,5 +1,4 @@
 ﻿using BratnavaFC.Application.Abstractions;
-using BratnavaFC.Application.Services;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
@@ -31,6 +30,15 @@ public class MatchesController : ControllerBase
     {
         var match = await _service.GetByIdAsync(groupId, matchId, cancellationToken);
         if (match == null) return NotFound();
+        return Ok(ToDto(match));
+    }
+
+    // ✅ NOVO: partida em andamento (Status != Finalized)
+    [HttpGet("group/{groupId:guid}/current")]
+    public async Task<IActionResult> GetCurrent(Guid groupId, CancellationToken cancellationToken)
+    {
+        var match = await _service.GetCurrentAsync(groupId, cancellationToken);
+        if (match is null) return NotFound();
         return Ok(ToDto(match));
     }
 
@@ -228,7 +236,6 @@ public class MatchesController : ControllerBase
         [FromRoute] Guid matchId,
         CancellationToken cancellationToken)
     {
-        // se quiser validar groupId, crie GetDetailsAsync(groupId, matchId)
         var details = await _service.GetDetailsAsync(matchId, cancellationToken);
         if (details is null) return NotFound();
         if (details.GroupId != groupId) return NotFound();
@@ -245,10 +252,10 @@ public class MatchesController : ControllerBase
     [Authorize(Roles = "Admin,GodMode")]
     [HttpPut("group/{groupId:guid}/{matchId:guid}/teams")]
     public async Task<IActionResult> AssignTeams(
-    Guid groupId,
-    Guid matchId,
-    [FromBody] AssignTeamsDto dto,
-    CancellationToken cancellationToken)
+        Guid groupId,
+        Guid matchId,
+        [FromBody] AssignTeamsDto dto,
+        CancellationToken cancellationToken)
     {
         await _service.AssignTeamsAsync(groupId, matchId, dto, cancellationToken);
         return NoContent();
@@ -257,20 +264,14 @@ public class MatchesController : ControllerBase
     [Authorize(Roles = "Admin,GodMode")]
     [HttpPost("group/{groupId:guid}/{matchId:guid}/swap")]
     public async Task<IActionResult> SwapPlayers(
-    Guid groupId,
-    Guid matchId,
-    [FromBody] SwapPlayersDto dto,
-    CancellationToken ct)
+        Guid groupId,
+        Guid matchId,
+        [FromBody] SwapPlayersDto dto,
+        CancellationToken ct)
     {
         try
         {
-            await _service.SwapPlayersByPlayerIdAsync(
-                groupId,
-                matchId,
-                dto.PlayerAId,
-                dto.PlayerBId,
-                ct);
-
+            await _service.SwapPlayersByPlayerIdAsync(groupId, matchId, dto.PlayerAId, dto.PlayerBId, ct);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -282,10 +283,10 @@ public class MatchesController : ControllerBase
     [Authorize(Roles = "Admin,GodMode")]
     [HttpPost("group/{groupId:guid}/{matchId:guid}/goals")]
     public async Task<IActionResult> AddGoal(
-    Guid groupId,
-    Guid matchId,
-    [FromBody] AddGoalRequestDto dto,
-    CancellationToken ct)
+        Guid groupId,
+        Guid matchId,
+        [FromBody] AddGoalRequestDto dto,
+        CancellationToken ct)
     {
         try
         {
@@ -300,11 +301,7 @@ public class MatchesController : ControllerBase
 
     [Authorize(Roles = "Admin,GodMode")]
     [HttpDelete("group/{groupId:guid}/{matchId:guid}/goals/{goalId:guid}")]
-    public async Task<IActionResult> RemoveGoal(
-        Guid groupId,
-        Guid matchId,
-        Guid goalId,
-        CancellationToken ct)
+    public async Task<IActionResult> RemoveGoal(Guid groupId, Guid matchId, Guid goalId, CancellationToken ct)
     {
         try
         {
@@ -349,11 +346,7 @@ public class MatchesController : ControllerBase
 
     [Authorize(Roles = "Admin,GodMode")]
     [HttpPost("group/{groupId:guid}/{matchId:guid}/goals/bulk")]
-    public async Task<IActionResult> AddGoalsBulk(
-    Guid groupId,
-    Guid matchId,
-    [FromBody] AddGoalsBulkRequestDto dto,
-    CancellationToken ct)
+    public async Task<IActionResult> AddGoalsBulk(Guid groupId, Guid matchId, [FromBody] AddGoalsBulkRequestDto dto, CancellationToken ct)
     {
         try
         {
@@ -365,7 +358,6 @@ public class MatchesController : ControllerBase
             return BadRequest(new { error = ex.Message });
         }
     }
-
 
     private static MatchDto ToDto(MatchEntity e) =>
         new(

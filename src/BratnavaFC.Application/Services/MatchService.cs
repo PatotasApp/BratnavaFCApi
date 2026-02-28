@@ -1,6 +1,7 @@
 ﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
+using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -239,6 +240,13 @@ public sealed class MatchService : IMatchService
     public async Task<MatchEntity> Create(Guid groupId, MatchEntity match, CancellationToken ct)
     {
         await EnsureGroupExistsAsync(groupId, ct);
+
+        var hasOpenMatch = await _context.Matches
+            .AsNoTracking()
+            .AnyAsync(m => m.GroupId == groupId && m.Status != MatchStatus.Finalized, ct);
+
+        if (hasOpenMatch)
+            throw new InvalidOperationException("Ja existe uma partida em andamento (não finalizada) para este grupo.");
 
         _repository.Add(match);
 
@@ -620,6 +628,17 @@ public sealed class MatchService : IMatchService
         _context.Goals.Remove(goal);
 
         await _context.SaveChangesAsync(ct);
+    }
+
+    public async Task<MatchEntity?> GetCurrentAsync(Guid groupId, CancellationToken ct = default)
+    {
+        await EnsureGroupExistsAsync(groupId, ct);
+
+        return await _context.Matches
+            .AsNoTracking()
+            .Where(m => m.GroupId == groupId && m.Status != MatchStatus.Finalized)
+            .OrderByDescending(m => m.PlayedAt)
+            .FirstOrDefaultAsync(ct);
     }
 
     public async Task AddGoalsBulkAsync(Guid groupId, Guid matchId, AddGoalsBulkRequestDto dto, CancellationToken ct)
