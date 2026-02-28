@@ -12,4 +12,11 @@ public interface IGroupService
     Task InactivateAsync(Guid groupId, CancellationToken cancellationToken);
     Task ReactivateAsync(Guid groupId, CancellationToken cancellationToken);
     Task AddAdminToGroupAsync(Guid groupId, AddAdminToGroupDto request, CancellationToken cancellationToken);
+
+    // ── Convites ──────────────────────────────────────────────────────────────
+    Task<GroupInviteDto> CreateInviteAsync(Guid groupId, CreateGroupInviteDto request, CancellationToken cancellationToken);
+    Task<List<GroupInviteDto>> GetMyInvitesAsync(Guid userId, CancellationToken cancellationToken);
+    Task<int> GetMyPendingInviteCountAsync(Guid userId, CancellationToken cancellationToken);
+    Task AcceptInviteAsync(Guid inviteId, Guid userId, CancellationToken cancellationToken);
+    Task RejectInviteAsync(Guid inviteId, Guid userId, CancellationToken cancellationToken);
 }

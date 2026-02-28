@@ -1,7 +1,8 @@
-﻿using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
+using BratnavaFC.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,13 +11,15 @@ namespace BratnavaFC.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = "User,Admin,GodMode")]
-public class MatchesController : ControllerBase
+public class MatchesController : GroupAuthorizedController
 {
     private readonly IMatchService _service;
+    private readonly AppDbContext _db;
 
-    public MatchesController(IMatchService service)
+    public MatchesController(IMatchService service, AppDbContext db)
     {
         _service = service;
+        _db = db;
     }
 
     [HttpGet("group/{groupId:guid}")]
@@ -34,10 +37,10 @@ public class MatchesController : ControllerBase
         return Ok(ToDto(match));
     }
 
-    [Authorize(Roles = "Admin,GodMode")]
     [HttpPost("group/{groupId:guid}")]
     public async Task<IActionResult> Create(Guid groupId, [FromBody] CreateMatchDto dto, CancellationToken cancellationToken)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
             var entity = new MatchEntity(groupId, dto.PlayedAt, dto.PlaceName);
@@ -51,10 +54,10 @@ public class MatchesController : ControllerBase
         }
     }
 
-    [Authorize(Roles = "Admin,GodMode")]
     [HttpPost("group/{groupId:guid}/{matchId:guid}/players/sync")]
     public async Task<IActionResult> SyncPlayers(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
             await _service.SyncPlayersFromGroupAsync(groupId, matchId, cancellationToken);
@@ -66,10 +69,10 @@ public class MatchesController : ControllerBase
         }
     }
 
-    [Authorize(Roles = "Admin,GodMode")]
     [HttpPut("group/{groupId:guid}/{matchId:guid}")]
     public async Task<IActionResult> Update(Guid groupId, Guid matchId, [FromBody] UpdateMatchDto dto, CancellationToken cancellationToken)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
             await _service.UpdateAsync(groupId, matchId, dto, cancellationToken);
@@ -81,10 +84,10 @@ public class MatchesController : ControllerBase
         }
     }
 
-    [Authorize(Roles = "Admin,GodMode")]
     [HttpDelete("group/{groupId:guid}/{matchId:guid}")]
     public async Task<IActionResult> Delete(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
             await _service.DeleteAsync(groupId, matchId, cancellationToken);
@@ -124,10 +127,10 @@ public class MatchesController : ControllerBase
         }
     }
 
-    [Authorize(Roles = "Admin,GodMode")]
     [HttpPost("group/{groupId:guid}/{matchId:guid}/start")]
     public async Task<IActionResult> StartAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
             await _service.StartMatchAsync(groupId, matchId, cancellationToken);
@@ -139,10 +142,10 @@ public class MatchesController : ControllerBase
         }
     }
 
-    [Authorize(Roles = "Admin,GodMode")]
     [HttpPost("group/{groupId:guid}/{matchId:guid}/end")]
     public async Task<IActionResult> EndAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
             await _service.EndMatchAsync(groupId, matchId, cancellationToken);
@@ -177,10 +180,10 @@ public class MatchesController : ControllerBase
         return Ok(new MatchPlayerDto(mvp.Id, mvp.Player?.Name ?? string.Empty, mvp.IsMvp));
     }
 
-    [Authorize(Roles = "Admin,GodMode")]
     [HttpPatch("group/{groupId:guid}/{matchId:guid}/score")]
     public async Task<IActionResult> SetScoreAsync(Guid groupId, Guid matchId, [FromBody] SetScoreRequestDto dto, CancellationToken cancellationToken)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
             await _service.SetScoreAsync(groupId, matchId, dto.TeamAGoals, dto.TeamBGoals, cancellationToken);
@@ -192,10 +195,10 @@ public class MatchesController : ControllerBase
         }
     }
 
-    [Authorize(Roles = "Admin,GodMode")]
     [HttpPatch("group/{groupId:guid}/{matchId:guid}/colors")]
     public async Task<IActionResult> SetMatchColorsAsync(Guid groupId, Guid matchId, [FromBody] SetMatchColorsRequestDto dto, CancellationToken cancellationToken)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
             await _service.SetTeamColorsAsync(groupId, matchId, dto.TeamAColorId, dto.TeamBColorId, dto.Randomize, cancellationToken);
@@ -207,10 +210,10 @@ public class MatchesController : ControllerBase
         }
     }
 
-    [Authorize(Roles = "Admin,GodMode")]
     [HttpPost("group/{groupId:guid}/{matchId:guid}/finalize")]
     public async Task<IActionResult> FinalizeAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
             await _service.FinalizeMatchAsync(groupId, matchId, cancellationToken);
@@ -228,7 +231,6 @@ public class MatchesController : ControllerBase
         [FromRoute] Guid matchId,
         CancellationToken cancellationToken)
     {
-        // se quiser validar groupId, crie GetDetailsAsync(groupId, matchId)
         var details = await _service.GetDetailsAsync(matchId, cancellationToken);
         if (details is null) return NotFound();
         if (details.GroupId != groupId) return NotFound();
@@ -242,35 +244,29 @@ public class MatchesController : ControllerBase
         return Ok(goals);
     }
 
-    [Authorize(Roles = "Admin,GodMode")]
     [HttpPut("group/{groupId:guid}/{matchId:guid}/teams")]
     public async Task<IActionResult> AssignTeams(
-    Guid groupId,
-    Guid matchId,
-    [FromBody] AssignTeamsDto dto,
-    CancellationToken cancellationToken)
+        Guid groupId,
+        Guid matchId,
+        [FromBody] AssignTeamsDto dto,
+        CancellationToken cancellationToken)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
         await _service.AssignTeamsAsync(groupId, matchId, dto, cancellationToken);
         return NoContent();
     }
 
-    [Authorize(Roles = "Admin,GodMode")]
     [HttpPost("group/{groupId:guid}/{matchId:guid}/swap")]
     public async Task<IActionResult> SwapPlayers(
-    Guid groupId,
-    Guid matchId,
-    [FromBody] SwapPlayersDto dto,
-    CancellationToken ct)
+        Guid groupId,
+        Guid matchId,
+        [FromBody] SwapPlayersDto dto,
+        CancellationToken ct)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         try
         {
-            await _service.SwapPlayersByPlayerIdAsync(
-                groupId,
-                matchId,
-                dto.PlayerAId,
-                dto.PlayerBId,
-                ct);
-
+            await _service.SwapPlayersByPlayerIdAsync(groupId, matchId, dto.PlayerAId, dto.PlayerBId, ct);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -279,14 +275,14 @@ public class MatchesController : ControllerBase
         }
     }
 
-    [Authorize(Roles = "Admin,GodMode")]
     [HttpPost("group/{groupId:guid}/{matchId:guid}/goals")]
     public async Task<IActionResult> AddGoal(
-    Guid groupId,
-    Guid matchId,
-    [FromBody] AddGoalRequestDto dto,
-    CancellationToken ct)
+        Guid groupId,
+        Guid matchId,
+        [FromBody] AddGoalRequestDto dto,
+        CancellationToken ct)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         try
         {
             await _service.AddGoalAsync(groupId, matchId, dto, ct);
@@ -298,7 +294,6 @@ public class MatchesController : ControllerBase
         }
     }
 
-    [Authorize(Roles = "Admin,GodMode")]
     [HttpDelete("group/{groupId:guid}/{matchId:guid}/goals/{goalId:guid}")]
     public async Task<IActionResult> RemoveGoal(
         Guid groupId,
@@ -306,6 +301,7 @@ public class MatchesController : ControllerBase
         Guid goalId,
         CancellationToken ct)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         try
         {
             await _service.RemoveGoalAsync(groupId, matchId, goalId, ct);
@@ -317,10 +313,10 @@ public class MatchesController : ControllerBase
         }
     }
 
-    [Authorize(Roles = "Admin,GodMode")]
     [HttpPost("group/{groupId:guid}/{matchId:guid}/matchmaking")]
     public async Task<IActionResult> GoToMatchMaking(Guid groupId, Guid matchId, CancellationToken ct)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         try
         {
             await _service.GoToMatchMakingAsync(groupId, matchId, ct);
@@ -332,10 +328,10 @@ public class MatchesController : ControllerBase
         }
     }
 
-    [Authorize(Roles = "Admin,GodMode")]
     [HttpPost("group/{groupId:guid}/{matchId:guid}/postgame")]
     public async Task<IActionResult> GoToPostGame(Guid groupId, Guid matchId, CancellationToken ct)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         try
         {
             await _service.GoToPostGameAsync(groupId, matchId, ct);
@@ -347,14 +343,14 @@ public class MatchesController : ControllerBase
         }
     }
 
-    [Authorize(Roles = "Admin,GodMode")]
     [HttpPost("group/{groupId:guid}/{matchId:guid}/goals/bulk")]
     public async Task<IActionResult> AddGoalsBulk(
-    Guid groupId,
-    Guid matchId,
-    [FromBody] AddGoalsBulkRequestDto dto,
-    CancellationToken ct)
+        Guid groupId,
+        Guid matchId,
+        [FromBody] AddGoalsBulkRequestDto dto,
+        CancellationToken ct)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         try
         {
             await _service.AddGoalsBulkAsync(groupId, matchId, dto, ct);
@@ -365,7 +361,6 @@ public class MatchesController : ControllerBase
             return BadRequest(new { error = ex.Message });
         }
     }
-
 
     private static MatchDto ToDto(MatchEntity e) =>
         new(
