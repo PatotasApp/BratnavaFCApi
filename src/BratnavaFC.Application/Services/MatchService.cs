@@ -1116,4 +1116,33 @@ public sealed class MatchService : IMatchService
             Goals = goals
         };
     }
+
+    // ── Adicionar convidado direto na partida (status Acceptation) ─────────────
+
+    public async Task AddGuestToMatchAsync(Guid groupId, Guid matchId, AddGuestToMatchDto dto, CancellationToken ct)
+    {
+        var match = await _context.Matches
+            .Include(m => m.Players)
+            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct)
+            ?? throw new ApplicationException("Match not found.");
+
+        if (match.Status != MatchStatus.Acceptation)
+            throw new InvalidOperationException("Só é possível adicionar convidado quando a partida está em Acceptation.");
+
+        if (string.IsNullOrWhiteSpace(dto.Name))
+            throw new ArgumentException("Nome do convidado é obrigatório.");
+
+        // Cria o player como guest no grupo da partida
+        var guest = new PlayerEntity(dto.Name.Trim(), null, match.GroupId, 0m, dto.IsGoalkeeper, true, Status.Active);
+        _context.Players.Add(guest);
+
+        // Cria o MatchPlayer para a partida
+        var mp = new MatchPlayerEntity(guest.Id);
+        mp.AssignToMatch(match);   // define MatchId, GroupId
+        mp.AssignToPlayer(guest);  // define navigation Player
+        // Team = 0 já configurado no construtor de MatchPlayerEntity
+        _context.MatchPlayers.Add(mp);
+
+        await _context.SaveChangesAsync(ct);
+    }
 }

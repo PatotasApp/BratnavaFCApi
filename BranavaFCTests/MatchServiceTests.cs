@@ -995,4 +995,142 @@ public sealed class MatchServiceTests
 
         after.Status.Should().Be(MatchStatus.Acceptation);
     }
+
+    // =========================
+    // ADD GUEST TO MATCH
+    // =========================
+
+    [Fact]
+    public async Task AddGuestToMatch_HappyPath_CreatesGuestPlayerAndAddsToMatch()
+    {
+        await using var db = DbContextFactory.Create(nameof(AddGuestToMatch_HappyPath_CreatesGuestPlayerAndAddsToMatch));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        var (match, _) = await SeedMatchAsync(db, group.Id, playersCount: 0, targetStatus: MatchStatus.Acceptation);
+        db.ChangeTracker.Clear();
+
+        await sut.AddGuestToMatchAsync(group.Id, match.Id, new AddGuestToMatchDto("Zé Convidado", false), CancellationToken.None);
+
+        // Player guest criado corretamente no grupo
+        var guest = await db.Players.FirstOrDefaultAsync(p => p.GroupId == group.Id && p.Name == "Zé Convidado");
+        guest.Should().NotBeNull();
+        guest!.IsGuest.Should().BeTrue();
+        guest.UserId.Should().BeNull();
+        guest.IsGoalkeeper.Should().BeFalse();
+
+        // MatchPlayer adicionado na partida com Team = 0 (pendente)
+        var updatedMatch = await db.Matches.Include(m => m.Players).FirstAsync(m => m.Id == match.Id);
+        updatedMatch.Players.Should().HaveCount(1);
+        updatedMatch.Players.Single().PlayerId.Should().Be(guest.Id);
+        updatedMatch.Players.Single().Team.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task AddGuestToMatch_AsGoalkeeper_SetsGoalkeeperFlag()
+    {
+        await using var db = DbContextFactory.Create(nameof(AddGuestToMatch_AsGoalkeeper_SetsGoalkeeperFlag));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        var (match, _) = await SeedMatchAsync(db, group.Id, playersCount: 0, targetStatus: MatchStatus.Acceptation);
+        db.ChangeTracker.Clear();
+
+        await sut.AddGuestToMatchAsync(group.Id, match.Id, new AddGuestToMatchDto("Goleirão", true), CancellationToken.None);
+
+        var guest = await db.Players.FirstAsync(p => p.GroupId == group.Id && p.Name == "Goleirão");
+        guest.IsGoalkeeper.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task AddGuestToMatch_WithExistingPlayers_AddsOnlyNewGuest()
+    {
+        await using var db = DbContextFactory.Create(nameof(AddGuestToMatch_WithExistingPlayers_AddsOnlyNewGuest));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        // Partida com 2 jogadores já presentes
+        var (match, _) = await SeedMatchAsync(db, group.Id, playersCount: 2, targetStatus: MatchStatus.Acceptation);
+        db.ChangeTracker.Clear();
+
+        await sut.AddGuestToMatchAsync(group.Id, match.Id, new AddGuestToMatchDto("Novo Convidado", false), CancellationToken.None);
+
+        var updatedMatch = await db.Matches.Include(m => m.Players).FirstAsync(m => m.Id == match.Id);
+        updatedMatch.Players.Should().HaveCount(3);
+
+        var guest = await db.Players.FirstOrDefaultAsync(p => p.GroupId == group.Id && p.Name == "Novo Convidado" && p.IsGuest);
+        guest.Should().NotBeNull();
+        updatedMatch.Players.Should().Contain(mp => mp.PlayerId == guest!.Id);
+    }
+
+    [Fact]
+    public async Task AddGuestToMatch_WhenMatchNotFound_ShouldThrow()
+    {
+        await using var db = DbContextFactory.Create(nameof(AddGuestToMatch_WhenMatchNotFound_ShouldThrow));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        var act = async () => await sut.AddGuestToMatchAsync(
+            group.Id, Guid.NewGuid(),
+            new AddGuestToMatchDto("Fulano", false),
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<ApplicationException>().WithMessage("Match not found.");
+    }
+
+    [Fact]
+    public async Task AddGuestToMatch_WhenMatchNotInAcceptation_ShouldThrow()
+    {
+        await using var db = DbContextFactory.Create(nameof(AddGuestToMatch_WhenMatchNotInAcceptation_ShouldThrow));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        // Match em Created (status 0), não em Acceptation
+        var match = new MatchEntity(group.Id, DateTime.UtcNow, "Arena");
+        db.Matches.Add(match);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var act = async () => await sut.AddGuestToMatchAsync(
+            group.Id, match.Id,
+            new AddGuestToMatchDto("Fulano", false),
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Acceptation*");
+    }
+
+    [Fact]
+    public async Task AddGuestToMatch_WhenMatchInMatchMaking_ShouldThrow()
+    {
+        await using var db = DbContextFactory.Create(nameof(AddGuestToMatch_WhenMatchInMatchMaking_ShouldThrow));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        var (match, _) = await SeedMatchAsync(
+            db, group.Id, playersCount: 2,
+            targetStatus: MatchStatus.MatchMaking,
+            acceptAllInvites: true, defineTeamsIfPossible: true);
+        db.ChangeTracker.Clear();
+
+        var act = async () => await sut.AddGuestToMatchAsync(
+            group.Id, match.Id,
+            new AddGuestToMatchDto("Fulano", false),
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Acceptation*");
+    }
 }

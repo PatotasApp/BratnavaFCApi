@@ -424,6 +424,26 @@ public class MatchesController : GroupAuthorizedController
         return Ok(items);
     }
 
+    [Authorize(Roles = "Admin,GodMode")]
+    [HttpPost("group/{groupId:guid}/{matchId:guid}/guests")]
+    public async Task<IActionResult> AddGuestToMatch(
+        Guid groupId,
+        Guid matchId,
+        [FromBody] AddGuestToMatchDto dto,
+        CancellationToken ct)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        try
+        {
+            await _service.AddGuestToMatchAsync(groupId, matchId, dto, ct);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     private static MatchDto ToDto(MatchEntity e) =>
         new(
             e.Id,

@@ -52,4 +52,6 @@ public interface IMatchService
 
     Task RewindOneStepAsync(Guid groupId, Guid matchId, CancellationToken ct);
     Task<IReadOnlyList<MatchHistoryItemDto>> GetHistoryAsync(Guid groupId, int take, CancellationToken cancellationToken);
+
+    Task AddGuestToMatchAsync(Guid groupId, Guid matchId, AddGuestToMatchDto dto, CancellationToken ct);
 }
