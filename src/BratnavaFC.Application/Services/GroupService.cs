@@ -72,18 +72,58 @@ public class GroupService : IGroupService
 
     public async Task DeleteAsync(Guid groupId, CancellationToken cancellationToken)
     {
+        await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);
         try
         {
-            var group = await _repository.GetByIdIncludingInactiveAsync(groupId, cancellationToken);
+            var group = await _context.Groups
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
+
             if (group == null)
                 throw new ApplicationException("Group not found.");
 
-            _repository.Remove(group);
-            await _repository.SaveChangesAsync(cancellationToken);
+            // 1. Partidas → cascateia MatchPlayers, Votes e Goals (MatchId = Cascade)
+            var matches = await _context.Matches
+                .Where(m => m.GroupId == groupId)
+                .ToListAsync(cancellationToken);
+            _context.Matches.RemoveRange(matches);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            // 2. Cores do time (FK GroupId = Restrict, precisa remoção explícita)
+            var colors = await _context.TeamColors
+                .IgnoreQueryFilters()
+                .Where(c => c.GroupId == groupId)
+                .ToListAsync(cancellationToken);
+            _context.TeamColors.RemoveRange(colors);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            // 3. Configurações do grupo (FK GroupId = Restrict)
+            var settings = await _context.GroupSettings
+                .Where(s => s.GroupId == groupId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (settings != null)
+            {
+                _context.GroupSettings.Remove(settings);
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+
+            // 4. Jogadores (MatchPlayers já removidos no passo 1)
+            var players = await _context.Players
+                .IgnoreQueryFilters()
+                .Where(p => p.GroupId == groupId)
+                .ToListAsync(cancellationToken);
+            _context.Players.RemoveRange(players);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            // 5. Grupo (GroupAdmins e GroupInvites cascateiam automaticamente)
+            _context.Groups.Remove(group);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            await tx.CommitAsync(cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error trying to delete group.");
+            _logger.LogError(ex, "Error trying to delete group with cascade. GroupId={GroupId}", groupId);
             throw;
         }
     }
@@ -170,6 +210,24 @@ public class GroupService : IGroupService
                 g.Group.Admins.Select(x => x.UserId).ToArray(),
                 g.Group.Status,
                 g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status)).ToList()
+            ))
+            .ToListAsync(cancellationToken);
+    }
+
+    public Task<List<GroupDto>> GetAllGroupsAsync(CancellationToken cancellationToken)
+    {
+        return _context.Groups
+            .IgnoreQueryFilters()
+            .Include(g => g.Players)
+            .Include(g => g.Admins)
+            .OrderBy(g => g.Name)
+            .Select(g => new GroupDto(
+                g.Id,
+                g.Name,
+                g.ScheduleMatchDate,
+                g.Admins.Select(a => a.UserId).ToArray(),
+                g.Status,
+                g.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status)).ToList()
             ))
             .ToListAsync(cancellationToken);
     }

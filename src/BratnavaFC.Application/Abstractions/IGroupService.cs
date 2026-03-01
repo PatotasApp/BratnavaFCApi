@@ -9,6 +9,7 @@ public interface IGroupService
     Task DeleteAsync(Guid groupId, CancellationToken cancellationToken);
     Task<GroupDto> GetByIdAsync(Guid groupId, CancellationToken cancellationToken);
     Task<List<GroupDto>> GetByAdminIdAsync(Guid adminId, CancellationToken cancellationToken);
+    Task<List<GroupDto>> GetAllGroupsAsync(CancellationToken cancellationToken);
     Task InactivateAsync(Guid groupId, CancellationToken cancellationToken);
     Task ReactivateAsync(Guid groupId, CancellationToken cancellationToken);
     Task AddAdminToGroupAsync(Guid groupId, AddAdminToGroupDto request, CancellationToken cancellationToken);

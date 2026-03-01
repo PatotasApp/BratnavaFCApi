@@ -59,6 +59,14 @@ public class GroupsController : GroupAuthorizedController
         return NoContent();
     }
 
+    [HttpGet]
+    [Authorize(Roles = "GodMode")]
+    public async Task<IActionResult> GetAllGroupsAsync(CancellationToken cancellationToken)
+    {
+        var response = await _groupService.GetAllGroupsAsync(cancellationToken);
+        return Ok(response);
+    }
+
     [HttpGet("{groupId:guid}")]
     public async Task<IActionResult> GetByIdAsync(Guid groupId, CancellationToken cancellationToken)
     {
