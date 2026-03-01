@@ -349,6 +349,40 @@ public class GroupServiceTests
         g.Players.Should().HaveCount(2);
     }
 
+    [Fact]
+    public async Task GetAllGroupsAsync_ShouldReturnUserName_WhenPlayerHasLinkedUser()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(GetAllGroupsAsync_ShouldReturnUserName_WhenPlayerHasLinkedUser));
+
+        var user = new UserEntity("joaofc", "João", "FC", "j@b.com", "hash", null, null);
+        db.Users.Add(user);
+
+        var group = new GroupEntity("G", null);
+        db.Groups.Add(group);
+
+        var linked = new PlayerEntity("João FC", user.Id, group.Id, 5, false, false, Status.Active);
+        var guest  = new PlayerEntity("Guest",   null,    group.Id, 0, false, true,  Status.Active);
+        db.Players.AddRange(linked, guest);
+
+        await db.SaveChangesAsync();
+
+        var sut = CreateSut(db);
+
+        // Act
+        var result = await sut.GetAllGroupsAsync(CancellationToken.None);
+
+        // Assert
+        var g = result.Should().ContainSingle().Subject;
+        g.Players.Should().HaveCount(2);
+
+        var linkedDto = g.Players.Should().ContainSingle(p => p.Name == "João FC").Subject;
+        linkedDto.UserName.Should().Be("joaofc");
+
+        var guestDto = g.Players.Should().ContainSingle(p => p.Name == "Guest").Subject;
+        guestDto.UserName.Should().BeNull();
+    }
+
     // ─── DeleteAsync (cascade) ────────────────────────────────────────────────
 
     [Fact]

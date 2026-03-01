@@ -221,22 +221,26 @@ public class GroupService : IGroupService
             .ToListAsync(cancellationToken);
     }
 
-    public Task<List<GroupDto>> GetAllGroupsAsync(CancellationToken cancellationToken)
+    public async Task<List<GroupDto>> GetAllGroupsAsync(CancellationToken cancellationToken)
     {
-        return _context.Groups
+        var groups = await _context.Groups
             .IgnoreQueryFilters()
             .Include(g => g.Players)
+                .ThenInclude(p => p.User)
             .Include(g => g.Admins)
             .OrderBy(g => g.Name)
-            .Select(g => new GroupDto(
-                g.Id,
-                g.Name,
-                g.ScheduleMatchDate,
-                g.Admins.Select(a => a.UserId).ToArray(),
-                g.Status,
-                g.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status)).ToList()
-            ))
             .ToListAsync(cancellationToken);
+
+        return groups.Select(g => new GroupDto(
+            g.Id,
+            g.Name,
+            g.ScheduleMatchDate,
+            g.Admins.Select(a => a.UserId).ToArray(),
+            g.Status,
+            g.Players.Select(p => new Domain.Dtos.Players.PlayerDto(
+                p.Id, p.Name, p.UserId, p.User?.UserName,
+                p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status)).ToList()
+        )).ToList();
     }
 
     public async Task AddAdminToGroupAsync(Guid groupId, AddAdminToGroupDto request, CancellationToken cancellationToken)
