@@ -234,7 +234,7 @@ public class GroupService : IGroupService
                 g.ScheduleMatchDate,
                 g.Admins.Select(a => a.UserId).ToArray(),
                 g.Status,
-                g.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status)).ToList()
+                g.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status)).ToList()
             ))
             .ToListAsync(cancellationToken);
     }

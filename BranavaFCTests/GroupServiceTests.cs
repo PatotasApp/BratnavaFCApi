@@ -7,6 +7,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
+using BratnavaFC.Domain.Dtos.Players;
 
 namespace BranavaFC.Tests;
 
@@ -246,6 +247,196 @@ public class GroupServiceTests
         // Assert
         result.Should().ContainSingle()
             .Which.Name.Should().Be("Patota do Admin");
+    }
+
+    // ─── GetAllGroupsAsync ────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetAllGroupsAsync_ShouldReturnAllGroups_IncludingInactive()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(GetAllGroupsAsync_ShouldReturnAllGroups_IncludingInactive));
+
+        var activeGroup = new GroupEntity("Ativa", null);
+        var inactiveGroup = new GroupEntity("Inativa", null);
+        inactiveGroup.Inactivate();
+
+        db.Groups.AddRange(activeGroup, inactiveGroup);
+        await db.SaveChangesAsync();
+
+        var sut = CreateSut(db);
+
+        // Act
+        var result = await sut.GetAllGroupsAsync(CancellationToken.None);
+
+        // Assert
+        result.Should().HaveCount(2);
+        result.Should().Contain(g => g.Name == "Ativa"   && g.Status == Status.Active);
+        result.Should().Contain(g => g.Name == "Inativa" && g.Status == Status.Inactive);
+    }
+
+    [Fact]
+    public async Task GetAllGroupsAsync_ShouldIncludePlayersFromEachGroup()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(GetAllGroupsAsync_ShouldIncludePlayersFromEachGroup));
+
+        var group1 = new GroupEntity("G1", null);
+        var group2 = new GroupEntity("G2", null);
+        db.Groups.AddRange(group1, group2);
+
+        db.Players.Add(new PlayerEntity("P1", null, group1.Id, 0, false, true, Status.Active));
+        db.Players.Add(new PlayerEntity("P2", null, group1.Id, 0, false, true, Status.Active));
+        db.Players.Add(new PlayerEntity("P3", null, group2.Id, 0, false, true, Status.Active));
+
+        await db.SaveChangesAsync();
+
+        var sut = CreateSut(db);
+
+        // Act
+        var result = await sut.GetAllGroupsAsync(CancellationToken.None);
+
+        // Assert
+        var g1 = result.Should().ContainSingle(g => g.Name == "G1").Subject;
+        var g2 = result.Should().ContainSingle(g => g.Name == "G2").Subject;
+
+        g1.Players.Should().HaveCount(2);
+        g2.Players.Should().HaveCount(1).And.Contain(p => p.Name == "P3");
+    }
+
+    [Fact]
+    public async Task GetAllGroupsAsync_ShouldReturnPlayersAlphabeticallyByGroupName()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(GetAllGroupsAsync_ShouldReturnPlayersAlphabeticallyByGroupName));
+
+        db.Groups.AddRange(new GroupEntity("Zebra", null), new GroupEntity("Alpha", null));
+        await db.SaveChangesAsync();
+
+        var sut = CreateSut(db);
+
+        // Act
+        var result = await sut.GetAllGroupsAsync(CancellationToken.None);
+
+        // Assert — ordenados por nome
+        result.First().Name.Should().Be("Alpha");
+        result.Last().Name.Should().Be("Zebra");
+    }
+
+    [Fact]
+    public async Task GetAllGroupsAsync_ShouldIncludeInactivePlayersOfGroup()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(GetAllGroupsAsync_ShouldIncludeInactivePlayersOfGroup));
+
+        var group = new GroupEntity("G", null);
+        db.Groups.Add(group);
+
+        var active   = new PlayerEntity("Ativo",   null, group.Id, 0, false, true, Status.Active);
+        var inactive = new PlayerEntity("Inativo", null, group.Id, 0, false, true, Status.Active);
+        inactive.Inactivate();
+
+        db.Players.AddRange(active, inactive);
+        await db.SaveChangesAsync();
+
+        var sut = CreateSut(db);
+
+        // Act
+        var result = await sut.GetAllGroupsAsync(CancellationToken.None);
+
+        // Assert — deve incluir inativos (IgnoreQueryFilters)
+        var g = result.Should().ContainSingle().Subject;
+        g.Players.Should().HaveCount(2);
+    }
+
+    // ─── DeleteAsync (cascade) ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task DeleteAsync_ShouldDeleteGroup_WhenNoRelatedData()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(DeleteAsync_ShouldDeleteGroup_WhenNoRelatedData));
+
+        var group = new GroupEntity("G", null);
+        db.Groups.Add(group);
+        await db.SaveChangesAsync();
+
+        var sut = CreateSut(db);
+
+        // Act
+        await sut.DeleteAsync(group.Id, CancellationToken.None);
+
+        // Assert
+        var exists = await db.Groups.IgnoreQueryFilters().AnyAsync(g => g.Id == group.Id);
+        exists.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ShouldDeletePlayers_WhenGroupHasPlayers()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(DeleteAsync_ShouldDeletePlayers_WhenGroupHasPlayers));
+
+        var group = new GroupEntity("G", null);
+        db.Groups.Add(group);
+
+        var player = new PlayerEntity("P1", null, group.Id, 0, false, true, Status.Active);
+        db.Players.Add(player);
+        await db.SaveChangesAsync();
+
+        var sut = CreateSut(db);
+
+        // Act
+        await sut.DeleteAsync(group.Id, CancellationToken.None);
+
+        // Assert
+        var groupExists  = await db.Groups.IgnoreQueryFilters().AnyAsync(g => g.Id == group.Id);
+        var playerExists = await db.Players.IgnoreQueryFilters().AnyAsync(p => p.Id == player.Id);
+
+        groupExists.Should().BeFalse();
+        playerExists.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ShouldDeleteTeamColors_WhenGroupHasColors()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(DeleteAsync_ShouldDeleteTeamColors_WhenGroupHasColors));
+
+        var group = new GroupEntity("G", null);
+        db.Groups.Add(group);
+        await db.SaveChangesAsync();
+
+        var color = new TeamColorEntity(group.Id, "Azul", "#0000FF");
+        db.TeamColors.Add(color);
+        await db.SaveChangesAsync();
+
+        var sut = CreateSut(db);
+
+        // Act
+        await sut.DeleteAsync(group.Id, CancellationToken.None);
+
+        // Assert
+        var groupExists = await db.Groups.IgnoreQueryFilters().AnyAsync(g => g.Id == group.Id);
+        var colorExists = await db.TeamColors.IgnoreQueryFilters().AnyAsync(c => c.Id == color.Id);
+
+        groupExists.Should().BeFalse();
+        colorExists.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DeleteAsync_WhenGroupNotFound_ShouldThrow()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(DeleteAsync_WhenGroupNotFound_ShouldThrow));
+        var sut = CreateSut(db);
+
+        // Act
+        var act = async () => await sut.DeleteAsync(Guid.NewGuid(), CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowAsync<ApplicationException>()
+            .WithMessage("Group not found.");
     }
 
     // ─── AddAdminToGroupAsync ─────────────────────────────────────────────────
