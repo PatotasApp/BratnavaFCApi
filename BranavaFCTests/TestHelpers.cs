@@ -1,9 +1,14 @@
-﻿using BratnavaFC.Domain.Dtos;
+using BratnavaFC.Domain.Dtos;
+using BratnavaFC.Domain.Models;
 
 namespace BranavaFC.Tests;
 
 internal static class TestHelpers
 {
+    // ----------------------------------------------------------------
+    // Player builders
+    // ----------------------------------------------------------------
+
     public static List<PlayerRequestDto> Players(params (string name, bool gk)[] specs)
         => specs.Select((s, i) => new PlayerRequestDto(GuidFromInt(i + 1), s.name, s.gk)).ToList();
 
@@ -16,4 +21,90 @@ internal static class TestHelpers
         bytes[12] = (byte)(n >> 24 & 0xFF);
         return new Guid(bytes);
     }
+
+    // ----------------------------------------------------------------
+    // Stats builders
+    // ----------------------------------------------------------------
+
+    /// <summary>
+    /// Non-neutral stats (wins+ties+losses >= 3 by default).
+    /// </summary>
+    public static PlayerStats Stats(
+        Guid id,
+        string name,
+        int wins,
+        int ties,
+        int losses,
+        double? neutralOverride = null)
+        => new PlayerStats
+        {
+            PlayerId = id,
+            Name = name,
+            Wins = wins,
+            Ties = ties,
+            Losses = losses,
+            WinRate = (wins + ties + losses) == 0
+                ? 0.0
+                : wins / (double)(wins + ties + losses),
+            SynergyWith = new Dictionary<Guid, double>(),
+            NeutralOverride = neutralOverride
+        };
+
+    /// <summary>
+    /// Neutral stats (0 matches, optional NeutralOverride for guest star rating tests).
+    /// </summary>
+    public static PlayerStats NeutralStats(
+        Guid id,
+        string name,
+        double? neutralOverride = null)
+        => new PlayerStats
+        {
+            PlayerId = id,
+            Name = name,
+            Wins = 0,
+            Ties = 0,
+            Losses = 0,
+            WinRate = 0.0,
+            SynergyWith = new Dictionary<Guid, double>(),
+            NeutralOverride = neutralOverride
+        };
+}
+
+// ----------------------------------------------------------------
+// FakeStatsService
+// ----------------------------------------------------------------
+
+internal sealed class FakeStatsService : IPlayerStatsService
+{
+    private readonly Dictionary<Guid, PlayerStats> _byId;
+
+    public FakeStatsService(IEnumerable<PlayerStats> stats)
+    {
+        _byId = stats.ToDictionary(s => s.PlayerId);
+    }
+
+    public Task<List<PlayerStats>> EnrichPlayersAsync(
+        List<PlayerRequestDto> players,
+        CancellationToken cancellationToken = default)
+    {
+        var result = players.Select(p =>
+            _byId.TryGetValue(p.Id, out var s)
+                ? s
+                : TestHelpers.NeutralStats(p.Id, p.Name)
+        ).ToList();
+
+        return Task.FromResult(result);
+    }
+
+    public Task<PlayerVisualStatsReport> GetVisualReportAsync(
+        Guid groupId,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(new PlayerVisualStatsReport
+        {
+            GroupId = groupId,
+            TotalMatchesConsidered = 0,
+            TotalFinalizedMatches = 0,
+            TotalMatchesWithScore = 0,
+            Players = new List<PlayerVisualStatsItem>()
+        });
 }

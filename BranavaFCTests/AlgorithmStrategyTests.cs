@@ -1,249 +1,298 @@
-﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.TeamGeneration;
 using BratnavaFC.Domain.Dtos;
-using BratnavaFC.Domain.Models;
+using FluentAssertions;
 using Xunit;
 
 namespace BranavaFC.Tests;
 
+/// <summary>
+/// Unit tests for AlgorithmStrategy.
+///
+/// Key rules exercised:
+///  - Neutral rule: fewer than 3 matches → effective WinRate = 0.50 (NeutralWinRate)
+///  - NeutralOverride: if set and player is still neutral, override replaces 0.50
+///  - NeutralOverride: ignored once player has >= 3 matches (real WinRate used)
+///  - GK handling: IncludeGoalkeepers=false → all GKs in Unassigned
+///  - BalanceDiff = |TeamAWeight - TeamBWeight| (always consistent with weights)
+///  - Options are ordered by BalanceDiff ascending
+///  - No player appears in more than one bucket per option
+/// </summary>
 public class AlgorithmStrategyTests
 {
-    //[Fact]
-    //public async Task AlgorithmStrategy_Returns_3Options_WithWeights_And_1GKPerTeam_When2GKs()
-    //{
-    //    // Arrange
-    //    var players = NewPlayersDeterministic(
-    //        ("GK1", true), ("GK2", true),
-    //        ("P1", false), ("P2", false), ("P3", false), ("P4", false), ("P5", false),
-    //        ("P6", false), ("P7", false), ("P8", false), ("P9", false), ("P10", false)
-    //    );
+    private static readonly TeamGenerationSettings Settings5v5 =
+        new() { PlayersPerTeam = 5, IncludeGoalkeepers = false };
 
-    //    var id = players.ToDictionary(p => p.Name, p => p.Id);
+    private static readonly TeamGenerationSettings Settings5v5WithGK =
+        new() { PlayersPerTeam = 5, IncludeGoalkeepers = true };
 
-    //    var stats = new Dictionary<Guid, PlayerStats>
-    //    {
-    //        // GKs
-    //        [id["GK1"]] = PS(id["GK1"], "GK1", wins: 12, ties: 0, losses: 0, winRate: 0.54),
-    //        [id["GK2"]] = PS(id["GK2"], "GK2", wins: 10, ties: 0, losses: 0, winRate: 0.50),
+    // ----------------------------------------------------------------
+    // 1. Empty input
+    // ----------------------------------------------------------------
 
-    //        // Linha
-    //        [id["P1"]] = PS(id["P1"], "P1", wins: 18, ties: 0, losses: 0, winRate: 0.70),
-    //        [id["P2"]] = PS(id["P2"], "P2", wins: 16, ties: 0, losses: 0, winRate: 0.66),
-    //        [id["P3"]] = PS(id["P3"], "P3", wins: 14, ties: 0, losses: 0, winRate: 0.62),
-    //        [id["P4"]] = PS(id["P4"], "P4", wins: 13, ties: 0, losses: 0, winRate: 0.58),
-    //        [id["P5"]] = PS(id["P5"], "P5", wins: 12, ties: 0, losses: 0, winRate: 0.55),
-    //        [id["P6"]] = PS(id["P6"], "P6", wins: 11, ties: 0, losses: 0, winRate: 0.52),
-    //        [id["P7"]] = PS(id["P7"], "P7", wins: 10, ties: 0, losses: 0, winRate: 0.48),
-    //        [id["P8"]] = PS(id["P8"], "P8", wins: 9, ties: 0, losses: 0, winRate: 0.45),
-    //        [id["P9"]] = PS(id["P9"], "P9", wins: 7, ties: 0, losses: 0, winRate: 0.40),
-    //        [id["P10"]] = PS(id["P10"], "P10", wins: 6, ties: 0, losses: 0, winRate: 0.36),
-    //    };
+    [Fact]
+    public async Task EmptyPlayers_ReturnsEmptyOptions()
+    {
+        var strategy = new AlgorithmStrategy(new FakeStatsService([]));
 
-    //    AddSynergy(stats, id["P1"], id["P3"], 0.82);
-    //    AddSynergy(stats, id["P2"], id["P4"], 0.75);
-    //    AddSynergy(stats, id["P5"], id["P6"], 0.70);
-    //    AddSynergy(stats, id["P7"], id["P8"], 0.68);
-    //    AddSynergy(stats, id["GK1"], id["P2"], 0.62);
-    //    AddSynergy(stats, id["GK2"], id["P6"], 0.60);
+        var result = await strategy.GenerateTeamsAsync([], Settings5v5);
 
-    //    var fake = new FakeStatsService(stats);
-    //    var strategy = new AlgorithmStrategy(fake);
+        result.Options.Should().BeEmpty();
+    }
 
-    //    var settings = new TeamGenerationSettings
-    //    {
-    //        PlayersPerTeam = 6,
-    //        IncludeGoalkeepers = true,
-    //    };
+    // ----------------------------------------------------------------
+    // 2. Structure: no overlaps, correct sizes
+    // ----------------------------------------------------------------
 
-    //    // Act
-    //    var result = await strategy.GenerateTeamsAsync(players, settings);
+    [Fact]
+    public async Task Structure_NoOverlaps_CorrectSizes_10Players()
+    {
+        var players = TestHelpers.Players(
+            ("A", false), ("B", false), ("C", false), ("D", false), ("E", false),
+            ("F", false), ("G", false), ("H", false), ("I", false), ("J", false));
 
-    //    // Assert (geral)
-    //    Assert.NotNull(result);
-    //    Assert.NotNull(result.Options);
-    //    Assert.Equal(3, result.Options.Count);
+        var stats = players.Select(p => TestHelpers.Stats(p.Id, p.Name, wins: 5, ties: 0, losses: 5));
+        var strategy = new AlgorithmStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 5, IncludeGoalkeepers = false };
 
-    //    // Assert (cada opção consistente)
-    //    foreach (var opt in result.Options)
-    //    {
-    //        Assert.NotNull(opt.TeamA);
-    //        Assert.NotNull(opt.TeamB);
+        var result = await strategy.GenerateTeamsAsync(players, settings);
 
-    //        Assert.Equal(6, opt.TeamA.Count);
-    //        Assert.Equal(6, opt.TeamB.Count);
+        result.Options.Should().NotBeEmpty();
 
-    //        // sem duplicar player entre A e B
-    //        var all = opt.TeamA.Select(x => x.PlayerId).Concat(opt.TeamB.Select(x => x.PlayerId)).ToList();
-    //        Assert.Equal(all.Count, all.Distinct().Count());
+        foreach (var opt in result.Options)
+        {
+            opt.TeamA.Should().HaveCount(5);
+            opt.TeamB.Should().HaveCount(5);
+            opt.Unassigned.Should().BeEmpty();
 
-    //        // tem peso por jogador
-    //        Assert.All(opt.TeamA, p => Assert.True(p.Weight > 0, $"Weight inválido em TeamA: {p.PlayerId} ({p.Weight})"));
-    //        Assert.All(opt.TeamB, p => Assert.True(p.Weight > 0, $"Weight inválido em TeamB: {p.PlayerId} ({p.Weight})"));
+            var allIds = opt.TeamA.Select(x => x.PlayerId)
+                           .Concat(opt.TeamB.Select(x => x.PlayerId))
+                           .ToList();
+            allIds.Should().OnlyHaveUniqueItems("no player may appear in both teams");
+        }
+    }
 
-    //        // tem peso total do time (seu DTO)
-    //        Assert.True(opt.TeamAWeight > 0);
-    //        Assert.True(opt.TeamBWeight > 0);
+    // ----------------------------------------------------------------
+    // 3. Options ordered by BalanceDiff ascending
+    // ----------------------------------------------------------------
 
-    //        // BalanceDiff bate com os pesos totais
-    //        var expectedDiff = Math.Abs(opt.TeamAWeight - opt.TeamBWeight);
-    //        Assert.True(Math.Abs(opt.BalanceDiff - expectedDiff) < 0.0001,
-    //            $"BalanceDiff inconsistente. DTO={opt.BalanceDiff:0.0000} esperado={expectedDiff:0.0000}\n{DumpOption(opt)}");
-    //    }
+    [Fact]
+    public async Task Options_OrderedByBalanceDiff_Ascending()
+    {
+        var players = TestHelpers.Players(
+            ("A", false), ("B", false), ("C", false), ("D", false),
+            ("E", false), ("F", false), ("G", false), ("H", false));
 
-    //    // Assert (ordenação por Score)
-    //    Assert.True(IsNonDecreasing(result.Options.Select(o => o.Score)),
-    //        "Options deveriam vir ordenadas por Score asc.");
-    //}
+        var ids = players.Select(p => p.Id).ToList();
+        var stats = new[]
+        {
+            TestHelpers.Stats(ids[0], "A", wins: 10, ties: 0, losses: 0),
+            TestHelpers.Stats(ids[1], "B", wins: 8,  ties: 0, losses: 2),
+            TestHelpers.Stats(ids[2], "C", wins: 6,  ties: 0, losses: 4),
+            TestHelpers.Stats(ids[3], "D", wins: 4,  ties: 0, losses: 6),
+            TestHelpers.Stats(ids[4], "E", wins: 10, ties: 0, losses: 0),
+            TestHelpers.Stats(ids[5], "F", wins: 8,  ties: 0, losses: 2),
+            TestHelpers.Stats(ids[6], "G", wins: 6,  ties: 0, losses: 4),
+            TestHelpers.Stats(ids[7], "H", wins: 4,  ties: 0, losses: 6),
+        };
 
-    //[Fact]
-    //public async Task AlgorithmStrategy_Uses_EffectiveWinRate_Neutral_WhenLowMatches()
-    //{
-    //    // Arrange: P1 tem 1 partida => efetivo deve virar 0.50 (neutro)
-    //    var players = NewPlayersDeterministic(
-    //        ("GK1", true), ("GK2", true),
-    //        ("P1", false), ("P2", false), ("P3", false), ("P4", false),
-    //        ("P5", false), ("P6", false), ("P7", false), ("P8", false), ("P9", false), ("P10", false)
-    //    );
+        var strategy = new AlgorithmStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 4, IncludeGoalkeepers = false };
 
-    //    var id = players.ToDictionary(p => p.Name, p => p.Id);
+        var result = await strategy.GenerateTeamsAsync(players, settings, optionsCount: 3);
 
-    //    var stats = new Dictionary<Guid, PlayerStats>
-    //    {
-    //        [id["GK1"]] = PS(id["GK1"], "GK1", wins: 10, ties: 0, losses: 0, winRate: 0.55),
-    //        [id["GK2"]] = PS(id["GK2"], "GK2", wins: 10, ties: 0, losses: 0, winRate: 0.50),
+        result.Options.Should().NotBeEmpty();
 
-    //        // P1: apenas 1 jogo total (wins=1) mas winrate “alto” -> deve ser neutralizado p/ 0.50
-    //        [id["P1"]] = PS(id["P1"], "P1", wins: 1, ties: 0, losses: 0, winRate: 0.95),
+        var diffs = result.Options.Select(o => o.BalanceDiff).ToList();
+        diffs.Should().BeInAscendingOrder(
+            because: "options must be ordered by BalanceDiff ascending");
+    }
 
-    //        // resto normal
-    //        [id["P2"]] = PS(id["P2"], "P2", wins: 10, ties: 0, losses: 0, winRate: 0.60),
-    //        [id["P3"]] = PS(id["P3"], "P3", wins: 10, ties: 0, losses: 0, winRate: 0.58),
-    //        [id["P4"]] = PS(id["P4"], "P4", wins: 10, ties: 0, losses: 0, winRate: 0.56),
-    //        [id["P5"]] = PS(id["P5"], "P5", wins: 10, ties: 0, losses: 0, winRate: 0.54),
-    //        [id["P6"]] = PS(id["P6"], "P6", wins: 10, ties: 0, losses: 0, winRate: 0.52),
-    //        [id["P7"]] = PS(id["P7"], "P7", wins: 10, ties: 0, losses: 0, winRate: 0.50),
-    //        [id["P8"]] = PS(id["P8"], "P8", wins: 10, ties: 0, losses: 0, winRate: 0.48),
-    //        [id["P9"]] = PS(id["P9"], "P9", wins: 10, ties: 0, losses: 0, winRate: 0.46),
-    //        [id["P10"]] = PS(id["P10"], "P10", wins: 10, ties: 0, losses: 0, winRate: 0.44),
-    //    };
+    // ----------------------------------------------------------------
+    // 4. BalanceDiff is always consistent with TeamAWeight - TeamBWeight
+    // ----------------------------------------------------------------
 
-    //    var fake = new FakeStatsService(stats);
-    //    var strategy = new AlgorithmStrategy(fake);
+    [Fact]
+    public async Task BalanceDiff_AlwaysConsistentWithWeights()
+    {
+        var players = TestHelpers.Players(
+            ("A", false), ("B", false), ("C", false), ("D", false),
+            ("E", false), ("F", false));
 
-    //    var settings = new TeamGenerationSettings { PlayersPerTeam = 6, IncludeGoalkeepers = true };
+        var ids = players.Select(p => p.Id).ToList();
+        var stats = ids.Select((id, i) =>
+            TestHelpers.Stats(id, $"P{i}", wins: i + 3, ties: 0, losses: 3));
 
-    //    // Act
-    //    var result = await strategy.GenerateTeamsAsync(players, settings);
+        var strategy = new AlgorithmStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 3, IncludeGoalkeepers = false };
 
-    //    // Assert: em alguma opção, P1 deve aparecer com EffectiveWinRate = 0.50
-    //    var p1Seen = result.Options
-    //        .SelectMany(o => o.TeamA.Concat(o.TeamB))
-    //        .FirstOrDefault(p => p.PlayerId == id["P1"]);
+        var result = await strategy.GenerateTeamsAsync(players, settings);
 
-    //    Assert.NotNull(p1Seen);
-    //}
+        foreach (var opt in result.Options)
+        {
+            var expectedDiff = Math.Abs(opt.TeamAWeight - opt.TeamBWeight);
+            opt.BalanceDiff.Should().BeApproximately(expectedDiff, 1e-9,
+                "BalanceDiff must equal |TeamAWeight - TeamBWeight|");
+        }
+    }
 
-    //// ----------------- helpers -----------------
+    // ----------------------------------------------------------------
+    // 5. Neutral rule: < 3 matches → weight = 0.50
+    // ----------------------------------------------------------------
 
-    //private static List<PlayerRequestDto> NewPlayersDeterministic(params (string name, bool isGk)[] specs)
-    //{
-    //    int i = 1;
-    //    return specs.Select(s => new PlayerRequestDto(GuidFromInt(i++), s.name, s.isGk)).ToList();
-    //}
+    [Fact]
+    public async Task NeutralRule_PlayerWithFewerThan3Matches_GetsWeight0_50()
+    {
+        var players = TestHelpers.Players(
+            ("Low", false), ("A", false), ("B", false), ("C", false));
 
-    //private static Guid GuidFromInt(int n)
-    //{
-    //    var bytes = new byte[16];
-    //    bytes[15] = (byte)(n & 0xFF);
-    //    bytes[14] = (byte)(n >> 8 & 0xFF);
-    //    bytes[13] = (byte)(n >> 16 & 0xFF);
-    //    bytes[12] = (byte)(n >> 24 & 0xFF);
-    //    return new Guid(bytes);
-    //}
+        var ids = players.Select(p => p.Id).ToList();
 
-    //private static PlayerStats PS(Guid playerId, string name, int wins, int ties, int losses, double winRate)
-    //    => new PlayerStats
-    //    {
-    //        PlayerId = playerId,
-    //        Name = name,
-    //        Wins = wins,
-    //        Ties = ties,
-    //        Losses = losses,
-    //        WinRate = winRate,
-    //        SynergyWith = new Dictionary<Guid, double>()
-    //    };
+        var stats = new[]
+        {
+            // "Low" has only 1 match total, high raw WinRate — must be neutralized to 0.50
+            TestHelpers.Stats(ids[0], "Low",  wins: 1, ties: 0, losses: 0),
+            TestHelpers.Stats(ids[1], "A",    wins: 5, ties: 0, losses: 5),
+            TestHelpers.Stats(ids[2], "B",    wins: 5, ties: 0, losses: 5),
+            TestHelpers.Stats(ids[3], "C",    wins: 5, ties: 0, losses: 5),
+        };
 
-    //private static void AddSynergy(Dictionary<Guid, PlayerStats> stats, Guid a, Guid b, double value01)
-    //{
-    //    if (!stats.TryGetValue(a, out var sa) || !stats.TryGetValue(b, out var sb))
-    //        return;
+        var strategy = new AlgorithmStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 2, IncludeGoalkeepers = false };
 
-    //    sa.SynergyWith[b] = value01;
-    //    sb.SynergyWith[a] = value01;
-    //}
+        var result = await strategy.GenerateTeamsAsync(players, settings);
 
-    //private static bool IsNonDecreasing(IEnumerable<double> xs)
-    //{
-    //    double? prev = null;
-    //    foreach (var x in xs)
-    //    {
-    //        if (prev.HasValue && x < prev.Value - 1e-12) return false;
-    //        prev = x;
-    //    }
-    //    return true;
-    //}
+        var lowEntry = result.Options
+            .SelectMany(o => o.TeamA.Concat(o.TeamB).Concat(o.Unassigned))
+            .First(p => p.PlayerId == ids[0]);
 
-    //private static string DumpOption(dynamic opt)
-    //{
-    //    string fmt(IEnumerable<dynamic> ps) =>
-    //        string.Join(", ", ps.Select(p => $"{p.Name}(w={p.Wins},wr={p.WinRate:0.00},eff={p.EffectiveWinRate:0.00},wt={p.Weight:0.000})"));
+        lowEntry.Weight.Should().BeApproximately(0.50, 1e-9,
+            "player with < 3 matches must receive neutral weight 0.50");
+    }
 
-    //    return
-    //        $"Score={opt.Score:0.000} BalanceDiff={opt.BalanceDiff:0.000} " +
-    //        $"TeamAWeight={opt.TeamAWeight:0.000} TeamBWeight={opt.TeamBWeight:0.000}\n" +
-    //        $"TeamA: {fmt(opt.TeamA)}\n" +
-    //        $"TeamB: {fmt(opt.TeamB)}\n";
-    //}
+    // ----------------------------------------------------------------
+    // 6. NeutralOverride used when player is still neutral
+    // ----------------------------------------------------------------
 
-    //private sealed class FakeStatsService : IPlayerStatsService
-    //{
-    //    private readonly Dictionary<Guid, PlayerStats> _stats;
+    [Fact]
+    public async Task NeutralOverride_IsUsed_WhenPlayerIsNeutral()
+    {
+        var players = TestHelpers.Players(
+            ("Guest", false), ("A", false), ("B", false), ("C", false));
 
-    //    public FakeStatsService(Dictionary<Guid, PlayerStats> stats)
-    //    {
-    //        _stats = stats ?? new Dictionary<Guid, PlayerStats>();
-    //    }
+        var ids = players.Select(p => p.Id).ToList();
 
-    //    public Task<List<PlayerStats>> EnrichPlayersAsync(List<PlayerRequestDto> players, CancellationToken cancellationToken = default)
-    //    {
-    //        var list = players.Select(p =>
-    //        {
-    //            if (_stats.TryGetValue(p.Id, out var s))
-    //                return s;
+        // Guest has 0 matches but a 5-star rating → override = (5-1)*0.25 = 1.00
+        var stats = new[]
+        {
+            TestHelpers.NeutralStats(ids[0], "Guest", neutralOverride: 1.00),
+            TestHelpers.Stats(ids[1], "A", wins: 5, ties: 0, losses: 5),
+            TestHelpers.Stats(ids[2], "B", wins: 5, ties: 0, losses: 5),
+            TestHelpers.Stats(ids[3], "C", wins: 5, ties: 0, losses: 5),
+        };
 
-    //            return new PlayerStats
-    //            {
-    //                PlayerId = p.Id,
-    //                Name = p.Name,
-    //                Wins = 0,
-    //                Ties = 0,
-    //                Losses = 0,
-    //                WinRate = 0.0,
-    //                SynergyWith = new Dictionary<Guid, double>()
-    //            };
-    //        }).ToList();
+        var strategy = new AlgorithmStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 2, IncludeGoalkeepers = false };
 
-    //        return Task.FromResult(list);
-    //    }
+        var result = await strategy.GenerateTeamsAsync(players, settings);
 
-    //    public Task<PlayerVisualStatsReport> GetVisualReportAsync(Guid groupId, CancellationToken cancellationToken = default)
-    //        => Task.FromResult(new PlayerVisualStatsReport
-    //        {
-    //            GroupId = groupId,
-    //            TotalMatchesConsidered = 0,
-    //            TotalFinalizedMatches = 0,
-    //            TotalMatchesWithScore = 0,
-    //            Players = new List<PlayerVisualStatsItem>()
-    //        });
-    //}
+        var guestEntry = result.Options
+            .SelectMany(o => o.TeamA.Concat(o.TeamB).Concat(o.Unassigned))
+            .First(p => p.PlayerId == ids[0]);
+
+        guestEntry.Weight.Should().BeApproximately(1.00, 1e-9,
+            "NeutralOverride=1.00 must be used as effective weight when player has < 3 matches");
+    }
+
+    // ----------------------------------------------------------------
+    // 7. NeutralOverride is IGNORED when player is non-neutral
+    // ----------------------------------------------------------------
+
+    [Fact]
+    public async Task NeutralOverride_IsIgnored_WhenPlayerHasEnoughMatches()
+    {
+        var players = TestHelpers.Players(
+            ("Veteran", false), ("A", false), ("B", false), ("C", false));
+
+        var ids = players.Select(p => p.Id).ToList();
+
+        // Veteran has 10 matches with real WinRate 0.70, NeutralOverride = 0.25 must be ignored
+        var stats = new[]
+        {
+            TestHelpers.Stats(ids[0], "Veteran", wins: 7, ties: 0, losses: 3, neutralOverride: 0.25),
+            TestHelpers.Stats(ids[1], "A", wins: 5, ties: 0, losses: 5),
+            TestHelpers.Stats(ids[2], "B", wins: 5, ties: 0, losses: 5),
+            TestHelpers.Stats(ids[3], "C", wins: 5, ties: 0, losses: 5),
+        };
+
+        var strategy = new AlgorithmStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 2, IncludeGoalkeepers = false };
+
+        var result = await strategy.GenerateTeamsAsync(players, settings);
+
+        var veteranEntry = result.Options
+            .SelectMany(o => o.TeamA.Concat(o.TeamB).Concat(o.Unassigned))
+            .First(p => p.PlayerId == ids[0]);
+
+        veteranEntry.Weight.Should().BeApproximately(0.70, 1e-9,
+            "real WinRate must be used; NeutralOverride is ignored when player has >= 3 matches");
+    }
+
+    // ----------------------------------------------------------------
+    // 8. GK exclusion: IncludeGoalkeepers = false
+    // ----------------------------------------------------------------
+
+    [Fact]
+    public async Task GoalkeeperExclusion_GKsGoToUnassigned_WhenSettingFalse()
+    {
+        var players = TestHelpers.Players(
+            ("GK1", true), ("GK2", true),
+            ("A", false), ("B", false), ("C", false), ("D", false));
+
+        var ids = players.ToDictionary(p => p.Name, p => p.Id);
+        var stats = players.Select(p => TestHelpers.Stats(p.Id, p.Name, wins: 5, ties: 0, losses: 5));
+
+        var strategy = new AlgorithmStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 2, IncludeGoalkeepers = false };
+
+        var result = await strategy.GenerateTeamsAsync(players, settings);
+
+        result.Options.Should().NotBeEmpty();
+
+        foreach (var opt in result.Options)
+        {
+            var teamIds = opt.TeamA.Select(x => x.PlayerId)
+                            .Concat(opt.TeamB.Select(x => x.PlayerId))
+                            .ToHashSet();
+
+            teamIds.Should().NotContain(ids["GK1"], "GK must not be assigned to a team");
+            teamIds.Should().NotContain(ids["GK2"], "GK must not be assigned to a team");
+
+            var unassignedIds = opt.Unassigned.Select(x => x.PlayerId).ToHashSet();
+            unassignedIds.Should().Contain(ids["GK1"], "GK1 must be in Unassigned");
+            unassignedIds.Should().Contain(ids["GK2"], "GK2 must be in Unassigned");
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // 9. Perfect balance: all players neutral → BalanceDiff ~ 0
+    // ----------------------------------------------------------------
+
+    [Fact]
+    public async Task PerfectBalance_AllNeutralPlayers_FirstOption_BalanceDiffIsZero()
+    {
+        // 4 players all neutral (< 3 matches) → all get weight 0.50
+        // 2v2 must yield BalanceDiff = |1.00 - 1.00| = 0
+        var players = TestHelpers.Players(
+            ("A", false), ("B", false), ("C", false), ("D", false));
+
+        var stats = players.Select(p => TestHelpers.NeutralStats(p.Id, p.Name));
+
+        var strategy = new AlgorithmStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 2, IncludeGoalkeepers = false };
+
+        var result = await strategy.GenerateTeamsAsync(players, settings);
+
+        result.Options.First().BalanceDiff.Should().BeApproximately(0.0, 1e-9,
+            "all neutral players have equal weight 0.50, so any 2v2 split is perfectly balanced");
+    }
 }

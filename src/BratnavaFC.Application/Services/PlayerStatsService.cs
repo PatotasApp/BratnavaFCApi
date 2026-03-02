@@ -44,6 +44,8 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
         var result = new List<PlayerStats>(players.Count);
 
+        const int minMatchesNonNeutral = 3;
+
         foreach (var pl in players)
         {
             var acc = perPlayer.TryGetValue(pl.Id, out var a) ? a : PlayerAccumulator.Empty;
@@ -54,6 +56,10 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
             var synergy = BuildSynergyMap(pl.Id, players, pairTotals);
 
+            double? neutralOverride = null;
+            if (acc.MatchesPlayed < minMatchesNonNeutral && pl.GuestStarRating.HasValue)
+                neutralOverride = (pl.GuestStarRating.Value - 1) * 0.25;
+
             result.Add(new PlayerStats
             {
                 PlayerId = pl.Id,
@@ -62,7 +68,8 @@ public sealed class PlayerStatsService : IPlayerStatsService
                 Ties = acc.Ties,
                 Losses = acc.Losses,
                 WinRate = winRate,
-                SynergyWith = synergy
+                SynergyWith = synergy,
+                NeutralOverride = neutralOverride
             });
         }
 

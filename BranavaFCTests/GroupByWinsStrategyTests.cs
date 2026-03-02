@@ -1,178 +1,296 @@
-﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.TeamGeneration;
-using BratnavaFC.Application.TeamGeneration.Strategies; // <- ajuste namespace se necessário
 using BratnavaFC.Domain.Dtos;
-using BratnavaFC.Domain.Models;
+using FluentAssertions;
 using Xunit;
 
 namespace BranavaFC.Tests;
 
+/// <summary>
+/// Unit tests for GroupByWinsStrategy.
+///
+/// Key rules exercised:
+///  - Sort order is by Wins DESC (not WinRate)
+///  - AlternateStartA: rank positions go A,B,A,B,... (even index → TeamA)
+///  - AlternateStartB: rank positions go B,A,B,A,... (odd index → TeamA)
+///  - SnakeABBA: positions 0,3,4,7,... → TeamA; positions 1,2,5,6,... → TeamB
+///  - Duplicate options (same canonical team key) are deduplicated
+///  - Neutral rule: &lt;3 matches → weight = 0.50
+///  - GKs go to Unassigned when IncludeGoalkeepers = false
+///  - Score = BalanceDiff (no synergy)
+///  - Options ordered by Score ascending
+/// </summary>
 public class GroupByWinsStrategyTests
 {
-    //[Fact]
-    //public async Task GroupByWins_Returns_3Options_And_Alternates_TopByEffectiveWinRate()
-    //{
-    //    // Arrange
-    //    var players = NewPlayersDeterministic(
-    //        ("P1", false),
-    //        ("P2", false),
-    //        ("P3", false),
-    //        ("P4", false)
-    //    );
+    // ----------------------------------------------------------------
+    // 1. Empty input
+    // ----------------------------------------------------------------
 
-    //    var id = players.ToDictionary(p => p.Name, p => p.Id);
+    [Fact]
+    public async Task EmptyPlayers_ReturnsSingleOptionWithEmptyTeams()
+    {
+        // GroupByWinsStrategy falls through to the maxAssignable==0 path (no early-exit for empty list),
+        // so it returns exactly 1 option with empty TeamA, TeamB, and Unassigned.
+        var strategy = new GroupByWinsStrategy(new FakeStatsService([]));
 
-    //    // Effective winrate será o critério.
-    //    // Todos com matches >= 3 para não cair no neutro.
-    //    var stats = new Dictionary<Guid, PlayerStats>
-    //    {
-    //        // wr ordenado: P1(0.70), P2(0.66), P3(0.62), P4(0.58)
-    //        [id["P1"]] = PS(id["P1"], "P1", wins: 7, ties: 0, losses: 3, winRate: 0.70),
-    //        [id["P2"]] = PS(id["P2"], "P2", wins: 6, ties: 0, losses: 3, winRate: 0.66),
-    //        [id["P3"]] = PS(id["P3"], "P3", wins: 5, ties: 0, losses: 3, winRate: 0.62),
-    //        [id["P4"]] = PS(id["P4"], "P4", wins: 4, ties: 0, losses: 3, winRate: 0.58),
-    //    };
+        var result = await strategy.GenerateTeamsAsync([], new TeamGenerationSettings { PlayersPerTeam = 5 });
 
-    //    var fake = new FakeStatsService(stats);
-    //    var strategy = new GroupByWinsStrategy(fake);
+        result.Options.Should().HaveCount(1);
+        var opt = result.Options[0];
+        opt.TeamA.Should().BeEmpty();
+        opt.TeamB.Should().BeEmpty();
+        opt.Unassigned.Should().BeEmpty();
+    }
 
-    //    var settings = new TeamGenerationSettings { PlayersPerTeam = 2, IncludeGoalkeepers = true };
+    // ----------------------------------------------------------------
+    // 2. Sort by Wins, not by WinRate
+    // ----------------------------------------------------------------
 
-    //    // Act
-    //    var result = await strategy.GenerateTeamsAsync(players, settings);
+    [Fact]
+    public async Task SortsByWins_NotWinRate_ThenFirstOption_AlternatesFromA()
+    {
+        // PlayerH: 1 win but 100% WinRate (only 1 match, neutral → 0.50)
+        // PlayerA: 10 wins but 50% WinRate
+        // GroupByWins must put A ahead of H in sorted order
+        var players = TestHelpers.Players(
+            ("H", false), ("A", false), ("B", false), ("C", false));
 
-    //    // Assert: novo contrato => 3 opções
-    //    Assert.NotNull(result);
-    //    Assert.NotNull(result.Options);
-    //    Assert.Equal(3, result.Options.Count);
+        var ids = players.ToDictionary(p => p.Name, p => p.Id);
 
-    //    // vamos validar a opção 0 (a primeira), porque GroupByWins normalmente é determinístico
-    //    var opt = result.Options[0];
+        var stats = new[]
+        {
+            TestHelpers.Stats(ids["H"], "H", wins: 1,  ties: 0, losses: 0),  // 100% WR but 1 win
+            TestHelpers.Stats(ids["A"], "A", wins: 10, ties: 0, losses: 10), // 50% WR, 10 wins
+            TestHelpers.Stats(ids["B"], "B", wins: 8,  ties: 0, losses: 8),
+            TestHelpers.Stats(ids["C"], "C", wins: 6,  ties: 0, losses: 6),
+        };
 
-    //    Assert.Equal(2, opt.TeamA.Count);
-    //    Assert.Equal(2, opt.TeamB.Count);
+        var strategy = new GroupByWinsStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 2, IncludeGoalkeepers = false };
 
-    //    // Regra pedida: "jogador com maior wins (aqui: maior effective winrate) vai alternado"
-    //    // Ordenado: P1, P2, P3, P4
-    //    // Alternando topo: P1 -> A, P2 -> B, P3 -> A, P4 -> B
-    //    var teamAIds = opt.TeamA.Select(x => x.PlayerId).ToHashSet();
-    //    var teamBIds = opt.TeamB.Select(x => x.PlayerId).ToHashSet();
+        var result = await strategy.GenerateTeamsAsync(players, settings, optionsCount: 1);
 
-    //    Assert.Contains(id["P1"], teamAIds);
-    //    Assert.Contains(id["P3"], teamAIds);
+        // Sorted by wins desc: A(10), B(8), C(6), H(1)
+        // AlternateStartA (option 1): index0→TeamA, index1→TeamB, index2→TeamA, index3→TeamB
+        var opt = result.Options[0];
+        var teamAIds = opt.TeamA.Select(x => x.PlayerId).ToHashSet();
+        var teamBIds = opt.TeamB.Select(x => x.PlayerId).ToHashSet();
 
-    //    Assert.Contains(id["P2"], teamBIds);
-    //    Assert.Contains(id["P4"], teamBIds);
+        // A(rank0) and C(rank2) → TeamA
+        teamAIds.Should().Contain(ids["A"], "highest-wins player goes to TeamA in AlternateStartA");
+        teamAIds.Should().Contain(ids["C"]);
+        // B(rank1) and H(rank3) → TeamB
+        teamBIds.Should().Contain(ids["B"]);
+        teamBIds.Should().Contain(ids["H"]);
+    }
 
-    //    // sem duplicação
-    //    Assert.Empty(teamAIds.Intersect(teamBIds));
+    // ----------------------------------------------------------------
+    // 3. AlternateStartA pattern: rank 0,2,4 → TeamA; rank 1,3,5 → TeamB
+    // ----------------------------------------------------------------
 
-    //    // Deve expor peso por jogador (front vai mostrar)
-    //    Assert.All(opt.TeamA, p => Assert.True(p.Weight > 0, $"Weight inválido TeamA: {p.PlayerId} ({p.Weight})"));
-    //    Assert.All(opt.TeamB, p => Assert.True(p.Weight > 0, $"Weight inválido TeamB: {p.PlayerId} ({p.Weight})"));
+    [Fact]
+    public async Task AlternateStartA_EvenRanksGoToTeamA()
+    {
+        // 6 players with clearly distinct wins: W1 > W2 > ... > W6
+        var players = TestHelpers.Players(
+            ("P1", false), ("P2", false), ("P3", false),
+            ("P4", false), ("P5", false), ("P6", false));
 
-    //    // E deve expor effective winrate
-    //    var p1pick = opt.TeamA.Concat(opt.TeamB).First(x => x.PlayerId == id["P1"]);
-    //}
+        var ids = players.Select(p => p.Id).ToList();
+        var stats = ids.Select((id, i) =>
+            TestHelpers.Stats(id, $"P{i + 1}", wins: 10 - i, ties: 0, losses: 5));
 
-    //[Fact]
-    //public async Task GroupByWins_Uses_Neutral_EffectiveWinRate_When_PlayerHasLessThan3Matches()
-    //{
-    //    // Arrange
-    //    var players = NewPlayersDeterministic(("P1", false), ("P2", false), ("P3", false), ("P4", false));
-    //    var id = players.ToDictionary(p => p.Name, p => p.Id);
+        var strategy = new GroupByWinsStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 3, IncludeGoalkeepers = false };
 
-    //    // P1 tem 2 matches (wins=2) -> deveria virar effective=0.50 (neutro)
-    //    var stats = new Dictionary<Guid, PlayerStats>
-    //    {
-    //        [id["P1"]] = PS(id["P1"], "P1", wins: 2, ties: 0, losses: 0, winRate: 1.00),
-    //        [id["P2"]] = PS(id["P2"], "P2", wins: 4, ties: 0, losses: 3, winRate: 0.57),
-    //        [id["P3"]] = PS(id["P3"], "P3", wins: 4, ties: 0, losses: 4, winRate: 0.50),
-    //        [id["P4"]] = PS(id["P4"], "P4", wins: 3, ties: 0, losses: 4, winRate: 0.43),
-    //    };
+        // Request only 1 option → AlternateStartA
+        var result = await strategy.GenerateTeamsAsync(players, settings, optionsCount: 1);
 
-    //    var fake = new FakeStatsService(stats);
-    //    var strategy = new GroupByWinsStrategy(fake);
+        var opt = result.Options[0];
+        var teamAIds = opt.TeamA.Select(x => x.PlayerId).ToHashSet();
 
-    //    var settings = new TeamGenerationSettings { PlayersPerTeam = 2, IncludeGoalkeepers = true };
+        // Sorted rank: P1(W=10), P2(W=9), ..., P6(W=5)
+        // AlternateStartA: even indices (0,2,4) → TeamA → P1, P3, P5
+        teamAIds.Should().Contain(ids[0], "rank-0 (most wins) → TeamA");
+        teamAIds.Should().Contain(ids[2], "rank-2 → TeamA");
+        teamAIds.Should().Contain(ids[4], "rank-4 → TeamA");
 
-    //    // Act
-    //    var result = await strategy.GenerateTeamsAsync(players, settings);
+        var teamBIds = opt.TeamB.Select(x => x.PlayerId).ToHashSet();
+        teamBIds.Should().Contain(ids[1], "rank-1 → TeamB");
+        teamBIds.Should().Contain(ids[3], "rank-3 → TeamB");
+        teamBIds.Should().Contain(ids[5], "rank-5 → TeamB");
+    }
 
-    //    // Assert
-    //    var opt = result.Options[0];
-    //    var p1pick = opt.TeamA.Concat(opt.TeamB).First(x => x.PlayerId == id["P1"]);
-    //}
+    // ----------------------------------------------------------------
+    // 4. SnakeABBA pattern: positions 0,3 → TeamA; positions 1,2 → TeamB (per block of 4)
+    // ----------------------------------------------------------------
 
-    //// ----------------- helpers -----------------
+    [Fact]
+    public async Task SnakeABBA_CorrectPattern_FirstBlock()
+    {
+        var players = TestHelpers.Players(
+            ("P1", false), ("P2", false), ("P3", false), ("P4", false));
 
-    //private static List<PlayerRequestDto> NewPlayersDeterministic(params (string name, bool isGk)[] specs)
-    //{
-    //    int i = 1;
-    //    return specs.Select(s => new PlayerRequestDto(GuidFromInt(i++), s.name, s.isGk)).ToList();
-    //}
+        var ids = players.Select(p => p.Id).ToList();
+        var stats = ids.Select((id, i) =>
+            TestHelpers.Stats(id, $"P{i + 1}", wins: 10 - i, ties: 0, losses: 5));
 
-    //private static Guid GuidFromInt(int n)
-    //{
-    //    var bytes = new byte[16];
-    //    bytes[15] = (byte)(n & 0xFF);
-    //    bytes[14] = (byte)(n >> 8 & 0xFF);
-    //    bytes[13] = (byte)(n >> 16 & 0xFF);
-    //    bytes[12] = (byte)(n >> 24 & 0xFF);
-    //    return new Guid(bytes);
-    //}
+        var strategy = new GroupByWinsStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 2, IncludeGoalkeepers = false };
 
-    //private static PlayerStats PS(Guid playerId, string name, int wins, int ties, int losses, double winRate)
-    //    => new PlayerStats
-    //    {
-    //        PlayerId = playerId,
-    //        Name = name,
-    //        Wins = wins,
-    //        Ties = ties,
-    //        Losses = losses,
-    //        WinRate = winRate,
-    //        SynergyWith = new Dictionary<Guid, double>()
-    //    };
+        // Request 3 options to generate SnakeABBA as option 3
+        var result = await strategy.GenerateTeamsAsync(players, settings, optionsCount: 3);
 
-    //private sealed class FakeStatsService : IPlayerStatsService
-    //{
-    //    private readonly Dictionary<Guid, PlayerStats> _stats;
+        // SnakeABBA: index%4: 0→A, 1→B, 2→B, 3→A
+        // Sorted: P1(rank0)→A, P2(rank1)→B, P3(rank2)→B, P4(rank3)→A
+        // → TeamA: P1, P4   TeamB: P2, P3
+        var snakeOpt = result.Options.FirstOrDefault(o =>
+        {
+            var aSet = o.TeamA.Select(x => x.PlayerId).ToHashSet();
+            return aSet.Contains(ids[0]) && aSet.Contains(ids[3]);
+        });
 
-    //    public FakeStatsService(Dictionary<Guid, PlayerStats> stats)
-    //    {
-    //        _stats = stats ?? new Dictionary<Guid, PlayerStats>();
-    //    }
+        snakeOpt.Should().NotBeNull("SnakeABBA option with P1+P4 in TeamA must exist (or be deduplicated equivalent)");
+    }
 
-    //    public Task<List<PlayerStats>> EnrichPlayersAsync(List<PlayerRequestDto> players, CancellationToken cancellationToken = default)
-    //    {
-    //        var list = players.Select(p =>
-    //        {
-    //            if (_stats.TryGetValue(p.Id, out var s))
-    //                return s;
+    // ----------------------------------------------------------------
+    // 5. Deduplication: identical canonical team keys are not repeated
+    // ----------------------------------------------------------------
 
-    //            return new PlayerStats
-    //            {
-    //                PlayerId = p.Id,
-    //                Name = p.Name,
-    //                Wins = 0,
-    //                Ties = 0,
-    //                Losses = 0,
-    //                WinRate = 0.0,
-    //                SynergyWith = new Dictionary<Guid, double>()
-    //            };
-    //        }).ToList();
+    [Fact]
+    public async Task Deduplication_RemovesDuplicateTeamOptions()
+    {
+        // With only 2 players and PlayersPerTeam=1, all three modes yield the same split
+        var players = TestHelpers.Players(("A", false), ("B", false));
+        var ids = players.Select(p => p.Id).ToList();
+        var stats = new[]
+        {
+            TestHelpers.Stats(ids[0], "A", wins: 5, ties: 0, losses: 5),
+            TestHelpers.Stats(ids[1], "B", wins: 5, ties: 0, losses: 5),
+        };
 
-    //        return Task.FromResult(list);
-    //    }
+        var strategy = new GroupByWinsStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 1, IncludeGoalkeepers = false };
 
-    //    public Task<PlayerVisualStatsReport> GetVisualReportAsync(Guid groupId, CancellationToken cancellationToken = default)
-    //        => Task.FromResult(new PlayerVisualStatsReport
-    //        {
-    //            GroupId = groupId,
-    //            TotalMatchesConsidered = 0,
-    //            TotalFinalizedMatches = 0,
-    //            TotalMatchesWithScore = 0,
-    //            Players = new List<PlayerVisualStatsItem>()
-    //        });
-    //}
+        var result = await strategy.GenerateTeamsAsync(players, settings, optionsCount: 3);
+
+        // Only 1 unique split is possible, so deduplication must yield exactly 1 option
+        result.Options.Should().HaveCount(1, "duplicate team compositions must be deduplicated");
+    }
+
+    // ----------------------------------------------------------------
+    // 6. Neutral weight: player with < 3 matches gets weight 0.50
+    // ----------------------------------------------------------------
+
+    [Fact]
+    public async Task NeutralPlayer_GetsWeight0_50()
+    {
+        var players = TestHelpers.Players(
+            ("New", false), ("A", false), ("B", false), ("C", false));
+
+        var ids = players.ToDictionary(p => p.Name, p => p.Id);
+
+        var stats = new[]
+        {
+            TestHelpers.NeutralStats(ids["New"], "New"),  // 0 matches → neutral
+            TestHelpers.Stats(ids["A"], "A", wins: 5, ties: 0, losses: 5),
+            TestHelpers.Stats(ids["B"], "B", wins: 4, ties: 0, losses: 6),
+            TestHelpers.Stats(ids["C"], "C", wins: 3, ties: 0, losses: 7),
+        };
+
+        var strategy = new GroupByWinsStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 2, IncludeGoalkeepers = false };
+
+        var result = await strategy.GenerateTeamsAsync(players, settings, optionsCount: 1);
+
+        var newEntry = result.Options
+            .SelectMany(o => o.TeamA.Concat(o.TeamB).Concat(o.Unassigned))
+            .First(p => p.PlayerId == ids["New"]);
+
+        newEntry.Weight.Should().BeApproximately(0.50, 1e-9,
+            "player with < 3 matches must receive neutral weight 0.50");
+    }
+
+    // ----------------------------------------------------------------
+    // 7. GK exclusion: IncludeGoalkeepers = false
+    // ----------------------------------------------------------------
+
+    [Fact]
+    public async Task GoalkeeperExclusion_GKsGoToUnassigned_WhenSettingFalse()
+    {
+        var players = TestHelpers.Players(
+            ("GK", true), ("A", false), ("B", false), ("C", false), ("D", false));
+
+        var ids = players.ToDictionary(p => p.Name, p => p.Id);
+        var stats = players.Select(p => TestHelpers.Stats(p.Id, p.Name, wins: 5, ties: 0, losses: 5));
+
+        var strategy = new GroupByWinsStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 2, IncludeGoalkeepers = false };
+
+        var result = await strategy.GenerateTeamsAsync(players, settings, optionsCount: 1);
+
+        foreach (var opt in result.Options)
+        {
+            var teamIds = opt.TeamA.Select(x => x.PlayerId)
+                            .Concat(opt.TeamB.Select(x => x.PlayerId))
+                            .ToHashSet();
+
+            teamIds.Should().NotContain(ids["GK"], "GK must not be assigned when IncludeGoalkeepers=false");
+            opt.Unassigned.Select(x => x.PlayerId).Should().Contain(ids["GK"]);
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // 8. Score = BalanceDiff (no synergy in this strategy)
+    // ----------------------------------------------------------------
+
+    [Fact]
+    public async Task Score_EqualsBalanceDiff_ForAllOptions()
+    {
+        var players = TestHelpers.Players(
+            ("A", false), ("B", false), ("C", false), ("D", false));
+
+        var ids = players.Select(p => p.Id).ToList();
+        var stats = new[]
+        {
+            TestHelpers.Stats(ids[0], "A", wins: 8, ties: 0, losses: 2),
+            TestHelpers.Stats(ids[1], "B", wins: 6, ties: 0, losses: 4),
+            TestHelpers.Stats(ids[2], "C", wins: 4, ties: 0, losses: 6),
+            TestHelpers.Stats(ids[3], "D", wins: 2, ties: 0, losses: 8),
+        };
+
+        var strategy = new GroupByWinsStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 2, IncludeGoalkeepers = false };
+
+        var result = await strategy.GenerateTeamsAsync(players, settings, optionsCount: 3);
+
+        foreach (var opt in result.Options)
+        {
+            opt.Score.Should().BeApproximately(opt.BalanceDiff, 1e-9,
+                "GroupByWinsStrategy sets Score = BalanceDiff (no synergy)");
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // 9. Options ordered by Score ascending
+    // ----------------------------------------------------------------
+
+    [Fact]
+    public async Task Options_OrderedByScore_Ascending()
+    {
+        var players = TestHelpers.Players(
+            ("A", false), ("B", false), ("C", false), ("D", false),
+            ("E", false), ("F", false));
+
+        var ids = players.Select(p => p.Id).ToList();
+        var stats = ids.Select((id, i) =>
+            TestHelpers.Stats(id, $"P{i}", wins: 10 - i * 2, ties: 0, losses: i * 2 + 3));
+
+        var strategy = new GroupByWinsStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 3, IncludeGoalkeepers = false };
+
+        var result = await strategy.GenerateTeamsAsync(players, settings, optionsCount: 3);
+
+        result.Options.Select(o => o.Score).Should().BeInAscendingOrder(
+            because: "options must be sorted by Score ascending");
+    }
 }

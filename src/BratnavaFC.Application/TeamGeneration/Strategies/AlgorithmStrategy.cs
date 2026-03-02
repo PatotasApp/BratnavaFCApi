@@ -69,7 +69,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
 
     private static int TotalMatches(PlayerStats s) => (s?.Wins ?? 0) + (s?.Ties ?? 0) + (s?.Losses ?? 0);
     private static bool IsNeutral(PlayerStats s) => TotalMatches(s) < MinMatchesToBeNonNeutral;
-    private static double EffectiveWinRate(PlayerStats s) => IsNeutral(s) ? NeutralWinRate : s.WinRate;
+    private static double EffectiveWinRate(PlayerStats s) => IsNeutral(s) ? (s.NeutralOverride ?? NeutralWinRate) : s.WinRate;
 
     // -----------------------------
     // DEPENDENCIES

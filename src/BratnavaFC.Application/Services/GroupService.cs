@@ -186,7 +186,7 @@ public class GroupService : IGroupService
                 .Where(p => p.GroupId == groupId)
                 .ToListAsync(cancellationToken);
 
-            var players = allPlayers.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, p.User?.UserName, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status)).ToList();
+            var players = allPlayers.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, p.User?.UserName, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating)).ToList();
 
             return new GroupDto(
                 group.Id,
@@ -216,7 +216,7 @@ public class GroupService : IGroupService
                 g.Group.ScheduleMatchDate,
                 g.Group.Admins.Select(x => x.UserId).ToArray(),
                 g.Group.Status,
-                g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status)).ToList()
+                g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating)).ToList()
             ))
             .ToListAsync(cancellationToken);
     }
@@ -239,7 +239,7 @@ public class GroupService : IGroupService
             g.Status,
             g.Players.Select(p => new Domain.Dtos.Players.PlayerDto(
                 p.Id, p.Name, p.UserId, p.User?.UserName,
-                p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status)).ToList()
+                p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating)).ToList()
         )).ToList();
     }
 

@@ -68,4 +68,14 @@ public class PlayerEntity : InactivatableEntity
     {
         IsGuest = isGuest;
     }
+
+    public int? GuestStarRating { get; private set; }
+
+    public void SetGuestStarRating(int? stars)
+    {
+        if (stars.HasValue && (stars.Value < 1 || stars.Value > 5))
+            throw new InvalidOperationException("GuestStarRating must be between 1 and 5.");
+
+        GuestStarRating = stars;
+    }
 }
