@@ -996,7 +996,8 @@ public sealed class MatchService : IMatchService
         PlayerName = mp.Player?.Name ?? string.Empty,
         IsGoalkeeper = mp.Player?.IsGoalkeeper ?? false,
         Team = mp.Team,
-        InviteResponse = (short)mp.InviteResponse
+        InviteResponse = (short)mp.InviteResponse,
+        IsMvp = mp.IsMvp ?? false
     };
 
     private static MatchDetailsDto MapToDetailsDto(MatchEntity match)

@@ -57,6 +57,7 @@ public sealed class PlayerInMatchDto
     public bool IsGoalkeeper { get; set; }
     public short Team { get; set; }
     public short InviteResponse { get; set; } // enum convertido (Accepted/Rejected/None)
+    public bool IsMvp { get; set; }
 }
 
 public sealed class VoteDto

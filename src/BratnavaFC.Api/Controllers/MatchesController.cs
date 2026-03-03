@@ -39,7 +39,7 @@ public class MatchesController : GroupAuthorizedController
     [HttpGet("group/{groupId:guid}/current")]
     public async Task<IActionResult> GetCurrent(Guid groupId, CancellationToken cancellationToken)
     {
-        var match = await _service.GetCurrentAsync(groupId, cancellationToken);
+            var match = await _service.GetCurrentAsync(groupId, cancellationToken);
         if (match is null) return NotFound();
         return Ok(ToDto(match));
     }
