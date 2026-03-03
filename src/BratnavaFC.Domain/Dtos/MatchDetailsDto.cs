@@ -55,6 +55,7 @@ public sealed class PlayerInMatchDto
     public Guid PlayerId { get; set; }
     public string PlayerName { get; set; } = "";
     public bool IsGoalkeeper { get; set; }
+    public bool IsGuest { get; set; }
     public short Team { get; set; }
     public short InviteResponse { get; set; } // enum convertido (Accepted/Rejected/None)
     public bool IsMvp { get; set; }

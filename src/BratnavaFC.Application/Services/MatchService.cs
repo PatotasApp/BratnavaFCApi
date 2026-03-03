@@ -757,6 +757,7 @@ public sealed class MatchService : IMatchService
                         PlayerId = mp.PlayerId,
                         PlayerName = mp.Player!.Name,
                         IsGoalkeeper = mp.Player!.IsGoalkeeper,
+                        IsGuest = mp.Player!.IsGuest,
                         Team = mp.Team,
                         InviteResponse = (short)mp.InviteResponse
                     })
@@ -802,6 +803,7 @@ public sealed class MatchService : IMatchService
                         PlayerId = mp.PlayerId,
                         PlayerName = mp.Player!.Name,
                         IsGoalkeeper = mp.Player!.IsGoalkeeper,
+                        IsGuest = mp.Player!.IsGuest,
                         Team = mp.Team,
                         InviteResponse = (short)mp.InviteResponse
                     })
@@ -817,6 +819,7 @@ public sealed class MatchService : IMatchService
                         PlayerId = mp.PlayerId,
                         PlayerName = mp.Player!.Name,
                         IsGoalkeeper = mp.Player!.IsGoalkeeper,
+                        IsGuest = mp.Player!.IsGuest,
                         Team = mp.Team,
                         InviteResponse = (short)mp.InviteResponse
                     })
@@ -831,6 +834,7 @@ public sealed class MatchService : IMatchService
                         PlayerId = mp.PlayerId,
                         PlayerName = mp.Player!.Name,
                         IsGoalkeeper = mp.Player!.IsGoalkeeper,
+                        IsGuest = mp.Player!.IsGuest,
                         Team = mp.Team,
                         InviteResponse = (short)mp.InviteResponse
                     })
@@ -995,6 +999,7 @@ public sealed class MatchService : IMatchService
         PlayerId = mp.PlayerId,
         PlayerName = mp.Player?.Name ?? string.Empty,
         IsGoalkeeper = mp.Player?.IsGoalkeeper ?? false,
+        IsGuest = mp.Player?.IsGuest ?? false,
         Team = mp.Team,
         InviteResponse = (short)mp.InviteResponse,
         IsMvp = mp.IsMvp ?? false
