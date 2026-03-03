@@ -34,6 +34,13 @@ public sealed class PlayerStatsService : IPlayerStatsService
         // So finalized (como voce tinha)
         var matches = await LoadFinalizedMatchesAsync(playerIds, cancellationToken);
 
+        // Carrega GuestStarRating diretamente do banco para garantir o valor mais atualizado
+        var guestRatingMap = await _context.Players
+            .AsNoTracking()
+            .Where(p => playerIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.GuestStarRating })
+            .ToDictionaryAsync(p => p.Id, p => p.GuestStarRating, cancellationToken);
+
         var perPlayer = InitializePlayerAccumulators(playerIds);
         var pairTotals = new Dictionary<PairKey, PairAccumulator>();
 
@@ -57,8 +64,9 @@ public sealed class PlayerStatsService : IPlayerStatsService
             var synergy = BuildSynergyMap(pl.Id, players, pairTotals);
 
             double? neutralOverride = null;
-            if (acc.MatchesPlayed < minMatchesNonNeutral && pl.GuestStarRating.HasValue)
-                neutralOverride = (pl.GuestStarRating.Value - 1) * 0.25;
+            var guestStarRating = guestRatingMap.TryGetValue(pl.Id, out var dbRating) ? dbRating : null;
+            if (acc.MatchesPlayed < minMatchesNonNeutral && guestStarRating.HasValue)
+                neutralOverride = (guestStarRating.Value - 1) * 0.25;
 
             result.Add(new PlayerStats
             {
