@@ -1133,4 +1133,127 @@ public sealed class MatchServiceTests
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*Acceptation*");
     }
+
+    // =========================
+    // REWIND — clear + resync
+    // =========================
+
+    [Fact]
+    public async Task RewindOneStepAsync_WhenMatchMaking_ShouldClearAllMatchPlayersAndResync()
+    {
+        await using var db = DbContextFactory.Create(nameof(RewindOneStepAsync_WhenMatchMaking_ShouldClearAllMatchPlayersAndResync));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        // Cria partida em MatchMaking com 2 jogadores com times atribuídos
+        var (match, players) = await SeedMatchAsync(
+            db, group.Id,
+            playersCount: 2,
+            targetStatus: MatchStatus.MatchMaking,
+            acceptAllInvites: true,
+            defineTeamsIfPossible: true);
+
+        // Sanity: jogadores têm times antes do rewind
+        var before = await db.Matches
+            .AsNoTracking()
+            .Include(m => m.Players)
+            .FirstAsync(m => m.Id == match.Id);
+
+        before.Players.Should().HaveCount(2);
+        before.Players.All(p => p.Team != 0).Should().BeTrue("times devem estar atribuídos antes do rewind");
+
+        db.ChangeTracker.Clear();
+
+        await sut.RewindOneStepAsync(group.Id, match.Id, CancellationToken.None);
+
+        var after = await db.Matches
+            .AsNoTracking()
+            .Include(m => m.Players)
+            .FirstAsync(m => m.Id == match.Id);
+
+        after.Status.Should().Be(MatchStatus.Acceptation);
+
+        // Todos os MatchPlayers foram re-criados pelo resync com estado limpo
+        after.Players.Should().HaveCount(players.Count,
+            "resync deve recriar um MatchPlayer por jogador do grupo");
+
+        after.Players.All(p => p.Team == 0).Should().BeTrue(
+            "times devem ser zerados após rewind + resync");
+
+        after.Players.All(p => p.InviteResponse == InviteResponse.None).Should().BeTrue(
+            "InviteResponse deve voltar para None após resync");
+    }
+
+    [Fact]
+    public async Task RewindOneStepAsync_WhenMatchMaking_ShouldIncludeNewGroupPlayerAddedAfterMatchStarted()
+    {
+        await using var db = DbContextFactory.Create(nameof(RewindOneStepAsync_WhenMatchMaking_ShouldIncludeNewGroupPlayerAddedAfterMatchStarted));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        // Cria partida em MatchMaking com 2 jogadores originais
+        var (match, _) = await SeedMatchAsync(
+            db, group.Id,
+            playersCount: 2,
+            targetStatus: MatchStatus.MatchMaking,
+            acceptAllInvites: true,
+            defineTeamsIfPossible: true);
+
+        // Adiciona um 3º jogador ao grupo DEPOIS que a partida já estava em MatchMaking
+        var newPlayer = new PlayerEntity("P_novo", Guid.NewGuid(), group.Id, 0m, false, status: Status.Active);
+        db.Players.Add(newPlayer);
+        await db.SaveChangesAsync();
+
+        db.ChangeTracker.Clear();
+
+        await sut.RewindOneStepAsync(group.Id, match.Id, CancellationToken.None);
+
+        var after = await db.Matches
+            .AsNoTracking()
+            .Include(m => m.Players)
+            .FirstAsync(m => m.Id == match.Id);
+
+        after.Status.Should().Be(MatchStatus.Acceptation);
+
+        // Resync deve ter incluído o novo jogador do grupo
+        after.Players.Should().HaveCount(3,
+            "o novo jogador do grupo deve ser incluído pelo resync após rewind");
+    }
+
+    [Fact]
+    public async Task RewindOneStepAsync_WhenStarted_ShouldPreserveTeamAssignments()
+    {
+        await using var db = DbContextFactory.Create(nameof(RewindOneStepAsync_WhenStarted_ShouldPreserveTeamAssignments));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        var (match, players) = await SeedMatchAsync(
+            db, group.Id,
+            playersCount: 2,
+            targetStatus: MatchStatus.Started,
+            acceptAllInvites: true,
+            defineTeamsIfPossible: true);
+
+        db.ChangeTracker.Clear();
+
+        await sut.RewindOneStepAsync(group.Id, match.Id, CancellationToken.None);
+
+        var after = await db.Matches
+            .AsNoTracking()
+            .Include(m => m.Players)
+            .FirstAsync(m => m.Id == match.Id);
+
+        after.Status.Should().Be(MatchStatus.MatchMaking);
+
+        // Rewind de Started → MatchMaking não deve tocar os jogadores
+        after.Players.Should().HaveCount(players.Count);
+        after.Players.Any(p => p.Team != 0).Should().BeTrue(
+            "atribuições de time devem ser preservadas ao voltar de Started para MatchMaking");
+    }
 }

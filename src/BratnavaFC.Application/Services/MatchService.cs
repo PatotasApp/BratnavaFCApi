@@ -704,14 +704,41 @@ public sealed class MatchService : IMatchService
 
     public async Task RewindOneStepAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
-        var match = await GetByIdAsync(groupId, matchId, ct) ?? throw new InvalidOperationException("Partida nao encontrada.");
+        // Carrega SEM Include(Players) para evitar conflitos de snapshot de coleção ao
+        // combinar RemoveRange + Add na mesma operação de SaveChanges.
+        var match = await _context.Matches
+            .Where(m => m.Id == matchId && m.GroupId == groupId)
+            .FirstOrDefaultAsync(ct)
+            ?? throw new InvalidOperationException("Partida nao encontrada.");
 
-        if (match.GroupId != groupId)
-            throw new InvalidOperationException("Partida nao pertence a este grupo.");
+        var wasMatchMaking = match.Status == MatchStatus.MatchMaking;
 
         match.RewindOneStep();
 
-        _context.Update(match);
+        if (wasMatchMaking)
+        {
+            // Busca e deleta os MatchPlayers diretamente pelo DbSet (sem navegar pela coleção)
+            var existingMps = await _context.MatchPlayers
+                .Where(mp => mp.MatchId == matchId)
+                .ToListAsync(ct);
+            _context.MatchPlayers.RemoveRange(existingMps);
+
+            // Re-sincroniza jogadores do grupo diretamente via DbSet
+            var groupPlayers = await _context.Players
+                .AsNoTracking()
+                .Where(p => p.GroupId == groupId)
+                .ToListAsync(ct);
+
+            foreach (var player in groupPlayers)
+            {
+                var newMp = new MatchPlayerEntity(player.Id);
+                newMp.AssignGroup(groupId);
+                _context.MatchPlayers.Add(newMp);
+                // MatchId tem private set; usa Entry API para definir sem nav prop
+                _context.Entry(newMp).Property(x => x.MatchId).CurrentValue = matchId;
+            }
+        }
+
         await _context.SaveChangesAsync(ct);
     }
 

@@ -173,11 +173,27 @@ public sealed class MatchEntityTests
     }
 
     // =========================
-    // ADD PLAYER (sync) only Created
+    // ADD PLAYER (sync) only Created or Acceptation
     // =========================
 
     [Fact]
-    public void AddPlayer_WhenNotCreated_ShouldThrow()
+    public void AddPlayer_WhenMatchMaking_ShouldThrow()
+    {
+        var (match, p1, p2, mp1, mp2) = CreateMatchWithTwoPlayers_Created();
+        match.OpenAcceptation();
+        match.AcceptInvite(p1.Id);
+        match.AcceptInvite(p2.Id);
+        match.GoToMatchMaking();
+
+        var p3 = new PlayerEntity("C", Guid.NewGuid(), match.GroupId, 0, false, false, Status.Active);
+        var mp3 = new MatchPlayerEntity(p3.Id);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => match.AddPlayer(mp3, p3));
+        Assert.Equal("So e possivel sincronizar jogadores quando a partida esta Created ou Acceptation.", ex.Message);
+    }
+
+    [Fact]
+    public void AddPlayer_WhenAcceptation_ShouldSucceed()
     {
         var (match, _, _, _, _) = CreateMatchWithTwoPlayers_Created();
         match.OpenAcceptation();
@@ -185,8 +201,9 @@ public sealed class MatchEntityTests
         var p3 = new PlayerEntity("C", Guid.NewGuid(), match.GroupId, 0, false, false, Status.Active);
         var mp3 = new MatchPlayerEntity(p3.Id);
 
-        var ex = Assert.Throws<InvalidOperationException>(() => match.AddPlayer(mp3, p3));
-        Assert.Equal("So e possivel sincronizar jogadores quando a partida esta Created.", ex.Message);
+        // Should NOT throw — Acceptation is now a valid state for AddPlayer (used by rewind resync)
+        match.AddPlayer(mp3, p3);
+        Assert.Contains(match.Players, mp => mp.PlayerId == p3.Id);
     }
 
     [Fact]

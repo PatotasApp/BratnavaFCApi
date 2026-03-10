@@ -242,7 +242,8 @@ public class MatchEntity : BaseEntity
         ArgumentNullException.ThrowIfNull(matchPlayer);
         ArgumentNullException.ThrowIfNull(playerEntity);
 
-        EnsureStatus(MatchStatus.Created, "So e possivel sincronizar jogadores quando a partida esta Created.");
+        if (Status != MatchStatus.Created && Status != MatchStatus.Acceptation)
+            throw new InvalidOperationException("So e possivel sincronizar jogadores quando a partida esta Created ou Acceptation.");
 
         if (playerEntity.GroupId != GroupId)
             throw new InvalidOperationException("Player nao pertence ao mesmo Group da partida.");

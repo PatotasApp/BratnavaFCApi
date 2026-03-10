@@ -77,7 +77,6 @@ public class MatchesController : GroupAuthorizedController
         return Ok(dto);
     }
 
-    [Authorize(Roles = "Admin,GodMode")]
     [HttpPost("group/{groupId:guid}")]
     public async Task<IActionResult> Create(Guid groupId, [FromBody] CreateMatchDto dto, CancellationToken cancellationToken)
     {
@@ -399,10 +398,10 @@ public class MatchesController : GroupAuthorizedController
         }
     }
 
-    [Authorize(Roles = "Admin,GodMode")]
     [HttpPost("group/{groupId:guid}/{matchId:guid}/rewind")]
     public async Task<IActionResult> Rewind(Guid groupId, Guid matchId, CancellationToken ct)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         try
         {
             await _service.RewindOneStepAsync(groupId, matchId, ct);
@@ -424,7 +423,6 @@ public class MatchesController : GroupAuthorizedController
         return Ok(items);
     }
 
-    [Authorize(Roles = "Admin,GodMode")]
     [HttpPost("group/{groupId:guid}/{matchId:guid}/guests")]
     public async Task<IActionResult> AddGuestToMatch(
         Guid groupId,
