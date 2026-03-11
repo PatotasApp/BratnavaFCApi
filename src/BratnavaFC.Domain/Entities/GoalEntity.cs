@@ -48,4 +48,17 @@ public sealed class GoalEntity : BaseEntity
     /// O ponto vai para o time adversário do marcador.
     /// </summary>
     public bool IsOwnGoal { get; private set; }
+
+    public void Update(Guid scorerMatchPlayerId, Guid? assistMatchPlayerId, int? timeSeconds, bool isOwnGoal)
+    {
+        if (scorerMatchPlayerId == Guid.Empty)
+            throw new InvalidOperationException("ScorerMatchPlayerId e obrigatorio.");
+        if (timeSeconds.HasValue && timeSeconds.Value < 0)
+            throw new InvalidOperationException("Tempo do gol nao pode ser negativo.");
+
+        ScorerMatchPlayerId = scorerMatchPlayerId;
+        AssistMatchPlayerId = assistMatchPlayerId;
+        TimeSeconds = timeSeconds;
+        IsOwnGoal = isOwnGoal;
+    }
 }

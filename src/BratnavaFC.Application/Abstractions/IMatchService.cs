@@ -37,6 +37,7 @@ public interface IMatchService
     Task AssignTeamsAsync(Guid groupId, Guid matchId, AssignTeamsDto dto, CancellationToken ct);
     Task SwapPlayersByPlayerIdAsync(Guid groupId, Guid matchId, Guid playerAId, Guid playerBId, CancellationToken ct);
     Task AddGoalAsync(Guid groupId, Guid matchId, AddGoalRequestDto dto, CancellationToken ct);
+    Task UpdateGoalAsync(Guid groupId, Guid matchId, Guid goalId, UpdateGoalRequestDto dto, CancellationToken ct);
     Task RemoveGoalAsync(Guid groupId, Guid matchId, Guid goalId, CancellationToken ct);
     Task AddGoalsBulkAsync(Guid groupId, Guid matchId, AddGoalsBulkRequestDto dto, CancellationToken ct);
     Task<List<GoalDto>> GetGoalsAsync(Guid groupId, Guid matchId, CancellationToken ct);

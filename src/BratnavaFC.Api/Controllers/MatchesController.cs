@@ -333,6 +333,26 @@ public class MatchesController : GroupAuthorizedController
         }
     }
 
+    [HttpPut("group/{groupId:guid}/{matchId:guid}/goals/{goalId:guid}")]
+    public async Task<IActionResult> UpdateGoal(
+        Guid groupId,
+        Guid matchId,
+        Guid goalId,
+        [FromBody] UpdateGoalRequestDto dto,
+        CancellationToken ct)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        try
+        {
+            await _service.UpdateGoalAsync(groupId, matchId, goalId, dto, ct);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     [HttpDelete("group/{groupId:guid}/{matchId:guid}/goals/{goalId:guid}")]
     public async Task<IActionResult> RemoveGoal(Guid groupId, Guid matchId, Guid goalId, CancellationToken ct)
     {
