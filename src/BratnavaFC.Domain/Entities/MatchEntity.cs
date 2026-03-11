@@ -352,7 +352,7 @@ public class MatchEntity : BaseEntity
         mpB.SetTeam(teamA);
     }
 
-    public void AddGoalByMatchPlayer(Guid scorerMatchPlayerId, Guid? assistMatchPlayerId, int? timeSeconds)
+    public void AddGoalByMatchPlayer(Guid scorerMatchPlayerId, Guid? assistMatchPlayerId, int? timeSeconds, bool isOwnGoal = false)
     {
         if (Status != MatchStatus.Started && Status != MatchStatus.PostGame)
             throw new InvalidOperationException("So e possivel registrar gols quando a partida esta Started ou PostGame.");
@@ -387,7 +387,8 @@ public class MatchEntity : BaseEntity
             if (assistMp.Team == 0)
                 throw new InvalidOperationException("Nao e possivel registrar assistencia de jogador nao atribuido a um time.");
 
-            if (assistMp.Team != scorerMp.Team)
+            // Em gols contra não é exigido que a assistência seja do mesmo time
+            if (!isOwnGoal && assistMp.Team != scorerMp.Team)
                 throw new InvalidOperationException("A assistencia so pode ser de um jogador do mesmo time do autor do gol.");
         }
 
@@ -396,7 +397,8 @@ public class MatchEntity : BaseEntity
             groupId: GroupId,
             scorerMatchPlayerId: scorerMp.Id,
             assistMatchPlayerId: assistMp?.Id,
-            timeSeconds: timeSeconds);
+            timeSeconds: timeSeconds,
+            isOwnGoal: isOwnGoal);
 
         Goals.Add(goal);
 
@@ -427,8 +429,17 @@ public class MatchEntity : BaseEntity
         {
             if (!teamByMatchPlayerId.TryGetValue(g.ScorerMatchPlayerId, out var team)) continue;
 
-            if (team == 1) countA++;
-            else if (team == 2) countB++;
+            if (g.IsOwnGoal)
+            {
+                // Gol contra: o ponto vai para o time adversário
+                if (team == 1) countB++;
+                else if (team == 2) countA++;
+            }
+            else
+            {
+                if (team == 1) countA++;
+                else if (team == 2) countB++;
+            }
         }
 
         TeamAGoals = countA;

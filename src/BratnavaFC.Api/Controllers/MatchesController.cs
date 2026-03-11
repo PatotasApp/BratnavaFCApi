@@ -322,7 +322,6 @@ public class MatchesController : GroupAuthorizedController
         [FromBody] AddGoalRequestDto dto,
         CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         try
         {
             await _service.AddGoalAsync(groupId, matchId, dto, ct);

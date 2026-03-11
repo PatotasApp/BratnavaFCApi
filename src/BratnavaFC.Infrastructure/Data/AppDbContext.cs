@@ -307,6 +307,8 @@ public class AppDbContext : DbContext
 
             builder.Property(x => x.TimeSeconds).IsRequired(false);
 
+            builder.Property(x => x.IsOwnGoal).IsRequired().HasDefaultValue(false);
+
             builder.HasOne(x => x.Match)
                 .WithMany(m => m.Goals)
                 .HasForeignKey(x => x.MatchId)

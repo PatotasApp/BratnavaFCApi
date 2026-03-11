@@ -1,4 +1,4 @@
-﻿namespace BratnavaFC.Domain.Dtos;
+namespace BratnavaFC.Domain.Dtos;
 
 public sealed class GoalDto
 {
@@ -14,4 +14,9 @@ public sealed class GoalDto
 
     public int? TimeSeconds { get; set; }
     public string? Time { get; set; }
+
+    /// <summary>
+    /// Gol contra: o ponto vai para o time adversário do marcador.
+    /// </summary>
+    public bool IsOwnGoal { get; set; }
 }

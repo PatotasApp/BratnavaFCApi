@@ -91,7 +91,8 @@ public sealed class MatchService : IMatchService
                     AssistName = assistMp?.Player?.Name,
 
                     TimeSeconds = g.TimeSeconds,
-                    Time = MatchTimeParser.FormatFromSeconds(g.TimeSeconds)
+                    Time = MatchTimeParser.FormatFromSeconds(g.TimeSeconds),
+                    IsOwnGoal = g.IsOwnGoal
                 };
             })
             .ToList();
@@ -159,7 +160,8 @@ public sealed class MatchService : IMatchService
                     AssistName = assistMp?.Player?.Name,
 
                     TimeSeconds = g.TimeSeconds,
-                    Time = MatchTimeParser.FormatFromSeconds(g.TimeSeconds)
+                    Time = MatchTimeParser.FormatFromSeconds(g.TimeSeconds),
+                    IsOwnGoal = g.IsOwnGoal
                 };
             })
             .ToList();
@@ -600,7 +602,8 @@ public sealed class MatchService : IMatchService
         match.AddGoalByMatchPlayer(
             scorerMatchPlayerId: scorerMp.Id,
             assistMatchPlayerId: assistMp?.Id,
-            timeSeconds: seconds);
+            timeSeconds: seconds,
+            isOwnGoal: dto.IsOwnGoal);
 
         await _context.SaveChangesAsync(ct);
     }
@@ -905,7 +908,8 @@ public sealed class MatchService : IMatchService
                     g.ScorerMatchPlayerId,
                     g.AssistMatchPlayerId,
                     g.TimeSeconds,
-                    g.CreateDate
+                    g.CreateDate,
+                    g.IsOwnGoal
                 }).ToList()
             })
             .FirstOrDefaultAsync(ct);
@@ -971,7 +975,8 @@ public sealed class MatchService : IMatchService
                     AssistPlayerId = assistPid,
                     AssistName = assistName,
                     TimeSeconds = g.TimeSeconds,
-                    Time = MatchTimeParser.FormatFromSeconds(g.TimeSeconds)
+                    Time = MatchTimeParser.FormatFromSeconds(g.TimeSeconds),
+                    IsOwnGoal = g.IsOwnGoal
                 };
             })
             .ToList();
@@ -1072,7 +1077,8 @@ public sealed class MatchService : IMatchService
                     AssistName = assistMp?.Player?.Name,
 
                     TimeSeconds = g.TimeSeconds,
-                    Time = MatchTimeParser.FormatFromSeconds(g.TimeSeconds)
+                    Time = MatchTimeParser.FormatFromSeconds(g.TimeSeconds),
+                    IsOwnGoal = g.IsOwnGoal
                 };
             })
             .ToList();

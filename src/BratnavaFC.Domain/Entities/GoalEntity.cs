@@ -1,4 +1,4 @@
-﻿using BratnavaFC.Domain.Enums;
+using BratnavaFC.Domain.Enums;
 
 namespace BratnavaFC.Domain.Entities;
 
@@ -11,7 +11,8 @@ public sealed class GoalEntity : BaseEntity
         Guid groupId,
         Guid scorerMatchPlayerId,
         Guid? assistMatchPlayerId,
-        int? timeSeconds)
+        int? timeSeconds,
+        bool isOwnGoal = false)
     {
         if (matchId == Guid.Empty) throw new InvalidOperationException("MatchId e obrigatorio.");
         if (groupId == Guid.Empty) throw new InvalidOperationException("GroupId e obrigatorio.");
@@ -25,6 +26,7 @@ public sealed class GoalEntity : BaseEntity
         AssistMatchPlayerId = assistMatchPlayerId;
 
         TimeSeconds = timeSeconds;
+        IsOwnGoal = isOwnGoal;
     }
 
     public Guid MatchId { get; private set; }
@@ -40,4 +42,10 @@ public sealed class GoalEntity : BaseEntity
     public MatchPlayerEntity? AssistMatchPlayer { get; private set; }
 
     public int? TimeSeconds { get; private set; }
+
+    /// <summary>
+    /// Gol contra: o gol foi marcado pelo próprio jogador (ex: defleção na própria rede).
+    /// O ponto vai para o time adversário do marcador.
+    /// </summary>
+    public bool IsOwnGoal { get; private set; }
 }
