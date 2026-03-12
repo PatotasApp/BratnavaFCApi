@@ -1175,15 +1175,15 @@ public sealed class MatchServiceTests
 
         after.Status.Should().Be(MatchStatus.Acceptation);
 
-        // Todos os MatchPlayers foram re-criados pelo resync com estado limpo
+        // Todos os MatchPlayers foram re-criados pelo resync preservando InviteResponse
         after.Players.Should().HaveCount(players.Count,
             "resync deve recriar um MatchPlayer por jogador do grupo");
 
         after.Players.All(p => p.Team == 0).Should().BeTrue(
             "times devem ser zerados após rewind + resync");
 
-        after.Players.All(p => p.InviteResponse == InviteResponse.None).Should().BeTrue(
-            "InviteResponse deve voltar para None após resync");
+        after.Players.All(p => p.InviteResponse == InviteResponse.Accepted).Should().BeTrue(
+            "InviteResponse deve ser preservada após rewind — jogadores que aceitaram devem continuar com Accepted");
     }
 
     [Fact]
