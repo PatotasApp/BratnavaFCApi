@@ -1036,20 +1036,30 @@ public sealed class MatchService : IMatchService
         };
     }
 
-    public async Task<IReadOnlyList<MatchHistoryItemDto>> GetHistoryAsync(Guid groupId, int take, CancellationToken cancellationToken, Guid? playerId = null)
+    public async Task<IReadOnlyList<MatchHistoryItemDto>> GetHistoryAsync(
+        Guid groupId,
+        int take,
+        CancellationToken cancellationToken,
+        Guid? playerId = null)
     {
         if (groupId == Guid.Empty) throw new InvalidOperationException("GroupId e obrigatorio.");
+
         if (take <= 0) take = 200;
         if (take > 500) take = 500;
 
-        var teste = await _context.Matches
-            .Include(m => m.Players)
-                .ThenInclude(mp => mp.Player)
+        var query = _context.Matches
             .AsNoTrackingWithIdentityResolution()
-            .Where(m => m.Players.Any(x =>
-                x.PlayerId == playerId &&
-                (x.Team == 1 || x.Team == 2)))
-                    .Select(m => new MatchHistoryItemDto(
+            .Where(m => m.GroupId == groupId)
+            .Where(m =>
+                playerId == null ||
+                m.Players.Any(x =>
+                    x.PlayerId == playerId &&
+                    (x.Team == 1 || x.Team == 2)));
+
+        var result = await query
+            .OrderByDescending(m => m.PlayedAt)
+            .Take(take)
+            .Select(m => new MatchHistoryItemDto(
                 m.Id,
                 m.PlayedAt,
                 m.TeamAGoals ?? 0,
@@ -1063,7 +1073,7 @@ public sealed class MatchService : IMatchService
             ))
             .ToListAsync(cancellationToken);
 
-        return teste;
+        return result;
     }
 
     private static PlayerInMatchDto ToPlayerDto(MatchPlayerEntity mp) => new()
