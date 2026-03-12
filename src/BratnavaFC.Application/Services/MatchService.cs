@@ -1042,20 +1042,14 @@ public sealed class MatchService : IMatchService
         if (take <= 0) take = 200;
         if (take > 500) take = 500;
 
-        // Subquery p/ cores (sem include)
-        var colors = _context.TeamColors.AsNoTracking().Where(c => c.GroupId == groupId);
-
-        var query =
-            from m in _context.Matches.AsNoTracking()
-            where m.GroupId == groupId
-                && m.Status == MatchStatus.Finalized
-                && (playerId == null || m.Players.Any(mp => mp.PlayerId == playerId))
-            orderby m.PlayedAt descending
-            join ca in colors on m.TeamAColorId equals ca.Id into caJoin
-            from ca in caJoin.DefaultIfEmpty()
-            join cb in colors on m.TeamBColorId equals cb.Id into cbJoin
-            from cb in cbJoin.DefaultIfEmpty()
-            select new MatchHistoryItemDto(
+        var teste = await _context.Matches
+            .Include(m => m.Players)
+                .ThenInclude(mp => mp.Player)
+            .AsNoTrackingWithIdentityResolution()
+            .Where(m => m.Players.Any(x =>
+                x.PlayerId == playerId &&
+                (x.Team == 1 || x.Team == 2)))
+                    .Select(m => new MatchHistoryItemDto(
                 m.Id,
                 m.PlayedAt,
                 m.TeamAGoals ?? 0,
@@ -1063,11 +1057,13 @@ public sealed class MatchService : IMatchService
                 (int)m.Status,
                 m.Status.ToString(),
                 m.PlaceName,
-                ca != null ? ca.HexValue : null,
-                cb != null ? cb.HexValue : null
-            );
+                m.TeamAColor != null ? m.TeamAColor.HexValue : null,
+                m.TeamBColor != null ? m.TeamBColor.HexValue : null,
+                m.Players.Select(p => p.PlayerId).ToList()
+            ))
+            .ToListAsync(cancellationToken);
 
-        return await query.Take(take).ToListAsync(cancellationToken);
+        return teste;
     }
 
     private static PlayerInMatchDto ToPlayerDto(MatchPlayerEntity mp) => new()

@@ -11,5 +11,6 @@ public sealed record MatchHistoryItemDto(
     string StatusName,
     string? PlaceName,
     string? TeamAColorHex,
-    string? TeamBColorHex
+    string? TeamBColorHex,
+    IReadOnlyList<Guid> PlayerIds
 );
