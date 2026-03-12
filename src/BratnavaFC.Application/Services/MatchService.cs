@@ -1047,7 +1047,7 @@ public sealed class MatchService : IMatchService
 
         var query =
             from m in _context.Matches.AsNoTracking()
-            where m.GroupId == groupId
+            where m.GroupId == groupId && m.Status == MatchStatus.Finalized
             orderby m.PlayedAt descending
             join ca in colors on m.TeamAColorId equals ca.Id into caJoin
             from ca in caJoin.DefaultIfEmpty()
