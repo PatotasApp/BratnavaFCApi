@@ -436,9 +436,10 @@ public class MatchesController : GroupAuthorizedController
     public async Task<IActionResult> GetHistory(
     Guid groupId,
     [FromQuery] int take = 200,
+    [FromQuery] Guid? playerId = null,
     CancellationToken cancellationToken = default)
     {
-        var items = await _service.GetHistoryAsync(groupId, take, cancellationToken);
+        var items = await _service.GetHistoryAsync(groupId, take, cancellationToken, playerId);
         return Ok(items);
     }
 

@@ -1036,7 +1036,7 @@ public sealed class MatchService : IMatchService
         };
     }
 
-    public async Task<IReadOnlyList<MatchHistoryItemDto>> GetHistoryAsync(Guid groupId, int take, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<MatchHistoryItemDto>> GetHistoryAsync(Guid groupId, int take, CancellationToken cancellationToken, Guid? playerId = null)
     {
         if (groupId == Guid.Empty) throw new InvalidOperationException("GroupId e obrigatorio.");
         if (take <= 0) take = 200;
@@ -1047,7 +1047,9 @@ public sealed class MatchService : IMatchService
 
         var query =
             from m in _context.Matches.AsNoTracking()
-            where m.GroupId == groupId && m.Status == MatchStatus.Finalized
+            where m.GroupId == groupId
+                && m.Status == MatchStatus.Finalized
+                && (playerId == null || m.Players.Any(mp => mp.PlayerId == playerId))
             orderby m.PlayedAt descending
             join ca in colors on m.TeamAColorId equals ca.Id into caJoin
             from ca in caJoin.DefaultIfEmpty()

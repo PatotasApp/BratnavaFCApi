@@ -52,7 +52,7 @@ public interface IMatchService
     Task<MatchEntity?> GetCurrentAsync(Guid groupId, CancellationToken ct);
 
     Task RewindOneStepAsync(Guid groupId, Guid matchId, CancellationToken ct);
-    Task<IReadOnlyList<MatchHistoryItemDto>> GetHistoryAsync(Guid groupId, int take, CancellationToken cancellationToken);
+    Task<IReadOnlyList<MatchHistoryItemDto>> GetHistoryAsync(Guid groupId, int take, CancellationToken cancellationToken, Guid? playerId = null);
 
     Task AddGuestToMatchAsync(Guid groupId, Guid matchId, AddGuestToMatchDto dto, CancellationToken ct);
 }
