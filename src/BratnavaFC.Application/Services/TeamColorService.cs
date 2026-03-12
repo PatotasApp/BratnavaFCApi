@@ -30,7 +30,8 @@ public sealed class TeamColorService : ITeamColorService
             query = query.Where(c => c.IsActive);
 
         return await query
-            .OrderBy(c => c.Name)
+            .OrderByDescending(c => c.IsActive)
+            .ThenBy(c => c.Name)
             .Select(ToDtoExpr())
             .ToListAsync(ct);
     }

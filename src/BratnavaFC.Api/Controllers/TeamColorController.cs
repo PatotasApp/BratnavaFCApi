@@ -51,7 +51,7 @@ public class TeamColorController : ControllerBase
         return NoContent();
     }
 
-    [HttpPut("group/{groupId:guid}/{colorId:guid}/activate")]
+    [HttpPost("group/{groupId:guid}/{colorId:guid}/activate")]
     public async Task<IActionResult> Activate(Guid groupId, Guid colorId, CancellationToken ct)
     {
         await _service.ActivateAsync(groupId, colorId, ct);

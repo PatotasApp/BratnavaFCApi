@@ -527,7 +527,7 @@ public sealed class MatchService : IMatchService
         ArgumentNullException.ThrowIfNull(match);
 
         var players = await _context.Players
-            .Where(p => p.GroupId == groupId)
+            .Where(p => p.GroupId == groupId && p.Status == Status.Active)
             .ToListAsync(ct);
 
         foreach (var player in players)
@@ -744,8 +744,6 @@ public sealed class MatchService : IMatchService
 
     public async Task RewindOneStepAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
-        // Carrega SEM Include(Players) para evitar conflitos de snapshot de coleção ao
-        // combinar RemoveRange + Add na mesma operação de SaveChanges.
         var match = await _context.Matches
             .Where(m => m.Id == matchId && m.GroupId == groupId)
             .FirstOrDefaultAsync(ct)
@@ -761,18 +759,25 @@ public sealed class MatchService : IMatchService
             var existingMps = await _context.MatchPlayers
                 .Where(mp => mp.MatchId == matchId)
                 .ToListAsync(ct);
+
+            var savedResponses = existingMps
+                .ToDictionary(mp => mp.PlayerId, mp => mp.InviteResponse);
+
             _context.MatchPlayers.RemoveRange(existingMps);
 
-            // Re-sincroniza jogadores do grupo diretamente via DbSet
             var groupPlayers = await _context.Players
                 .AsNoTracking()
-                .Where(p => p.GroupId == groupId)
+                .Where(p => p.GroupId == groupId && p.Status == Status.Active)
                 .ToListAsync(ct);
 
             foreach (var player in groupPlayers)
             {
                 var newMp = new MatchPlayerEntity(player.Id);
                 newMp.AssignGroup(groupId);
+
+                if (savedResponses.TryGetValue(player.Id, out var previousResponse))
+                    newMp.InviteResponse = previousResponse;
+
                 _context.MatchPlayers.Add(newMp);
                 // MatchId tem private set; usa Entry API para definir sem nav prop
                 _context.Entry(newMp).Property(x => x.MatchId).CurrentValue = matchId;
@@ -817,6 +822,7 @@ public sealed class MatchService : IMatchService
                 MatchId = m.Id,
                 Status = (short)m.Status,
                 Players = m.Players
+                    .Where(mp => mp.Player!.Status == Status.Active)
                     .OrderBy(p => p.Player!.Name)
                     .Select(mp => new PlayerInMatchDto
                     {
@@ -861,7 +867,7 @@ public sealed class MatchService : IMatchService
                 },
 
                 TeamAPlayers = m.Players
-                    .Where(p => p.Team == 1)
+                    .Where(p => p.Team == 1 && p.Player!.Status == Status.Active)
                     .OrderByDescending(p => p.Player!.IsGoalkeeper)
                     .ThenBy(p => p.Player!.Name)
                     .Select(mp => new PlayerInMatchDto
@@ -877,7 +883,7 @@ public sealed class MatchService : IMatchService
                     .ToList(),
 
                 TeamBPlayers = m.Players
-                    .Where(p => p.Team == 2)
+                    .Where(p => p.Team == 2 && p.Player!.Status == Status.Active)
                     .OrderByDescending(p => p.Player!.IsGoalkeeper)
                     .ThenBy(p => p.Player!.Name)
                     .Select(mp => new PlayerInMatchDto
@@ -893,7 +899,7 @@ public sealed class MatchService : IMatchService
                     .ToList(),
 
                 UnassignedPlayers = m.Players
-                    .Where(p => p.Team == 0)
+                    .Where(p => p.Team == 0 && p.Player!.Status == Status.Active)
                     .OrderBy(p => p.Player!.Name)
                     .Select(mp => new PlayerInMatchDto
                     {

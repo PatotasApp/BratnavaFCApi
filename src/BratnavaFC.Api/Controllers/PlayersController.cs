@@ -49,14 +49,14 @@ public class PlayersController : ControllerBase
         return Ok(playerUpdated);
     }
 
-    [HttpPut("{playerId:guid}/inactivate")]
+    [HttpPost("{playerId:guid}/inactivate")]
     public async Task<IActionResult> InactivateAsync(Guid playerId, CancellationToken cancellationToken)
     {
         await _playerService.InactivateAsync(playerId, cancellationToken);
         return NoContent();
     }
 
-    [HttpPut("{playerId:guid}/reactivate")]
+    [HttpPost("{playerId:guid}/reactivate")]
     public async Task<IActionResult> ReactivateAsync(Guid playerId, CancellationToken cancellationToken)
     {
         await _playerService.ReactivateAsync(playerId, cancellationToken);
