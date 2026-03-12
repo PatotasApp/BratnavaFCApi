@@ -16,9 +16,9 @@ public class TeamColorController : ControllerBase
     }
 
     [HttpGet("group/{groupId:guid}")]
-    public async Task<IActionResult> GetAll(Guid groupId, [FromQuery] bool includeInactive, CancellationToken ct)
+    public async Task<IActionResult> GetAll(Guid groupId, [FromQuery] bool activeOnly, CancellationToken ct)
     {
-        var result = await _service.GetAllAsync(groupId, includeInactive, ct);
+        var result = await _service.GetAllAsync(groupId, activeOnly, ct);
         return Ok(result);
     }
 
@@ -44,7 +44,7 @@ public class TeamColorController : ControllerBase
         return Ok(updated);
     }
 
-    [HttpDelete("group/{groupId:guid}/{colorId:guid}")]
+    [HttpPost("group/{groupId:guid}/{colorId:guid}/deactivate")]
     public async Task<IActionResult> Inactivate(Guid groupId, Guid colorId, CancellationToken ct)
     {
         await _service.InactivateAsync(groupId, colorId, ct);

@@ -36,7 +36,6 @@ public class UserService : IUserService
             var username = dto.UserName?.Trim().ToLower();
 
             var existing = await _db.Users
-                .IgnoreQueryFilters()
                 .FirstOrDefaultAsync(x => x.Email == dto.Email || x.UserName == username, cancellationToken);
 
             if (existing?.UserName == username)
@@ -104,8 +103,8 @@ public class UserService : IUserService
 
         IQueryable<UserEntity> q = _db.Users;
 
-        if (req.IncludeInactive)
-            q = q.IgnoreQueryFilters();
+        if (!req.IncludeInactive)
+            q = q.Where(u => u.Status != Status.Inactive);
 
         if (!string.IsNullOrWhiteSpace(req.Search))
         {
@@ -167,7 +166,6 @@ public class UserService : IUserService
             {
                 var username = dto.UserName.Trim().ToLower();
                 var existsUserName = await _db.Users
-                    .IgnoreQueryFilters()
                     .AnyAsync(u => u.Id != userId && u.UserName.ToLower() == username, cancellationToken);
 
                 if (existsUserName)
@@ -179,7 +177,6 @@ public class UserService : IUserService
             {
                 var email = dto.Email.Trim().ToLower();
                 var existsEmail = await _db.Users
-                    .IgnoreQueryFilters()
                     .AnyAsync(u => u.Id != userId && u.Email.ToLower() == email, cancellationToken);
 
                 if (existsEmail)

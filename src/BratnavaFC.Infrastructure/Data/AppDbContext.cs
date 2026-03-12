@@ -177,8 +177,6 @@ public class AppDbContext : DbContext
 
             builder.Property(x => x.InactivatedAt);
 
-            builder.HasQueryFilter(x => x.Status != Status.Inactive);
-
         });
 
         modelBuilder.Entity<UserEntity>(builder =>
@@ -201,8 +199,6 @@ public class AppDbContext : DbContext
 
             builder.Property(x => x.InactivatedAt);
 
-            builder.HasQueryFilter(x => x.Status != Status.Inactive);
-
         });
 
         modelBuilder.Entity<GroupEntity>(builder =>
@@ -221,8 +217,6 @@ public class AppDbContext : DbContext
                 .IsRequired();
 
             builder.Property(x => x.InactivatedAt);
-
-            builder.HasQueryFilter(x => x.Status != Status.Inactive);
 
         });
 
@@ -264,8 +258,6 @@ public class AppDbContext : DbContext
             builder.Property(x => x.IsActive)
                 .HasDefaultValue(true)
                 .IsRequired();
-
-            builder.HasQueryFilter(x => x.IsActive);
 
             builder.HasIndex(x => new { x.GroupId, x.Name }).IsUnique(false);
         });

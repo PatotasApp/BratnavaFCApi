@@ -20,14 +20,14 @@ public sealed class TeamColorService : ITeamColorService
         _context = context;
     }
 
-    public async Task<IReadOnlyList<TeamColorDto>> GetAllAsync(Guid groupId, bool includeInactive, CancellationToken ct)
+    public async Task<IReadOnlyList<TeamColorDto>> GetAllAsync(Guid groupId, bool activeOnly, CancellationToken ct)
     {
         await EnsureGroupExistsAsync(groupId, ct);
 
         IQueryable<TeamColorEntity> query = _context.TeamColors.AsNoTracking().Where(c => c.GroupId == groupId);
 
-        if (includeInactive)
-            query = query.IgnoreQueryFilters();
+        if (activeOnly)
+            query = query.Where(c => c.IsActive);
 
         return await query
             .OrderBy(c => c.Name)
@@ -41,7 +41,6 @@ public sealed class TeamColorService : ITeamColorService
 
         var entity = await _context.TeamColors
             .AsNoTracking()
-            .IgnoreQueryFilters() // para poder achar mesmo inativa e retornar mensagem clara
             .FirstOrDefaultAsync(c => c.GroupId == groupId && c.Id == colorId, ct);
 
         if (entity is null)
@@ -69,7 +68,6 @@ public sealed class TeamColorService : ITeamColorService
         await EnsureGroupExistsAsync(groupId, ct);
 
         var entity = await _context.TeamColors
-            .IgnoreQueryFilters()
             .FirstOrDefaultAsync(c => c.GroupId == groupId && c.Id == colorId, ct);
 
         if (entity is null)
@@ -88,7 +86,6 @@ public sealed class TeamColorService : ITeamColorService
         await EnsureGroupExistsAsync(groupId, ct);
 
         var entity = await _context.TeamColors
-            .IgnoreQueryFilters()
             .FirstOrDefaultAsync(c => c.GroupId == groupId && c.Id == colorId, ct);
 
         if (entity is null)
@@ -103,7 +100,6 @@ public sealed class TeamColorService : ITeamColorService
         await EnsureGroupExistsAsync(groupId, ct);
 
         var entity = await _context.TeamColors
-            .IgnoreQueryFilters()
             .FirstOrDefaultAsync(c => c.GroupId == groupId && c.Id == colorId, ct);
 
         if (entity is null)

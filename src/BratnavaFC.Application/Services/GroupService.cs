@@ -76,7 +76,6 @@ public class GroupService : IGroupService
         try
         {
             var group = await _context.Groups
-                .IgnoreQueryFilters()
                 .FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
 
             if (group == null)
@@ -91,7 +90,6 @@ public class GroupService : IGroupService
 
             // 2. Cores do time (FK GroupId = Restrict, precisa remoção explícita)
             var colors = await _context.TeamColors
-                .IgnoreQueryFilters()
                 .Where(c => c.GroupId == groupId)
                 .ToListAsync(cancellationToken);
             _context.TeamColors.RemoveRange(colors);
@@ -109,7 +107,6 @@ public class GroupService : IGroupService
 
             // 4. Jogadores (MatchPlayers já removidos no passo 1)
             var players = await _context.Players
-                .IgnoreQueryFilters()
                 .Where(p => p.GroupId == groupId)
                 .ToListAsync(cancellationToken);
             _context.Players.RemoveRange(players);
@@ -179,9 +176,7 @@ public class GroupService : IGroupService
             if (group == null)
                 throw new ApplicationException("Group not found.");
 
-            // IgnoreQueryFilters para trazer ativos e inativos — o admin precisa ver todos
             var allPlayers = await _context.Players
-                .IgnoreQueryFilters()
                 .Include(p => p.User)
                 .Where(p => p.GroupId == groupId)
                 .ToListAsync(cancellationToken);
@@ -224,7 +219,6 @@ public class GroupService : IGroupService
     public async Task<List<GroupDto>> GetAllGroupsAsync(CancellationToken cancellationToken)
     {
         var groups = await _context.Groups
-            .IgnoreQueryFilters()
             .Include(g => g.Players)
                 .ThenInclude(p => p.User)
             .Include(g => g.Admins)
@@ -308,7 +302,6 @@ public class GroupService : IGroupService
             if (request.GuestPlayerId.HasValue)
             {
                 var guest = await _context.Players
-                    .IgnoreQueryFilters()
                     .FirstOrDefaultAsync(p => p.Id == request.GuestPlayerId.Value && p.GroupId == groupId && p.IsGuest, cancellationToken);
                 if (guest == null)
                     throw new ApplicationException("Guest player not found in this group.");
@@ -382,7 +375,6 @@ public class GroupService : IGroupService
             {
                 // Vincular ao guest player existente
                 var player = await _context.Players
-                    .IgnoreQueryFilters()
                     .FirstOrDefaultAsync(p => p.Id == invite.GuestPlayerId.Value, cancellationToken);
 
                 if (player == null) throw new ApplicationException("Guest player not found.");

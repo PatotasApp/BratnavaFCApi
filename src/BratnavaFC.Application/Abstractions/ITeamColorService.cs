@@ -8,7 +8,7 @@ namespace BratnavaFC.Application.Abstractions;
 
 public interface ITeamColorService
 {
-    Task<IReadOnlyList<TeamColorDto>> GetAllAsync(Guid groupId, bool includeInactive, CancellationToken ct);
+    Task<IReadOnlyList<TeamColorDto>> GetAllAsync(Guid groupId, bool activeOnly, CancellationToken ct);
     Task<TeamColorDto> GetByIdAsync(Guid groupId, Guid colorId, CancellationToken ct);
 
     Task<TeamColorDto> CreateAsync(CreateTeamColorDto dto, CancellationToken ct);
