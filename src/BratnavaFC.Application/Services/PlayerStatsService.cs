@@ -110,8 +110,9 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
         var matches = await _context.Matches
             .AsNoTracking()
-            .Where(m => m.GroupId == groupId)
+            .Where(m => m.GroupId == groupId && m.Status == MatchStatus.Finalized)
             .Include(m => m.Players)
+            .Include(m => m.Goals)
             .ToListAsync(cancellationToken);
 
         var matchesFiltered = matches
@@ -171,6 +172,10 @@ public sealed class PlayerStatsService : IPlayerStatsService
                 WinRate = winRate,
 
                 Mvps = mvpCounts.TryGetValue(pl.Id, out var mvps) ? mvps : 0,
+
+                Goals    = acc.Goals,
+                Assists  = acc.Assists,
+                OwnGoals = acc.OwnGoals,
 
                 Synergies = synergies
                     .OrderByDescending(s => s.MatchesTogether)
@@ -320,6 +325,42 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
         AddTeamSynergy(teamA, outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamA, pairTotals);
         AddTeamSynergy(teamB, outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamB, pairTotals);
+
+        // ── Gols / assistências / gols-contra ─────────────────────────────
+        // mapeia MatchPlayerEntity.Id → PlayerId para os jogadores rastreados
+        var mpIdToPlayerId = match.Players
+            .Where(mp => trackedPlayerIds.Contains(mp.PlayerId))
+            .ToDictionary(mp => mp.Id, mp => mp.PlayerId);
+
+        foreach (var goal in match.Goals ?? [])
+        {
+            if (goal.IsOwnGoal)
+            {
+                if (mpIdToPlayerId.TryGetValue(goal.ScorerMatchPlayerId, out var pid)
+                    && perPlayer.TryGetValue(pid, out var acc))
+                {
+                    acc.OwnGoals++;
+                    perPlayer[pid] = acc;
+                }
+            }
+            else
+            {
+                if (mpIdToPlayerId.TryGetValue(goal.ScorerMatchPlayerId, out var pid)
+                    && perPlayer.TryGetValue(pid, out var acc))
+                {
+                    acc.Goals++;
+                    perPlayer[pid] = acc;
+                }
+
+                if (goal.AssistMatchPlayerId.HasValue
+                    && mpIdToPlayerId.TryGetValue(goal.AssistMatchPlayerId.Value, out var aPid)
+                    && perPlayer.TryGetValue(aPid, out var aAcc))
+                {
+                    aAcc.Assists++;
+                    perPlayer[aPid] = aAcc;
+                }
+            }
+        }
     }
 
     private static void AddTeamSynergy(
@@ -465,6 +506,9 @@ public sealed class PlayerStatsService : IPlayerStatsService
         public int Wins;
         public int Ties;
         public int Losses;
+        public int Goals;
+        public int Assists;
+        public int OwnGoals;
 
         public static PlayerAccumulator Empty => new PlayerAccumulator();
     }
