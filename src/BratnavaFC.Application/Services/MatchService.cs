@@ -1226,8 +1226,14 @@ public sealed class MatchService : IMatchService
         if (string.IsNullOrWhiteSpace(dto.Name))
             throw new ArgumentException("Nome do convidado é obrigatório.");
 
+        // Valida o GuestStarRating antes de criar o jogador
+        if (dto.GuestStarRating.HasValue && (dto.GuestStarRating.Value < 1 || dto.GuestStarRating.Value > 5))
+            throw new ArgumentException("GuestStarRating deve ser entre 1 e 5.");
+
         // Cria o player como guest no grupo da partida
         var guest = new PlayerEntity(dto.Name.Trim(), null, match.GroupId, 0m, dto.IsGoalkeeper, true, Status.Active);
+        if (dto.GuestStarRating.HasValue)
+            guest.SetGuestStarRating(dto.GuestStarRating.Value);
         _context.Players.Add(guest);
 
         // Cria o MatchPlayer para a partida

@@ -1,4 +1,5 @@
 using BratnavaFC.Application.TeamGeneration;
+using BratnavaFC.Application.TeamGeneration.Strategies;
 using BratnavaFC.Domain.Dtos;
 using FluentAssertions;
 using Xunit;

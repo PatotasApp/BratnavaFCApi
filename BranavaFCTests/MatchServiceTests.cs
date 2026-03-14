@@ -1134,6 +1134,75 @@ public sealed class MatchServiceTests
             .WithMessage("*Acceptation*");
     }
 
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 2)]
+    [InlineData(3, 3)]
+    [InlineData(4, 4)]
+    [InlineData(5, 5)]
+    public async Task AddGuestToMatch_WithStarRating_SetsGuestStarRatingOnPlayer(int stars, int expected)
+    {
+        await using var db = DbContextFactory.Create($"AddGuest_StarRating_{stars}");
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+        var (match, _) = await SeedMatchAsync(db, group.Id, playersCount: 0, targetStatus: MatchStatus.Acceptation);
+        db.ChangeTracker.Clear();
+
+        await sut.AddGuestToMatchAsync(
+            group.Id, match.Id,
+            new AddGuestToMatchDto("Convidado Estrela", false, stars),
+            CancellationToken.None);
+
+        var guest = await db.Players.FirstAsync(p => p.GroupId == group.Id && p.Name == "Convidado Estrela");
+        guest.GuestStarRating.Should().Be(expected,
+            $"GuestStarRating={stars} deve ser persistido no banco");
+    }
+
+    [Fact]
+    public async Task AddGuestToMatch_WithNullStarRating_GuestStarRatingIsNull()
+    {
+        await using var db = DbContextFactory.Create(nameof(AddGuestToMatch_WithNullStarRating_GuestStarRatingIsNull));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+        var (match, _) = await SeedMatchAsync(db, group.Id, playersCount: 0, targetStatus: MatchStatus.Acceptation);
+        db.ChangeTracker.Clear();
+
+        await sut.AddGuestToMatchAsync(
+            group.Id, match.Id,
+            new AddGuestToMatchDto("Convidado Sem Estrela", false, null),
+            CancellationToken.None);
+
+        var guest = await db.Players.FirstAsync(p => p.GroupId == group.Id && p.Name == "Convidado Sem Estrela");
+        guest.GuestStarRating.Should().BeNull("nenhuma estrela fornecida, campo deve ficar nulo");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(6)]
+    [InlineData(-1)]
+    public async Task AddGuestToMatch_WithInvalidStarRating_ShouldThrow(int invalidStars)
+    {
+        await using var db = DbContextFactory.Create($"AddGuest_InvalidStarRating_{invalidStars + 10}");
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+        var (match, _) = await SeedMatchAsync(db, group.Id, playersCount: 0, targetStatus: MatchStatus.Acceptation);
+        db.ChangeTracker.Clear();
+
+        var act = async () => await sut.AddGuestToMatchAsync(
+            group.Id, match.Id,
+            new AddGuestToMatchDto("Convidado", false, invalidStars),
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<ArgumentException>(
+            $"GuestStarRating={invalidStars} é inválido e deve lançar exceção");
+    }
+
     // =========================
     // REWIND — clear + resync
     // =========================

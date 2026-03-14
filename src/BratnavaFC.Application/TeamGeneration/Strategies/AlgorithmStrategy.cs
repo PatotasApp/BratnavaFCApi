@@ -1,80 +1,54 @@
-﻿using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+using static BratnavaFC.Application.TeamGeneration.StrategyHelpers;
 
-namespace BratnavaFC.Application.TeamGeneration;
+namespace BratnavaFC.Application.TeamGeneration.Strategies;
 
 /// <summary>
-/// Team generator that tries multiple "seed pairs" (two initial players, one per team),
-/// runs the draft for each seed pair, and picks the outcome with the smallest WinRate sum difference
-/// (with small penalties for GK imbalance and small bonus for synergy).
+/// Team generator that evaluates multiple "seed pairs" (two initial players, one per team),
+/// runs a greedy draft for each, and returns the top N outcomes ranked by composite score:
+///   Score = BalanceDiff × <see cref="BalanceWeight"/>
+///         + GKDiff      × <see cref="GoalkeeperWeight"/>
+///         - Synergy     × <see cref="SynergyWeight"/>
 ///
-/// All knobs are constants (edit this file to tune).
-///
-/// CHANGE: Players with fewer than X matches are treated as neutral:
-/// - Their effective winrate becomes 0.50
-/// - Their synergy becomes NeutralSynergy (0.50)
+/// All tuning knobs are constants at the top of this file.
+/// Players with fewer than <see cref="MinMatchesToBeNonNeutral"/> matches are treated as neutral
+/// (effective WinRate → 0.50, or their star-rating override if set).
 /// </summary>
 public sealed class AlgorithmStrategy : ITeamGenerationStrategy
 {
-    // -----------------------------
-    // TUNING KNOBS (edit here)
-    // -----------------------------
+    // ── Tuning knobs (edit here) ──────────────────────────────────────────────
 
-    // Primary goal: minimize WinRate sum difference between teams (smaller is better).
+    /// <summary>Primary goal: minimise WinRate sum difference (lower is better).</summary>
     private const double BalanceWeight = 1.00;
 
-    // GK imbalance penalty (difference in GK counts between teams).
+    /// <summary>Penalty per unit of GK-count imbalance between teams.</summary>
     private const double GoalkeeperWeight = 0.60;
 
-    // Synergy bonus (bigger synergy lowers score). Keep small so it never breaks balance too much.
+    /// <summary>Synergy bonus (larger synergy lowers score). Kept small so it never overrides balance.</summary>
     private const double SynergyWeight = 0.25;
 
-    // If we don't know synergy, assume neutral.
+    /// <summary>Neutral synergy value when pair history is insufficient.</summary>
     private const double NeutralSynergy = 0.50;
 
-    // Seed pool: how many top WinRate players we consider when building seed pairs.
-    // Set to int.MaxValue to allow seeds from ALL players.
+    /// <summary>How many top-WinRate players form the seed pool. <see cref="int.MaxValue"/> = all players.</summary>
     private const int SeedPoolTopN = int.MaxValue;
 
-    // How many seed pairs we evaluate at most.
-    // Set to int.MaxValue to test ALL possible pairs from the seed pool.
-    // Minimum effective is 1.
+    /// <summary>Maximum seed pairs to evaluate. <see cref="int.MaxValue"/> = every possible pair.</summary>
     private const int MaxSeedPairsToEvaluate = int.MaxValue;
 
-    // If true, also evaluates swapping the pair orientation (A->TeamA,B->TeamB AND B->TeamA,A->TeamB).
+    /// <summary>When true, also evaluates swapping the pair orientation (A↔B).</summary>
     private const bool EvaluateBothOrientations = true;
 
-    // Tie-breaker: very small factor to prefer taking a higher WinRate when costs are equal.
+    /// <summary>Tiny preference for higher WinRate when costs are equal (tie-breaker only).</summary>
     private const double TinyPreferHigherWinRate = 0.0001;
 
-    // tolerancia aceitavel de desequilibrio (winrate)
-    private const double BalanceTolerance = 0.05;
+    // ── Dependencies ──────────────────────────────────────────────────────────
 
-    // -----------------------------
-    // NEUTRAL RULE (insufficient sample)
-    // -----------------------------
-    // Se o jogador tiver menos que X partidas, ele e tratado como "neutro".
-    private const int MinMatchesToBeNonNeutral = 3;
-
-    // WinRate neutro (empate perfeito).
-    private const double NeutralWinRate = 0.50;
-
-    private static int TotalMatches(PlayerStats s) => (s?.Wins ?? 0) + (s?.Ties ?? 0) + (s?.Losses ?? 0);
-    private static bool IsNeutral(PlayerStats s) => TotalMatches(s) < MinMatchesToBeNonNeutral;
-    private static double EffectiveWinRate(PlayerStats s) => IsNeutral(s) ? (s.NeutralOverride ?? NeutralWinRate) : s.WinRate;
-
-    // -----------------------------
-    // DEPENDENCIES
-    // -----------------------------
-    private readonly IPlayerStatsService _statsService;
+    private readonly IPlayerStatsService        _statsService;
     private readonly ILogger<AlgorithmStrategy> _logger;
 
     public AlgorithmStrategy(
@@ -82,14 +56,16 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         ILogger<AlgorithmStrategy>? logger = null)
     {
         _statsService = statsService ?? throw new ArgumentNullException(nameof(statsService));
-        _logger = logger ?? NullLogger<AlgorithmStrategy>.Instance;
+        _logger       = logger ?? NullLogger<AlgorithmStrategy>.Instance;
     }
 
+    // ── Public entry-point ────────────────────────────────────────────────────
+
     public async Task<TeamsOptionsResultDto> GenerateTeamsAsync(
-    List<PlayerRequestDto> players,
-    TeamGenerationSettings settings,
-    int optionsCount = 3,
-    CancellationToken cancellationToken = default)
+        List<PlayerRequestDto> players,
+        TeamGenerationSettings settings,
+        int optionsCount = 3,
+        CancellationToken cancellationToken = default)
     {
         if (players is null) throw new ArgumentNullException(nameof(players));
         if (settings is null) throw new ArgumentNullException(nameof(settings));
@@ -98,151 +74,98 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         optionsCount = Math.Max(1, optionsCount);
 
         if (players.Count == 0)
-            return new TeamsOptionsResultDto(new List<TeamOptionDto>());
+            return new TeamsOptionsResultDto([]);
 
-        var candidatePlayers = settings.IncludeGoalkeepers
-            ? players.ToList()
-            : players.Where(p => !p.IsGoalkeeper).ToList();
-
-        var perTeam = settings.PlayersPerTeam;
-        var maxAssignable = Math.Min(candidatePlayers.Count, perTeam * 2);
+        List<PlayerRequestDto>        candidates    = FilterCandidates(players, settings);
+        int                           perTeam       = settings.PlayersPerTeam;
+        int                           maxAssignable = Math.Min(candidates.Count, perTeam * 2);
 
         if (maxAssignable == 0)
-        {
-            var allUnassigned = players.Select(p => new PlayerWeightDto(p.Id, 0.0)).ToList();
+            return BuildEmptyResult(players);
 
-            var opt = new TeamOptionDto(
-                TeamA: new(),
-                TeamB: new(),
-                Unassigned: allUnassigned,
-                TeamAWeight: 0,
-                TeamBWeight: 0,
-                BalanceDiff: 0,
-                GoalkeeperDiff: 0,
-                SynergyTotal: 0,
-                Score: 0
-            );
+        Dictionary<Guid, PlayerStats> statsById = await LoadStatsByPlayerId(_statsService, candidates, cancellationToken);
 
-            return new TeamsOptionsResultDto(new List<TeamOptionDto> { opt });
-        }
-
-        // load stats
-        var statsById = await LoadStatsByPlayerId(candidatePlayers, cancellationToken).ConfigureAwait(false);
-
-        // build ordered candidates (ORDER BY effective winrate, not raw winrate)
-        var candidates = candidatePlayers
-            .Select(p => new PlayerWithStats(p, GetOrCreateStats(statsById, p.Id, p.Name)))
+        // Order by effective WinRate desc, then Id asc for deterministic tie-breaking
+        List<CandidatePlayer> ranked = candidates
+            .Select(p => new CandidatePlayer(p, GetOrCreateStats(statsById, p.Id, p.Name)))
             .OrderByDescending(x => EffectiveWinRate(x.Stats))
             .ThenBy(x => x.Player.Id)
             .ToList();
 
-        // seed pool
-        var seedPoolCount = Math.Min(SeedPoolTopN, candidates.Count);
-        var seedPool = candidates.Take(seedPoolCount).ToList();
+        List<CandidatePlayer>                    seedPool = ranked.Take(Math.Min(SeedPoolTopN, ranked.Count)).ToList();
+        List<(CandidatePlayer A, CandidatePlayer B)> allPairs = BuildAllSeedPairs(seedPool);
 
         LogSeedPool(seedPool, settings, maxAssignable);
 
-        var allPairs = BuildAllSeedPairs(seedPool);
-
         if (allPairs.Count == 0)
         {
-            _logger.LogInformation("[TeamGen] No seed pairs available. Using single greedy draft.");
-            var single = RunGreedyDraft(candidates, perTeam, seedA: null, seedB: null, maxAssignable);
-            return new TeamsOptionsResultDto(new List<TeamOptionDto> { BuildOption(single, players, settings) });
+            _logger.LogInformation("[TeamGen] No seed pairs available — using single greedy draft.");
+            DraftOutcome single = RunGreedyDraft(ranked, perTeam, seedA: null, seedB: null, maxAssignable);
+            return new TeamsOptionsResultDto([BuildOption(single, players, settings)]);
         }
 
-        var pairsToEvaluate = PickPairsToEvaluate(allPairs, seedPool);
+        List<(CandidatePlayer A, CandidatePlayer B)> pairsToEvaluate = PickPairsToEvaluate(allPairs, seedPool);
 
         _logger.LogInformation(
-            "[TeamGen] SeedPairs total={TotalPairs} | evaluating={EvalPairs} | SeedPoolTopN={TopN} | MaxSeedPairsToEvaluate={MaxEval}",
+            "[TeamGen] SeedPairs total={Total} | evaluating={Eval} | SeedPoolTopN={TopN} | MaxPairs={Max}",
             allPairs.Count, pairsToEvaluate.Count, SeedPoolTopN, MaxSeedPairsToEvaluate);
 
-        var outcomes = new List<DraftOutcome>();
-        var seen = new HashSet<string>();
+        // Evaluate all selected pairs (and their swapped orientations)
+        HashSet<string>    seen     = new HashSet<string>();
+        List<DraftOutcome> outcomes = new List<DraftOutcome>();
 
-        void AddOutcome(DraftOutcome o)
+        void TryAdd(DraftOutcome o)
         {
-            var key = BuildTeamsKey(o);
-            if (seen.Add(key))
-                outcomes.Add(o);
+            string key = BuildTeamsKey(
+                o.TeamA.Select(x => x.Player.Id),
+                o.TeamB.Select(x => x.Player.Id));
+
+            if (seen.Add(key)) outcomes.Add(o);
         }
 
-        foreach (var (a, b) in pairsToEvaluate)
+        foreach ((CandidatePlayer a, CandidatePlayer b) in pairsToEvaluate)
         {
-            var out1 = RunGreedyDraft(candidates, perTeam, a, b, maxAssignable);
-            LogOutcome("Seed(A->A,B->B)", a, b, out1);
-            AddOutcome(out1);
+            TryAdd(RunGreedyDraft(ranked, perTeam, a, b, maxAssignable));
 
             if (EvaluateBothOrientations)
-            {
-                var out2 = RunGreedyDraft(candidates, perTeam, b, a, maxAssignable);
-                LogOutcome("Seed(B->A,A->B)", b, a, out2);
-                AddOutcome(out2);
-            }
+                TryAdd(RunGreedyDraft(ranked, perTeam, b, a, maxAssignable));
         }
 
         if (outcomes.Count == 0)
-        {
-            var fallback = RunGreedyDraft(candidates, perTeam, seedA: null, seedB: null, maxAssignable);
-            outcomes.Add(fallback);
-        }
+            outcomes.Add(RunGreedyDraft(ranked, perTeam, seedA: null, seedB: null, maxAssignable));
 
-        // TOP N (menor Score é melhor)
-        var top = outcomes
-            .OrderBy(o => o.BalanceDiff)
-            .Take(optionsCount)
-            .ToList();
+        // Return the top N outcomes (lowest Score is best)
+        List<DraftOutcome>  top     = outcomes.OrderBy(o => o.Score).Take(optionsCount).ToList();
+        List<TeamOptionDto> options = top.Select(o => BuildOption(o, players, settings)).ToList();
 
-        var options = top.Select(o => BuildOption(o, players, settings)).ToList();
-
-        // logging do melhor (opcional)
         LogBest(top[0]);
 
         return new TeamsOptionsResultDto(options);
     }
 
-    private static string BuildTeamsKey(DraftOutcome o)
+    // ── DTO builder ───────────────────────────────────────────────────────────
+
+    private TeamOptionDto BuildOption(
+        DraftOutcome best,
+        List<PlayerRequestDto> allPlayers,
+        TeamGenerationSettings settings)
     {
-        var a = o.TeamA.Select(x => x.Player.Id).OrderBy(x => x).ToArray();
-        var b = o.TeamB.Select(x => x.Player.Id).OrderBy(x => x).ToArray();
+        List<PlayerWeightDto> teamA = best.TeamA.Select(x => new PlayerWeightDto(x.Player.Id, EffectiveWinRate(x.Stats))).ToList();
+        List<PlayerWeightDto> teamB = best.TeamB.Select(x => new PlayerWeightDto(x.Player.Id, EffectiveWinRate(x.Stats))).ToList();
 
-        var key1 = "A:" + string.Join(",", a) + "|B:" + string.Join(",", b);
-        var key2 = "A:" + string.Join(",", b) + "|B:" + string.Join(",", a);
-
-        return string.CompareOrdinal(key1, key2) <= 0 ? key1 : key2;
-    }
-
-    private TeamOptionDto BuildOption(DraftOutcome best, List<PlayerRequestDto> allPlayers, TeamGenerationSettings settings)
-    {
-        var teamA = best.TeamA
-            .Select(x => new PlayerWeightDto(x.Player.Id, EffectiveWinRate(x.Stats)))
-            .ToList();
-
-        var teamB = best.TeamB
-            .Select(x => new PlayerWeightDto(x.Player.Id, EffectiveWinRate(x.Stats)))
-            .ToList();
-
-        var teamAWeight = teamA.Sum(x => x.Weight);
-        var teamBWeight = teamB.Sum(x => x.Weight);
-
-        var unassignedIds = best.Waiting.Select(x => x.Player.Id).ToHashSet();
-
+        // Unassigned = waiting-list players + GKs excluded from candidates
+        HashSet<Guid> unassignedIds = best.Waiting.Select(x => x.Player.Id).ToHashSet();
         if (!settings.IncludeGoalkeepers)
-            foreach (var gk in allPlayers.Where(p => p.IsGoalkeeper))
+            foreach (PlayerRequestDto gk in allPlayers.Where(p => p.IsGoalkeeper))
                 unassignedIds.Add(gk.Id);
 
-        // Mapa de stats conhecidos (dos que estavam no draft)
-        var statsById = best.TeamA.Concat(best.TeamB).Concat(best.Waiting)
-            .GroupBy(x => x.Player.Id)
-            .ToDictionary(g => g.Key, g => g.First().Stats);
+        Dictionary<Guid, PlayerStats> knownStats = best.TeamA.Concat(best.TeamB).Concat(best.Waiting)
+            .ToDictionary(x => x.Player.Id, x => x.Stats);
 
-        var unassigned = unassignedIds
-            .Select(id =>
-            {
-                if (statsById.TryGetValue(id, out var s))
-                    return new PlayerWeightDto(id, EffectiveWinRate(s));
-                return new PlayerWeightDto(id, 0.0);
-            })
+        List<PlayerWeightDto> unassigned = unassignedIds
+            .Select(id => knownStats.TryGetValue(id, out PlayerStats? s)
+                ? new PlayerWeightDto(id, EffectiveWinRate(s))
+                : new PlayerWeightDto(id, NeutralWinRate))   // GK excluded from draft → neutral weight
             .DistinctBy(x => x.PlayerId)
             .ToList();
 
@@ -250,8 +173,8 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
             TeamA: teamA,
             TeamB: teamB,
             Unassigned: unassigned,
-            TeamAWeight: teamAWeight,
-            TeamBWeight: teamBWeight,
+            TeamAWeight: teamA.Sum(x => x.Weight),
+            TeamBWeight: teamB.Sum(x => x.Weight),
             BalanceDiff: best.BalanceDiff,
             GoalkeeperDiff: best.GoalkeeperDiff,
             SynergyTotal: best.SynergyTotal,
@@ -259,14 +182,12 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         );
     }
 
-    // -----------------------------
-    // SEEDS / PAIRS
-    // -----------------------------
+    // ── Seed pairs ────────────────────────────────────────────────────────────
 
-    private static List<(PlayerWithStats A, PlayerWithStats B)> BuildAllSeedPairs(List<PlayerWithStats> seedPool)
+    private static List<(CandidatePlayer A, CandidatePlayer B)> BuildAllSeedPairs(
+        List<CandidatePlayer> seedPool)
     {
-        var pairs = new List<(PlayerWithStats, PlayerWithStats)>();
-        if (seedPool.Count < 2) return pairs;
+        List<(CandidatePlayer, CandidatePlayer)> pairs = new List<(CandidatePlayer, CandidatePlayer)>();
 
         for (int i = 0; i < seedPool.Count; i++)
             for (int j = i + 1; j < seedPool.Count; j++)
@@ -276,350 +197,216 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
     }
 
     /// <summary>
-    /// Selects which seed pairs to evaluate.
-    /// - If MaxSeedPairsToEvaluate is big enough, evaluates all.
-    /// - Otherwise chooses a deterministic subset that "makes sense":
-    ///   extremes (top vs bottom), second-top vs second-bottom, etc, then adjacent pairs.
+    /// When <see cref="MaxSeedPairsToEvaluate"/> is large enough, evaluates all pairs.
+    /// Otherwise selects a deterministic coverage subset: extremes first, then adjacent, then fill.
     /// </summary>
-    private static List<(PlayerWithStats A, PlayerWithStats B)> PickPairsToEvaluate(
-        List<(PlayerWithStats A, PlayerWithStats B)> allPairs,
-        List<PlayerWithStats> seedPoolSortedByWinRateDesc)
+    private static List<(CandidatePlayer A, CandidatePlayer B)> PickPairsToEvaluate(
+        List<(CandidatePlayer A, CandidatePlayer B)> allPairs,
+        List<CandidatePlayer> sortedByWinRateDesc)
     {
-        var maxEval = Math.Max(1, MaxSeedPairsToEvaluate);
+        int maxEval = Math.Max(1, MaxSeedPairsToEvaluate);
 
         if (maxEval >= allPairs.Count || maxEval == int.MaxValue)
             return allPairs;
 
-        // Build a "good coverage" list (extremes + adjacent)
-        var selected = new List<(PlayerWithStats, PlayerWithStats)>();
-        var used = new HashSet<(Guid, Guid)>();
+        List<(CandidatePlayer, CandidatePlayer)> selected = new List<(CandidatePlayer, CandidatePlayer)>();
+        HashSet<(Guid, Guid)>                    used     = new HashSet<(Guid, Guid)>();
 
-        void AddPair(PlayerWithStats x, PlayerWithStats y)
+        void AddPair(CandidatePlayer x, CandidatePlayer y)
         {
             if (x.Player.Id == y.Player.Id) return;
 
-            // normalize key
-            var a = x.Player.Id;
-            var b = y.Player.Id;
-            var key = a.CompareTo(b) < 0 ? (a, b) : (b, a);
+            (Guid, Guid) key = x.Player.Id.CompareTo(y.Player.Id) < 0
+                ? (x.Player.Id, y.Player.Id)
+                : (y.Player.Id, x.Player.Id);
 
             if (used.Add(key))
                 selected.Add((x, y));
         }
 
-        // extremes: top vs bottom, second-top vs second-bottom...
-        int n = seedPoolSortedByWinRateDesc.Count;
+        int n = sortedByWinRateDesc.Count;
+
+        // Extremes: best vs worst, second-best vs second-worst, …
         for (int i = 0; i < n / 2 && selected.Count < maxEval; i++)
-        {
-            AddPair(seedPoolSortedByWinRateDesc[i], seedPoolSortedByWinRateDesc[n - 1 - i]);
-        }
+            AddPair(sortedByWinRateDesc[i], sortedByWinRateDesc[n - 1 - i]);
 
-        // adjacent: (0,1), (1,2), (2,3)...
+        // Adjacent: (0,1), (1,2), …
         for (int i = 0; i < n - 1 && selected.Count < maxEval; i++)
-        {
-            AddPair(seedPoolSortedByWinRateDesc[i], seedPoolSortedByWinRateDesc[i + 1]);
-        }
+            AddPair(sortedByWinRateDesc[i], sortedByWinRateDesc[i + 1]);
 
-        // if still not enough, fill from allPairs
-        if (selected.Count < maxEval)
+        // Fill remainder from the full list
+        foreach ((CandidatePlayer A, CandidatePlayer B) p in allPairs)
         {
-            foreach (var p in allPairs)
-            {
-                if (selected.Count >= maxEval) break;
+            if (selected.Count >= maxEval) break;
 
-                var a = p.A.Player.Id;
-                var b = p.B.Player.Id;
-                var key = a.CompareTo(b) < 0 ? (a, b) : (b, a);
-                if (used.Add(key))
-                    selected.Add(p);
-            }
+            (Guid, Guid) key = p.A.Player.Id.CompareTo(p.B.Player.Id) < 0
+                ? (p.A.Player.Id, p.B.Player.Id)
+                : (p.B.Player.Id, p.A.Player.Id);
+
+            if (used.Add(key))
+                selected.Add(p);
         }
 
         return selected;
     }
 
-    // -----------------------------
-    // DRAFT
-    // -----------------------------
+    // ── Greedy draft ──────────────────────────────────────────────────────────
 
     private DraftOutcome RunGreedyDraft(
-        List<PlayerWithStats> orderedCandidates,
+        List<CandidatePlayer> ranked,
         int perTeam,
-        PlayerWithStats? seedA,
-        PlayerWithStats? seedB,
+        CandidatePlayer? seedA,
+        CandidatePlayer? seedB,
         int maxAssignable)
     {
-        var waiting = orderedCandidates.ToList();
+        List<CandidatePlayer> waiting = ranked.ToList();
+        List<CandidatePlayer> teamA   = new List<CandidatePlayer>(perTeam);
+        List<CandidatePlayer> teamB   = new List<CandidatePlayer>(perTeam);
 
-        var teamA = new List<PlayerWithStats>(perTeam);
-        var teamB = new List<PlayerWithStats>(perTeam);
+        // Place seeds
+        PlaceSeed(seedA, teamA, waiting);
+        PlaceSeed(seedB, teamB, waiting);
 
-        // apply seeds
-        if (seedA is not null)
-        {
-            var s = waiting.FirstOrDefault(x => x.Player.Id == seedA.Player.Id);
-            if (s is not null) { teamA.Add(s); waiting.Remove(s); }
-        }
-
-        if (seedB is not null)
-        {
-            var s = waiting.FirstOrDefault(x => x.Player.Id == seedB.Player.Id);
-            if (s is not null) { teamB.Add(s); waiting.Remove(s); }
-        }
-
-        // if only one team has a seed, give the other team the best remaining to avoid a weird start
-        if (teamA.Count == 0 && teamB.Count > 0 && waiting.Count > 0)
-        {
-            teamA.Add(waiting[0]);
-            waiting.RemoveAt(0);
-        }
+        // If only one team has a seed, give the other the best remaining
+        if      (teamA.Count == 0 && teamB.Count > 0 && waiting.Count > 0)
+            { teamA.Add(waiting[0]); waiting.RemoveAt(0); }
         else if (teamB.Count == 0 && teamA.Count > 0 && waiting.Count > 0)
-        {
-            teamB.Add(waiting[0]);
-            waiting.RemoveAt(0);
-        }
+            { teamB.Add(waiting[0]); waiting.RemoveAt(0); }
         else if (teamA.Count == 0 && teamB.Count == 0 && waiting.Count > 0)
         {
-            // no seeds: start with top 2 split
+            // No seeds at all: split top-2
             teamA.Add(waiting[0]); waiting.RemoveAt(0);
             if (waiting.Count > 0) { teamB.Add(waiting[0]); waiting.RemoveAt(0); }
         }
 
-        // draft until both teams filled or no more assignable
-        while (waiting.Count > 0 && (teamA.Count + teamB.Count) < maxAssignable)
+        // Greedy fill — always pick for the weaker / smaller team
+        while (waiting.Count > 0 && teamA.Count + teamB.Count < maxAssignable)
         {
-            var pickForA = ShouldPickForTeamA(teamA, teamB, perTeam);
-            var target = pickForA ? teamA : teamB;
-            var other = pickForA ? teamB : teamA;
+            bool                  pickForA = PickForTeamA(teamA, teamB, perTeam);
+            List<CandidatePlayer> target   = pickForA ? teamA : teamB;
+            List<CandidatePlayer> other    = pickForA ? teamB : teamA;
 
-            if (target.Count >= perTeam)
-                target = other;
+            if (target.Count >= perTeam) target = other;
 
-            var bestIdx = SelectBestCandidateIndex(waiting, target, other);
-            var chosen = waiting[bestIdx];
-
+            int             idx    = BestCandidateIndex(waiting, target, other);
+            CandidatePlayer chosen = waiting[idx];
             target.Add(chosen);
-            waiting.RemoveAt(bestIdx);
+            waiting.RemoveAt(idx);
         }
 
-        // compute outcome stats (use effective winrate)
-        var sumA = teamA.Sum(x => EffectiveWinRate(x.Stats));
-        var sumB = teamB.Sum(x => EffectiveWinRate(x.Stats));
-
-        var outcome = new DraftOutcome(teamA, teamB, waiting)
-        {
-            BalanceDiff = Math.Abs(sumA - sumB),
-            GoalkeeperDiff = Math.Abs(teamA.Count(x => x.Player.IsGoalkeeper) - teamB.Count(x => x.Player.IsGoalkeeper)),
-            SynergyTotal = ComputeTeamSynergyTotal(teamA) + ComputeTeamSynergyTotal(teamB)
-        };
-
-        // Score: lower is better
-        outcome.Score = (BalanceWeight * outcome.BalanceDiff)
-                        + (GoalkeeperWeight * outcome.GoalkeeperDiff)
-                        - (SynergyWeight * outcome.SynergyTotal);
-
-        return outcome;
+        return ToOutcome(teamA, teamB, waiting);
     }
 
-    private static bool ShouldPickForTeamA(List<PlayerWithStats> teamA, List<PlayerWithStats> teamB, int perTeam)
+    private static void PlaceSeed(
+        CandidatePlayer? seed,
+        List<CandidatePlayer> team,
+        List<CandidatePlayer> waiting)
     {
-        if (teamA.Count < teamB.Count) return true;
-        if (teamB.Count < teamA.Count) return false;
+        if (seed is null) return;
 
-        var sumA = teamA.Sum(x => EffectiveWinRate(x.Stats));
-        var sumB = teamB.Sum(x => EffectiveWinRate(x.Stats));
-
-        return sumA <= sumB;
+        CandidatePlayer? found = waiting.FirstOrDefault(x => x.Player.Id == seed.Player.Id);
+        if (found is not null) { team.Add(found); waiting.Remove(found); }
     }
 
-    private int SelectBestCandidateIndex(
-        List<PlayerWithStats> waiting,
-        List<PlayerWithStats> targetTeam,
-        List<PlayerWithStats> otherTeam)
+    private static bool PickForTeamA(
+        List<CandidatePlayer> teamA,
+        List<CandidatePlayer> teamB,
+        int perTeam)
     {
-        var sumTarget = targetTeam.Sum(x => EffectiveWinRate(x.Stats));
-        var sumOther = otherTeam.Sum(x => EffectiveWinRate(x.Stats));
+        if (teamA.Count != teamB.Count)
+            return teamA.Count < teamB.Count;
 
-        var gkTarget = targetTeam.Count(x => x.Player.IsGoalkeeper);
-        var gkOther = otherTeam.Count(x => x.Player.IsGoalkeeper);
+        // Equal size: pick for the weaker team
+        return teamA.Sum(x => EffectiveWinRate(x.Stats)) <= teamB.Sum(x => EffectiveWinRate(x.Stats));
+    }
+
+    private int BestCandidateIndex(
+        List<CandidatePlayer> waiting,
+        List<CandidatePlayer> target,
+        List<CandidatePlayer> other)
+    {
+        double sumTarget = target.Sum(x => EffectiveWinRate(x.Stats));
+        double sumOther  = other.Sum(x => EffectiveWinRate(x.Stats));
+        int    gkTarget  = target.Count(x => x.Player.IsGoalkeeper);
+        int    gkOther   = other.Count(x => x.Player.IsGoalkeeper);
 
         double bestCost = double.PositiveInfinity;
-        int bestIdx = 0;
+        int    bestIdx  = 0;
 
         for (int i = 0; i < waiting.Count; i++)
         {
-            var c = waiting[i];
+            CandidatePlayer c   = waiting[i];
+            double          cWr = EffectiveWinRate(c.Stats);
 
-            var cWr = EffectiveWinRate(c.Stats);
+            double cost = (BalanceWeight    * Math.Abs(sumTarget + cWr - sumOther))
+                        + (GoalkeeperWeight * Math.Abs(gkTarget + (c.Player.IsGoalkeeper ? 1 : 0) - gkOther))
+                        - (SynergyWeight    * SynergyGain(c, target))
+                        - (cWr             * TinyPreferHigherWinRate);  // tie-breaker
 
-            var newSumTarget = sumTarget + cWr;
-            var balanceAfter = Math.Abs(newSumTarget - sumOther);
-
-            var synergyGain = ComputeSynergyGain(c, targetTeam);
-
-            var newGkTarget = gkTarget + (c.Player.IsGoalkeeper ? 1 : 0);
-            var gkImbalanceAfter = Math.Abs(newGkTarget - gkOther);
-
-            // Lower cost is better
-            var cost = (BalanceWeight * balanceAfter)
-                       + (GoalkeeperWeight * gkImbalanceAfter)
-                       - (SynergyWeight * synergyGain);
-
-            // tiny preference for higher WinRate when equal (use effective winrate)
-            cost -= (cWr * TinyPreferHigherWinRate);
-
-            if (cost < bestCost)
-            {
-                bestCost = cost;
-                bestIdx = i;
-            }
+            if (cost < bestCost) { bestCost = cost; bestIdx = i; }
         }
 
         return bestIdx;
     }
 
-    private double ComputeSynergyGain(PlayerWithStats candidate, List<PlayerWithStats> team)
+    private DraftOutcome ToOutcome(
+        List<CandidatePlayer> teamA,
+        List<CandidatePlayer> teamB,
+        List<CandidatePlayer> waiting)
     {
-        if (team.Count == 0) return 0.0;
+        double balanceDiff  = Math.Abs(
+            teamA.Sum(x => EffectiveWinRate(x.Stats)) -
+            teamB.Sum(x => EffectiveWinRate(x.Stats)));
 
-        double sum = 0;
-        foreach (var member in team)
-            sum += GetPairSynergy(candidate.Stats, member.Player.Id, member.Stats);
+        int gkDiff          = Math.Abs(
+            teamA.Count(x => x.Player.IsGoalkeeper) -
+            teamB.Count(x => x.Player.IsGoalkeeper));
+
+        double synergyTotal = TeamSynergy(teamA) + TeamSynergy(teamB);
+
+        double score        = BalanceWeight    * balanceDiff
+                            + GoalkeeperWeight * gkDiff
+                            - SynergyWeight    * synergyTotal;
+
+        return new DraftOutcome(teamA, teamB, waiting, score, balanceDiff, gkDiff, synergyTotal);
+    }
+
+    // ── Synergy ───────────────────────────────────────────────────────────────
+
+    private double SynergyGain(CandidatePlayer candidate, List<CandidatePlayer> team)
+        => team.Sum(member => PairSynergy(candidate.Stats, member.Player.Id, member.Stats));
+
+    private double TeamSynergy(List<CandidatePlayer> team)
+    {
+        double sum = 0.0;
+
+        for (int i = 0; i < team.Count; i++)
+            for (int j = i + 1; j < team.Count; j++)
+                sum += PairSynergy(team[i].Stats, team[j].Player.Id, team[j].Stats);
 
         return sum;
     }
 
-    private double GetPairSynergy(PlayerStats candidateStats, Guid memberId, PlayerStats memberStats)
+    private double PairSynergy(PlayerStats a, Guid bId, PlayerStats b)
     {
-        // If any side has insufficient sample, treat synergy as neutral.
-        if (IsNeutral(candidateStats) || IsNeutral(memberStats))
-            return NeutralSynergy;
+        if (IsNeutral(a) || IsNeutral(b)) return NeutralSynergy;
 
-        if (candidateStats.SynergyWith is not null && candidateStats.SynergyWith.TryGetValue(memberId, out var v))
-            return Clamp01(v);
-
-        if (memberStats.SynergyWith is not null && memberStats.SynergyWith.TryGetValue(candidateStats.PlayerId, out var v2))
-            return Clamp01(v2);
+        if (a.SynergyWith?.TryGetValue(bId, out double v1)        == true) return Math.Clamp(v1, 0.0, 1.0);
+        if (b.SynergyWith?.TryGetValue(a.PlayerId, out double v2) == true) return Math.Clamp(v2, 0.0, 1.0);
 
         return NeutralSynergy;
     }
 
-    private static double Clamp01(double v) => v < 0 ? 0 : (v > 1 ? 1 : v);
+    // ── Logging ───────────────────────────────────────────────────────────────
 
-    private double ComputeTeamSynergyTotal(List<PlayerWithStats> team)
-    {
-        if (team.Count < 2) return 0.0;
-
-        double sum = 0.0;
-        for (int i = 0; i < team.Count; i++)
-            for (int j = i + 1; j < team.Count; j++)
-                sum += GetPairSynergy(team[i].Stats, team[j].Player.Id, team[j].Stats);
-
-        return sum;
-    }
-
-    private static DraftOutcome PickBetter(
-        DraftOutcome? current,
-        DraftOutcome challenger)
-    {
-        if (current is null)
-            return challenger;
-
-        // 1️⃣ Menor BalanceDiff SEMPRE vence
-        if (challenger.BalanceDiff < current.BalanceDiff - BalanceTolerance)
-            return challenger;
-
-        if (current.BalanceDiff < challenger.BalanceDiff - BalanceTolerance)
-            return current;
-
-        // 2️⃣ Balance praticamente igual → menor GKDiff
-        if (challenger.GoalkeeperDiff < current.GoalkeeperDiff)
-            return challenger;
-
-        if (current.GoalkeeperDiff < challenger.GoalkeeperDiff)
-            return current;
-
-        // 3️⃣ Sinergia maior vence
-        if (challenger.SynergyTotal > current.SynergyTotal)
-            return challenger;
-
-        if (current.SynergyTotal > challenger.SynergyTotal)
-            return current;
-
-        // 4️⃣ ultimo desempate: soma total de winrate maior (effective winrate)
-        var sumCurrent =
-            current.TeamA.Sum(x => EffectiveWinRate(x.Stats)) +
-            current.TeamB.Sum(x => EffectiveWinRate(x.Stats));
-
-        var sumChallenger =
-            challenger.TeamA.Sum(x => EffectiveWinRate(x.Stats)) +
-            challenger.TeamB.Sum(x => EffectiveWinRate(x.Stats));
-
-        return sumChallenger > sumCurrent ? challenger : current;
-    }
-
-    // -----------------------------
-    // STATS LOADING
-    // -----------------------------
-
-    private async Task<Dictionary<Guid, PlayerStats>> LoadStatsByPlayerId(
-        List<PlayerRequestDto> players,
-        CancellationToken cancellationToken)
-    {
-        var statsList = await _statsService.EnrichPlayersAsync(players, cancellationToken).ConfigureAwait(false);
-        return statsList.ToDictionary(s => s.PlayerId, s => s);
-    }
-
-    private static PlayerStats GetOrCreateStats(Dictionary<Guid, PlayerStats> statsByPlayerId, Guid playerId, string? name)
-        => statsByPlayerId.TryGetValue(playerId, out var s)
-            ? s
-            : new PlayerStats
-            {
-                PlayerId = playerId,
-                Name = name ?? string.Empty,
-                Wins = 0,
-                Ties = 0,
-                Losses = 0,
-                WinRate = 0.0,
-                SynergyWith = new()
-            };
-
-    // -----------------------------
-    // LOGGING
-    // -----------------------------
-
-    private void LogSeedPool(List<PlayerWithStats> seedPool, TeamGenerationSettings settings, int maxAssignable)
+    private void LogSeedPool(List<CandidatePlayer> pool, TeamGenerationSettings settings, int maxAssignable)
     {
         if (_logger == NullLogger<AlgorithmStrategy>.Instance) return;
 
-        var pool = string.Join(", ",
-            seedPool.Select(p =>
-            {
-                var wr = EffectiveWinRate(p.Stats);
-                var m = TotalMatches(p.Stats);
-                var neutral = IsNeutral(p.Stats) ? ",NEUTRAL" : "";
-                return $"{p.Player.Name}(wr={wr:0.000},m={m}{neutral}{(p.Player.IsGoalkeeper ? ",GK" : "")})";
-            }));
-
         _logger.LogInformation(
-            "[TeamGen] SeedPool Top{TopN} | PlayersPerTeam={PerTeam} IncludeGoalkeepers={IncGK} MaxAssignable={MaxAssign} | Pool: {Pool}",
-            seedPool.Count, settings.PlayersPerTeam, settings.IncludeGoalkeepers, maxAssignable, pool);
-    }
-
-    private void LogOutcome(string label, PlayerWithStats? seedA, PlayerWithStats? seedB, DraftOutcome outcome)
-    {
-        if (_logger == NullLogger<AlgorithmStrategy>.Instance) return;
-
-        var seedTxt = $"{FmtSeed(seedA)} vs {FmtSeed(seedB)}";
-
-        _logger.LogInformation(
-            "[TeamGen] {Label} | Seeds: {Seeds} | Score={Score:0.000} | BalanceDiff={Balance:0.000} | GKDiff={GKDiff} | SynergyTotal={Syn:0.000}",
-            label, seedTxt, outcome.Score, outcome.BalanceDiff, outcome.GoalkeeperDiff, outcome.SynergyTotal);
-
-        _logger.LogInformation("[TeamGen] TeamA: {TeamA}", FormatTeam(outcome.TeamA));
-        _logger.LogInformation("[TeamGen] TeamB: {TeamB}", FormatTeam(outcome.TeamB));
-        if (outcome.Waiting.Count > 0)
-            _logger.LogInformation("[TeamGen] Unassigned: {Unassigned}", FormatTeam(outcome.Waiting));
+            "[TeamGen] SeedPool({Size}) | PerTeam={PerTeam} IncludeGK={IncGK} MaxAssignable={Max} | {Pool}",
+            pool.Count, settings.PlayersPerTeam, settings.IncludeGoalkeepers, maxAssignable,
+            string.Join(", ", pool.Select(Fmt)));
     }
 
     private void LogBest(DraftOutcome best)
@@ -627,64 +414,42 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         if (_logger == NullLogger<AlgorithmStrategy>.Instance) return;
 
         _logger.LogInformation(
-            "[TeamGen] BEST CHOSEN | Score={Score:0.000} | BalanceDiff={Balance:0.000} | GKDiff={GKDiff} | SynergyTotal={Syn:0.000}",
+            "[TeamGen] BEST | Score={Score:0.000} Balance={Bal:0.000} GKDiff={GK} Synergy={Syn:0.000}",
             best.Score, best.BalanceDiff, best.GoalkeeperDiff, best.SynergyTotal);
 
-        _logger.LogInformation("[TeamGen] BEST TeamA: {TeamA}", FormatTeam(best.TeamA));
-        _logger.LogInformation("[TeamGen] BEST TeamB: {TeamB}", FormatTeam(best.TeamB));
+        _logger.LogInformation("[TeamGen] TeamA: {A}", FmtTeam(best.TeamA));
+        _logger.LogInformation("[TeamGen] TeamB: {B}", FmtTeam(best.TeamB));
     }
 
-    private static string FmtSeed(PlayerWithStats? s)
+    private static string Fmt(CandidatePlayer p)
     {
-        if (s is null) return "null";
-
-        var wr = EffectiveWinRate(s.Stats);
-        var m = TotalMatches(s.Stats);
-        var neutral = IsNeutral(s.Stats) ? ",NEUTRAL" : "";
-        return $"{s.Player.Name}(wr={wr:0.000},m={m}{neutral}{(s.Player.IsGoalkeeper ? ",GK" : "")})";
+        double wr      = EffectiveWinRate(p.Stats);
+        int    m       = TotalMatches(p.Stats);
+        string neutral = IsNeutral(p.Stats) ? ",N" : "";
+        string gk      = p.Player.IsGoalkeeper ? ",GK" : "";
+        return $"{p.Player.Name}(wr={wr:0.00},m={m}{neutral}{gk})";
     }
 
-    private static string FormatTeam(List<PlayerWithStats> team)
-        => string.Join(", ", team.Select(p =>
-        {
-            var wr = EffectiveWinRate(p.Stats);
-            var m = TotalMatches(p.Stats);
-            var neutral = IsNeutral(p.Stats) ? ",NEUTRAL" : "";
-            return $"{p.Player.Name}(wr={wr:0.000},m={m}{neutral}{(p.Player.IsGoalkeeper ? ",GK" : "")})";
-        }));
+    private static string FmtTeam(List<CandidatePlayer> team)
+        => string.Join(", ", team.Select(Fmt));
 
-    // -----------------------------
-    // INTERNAL TYPES
-    // -----------------------------
+    // ── Internal types ────────────────────────────────────────────────────────
 
-    private sealed class PlayerWithStats
+    private sealed class DraftOutcome(
+        List<CandidatePlayer> teamA,
+        List<CandidatePlayer> teamB,
+        List<CandidatePlayer> waiting,
+        double score,
+        double balanceDiff,
+        int goalkeeperDiff,
+        double synergyTotal)
     {
-        public PlayerRequestDto Player { get; }
-        public PlayerStats Stats { get; }
-
-        public PlayerWithStats(PlayerRequestDto player, PlayerStats stats)
-        {
-            Player = player ?? throw new ArgumentNullException(nameof(player));
-            Stats = stats ?? throw new ArgumentNullException(nameof(stats));
-        }
-    }
-
-    private sealed class DraftOutcome
-    {
-        public List<PlayerWithStats> TeamA { get; }
-        public List<PlayerWithStats> TeamB { get; }
-        public List<PlayerWithStats> Waiting { get; }
-
-        public double Score { get; set; }
-        public double BalanceDiff { get; set; }
-        public int GoalkeeperDiff { get; set; }
-        public double SynergyTotal { get; set; }
-
-        public DraftOutcome(List<PlayerWithStats> a, List<PlayerWithStats> b, List<PlayerWithStats> waiting)
-        {
-            TeamA = a;
-            TeamB = b;
-            Waiting = waiting;
-        }
+        public List<CandidatePlayer> TeamA          { get; } = teamA;
+        public List<CandidatePlayer> TeamB          { get; } = teamB;
+        public List<CandidatePlayer> Waiting        { get; } = waiting;
+        public double                Score          { get; } = score;
+        public double                BalanceDiff    { get; } = balanceDiff;
+        public int                   GoalkeeperDiff { get; } = goalkeeperDiff;
+        public double                SynergyTotal   { get; } = synergyTotal;
     }
 }
