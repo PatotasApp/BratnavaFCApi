@@ -178,4 +178,369 @@ public sealed class PlayerStatsServiceTests
         result[0].NeutralOverride.Should().BeNull(
             "jogador ausente no banco não possui GuestStarRating, portanto NeutralOverride = null");
     }
+
+    // -----------------------------------------------------------------
+    // Seeds (GetVisualReportAsync)
+    // -----------------------------------------------------------------
+
+    /// <summary>
+    /// Seed de partida do estado Created até PostGame (sem finalizar).
+    /// Retorna o match e um mapa playerId → MatchPlayerEntity para facilitar testes de gols/votos.
+    /// </summary>
+    private static async Task<(MatchEntity Match, Dictionary<Guid, MatchPlayerEntity> PlayerMap)>
+        SeedMatchUpToPostGameAsync(
+            BratnavaFC.Infrastructure.Data.AppDbContext db,
+            Guid groupId,
+            IReadOnlyList<Guid> teamAPlayerIds,
+            IReadOnlyList<Guid> teamBPlayerIds)
+    {
+        var allIds = teamAPlayerIds.Concat(teamBPlayerIds).ToList();
+
+        var match = new MatchEntity(groupId, DateTime.UtcNow.AddDays(-1), "Arena");
+
+        foreach (var pid in allIds)
+        {
+            var player = await db.Players.FindAsync(pid)
+                         ?? throw new InvalidOperationException($"Player {pid} não encontrado.");
+            match.AddPlayer(new MatchPlayerEntity(pid), player);
+        }
+
+        db.Matches.Add(match);
+        await db.SaveChangesAsync();
+
+        match.OpenAcceptation();
+        foreach (var pid in allIds)
+            match.AcceptInvite(pid);
+        await db.SaveChangesAsync();
+
+        match.GoToMatchMaking();
+        match.AssignTeams(teamAPlayerIds.ToArray(), teamBPlayerIds.ToArray());
+        await db.SaveChangesAsync();
+
+        match.Start();
+        match.End();
+        match.GoToPostGame();
+        await db.SaveChangesAsync();
+
+        return (match, match.Players.ToDictionary(mp => mp.PlayerId));
+    }
+
+    // -----------------------------------------------------------------
+    // Testes — GetVisualReportAsync
+    // -----------------------------------------------------------------
+
+    [Fact]
+    public async Task GetVisualReportAsync_WhenGroupHasNoPlayers_ShouldReturnEmptyReport()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetVisualReportAsync_WhenGroupHasNoPlayers_ShouldReturnEmptyReport));
+
+        var sut = CreateSut(db);
+        var unknownGroupId = Guid.NewGuid();
+
+        var result = await sut.GetVisualReportAsync(unknownGroupId);
+
+        result.GroupId.Should().Be(unknownGroupId);
+        result.TotalMatchesConsidered.Should().Be(0);
+        result.TotalFinalizedMatches.Should().Be(0);
+        result.Players.Should().BeEmpty("sem jogadores no grupo o relatório deve estar vazio");
+    }
+
+    [Fact]
+    public async Task GetVisualReportAsync_WhenGroupHasPlayersButNoMatches_ShouldReturnZeroStats()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetVisualReportAsync_WhenGroupHasPlayersButNoMatches_ShouldReturnZeroStats));
+
+        var group = await SeedGroupAsync(db);
+        await SeedPlayerAsync(db, group.Id);
+        await SeedPlayerAsync(db, group.Id);
+
+        var sut = CreateSut(db);
+        var result = await sut.GetVisualReportAsync(group.Id);
+
+        result.TotalMatchesConsidered.Should().Be(0);
+        result.Players.Should().HaveCount(2);
+        result.Players.Should().OnlyContain(p =>
+            p.GamesPlayed == 0 && p.Wins == 0 && p.Losses == 0 && p.Ties == 0 && p.Goals == 0,
+            "sem partidas todos os contadores devem ser zero");
+    }
+
+    [Fact]
+    public async Task GetVisualReportAsync_ShouldOnlyConsiderFinalizedMatches()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetVisualReportAsync_ShouldOnlyConsiderFinalizedMatches));
+
+        var group = await SeedGroupAsync(db);
+        var p1 = await SeedPlayerAsync(db, group.Id);
+        var p2 = await SeedPlayerAsync(db, group.Id);
+
+        // 1 partida finalizada
+        await SeedFinalizedMatchAsync(db, group.Id, p1.Id, p2.Id);
+
+        // 1 partida não-finalizada (status Created)
+        db.ChangeTracker.Clear();
+        db.Matches.Add(new MatchEntity(group.Id, DateTime.UtcNow, "Arena"));
+        await db.SaveChangesAsync();
+
+        db.ChangeTracker.Clear();
+
+        var sut = CreateSut(db);
+        var result = await sut.GetVisualReportAsync(group.Id);
+
+        result.TotalMatchesConsidered.Should().Be(1, "apenas partidas finalizadas devem ser consideradas");
+        result.TotalFinalizedMatches.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetVisualReportAsync_ShouldCountWinsAndLossesCorrectly()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetVisualReportAsync_ShouldCountWinsAndLossesCorrectly));
+
+        var group = await SeedGroupAsync(db);
+        var p1 = await SeedPlayerAsync(db, group.Id); // Time A — vence
+        var p2 = await SeedPlayerAsync(db, group.Id); // Time B — perde
+
+        var (match, _) = await SeedMatchUpToPostGameAsync(db, group.Id,
+            new[] { p1.Id }, new[] { p2.Id });
+
+        match.SetScore(2, 0); // Time A vence
+        match.FinalizeByVotes();
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var sut = CreateSut(db);
+        var result = await sut.GetVisualReportAsync(group.Id);
+
+        var stat1 = result.Players.Single(p => p.PlayerId == p1.Id);
+        var stat2 = result.Players.Single(p => p.PlayerId == p2.Id);
+
+        stat1.GamesPlayed.Should().Be(1);
+        stat1.Wins.Should().Be(1);
+        stat1.Losses.Should().Be(0);
+
+        stat2.GamesPlayed.Should().Be(1);
+        stat2.Wins.Should().Be(0);
+        stat2.Losses.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetVisualReportAsync_ShouldCountTiesCorrectly()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetVisualReportAsync_ShouldCountTiesCorrectly));
+
+        var group = await SeedGroupAsync(db);
+        var p1 = await SeedPlayerAsync(db, group.Id);
+        var p2 = await SeedPlayerAsync(db, group.Id);
+
+        var (match, _) = await SeedMatchUpToPostGameAsync(db, group.Id,
+            new[] { p1.Id }, new[] { p2.Id });
+
+        match.SetScore(1, 1); // Empate
+        match.FinalizeByVotes();
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var sut = CreateSut(db);
+        var result = await sut.GetVisualReportAsync(group.Id);
+
+        var stat1 = result.Players.Single(p => p.PlayerId == p1.Id);
+        var stat2 = result.Players.Single(p => p.PlayerId == p2.Id);
+
+        stat1.Ties.Should().Be(1);
+        stat1.Wins.Should().Be(0);
+        stat1.Losses.Should().Be(0);
+
+        stat2.Ties.Should().Be(1);
+        stat2.Wins.Should().Be(0);
+        stat2.Losses.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task GetVisualReportAsync_ShouldCountGoalsAndAssistsCorrectly()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetVisualReportAsync_ShouldCountGoalsAndAssistsCorrectly));
+
+        var group = await SeedGroupAsync(db);
+        var p1 = await SeedPlayerAsync(db, group.Id); // artilheiro, Time A
+        var p2 = await SeedPlayerAsync(db, group.Id); // assistência, Time A
+        var p3 = await SeedPlayerAsync(db, group.Id); // Time B
+
+        var (match, playerMap) = await SeedMatchUpToPostGameAsync(db, group.Id,
+            new[] { p1.Id, p2.Id }, new[] { p3.Id });
+
+        // p1 marca, p2 assiste
+        match.AddGoalByMatchPlayer(playerMap[p1.Id].Id, playerMap[p2.Id].Id, null);
+        // FinalizeByVotes recalcula placar a partir dos gols
+        match.FinalizeByVotes();
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var sut = CreateSut(db);
+        var result = await sut.GetVisualReportAsync(group.Id);
+
+        var stat1 = result.Players.Single(p => p.PlayerId == p1.Id);
+        var stat2 = result.Players.Single(p => p.PlayerId == p2.Id);
+        var stat3 = result.Players.Single(p => p.PlayerId == p3.Id);
+
+        stat1.Goals.Should().Be(1, "p1 marcou o gol");
+        stat1.Assists.Should().Be(0);
+
+        stat2.Goals.Should().Be(0);
+        stat2.Assists.Should().Be(1, "p2 deu a assistência");
+
+        stat3.Goals.Should().Be(0);
+        stat3.Assists.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task GetVisualReportAsync_ShouldCountOwnGoalsCorrectly()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetVisualReportAsync_ShouldCountOwnGoalsCorrectly));
+
+        var group = await SeedGroupAsync(db);
+        var p1 = await SeedPlayerAsync(db, group.Id); // Time A — marca gol contra
+        var p2 = await SeedPlayerAsync(db, group.Id); // Time B
+
+        var (match, playerMap) = await SeedMatchUpToPostGameAsync(db, group.Id,
+            new[] { p1.Id }, new[] { p2.Id });
+
+        // p1 marca gol contra (isOwnGoal = true)
+        match.AddGoalByMatchPlayer(playerMap[p1.Id].Id, null, null, isOwnGoal: true);
+        match.FinalizeByVotes();
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var sut = CreateSut(db);
+        var result = await sut.GetVisualReportAsync(group.Id);
+
+        var stat1 = result.Players.Single(p => p.PlayerId == p1.Id);
+
+        stat1.OwnGoals.Should().Be(1, "p1 marcou um gol contra");
+        stat1.Goals.Should().Be(0, "gol contra não conta como gol normal");
+    }
+
+    /// <summary>
+    /// Seed de partida finalizada onde mvpPlayerId recebe o MVP via votação real.
+    /// Toda a máquina de estados é percorrida em memória antes de qualquer Save,
+    /// garantindo que o único SaveChangesAsync efetue apenas INSERTs (estado Added)
+    /// e nunca UPDATEs — evitando o DbUpdateConcurrencyException do EF InMemory.
+    /// </summary>
+    private static async Task SeedFinalizedMatchWithMvpAsync(
+        BratnavaFC.Infrastructure.Data.AppDbContext db,
+        Guid groupId,
+        Guid mvpPlayerId,
+        Guid voterPlayerId)
+    {
+        // Carrega os PlayerEntities (precisamos de GroupId para AddPlayer)
+        var mvp   = await db.Players.FindAsync(mvpPlayerId)   ?? throw new InvalidOperationException("mvp não encontrado.");
+        var voter = await db.Players.FindAsync(voterPlayerId) ?? throw new InvalidOperationException("voter não encontrado.");
+
+        var mpMvp   = new MatchPlayerEntity(mvp.Id);
+        var mpVoter = new MatchPlayerEntity(voter.Id);
+
+        var match = new MatchEntity(groupId, DateTime.UtcNow.AddDays(-1), "Arena");
+        match.AddPlayer(mpMvp, mvp);
+        match.AddPlayer(mpVoter, voter);
+
+        // Percorre toda a máquina de estados em memória
+        match.OpenAcceptation();
+        match.AcceptInvite(mvp.Id);
+        match.AcceptInvite(voter.Id);
+        match.GoToMatchMaking();
+        match.AssignTeams(new[] { mvp.Id }, new[] { voter.Id });
+        match.Start();
+        match.End();
+        match.GoToPostGame();
+        match.SetScore(1, 0);
+
+        // Adiciona o voto (ainda em memória, antes de qualquer tracking pelo EF)
+        var vote = new VoteEntity(match.Id, mpVoter.Id, mpMvp.Id);
+        match.Votes.Add(vote);
+
+        // FinalizeByVotes encontra o voto em match.Votes e chama SetMvp no mpMvp
+        match.FinalizeByVotes();
+
+        // Único Save: todos os objetos estão em estado Added → apenas INSERTs, sem UPDATEs
+        db.Matches.Add(match); // propaga para Players, Votes e Goals via navegação
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task GetVisualReportAsync_ShouldCountMvpsCorrectly()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetVisualReportAsync_ShouldCountMvpsCorrectly));
+
+        var group = await SeedGroupAsync(db);
+        var p1 = await SeedPlayerAsync(db, group.Id); // MVP
+        var p2 = await SeedPlayerAsync(db, group.Id); // Votante
+
+        // Seed de partida finalizada com mvp (p1) via votação real
+        await SeedFinalizedMatchWithMvpAsync(db, group.Id, mvpPlayerId: p1.Id, voterPlayerId: p2.Id);
+
+        db.ChangeTracker.Clear();
+
+        var sut = CreateSut(db);
+        var result = await sut.GetVisualReportAsync(group.Id);
+
+        var stat1 = result.Players.Single(p => p.PlayerId == p1.Id);
+        var stat2 = result.Players.Single(p => p.PlayerId == p2.Id);
+
+        stat1.Mvps.Should().Be(1, "p1 recebeu o voto de MVP e FinalizeByVotes o marcou como tal");
+        stat2.Mvps.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task GetVisualReportAsync_ShouldReturnCorrectMatchTotals()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetVisualReportAsync_ShouldReturnCorrectMatchTotals));
+
+        var group = await SeedGroupAsync(db);
+        var p1 = await SeedPlayerAsync(db, group.Id);
+        var p2 = await SeedPlayerAsync(db, group.Id);
+
+        // Seed 3 partidas finalizadas (todas com placar)
+        for (var i = 0; i < 3; i++)
+        {
+            db.ChangeTracker.Clear();
+            await SeedFinalizedMatchAsync(db, group.Id, p1.Id, p2.Id);
+        }
+
+        db.ChangeTracker.Clear();
+
+        var sut = CreateSut(db);
+        var result = await sut.GetVisualReportAsync(group.Id);
+
+        result.TotalMatchesConsidered.Should().Be(3);
+        result.TotalFinalizedMatches.Should().Be(3);
+        result.TotalMatchesWithScore.Should().Be(3, "todas as partidas finalizadas têm placar definido");
+
+        // p1 e p2 devem ter 3 partidas jogadas cada
+        result.Players.Should().OnlyContain(p => p.GamesPlayed == 3);
+    }
+
+    [Fact]
+    public async Task GetVisualReportAsync_ShouldOrderPlayersByWinRateThenGamesPlayed()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetVisualReportAsync_ShouldOrderPlayersByWinRateThenGamesPlayed));
+
+        var group = await SeedGroupAsync(db);
+        var p1 = await SeedPlayerAsync(db, group.Id); // vai vencer → maior WinRate
+        var p2 = await SeedPlayerAsync(db, group.Id); // vai perder → menor WinRate
+
+        var (match, _) = await SeedMatchUpToPostGameAsync(db, group.Id,
+            new[] { p1.Id }, new[] { p2.Id });
+
+        match.SetScore(3, 0); // p1 vence
+        match.FinalizeByVotes();
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var sut = CreateSut(db);
+        var result = await sut.GetVisualReportAsync(group.Id);
+
+        result.Players.Should().HaveCount(2);
+        result.Players[0].PlayerId.Should().Be(p1.Id,
+            "p1 tem WinRate 1.0 e deve aparecer primeiro na ordenação");
+        result.Players[1].PlayerId.Should().Be(p2.Id,
+            "p2 tem WinRate 0.0 e deve aparecer por último");
+    }
 }

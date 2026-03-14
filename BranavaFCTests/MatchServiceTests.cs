@@ -1256,4 +1256,206 @@ public sealed class MatchServiceTests
         after.Players.Any(p => p.Team != 0).Should().BeTrue(
             "atribuições de time devem ser preservadas ao voltar de Started para MatchMaking");
     }
+
+    // =========================
+    // GET HISTORY
+    // =========================
+
+    [Fact]
+    public async Task GetHistoryAsync_WhenNoPlayerId_ShouldReturnAllFinalizedMatchesOrderedByDateDesc()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetHistoryAsync_WhenNoPlayerId_ShouldReturnAllFinalizedMatchesOrderedByDateDesc));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        var dateOld = DateTime.UtcNow.AddDays(-10);
+        var dateMid = DateTime.UtcNow.AddDays(-5);
+        var dateNew = DateTime.UtcNow.AddDays(-1);
+
+        await SeedMatchAsync(db, group.Id, playersCount: 2, targetStatus: MatchStatus.Finalized, playedAtUtc: dateOld);
+        db.ChangeTracker.Clear();
+        await SeedMatchAsync(db, group.Id, playersCount: 2, targetStatus: MatchStatus.Finalized, playedAtUtc: dateNew);
+        db.ChangeTracker.Clear();
+        await SeedMatchAsync(db, group.Id, playersCount: 2, targetStatus: MatchStatus.Finalized, playedAtUtc: dateMid);
+        db.ChangeTracker.Clear();
+
+        var result = await sut.GetHistoryAsync(group.Id, 200, CancellationToken.None);
+
+        result.Should().HaveCount(3);
+        result[0].PlayedAt.Should().BeCloseTo(dateNew, TimeSpan.FromSeconds(1), "mais recente primeiro");
+        result[1].PlayedAt.Should().BeCloseTo(dateMid, TimeSpan.FromSeconds(1));
+        result[2].PlayedAt.Should().BeCloseTo(dateOld, TimeSpan.FromSeconds(1), "mais antiga por último");
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_ShouldIgnoreNonFinalizedMatches()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetHistoryAsync_ShouldIgnoreNonFinalizedMatches));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        // Partida finalizada — deve aparecer
+        await SeedMatchAsync(db, group.Id, playersCount: 2, targetStatus: MatchStatus.Finalized);
+        db.ChangeTracker.Clear();
+
+        // Partida em PostGame — não deve aparecer
+        await SeedMatchAsync(db, group.Id, playersCount: 2, targetStatus: MatchStatus.PostGame,
+            setScoreInPostGame: true, score: (1, 0));
+        db.ChangeTracker.Clear();
+
+        // Partida em Started — não deve aparecer
+        await SeedMatchAsync(db, group.Id, playersCount: 2, targetStatus: MatchStatus.Started);
+        db.ChangeTracker.Clear();
+
+        var result = await sut.GetHistoryAsync(group.Id, 200, CancellationToken.None);
+
+        result.Should().HaveCount(1, "somente partidas Finalized devem ser retornadas");
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_ShouldRespectTakeLimit()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetHistoryAsync_ShouldRespectTakeLimit));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        for (var i = 0; i < 5; i++)
+        {
+            await SeedMatchAsync(db, group.Id, playersCount: 2, targetStatus: MatchStatus.Finalized,
+                playedAtUtc: DateTime.UtcNow.AddDays(-i));
+            db.ChangeTracker.Clear();
+        }
+
+        var result = await sut.GetHistoryAsync(group.Id, take: 3, CancellationToken.None);
+
+        result.Should().HaveCount(3, "take=3 deve limitar o resultado a 3 partidas");
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_WithPlayerId_ShouldReturnOnlyMatchesWherePlayerWasOnATeam()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetHistoryAsync_WithPlayerId_ShouldReturnOnlyMatchesWherePlayerWasOnATeam));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        // Partida 1: player1 + player2 — player1 estará no time A (Team=1)
+        var (_, players1) = await SeedMatchAsync(db, group.Id, playersCount: 2,
+            targetStatus: MatchStatus.Finalized, acceptAllInvites: true, defineTeamsIfPossible: true);
+        var player1 = players1[0];
+        db.ChangeTracker.Clear();
+
+        // Partida 2: player3 + player4 — player1 NÃO está nessa partida
+        await SeedMatchAsync(db, group.Id, playersCount: 2,
+            targetStatus: MatchStatus.Finalized, acceptAllInvites: true, defineTeamsIfPossible: true);
+        db.ChangeTracker.Clear();
+
+        var result = await sut.GetHistoryAsync(group.Id, 200, CancellationToken.None, player1.Id);
+
+        result.Should().HaveCount(1, "filtro por playerId deve retornar apenas a partida em que ele jogou");
+        result[0].PlayerIds.Should().Contain(player1.Id);
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_WithPlayerId_ShouldReturnEmptyWhenPlayerPlayedNoMatches()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetHistoryAsync_WithPlayerId_ShouldReturnEmptyWhenPlayerPlayedNoMatches));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        // Partidas finalizadas sem o player desejado
+        await SeedMatchAsync(db, group.Id, playersCount: 2, targetStatus: MatchStatus.Finalized);
+        db.ChangeTracker.Clear();
+
+        // Jogador que não participou de nenhuma partida
+        var strangerPlayer = new PlayerEntity("Estranho", null, group.Id, 0m, false, status: Status.Active);
+        db.Players.Add(strangerPlayer);
+        await db.SaveChangesAsync();
+
+        var result = await sut.GetHistoryAsync(group.Id, 200, CancellationToken.None, strangerPlayer.Id);
+
+        result.Should().BeEmpty("jogador sem partidas não deve aparecer no histórico");
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_WithPlayerId_ShouldTakeOnlyMatchesWithTeamAssigned()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetHistoryAsync_WithPlayerId_ShouldTakeOnlyMatchesWithTeamAssigned));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        // Partida com times atribuídos — deve aparecer
+        var (_, players) = await SeedMatchAsync(db, group.Id, playersCount: 2,
+            targetStatus: MatchStatus.Finalized, acceptAllInvites: true, defineTeamsIfPossible: true);
+        var player = players[0];
+        db.ChangeTracker.Clear();
+
+        // Partida sem times — player está na partida mas com Team=0 → não deve aparecer no histórico.
+        // GoToMatchMaking exige ≥ 2 aceitos e Start exige times A e B definidos, por isso usamos
+        // dois dummies que aceitam e recebem times; player permanece InviteResponse.None / Team=0.
+        var dummies = await SeedPlayersAsync(db, group.Id, 2);
+        var playerEntity = await db.Players.FindAsync(player.Id)
+            ?? throw new InvalidOperationException("player não encontrado.");
+
+        var matchNoTeams = new MatchEntity(group.Id, DateTime.UtcNow.AddDays(-2), "Arena");
+        var mpNoTeam = new MatchPlayerEntity(player.Id);
+        matchNoTeams.AddPlayer(mpNoTeam, playerEntity);
+        matchNoTeams.AddPlayer(new MatchPlayerEntity(dummies[0].Id), dummies[0]);
+        matchNoTeams.AddPlayer(new MatchPlayerEntity(dummies[1].Id), dummies[1]);
+
+        matchNoTeams.OpenAcceptation();
+        // Apenas os dummies aceitam; player permanece com InviteResponse.None
+        matchNoTeams.AcceptInvite(dummies[0].Id);
+        matchNoTeams.AcceptInvite(dummies[1].Id);
+        matchNoTeams.GoToMatchMaking();
+        // Atribui times somente para os dummies; mpNoTeam.Team fica 0
+        matchNoTeams.AssignTeams(new[] { dummies[0].Id }, new[] { dummies[1].Id });
+        matchNoTeams.Start();
+        matchNoTeams.End();
+        matchNoTeams.GoToPostGame();
+        matchNoTeams.SetScore(1, 0);
+        matchNoTeams.FinalizeByVotes();
+        db.Matches.Add(matchNoTeams);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var result = await sut.GetHistoryAsync(group.Id, 200, CancellationToken.None, player.Id);
+
+        result.Should().HaveCount(1,
+            "só a partida onde o jogador estava escalado num time (Team > 0) deve aparecer");
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_ShouldPopulatePlayerIdsCorrectly()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetHistoryAsync_ShouldPopulatePlayerIdsCorrectly));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        var (_, players) = await SeedMatchAsync(db, group.Id, playersCount: 3,
+            targetStatus: MatchStatus.Finalized, acceptAllInvites: true, defineTeamsIfPossible: true);
+        db.ChangeTracker.Clear();
+
+        var result = await sut.GetHistoryAsync(group.Id, 200, CancellationToken.None);
+
+        result.Should().HaveCount(1);
+        var playerIds = result[0].PlayerIds;
+        playerIds.Should().HaveCount(players.Count);
+
+        foreach (var p in players)
+            playerIds.Should().Contain(p.Id, $"jogador {p.Name} deve estar em PlayerIds");
+    }
 }

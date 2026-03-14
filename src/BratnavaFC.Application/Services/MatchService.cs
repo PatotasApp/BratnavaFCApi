@@ -1042,21 +1042,25 @@ public sealed class MatchService : IMatchService
         CancellationToken cancellationToken,
         Guid? playerId = null)
     {
-        if (groupId == Guid.Empty) throw new InvalidOperationException("GroupId e obrigatorio.");
+        if (groupId == Guid.Empty)
+            throw new InvalidOperationException("GroupId e obrigatorio.");
 
-        if (take <= 0) take = 200;
-        if (take > 500) take = 500;
+        take = take <= 0 ? 200 : Math.Min(take, 500);
 
-        var query = _context.Matches
-            .AsNoTrackingWithIdentityResolution()
-            .Where(m => m.GroupId == groupId)
-            .Where(m =>
-                playerId == null ||
-                m.Players.Any(x =>
-                    x.PlayerId == playerId &&
-                    (x.Team == 1 || x.Team == 2)));
+        IQueryable<MatchEntity> query = _context.Matches
+            .AsNoTracking()
+            .Where(m => m.GroupId == groupId && m.Status == MatchStatus.Finalized);
 
-        var result = await query
+        if (playerId.HasValue)
+        {
+            var playerIdValue = playerId.Value;
+
+            query = query.Where(m => m.Players.Any(p =>
+                p.PlayerId == playerIdValue &&
+                p.Team > 0));
+        }
+
+        return await query
             .OrderByDescending(m => m.PlayedAt)
             .Take(take)
             .Select(m => new MatchHistoryItemDto(
@@ -1069,11 +1073,11 @@ public sealed class MatchService : IMatchService
                 m.PlaceName,
                 m.TeamAColor != null ? m.TeamAColor.HexValue : null,
                 m.TeamBColor != null ? m.TeamBColor.HexValue : null,
-                m.Players.Select(p => p.PlayerId).ToList()
+                m.Players
+                    .Select(p => p.PlayerId)
+                    .ToList()
             ))
             .ToListAsync(cancellationToken);
-
-        return result;
     }
 
     private static PlayerInMatchDto ToPlayerDto(MatchPlayerEntity mp) => new()
