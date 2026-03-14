@@ -23,7 +23,7 @@ public sealed class PlayerStatsServiceTests
 
     private static async Task<GroupEntity> SeedGroupAsync(BratnavaFC.Infrastructure.Data.AppDbContext db)
     {
-        var group = new GroupEntity("Grupo Teste", null);
+        var group = new GroupEntity("Grupo Teste", null, Guid.NewGuid());
         db.Groups.Add(group);
         await db.SaveChangesAsync();
         return group;

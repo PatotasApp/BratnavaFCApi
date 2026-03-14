@@ -4,6 +4,7 @@ public class GroupEntity : InactivatableEntity
 {
     public string Name { get; private set; } = null!;
     public DateTimeOffset? ScheduleMatchDate { get; private set; }
+    public Guid CreatedByUserId { get; private set; }
 
     private readonly List<PlayerEntity> _players = [];
     public IReadOnlyCollection<PlayerEntity> Players => _players;
@@ -14,10 +15,11 @@ public class GroupEntity : InactivatableEntity
     // EF
     private GroupEntity() { }
 
-    public GroupEntity(string name, DateTimeOffset? scheduleMatchDate)
+    public GroupEntity(string name, DateTimeOffset? scheduleMatchDate, Guid createdByUserId)
     {
         Rename(name);
         Reschedule(scheduleMatchDate);
+        CreatedByUserId = createdByUserId;
     }
 
     public void AddPlayer(PlayerEntity player)
@@ -58,5 +60,17 @@ public class GroupEntity : InactivatableEntity
                 UserId = adminId
             });
         }
+    }
+
+    public void RemoveAdmin(Guid userId)
+    {
+        if (userId == CreatedByUserId)
+            throw new InvalidOperationException("The group creator cannot be removed from admins.");
+
+        var admin = _admins.FirstOrDefault(a => a.UserId == userId);
+        if (admin == null)
+            throw new InvalidOperationException("User is not an admin of this group.");
+
+        _admins.Remove(admin);
     }
 }

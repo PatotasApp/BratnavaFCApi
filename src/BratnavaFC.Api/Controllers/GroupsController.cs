@@ -25,7 +25,12 @@ public class GroupsController : GroupAuthorizedController
     {
         if (request == null) return BadRequest();
 
-        var newGroupId = await _groupService.CreateAsync(request, cancellationToken);
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId == null) return Unauthorized();
+
+        var requestWithCreator = request with { CreatedByUserId = currentUserId.Value };
+
+        var newGroupId = await _groupService.CreateAsync(requestWithCreator, cancellationToken);
         return Ok(newGroupId);
     }
 
@@ -88,6 +93,30 @@ public class GroupsController : GroupAuthorizedController
 
         await _groupService.AddAdminToGroupAsync(groupId, request, cancellationToken);
         return NoContent();
+    }
+
+    [HttpDelete("{groupId:guid}/admins/{userId:guid}")]
+    public async Task<IActionResult> RemoveAdminAsync(Guid groupId, Guid userId, CancellationToken cancellationToken)
+    {
+        var requestingUserId = GetCurrentUserId();
+        if (requestingUserId == null) return Unauthorized();
+
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
+            return Forbid();
+
+        try
+        {
+            await _groupService.RemoveAdminAsync(groupId, userId, requestingUserId.Value, cancellationToken);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
     }
 
     // ── Convites ──────────────────────────────────────────────────────────────

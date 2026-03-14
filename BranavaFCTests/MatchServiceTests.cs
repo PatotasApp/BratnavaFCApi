@@ -67,7 +67,7 @@ public sealed class MatchServiceTests
     // =========================
     private static async Task<GroupEntity> SeedGroupAsync(AppDbContext db, string name = "Bratnava FC")
     {
-        var group = new GroupEntity(name, null);
+        var group = new GroupEntity(name, null, Guid.NewGuid());
         db.Groups.Add(group);
         await db.SaveChangesAsync();
         return group;

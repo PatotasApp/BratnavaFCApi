@@ -18,7 +18,7 @@ file static class Builders
         new(userName, "Primeiro", "Sobrenome", $"{userName}@mail.com", "hash", null, null);
 
     public static GroupEntity MakeGroup(string name = "Patota FC") =>
-        new(name, null);
+        new(name, null, Guid.NewGuid());
 
     public static GroupService MakeSut(BratnavaFC.Infrastructure.Data.AppDbContext db)
     {
