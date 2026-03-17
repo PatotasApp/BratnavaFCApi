@@ -325,6 +325,15 @@ public class MatchEntity : BaseEntity
             playersByPlayerId[playerId].SetTeam(2);
     }
 
+    public void SetPlayerRole(Guid matchPlayerId, bool isGoalkeeper)
+    {
+        if (Status != MatchStatus.Acceptation && Status != MatchStatus.MatchMaking)
+            throw new InvalidOperationException("Função só pode ser alterada durante Acceptation ou MatchMaking.");
+        var mp = Players.FirstOrDefault(p => p.Id == matchPlayerId)
+            ?? throw new InvalidOperationException("Jogador não encontrado na partida.");
+        mp.SetIsGoalkeeper(isGoalkeeper);
+    }
+
     public void SwapPlayers(Guid matchPlayerAId, Guid matchPlayerBId)
     {
         EnsureStatus(MatchStatus.MatchMaking, "So e possivel trocar jogadores quando a partida esta em MatchMaking.");

@@ -45,10 +45,14 @@ public class MatchPlayerEntity : BaseEntity
         AssignGroup(match.GroupId);
     }
 
+    public bool IsGoalkeeper { get; private set; }
+    public void SetIsGoalkeeper(bool isGoalkeeper) => IsGoalkeeper = isGoalkeeper;
+
     public void AssignToPlayer(PlayerEntity player)
     {
         Player = player ?? throw new ArgumentNullException(nameof(player));
         PlayerId = player.Id;
+        IsGoalkeeper = player.IsGoalkeeper;
 
         if (GroupId != Guid.Empty && player.GroupId != GroupId)
             throw new InvalidOperationException("Player nao pertence ao Group do MatchPlayer.");

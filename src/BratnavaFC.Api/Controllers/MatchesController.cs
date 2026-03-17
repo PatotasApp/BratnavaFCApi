@@ -315,6 +315,20 @@ public class MatchesController : GroupAuthorizedController
         }
     }
 
+    [HttpPatch("group/{groupId:guid}/{matchId:guid}/players/{matchPlayerId:guid}/role")]
+    public async Task<IActionResult> SetPlayerRoleAsync(
+        Guid groupId, Guid matchId, Guid matchPlayerId,
+        [FromBody] SetPlayerRoleDto dto, CancellationToken cancellationToken)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
+        try
+        {
+            await _service.SetPlayerRoleAsync(groupId, matchId, matchPlayerId, dto, cancellationToken);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
     [HttpPost("group/{groupId:guid}/{matchId:guid}/goals")]
     public async Task<IActionResult> AddGoal(
         Guid groupId,

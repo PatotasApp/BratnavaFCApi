@@ -478,6 +478,16 @@ public sealed class MatchService : IMatchService
         await _context.SaveChangesAsync(ct);
     }
 
+    public async Task SetPlayerRoleAsync(
+        Guid groupId, Guid matchId, Guid matchPlayerId,
+        SetPlayerRoleDto dto, CancellationToken ct)
+    {
+        await EnsureGroupExistsAsync(groupId, ct);
+        var match = await LoadMatchForPlayersUpdateAsync(groupId, matchId, ct);
+        match.SetPlayerRole(matchPlayerId, dto.IsGoalkeeper);
+        await _context.SaveChangesAsync(ct);
+    }
+
     private async Task<MatchEntity> LoadMatchForSimpleUpdateAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
         EnsureMatchId(matchId);
@@ -774,6 +784,7 @@ public sealed class MatchService : IMatchService
             {
                 var newMp = new MatchPlayerEntity(player.Id);
                 newMp.AssignGroup(groupId);
+                newMp.SetIsGoalkeeper(player.IsGoalkeeper);
 
                 if (savedResponses.TryGetValue(player.Id, out var previousResponse))
                     newMp.InviteResponse = previousResponse;
@@ -829,7 +840,7 @@ public sealed class MatchService : IMatchService
                         MatchPlayerId = mp.Id,
                         PlayerId = mp.PlayerId,
                         PlayerName = mp.Player!.Name,
-                        IsGoalkeeper = mp.Player!.IsGoalkeeper,
+                        IsGoalkeeper = mp.IsGoalkeeper,
                         IsGuest = mp.Player!.IsGuest,
                         Team = mp.Team,
                         InviteResponse = (short)mp.InviteResponse
@@ -868,14 +879,14 @@ public sealed class MatchService : IMatchService
 
                 TeamAPlayers = m.Players
                     .Where(p => p.Team == 1 && p.Player!.Status == Status.Active)
-                    .OrderByDescending(p => p.Player!.IsGoalkeeper)
+                    .OrderByDescending(p => p.IsGoalkeeper)
                     .ThenBy(p => p.Player!.Name)
                     .Select(mp => new PlayerInMatchDto
                     {
                         MatchPlayerId = mp.Id,
                         PlayerId = mp.PlayerId,
                         PlayerName = mp.Player!.Name,
-                        IsGoalkeeper = mp.Player!.IsGoalkeeper,
+                        IsGoalkeeper = mp.IsGoalkeeper,
                         IsGuest = mp.Player!.IsGuest,
                         Team = mp.Team,
                         InviteResponse = (short)mp.InviteResponse
@@ -884,14 +895,14 @@ public sealed class MatchService : IMatchService
 
                 TeamBPlayers = m.Players
                     .Where(p => p.Team == 2 && p.Player!.Status == Status.Active)
-                    .OrderByDescending(p => p.Player!.IsGoalkeeper)
+                    .OrderByDescending(p => p.IsGoalkeeper)
                     .ThenBy(p => p.Player!.Name)
                     .Select(mp => new PlayerInMatchDto
                     {
                         MatchPlayerId = mp.Id,
                         PlayerId = mp.PlayerId,
                         PlayerName = mp.Player!.Name,
-                        IsGoalkeeper = mp.Player!.IsGoalkeeper,
+                        IsGoalkeeper = mp.IsGoalkeeper,
                         IsGuest = mp.Player!.IsGuest,
                         Team = mp.Team,
                         InviteResponse = (short)mp.InviteResponse
@@ -906,7 +917,7 @@ public sealed class MatchService : IMatchService
                         MatchPlayerId = mp.Id,
                         PlayerId = mp.PlayerId,
                         PlayerName = mp.Player!.Name,
-                        IsGoalkeeper = mp.Player!.IsGoalkeeper,
+                        IsGoalkeeper = mp.IsGoalkeeper,
                         IsGuest = mp.Player!.IsGuest,
                         Team = mp.Team,
                         InviteResponse = (short)mp.InviteResponse
@@ -1085,7 +1096,7 @@ public sealed class MatchService : IMatchService
         MatchPlayerId = mp.Id,
         PlayerId = mp.PlayerId,
         PlayerName = mp.Player?.Name ?? string.Empty,
-        IsGoalkeeper = mp.Player?.IsGoalkeeper ?? false,
+        IsGoalkeeper = mp.IsGoalkeeper,
         IsGuest = mp.Player?.IsGuest ?? false,
         Team = mp.Team,
         InviteResponse = (short)mp.InviteResponse,
