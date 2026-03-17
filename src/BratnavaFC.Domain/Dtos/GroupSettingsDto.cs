@@ -15,4 +15,12 @@ public sealed class GroupSettingsDto
     public TimeSpan? DefaultKickoffTime { get; init; }
 
     public bool IsPersisted { get; init; }
+
+    // ── Ícones configuráveis ─────────────────────────────────────────────────
+    public string? GoalIcon       { get; init; }
+    public string? GoalkeeperIcon { get; init; }
+    public string? AssistIcon     { get; init; }
+    public string? OwnGoalIcon    { get; init; }
+    public string? MvpIcon        { get; init; }
+    public string? PlayerIcon     { get; init; }
 }

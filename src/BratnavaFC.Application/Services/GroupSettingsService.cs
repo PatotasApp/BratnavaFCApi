@@ -36,7 +36,13 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 DefaultPlaceName = null,
                 DefaultDayOfWeek = null,
                 DefaultKickoffTime = null,
-                IsPersisted = false
+                IsPersisted = false,
+                GoalIcon       = null,
+                GoalkeeperIcon = null,
+                AssistIcon     = null,
+                OwnGoalIcon    = null,
+                MvpIcon        = null,
+                PlayerIcon     = null,
             };
         }
 
@@ -61,6 +67,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 dto.DefaultDayOfWeek,
                 dto.DefaultKickoffTime);
 
+            entity.SetIcons(dto.GoalIcon, dto.GoalkeeperIcon, dto.AssistIcon, dto.OwnGoalIcon, dto.MvpIcon, dto.PlayerIcon);
             await _context.GroupSettings.AddAsync(entity, ct);
         }
         else
@@ -71,6 +78,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 dto.DefaultPlaceName,
                 dto.DefaultDayOfWeek,
                 dto.DefaultKickoffTime);
+            entity.SetIcons(dto.GoalIcon, dto.GoalkeeperIcon, dto.AssistIcon, dto.OwnGoalIcon, dto.MvpIcon, dto.PlayerIcon);
         }
 
         try
@@ -90,6 +98,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 dto.DefaultPlaceName,
                 dto.DefaultDayOfWeek,
                 dto.DefaultKickoffTime);
+            existing.SetIcons(dto.GoalIcon, dto.GoalkeeperIcon, dto.AssistIcon, dto.OwnGoalIcon, dto.MvpIcon, dto.PlayerIcon);
 
             await _context.SaveChangesAsync(ct);
             entity = existing;
@@ -107,7 +116,13 @@ public sealed class GroupSettingsService : IGroupSettingsService
         DefaultPlaceName = e.DefaultPlaceName,
         DefaultDayOfWeek = e.DefaultDayOfWeek,
         DefaultKickoffTime = e.DefaultKickoffTime,
-        IsPersisted = isPersisted
+        IsPersisted = isPersisted,
+        GoalIcon       = e.GoalIcon,
+        GoalkeeperIcon = e.GoalkeeperIcon,
+        AssistIcon     = e.AssistIcon,
+        OwnGoalIcon    = e.OwnGoalIcon,
+        MvpIcon        = e.MvpIcon,
+        PlayerIcon     = e.PlayerIcon,
     };
 
     private async Task EnsureGroupExistsAsync(Guid groupId, CancellationToken ct)

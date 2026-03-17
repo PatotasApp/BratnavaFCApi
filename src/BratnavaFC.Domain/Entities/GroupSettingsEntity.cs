@@ -34,6 +34,14 @@ public sealed class GroupSettingsEntity : BaseEntity
     public DayOfWeek? DefaultDayOfWeek { get; private set; }
     public TimeSpan? DefaultKickoffTime { get; private set; }
 
+    // ── Ícones configuráveis por patota ───────────────────────────────────────
+    public string? GoalIcon       { get; private set; }
+    public string? GoalkeeperIcon { get; private set; }
+    public string? AssistIcon     { get; private set; }
+    public string? OwnGoalIcon    { get; private set; }
+    public string? MvpIcon        { get; private set; }
+    public string? PlayerIcon     { get; private set; }
+
     public void Update(
         int minPlayers,
         int maxPlayers,
@@ -44,6 +52,22 @@ public sealed class GroupSettingsEntity : BaseEntity
         SetPlayerLimits(minPlayers, maxPlayers);
         SetDefaultPlaceName(defaultPlaceName);
         SetDefaultSchedule(defaultDayOfWeek, defaultKickoffTime);
+    }
+
+    public void SetIcons(
+        string? goalIcon,
+        string? goalkeeperIcon,
+        string? assistIcon,
+        string? ownGoalIcon,
+        string? mvpIcon,
+        string? playerIcon)
+    {
+        GoalIcon       = goalIcon;
+        GoalkeeperIcon = goalkeeperIcon;
+        AssistIcon     = assistIcon;
+        OwnGoalIcon    = ownGoalIcon;
+        MvpIcon        = mvpIcon;
+        PlayerIcon     = playerIcon;
     }
 
     private void SetPlayerLimits(int minPlayers, int maxPlayers)
