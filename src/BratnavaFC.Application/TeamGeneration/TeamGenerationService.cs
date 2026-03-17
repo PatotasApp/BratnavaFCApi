@@ -28,8 +28,8 @@ public sealed class TeamGenerationService
 
         var settings = new TeamGenerationSettings
         {
-            PlayersPerTeam = playersPerTeam,
-            IncludeGoalkeepers = includeGoalkeepers
+            PlayersPerTeam     = playersPerTeam,
+            IncludeGoalkeepers = includeGoalkeepers,
         };
 
         var strategy = TeamGenerationFactory.Create(strategyType, _statsService, _loggerFactory);

@@ -27,11 +27,11 @@ internal static class StrategyHelpers
         => TotalMatches(s) < MinMatchesToBeNonNeutral;
 
     /// <summary>
-    /// Effective win-rate for balancing purposes.
+    /// Effective weight (W_base) for balancing purposes.
     /// Neutral players use <see cref="PlayerStats.NeutralOverride"/> when set (populated
     /// from the guest's star-rating), otherwise fall back to <see cref="NeutralWinRate"/>.
     /// </summary>
-    internal static double EffectiveWinRate(PlayerStats s)
+    internal static double EffectiveWeight(PlayerStats s)
         => IsNeutral(s) ? (s.NeutralOverride ?? NeutralWinRate) : s.WinRate;
 
     // ── Candidate filtering ───────────────────────────────────────────────────
@@ -61,7 +61,7 @@ internal static class StrategyHelpers
         [
             new(TeamA: [], TeamB: [], Unassigned: allUnassigned,
                 TeamAWeight: 0, TeamBWeight: 0, BalanceDiff: 0,
-                GoalkeeperDiff: 0, SynergyTotal: 0, Score: 0)
+                SynergyTotal: 0, Score: 0)
         ]);
     }
 

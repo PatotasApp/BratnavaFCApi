@@ -28,6 +28,7 @@ internal static class TestHelpers
 
     /// <summary>
     /// Non-neutral stats (wins+ties+losses >= 3 by default).
+    /// WinRate is set to the raw ratio here; real service uses W_base (Bayesian + GoalContrib).
     /// </summary>
     public static PlayerStats Stats(
         Guid id,
@@ -35,7 +36,9 @@ internal static class TestHelpers
         int wins,
         int ties,
         int losses,
-        double? neutralOverride = null)
+        double? neutralOverride = null,
+        int goals = 0,
+        int assists = 0)
         => new PlayerStats
         {
             PlayerId = id,
@@ -46,6 +49,8 @@ internal static class TestHelpers
             WinRate = (wins + ties + losses) == 0
                 ? 0.0
                 : wins / (double)(wins + ties + losses),
+            Goals = goals,
+            Assists = assists,
             SynergyWith = new Dictionary<Guid, double>(),
             NeutralOverride = neutralOverride
         };

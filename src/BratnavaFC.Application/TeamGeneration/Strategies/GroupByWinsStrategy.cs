@@ -35,11 +35,11 @@ public sealed class GroupByWinsStrategy : ITeamGenerationStrategy
 
         Dictionary<Guid, PlayerStats> statsById = await LoadStatsByPlayerId(_statsService, candidates, cancellationToken);
 
-        // Sort by Wins desc → EffectiveWinRate desc → Id asc (deterministic tie-break)
+        // Sort by Wins desc → EffectiveWeight desc → Id asc (deterministic tie-break)
         List<CandidatePlayer> ordered = candidates
             .Select(p => new CandidatePlayer(p, GetOrCreateStats(statsById, p.Id, p.Name)))
             .OrderByDescending(x => x.Stats.Wins)
-            .ThenByDescending(x => EffectiveWinRate(x.Stats))
+            .ThenByDescending(x => EffectiveWeight(x.Stats))
             .ThenBy(x => x.Player.Id)
             .ToList();
 
@@ -133,7 +133,7 @@ public sealed class GroupByWinsStrategy : ITeamGenerationStrategy
     private static TeamOptionDto ToOptionDto(Outcome o, TeamGenerationSettings settings)
     {
         double WeightOf(Guid id)
-            => o.Map.TryGetValue(id, out CandidatePlayer? p) ? EffectiveWinRate(p.Stats) : NeutralWinRate;
+            => o.Map.TryGetValue(id, out CandidatePlayer? p) ? EffectiveWeight(p.Stats) : NeutralWinRate;
 
         bool IsGk(Guid id)
             => o.Map.TryGetValue(id, out CandidatePlayer? p) && p.Player.IsGoalkeeper;
@@ -153,9 +153,6 @@ public sealed class GroupByWinsStrategy : ITeamGenerationStrategy
             TeamAWeight: teamAWeight,
             TeamBWeight: teamBWeight,
             BalanceDiff: balanceDiff,
-            GoalkeeperDiff: settings.IncludeGoalkeepers
-                ? Math.Abs(o.TeamA.Count(IsGk) - o.TeamB.Count(IsGk))
-                : 0,
             SynergyTotal: 0.0,
             Score: balanceDiff
         );

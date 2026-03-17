@@ -31,8 +31,8 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
         var playerIds = players.Select(p => p.Id).ToHashSet();
 
-        // So finalized (como voce tinha)
-        var matches = await LoadFinalizedMatchesAsync(playerIds, cancellationToken);
+        // Only the last 20 finalized matches that include at least one of the players requested.
+        var matches = await LoadRecentFinalizedMatchesAsync(playerIds, cancellationToken);
 
         // Carrega GuestStarRating diretamente do banco para garantir o valor mais atualizado
         var guestRatingMap = await _context.Players
@@ -49,6 +49,14 @@ public sealed class PlayerStatsService : IPlayerStatsService
             ProcessMatchForBasicStats(match, playerIds, perPlayer, pairTotals);
         }
 
+        // Pre-compute Bayesian WR for each player (used for W_base and synergy baseline)
+        var winRateAdjById = perPlayer.ToDictionary(
+            kv => kv.Key,
+            kv => BayesianWinRate(kv.Value.Wins, kv.Value.Ties, kv.Value.MatchesPlayed));
+
+        // Group-average goal contribution (null = no scoring data → neutral GoalContrib)
+        double? groupAvgGC = ComputeGroupAvgGC(perPlayer.Values);
+
         var result = new List<PlayerStats>(players.Count);
 
         const int minMatchesNonNeutral = 3;
@@ -57,11 +65,14 @@ public sealed class PlayerStatsService : IPlayerStatsService
         {
             var acc = perPlayer.TryGetValue(pl.Id, out var a) ? a : PlayerAccumulator.Empty;
 
-            var winRate = acc.MatchesPlayed == 0
-                ? 0.0
-                : acc.Wins / (double)acc.MatchesPlayed;
+            // W_base = 0.70 × WinRate_adj (Bayesian) + 0.30 × GoalContrib_norm
+            double winRateAdj     = winRateAdjById.TryGetValue(pl.Id, out var wra) ? wra : BayesianWinRate(0, 0, 0);
+            double goalContribNorm = (acc.MatchesPlayed == 0 || !groupAvgGC.HasValue)
+                ? 0.5
+                : ComputeGoalContribNorm(acc, groupAvgGC.Value);
+            double wBase = 0.70 * winRateAdj + 0.30 * goalContribNorm;
 
-            var synergy = BuildSynergyMap(pl.Id, players, pairTotals);
+            var synergy = BuildSynergyMap(pl.Id, winRateAdjById, players, pairTotals);
 
             double? neutralOverride = null;
             var guestStarRating = guestRatingMap.TryGetValue(pl.Id, out var dbRating) ? dbRating : null;
@@ -70,13 +81,15 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
             result.Add(new PlayerStats
             {
-                PlayerId = pl.Id,
-                Name = pl.Name,
-                Wins = acc.Wins,
-                Ties = acc.Ties,
-                Losses = acc.Losses,
-                WinRate = winRate,
-                SynergyWith = synergy,
+                PlayerId       = pl.Id,
+                Name           = pl.Name,
+                Wins           = acc.Wins,
+                Ties           = acc.Ties,
+                Losses         = acc.Losses,
+                WinRate        = wBase,     // W_base ∈ [0, 1]
+                Goals          = acc.Goals,
+                Assists        = acc.Assists,
+                SynergyWith    = synergy,
                 NeutralOverride = neutralOverride
             });
         }
@@ -209,6 +222,25 @@ public sealed class PlayerStatsService : IPlayerStatsService
             .AsNoTracking()
             .Where(m => m.Status == MatchStatus.Finalized)
             .Include(m => m.Players)
+            .Include(m => m.Goals)
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Returns the last 20 finalized matches that include at least one of the requested players,
+    /// ordered newest first. Used by <see cref="EnrichPlayersAsync"/> to keep the stat window
+    /// recent and to bound query cost regardless of total match history.
+    /// </summary>
+    private Task<List<MatchEntity>> LoadRecentFinalizedMatchesAsync(HashSet<Guid> playerIds, CancellationToken cancellationToken)
+    {
+        return _context.Matches
+            .AsNoTracking()
+            .Where(m => m.Status == MatchStatus.Finalized
+                     && m.Players.Any(mp => playerIds.Contains(mp.PlayerId)))
+            .OrderByDescending(m => m.PlayedAt)
+            .Take(20)
+            .Include(m => m.Players)
+            .Include(m => m.Goals)
             .ToListAsync(cancellationToken);
     }
 
@@ -266,8 +298,32 @@ public sealed class PlayerStatsService : IPlayerStatsService
             perPlayer[playerId] = acc;
         }
 
-        AddTeamSynergy(teamA, outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamA, pairTotals);
-        AddTeamSynergy(teamB, outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamB, pairTotals);
+        // ── Goals / assists for W_base GoalContrib component ─────────────────
+        var mpIdToPlayerId = match.Players
+            .Where(mp => trackedPlayerIds.Contains(mp.PlayerId))
+            .ToDictionary(mp => mp.Id, mp => mp.PlayerId);
+
+        foreach (var goal in match.Goals ?? [])
+        {
+            if (goal.IsOwnGoal) continue;   // own goals not counted in W_base
+
+            if (mpIdToPlayerId.TryGetValue(goal.ScorerMatchPlayerId, out var pid)
+                && perPlayer.TryGetValue(pid, out var gAcc))
+            {
+                gAcc.Goals++;
+            }
+
+            if (goal.AssistMatchPlayerId.HasValue
+                && mpIdToPlayerId.TryGetValue(goal.AssistMatchPlayerId.Value, out var aPid)
+                && perPlayer.TryGetValue(aPid, out var aAcc))
+            {
+                aAcc.Assists++;
+            }
+        }
+
+        bool isTieBasic = outcome.HasScore && outcome.IsTie;
+        AddTeamSynergy(teamA, outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamA, isTieBasic, pairTotals);
+        AddTeamSynergy(teamB, outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamB, isTieBasic, pairTotals);
     }
 
     private static void ProcessMatchForVisual(
@@ -323,8 +379,9 @@ public sealed class PlayerStatsService : IPlayerStatsService
             perPlayer[playerId] = acc;
         }
 
-        AddTeamSynergy(teamA, outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamA, pairTotals);
-        AddTeamSynergy(teamB, outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamB, pairTotals);
+        bool isTieVisual = outcome.HasScore && outcome.IsTie;
+        AddTeamSynergy(teamA, outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamA, isTieVisual, pairTotals);
+        AddTeamSynergy(teamB, outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamB, isTieVisual, pairTotals);
 
         // ── Gols / assistências / gols-contra ─────────────────────────────
         // mapeia MatchPlayerEntity.Id → PlayerId para os jogadores rastreados
@@ -366,6 +423,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
     private static void AddTeamSynergy(
         IReadOnlyList<MatchPlayerEntity> teamPlayers,
         bool teamWon,
+        bool isTie,
         Dictionary<PairKey, PairAccumulator> pairTotals)
     {
         var ids = teamPlayers.Select(p => p.PlayerId).Distinct().ToList();
@@ -381,6 +439,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
                 pairAcc.MatchesTogether++;
                 if (teamWon) pairAcc.WinsTogether++;
+                if (isTie)   pairAcc.TiesTogether++;
 
                 pairTotals[key] = pairAcc;
             }
@@ -426,12 +485,20 @@ public sealed class PlayerStatsService : IPlayerStatsService
             : MatchOutcome.Win(MatchWinningTeam.TeamB);
     }
 
+    /// <summary>
+    /// Builds the Synergy_eff map for a player.
+    /// Synergy_eff = Confidence × (WR_together_adj − baseline), range ≈ [−0.5, +0.5].
+    /// Zero means no shared history (no bonus/penalty).
+    /// </summary>
     private static Dictionary<Guid, double> BuildSynergyMap(
         Guid playerId,
+        Dictionary<Guid, double> winRateAdjById,
         List<PlayerRequestDto> allPlayers,
         Dictionary<PairKey, PairAccumulator> pairTotals)
     {
         var map = new Dictionary<Guid, double>(Math.Max(0, allPlayers.Count - 1));
+
+        double playerWRAdj = winRateAdjById.TryGetValue(playerId, out var pwr) ? pwr : BayesianWinRate(0, 0, 0);
 
         foreach (var other in allPlayers)
         {
@@ -441,14 +508,60 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
             if (!pairTotals.TryGetValue(key, out var pairAcc) || pairAcc.MatchesTogether == 0)
             {
-                map[other.Id] = 0.0;
+                map[other.Id] = 0.0;    // no shared history → neutral (no bonus/penalty)
                 continue;
             }
 
-            map[other.Id] = pairAcc.WinsTogether / (double)pairAcc.MatchesTogether;
+            double otherWRAdj          = winRateAdjById.TryGetValue(other.Id, out var owr) ? owr : BayesianWinRate(0, 0, 0);
+            double effectiveWinsTogether = pairAcc.WinsTogether + 0.5 * pairAcc.TiesTogether;
+            double wrTogetherAdj       = (effectiveWinsTogether + 1.0) / (pairAcc.MatchesTogether + 2.0);
+            double baseline            = (playerWRAdj + otherWRAdj) / 2.0;
+            double confidence          = 1.0 - Math.Exp(-pairAcc.MatchesTogether / 5.0);
+            map[other.Id]              = confidence * (wrTogetherAdj - baseline);
         }
 
         return map;
+    }
+
+    // ── W_base helpers ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Bayesian win rate: shrinks extreme values toward 0.50 with prior α = 1.5.
+    /// Ties count as half a win: effectiveWins = wins + 0.5 × ties.
+    /// Formula: (effectiveWins + α) / (matches + 2α).
+    /// </summary>
+    private static double BayesianWinRate(int wins, int ties, int totalMatches)
+    {
+        const double alpha = 1.5;
+        double effectiveWins = wins + 0.5 * ties;
+        return (effectiveWins + alpha) / (totalMatches + 2.0 * alpha);
+    }
+
+    /// <summary>
+    /// Returns the group-average raw goal contribution per game,
+    /// or null when no player has scored (→ neutral GoalContrib for everyone).
+    /// gc_raw(p) = (goals + 0.6 × assists) / matchesPlayed  (players with ≥ 1 match only).
+    /// </summary>
+    private static double? ComputeGroupAvgGC(IEnumerable<PlayerAccumulator> accs)
+    {
+        var eligible = accs.Where(a => a.MatchesPlayed >= 1).ToList();
+        if (eligible.Count == 0) return null;
+
+        double avg = eligible.Average(a => (a.Goals + 0.6 * a.Assists) / (double)a.MatchesPlayed);
+        return avg > 0.0 ? avg : null;  // null = no one has scored → neutral for all
+    }
+
+    /// <summary>
+    /// Normalised goal contribution with a Bayesian prior weight of 3 matches at the group average.
+    /// Result is clamped to [0, 1] via: clamp(gcAdj / groupAvgGC / 2, 0, 1).
+    /// Pre-condition: groupAvgGC > 0.
+    /// </summary>
+    private static double ComputeGoalContribNorm(PlayerAccumulator acc, double groupAvgGC)
+    {
+        double rawGC  = acc.Goals + 0.6 * acc.Assists;
+        double gcAdj  = (rawGC + groupAvgGC * 3.0) / (acc.MatchesPlayed + 3.0);
+        double normed = gcAdj / groupAvgGC;
+        return Math.Clamp(normed / 2.0, 0.0, 1.0);
     }
 
     private static List<PlayerSynergyItem> BuildSynergyVisual(
@@ -517,6 +630,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
     {
         public int MatchesTogether;
         public int WinsTogether;
+        public int TiesTogether;
 
         public static PairAccumulator Empty => new PairAccumulator();
     }

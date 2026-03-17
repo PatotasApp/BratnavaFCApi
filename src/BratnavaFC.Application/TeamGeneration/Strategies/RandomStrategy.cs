@@ -34,7 +34,7 @@ public sealed class RandomStrategy : ITeamGenerationStrategy
         Dictionary<Guid, PlayerStats> statsById     = await LoadStatsByPlayerId(_statsService, pool, cancellationToken);
 
         double WeightOf(Guid id)
-            => statsById.TryGetValue(id, out PlayerStats? s) ? EffectiveWinRate(s) : NeutralWinRate;
+            => statsById.TryGetValue(id, out PlayerStats? s) ? EffectiveWeight(s) : NeutralWinRate;
 
         bool IsGk(Guid id)
             => players.FirstOrDefault(p => p.Id == id)?.IsGoalkeeper == true;
@@ -71,9 +71,6 @@ public sealed class RandomStrategy : ITeamGenerationStrategy
                 TeamAWeight: teamAWeight,
                 TeamBWeight: teamBWeight,
                 BalanceDiff: balanceDiff,
-                GoalkeeperDiff: settings.IncludeGoalkeepers
-                    ? Math.Abs(teamAIds.Count(IsGk) - teamBIds.Count(IsGk))
-                    : 0,
                 SynergyTotal: 0.0,
                 Score: balanceDiff
             ));

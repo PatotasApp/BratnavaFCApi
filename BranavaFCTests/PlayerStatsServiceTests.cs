@@ -543,4 +543,456 @@ public sealed class PlayerStatsServiceTests
         result.Players[1].PlayerId.Should().Be(p2.Id,
             "p2 tem WinRate 0.0 e deve aparecer por último");
     }
+
+    // -----------------------------------------------------------------
+    // Seeds (EnrichPlayersAsync — W_base / Synergy_eff)
+    // -----------------------------------------------------------------
+
+    /// <summary>
+    /// Seeds a finalized match with p1+p2 on Team A and p3+p4 on Team B.
+    /// Used for synergy tests (players on the *same* team build pair accumulators).
+    /// </summary>
+    private static async Task SeedFinalizedMatchSameTeamAsync(
+        BratnavaFC.Infrastructure.Data.AppDbContext db,
+        Guid groupId,
+        Guid p1Id, Guid p2Id,   // Team A
+        Guid p3Id, Guid p4Id,   // Team B
+        bool teamAWins)
+    {
+        var p1 = await db.Players.FindAsync(p1Id) ?? throw new InvalidOperationException("p1 not found.");
+        var p2 = await db.Players.FindAsync(p2Id) ?? throw new InvalidOperationException("p2 not found.");
+        var p3 = await db.Players.FindAsync(p3Id) ?? throw new InvalidOperationException("p3 not found.");
+        var p4 = await db.Players.FindAsync(p4Id) ?? throw new InvalidOperationException("p4 not found.");
+
+        var match = new MatchEntity(groupId, DateTime.UtcNow.AddDays(-1), "Arena");
+        match.AddPlayer(new MatchPlayerEntity(p1Id), p1);
+        match.AddPlayer(new MatchPlayerEntity(p2Id), p2);
+        match.AddPlayer(new MatchPlayerEntity(p3Id), p3);
+        match.AddPlayer(new MatchPlayerEntity(p4Id), p4);
+
+        db.Matches.Add(match);
+        await db.SaveChangesAsync();
+
+        match.OpenAcceptation();
+        foreach (var pid in new[] { p1Id, p2Id, p3Id, p4Id })
+            match.AcceptInvite(pid);
+        await db.SaveChangesAsync();
+
+        match.GoToMatchMaking();
+        match.AssignTeams(new[] { p1Id, p2Id }, new[] { p3Id, p4Id });
+        await db.SaveChangesAsync();
+
+        match.Start();
+        match.End();
+        match.GoToPostGame();
+        match.SetScore(teamAWins ? 1 : 0, teamAWins ? 0 : 1);
+        match.FinalizeByVotes();
+        await db.SaveChangesAsync();
+    }
+
+    // -----------------------------------------------------------------
+    // Testes — EnrichPlayersAsync / W_base
+    // -----------------------------------------------------------------
+
+    [Fact]
+    public async Task EnrichPlayersAsync_ShouldPopulateGoalsAndAssists()
+    {
+        await using var db = DbContextFactory.Create(nameof(EnrichPlayersAsync_ShouldPopulateGoalsAndAssists));
+
+        var group = await SeedGroupAsync(db);
+        var p1 = await SeedPlayerAsync(db, group.Id); // artilheiro, Time A
+        var p2 = await SeedPlayerAsync(db, group.Id); // assistência, Time A
+        var p3 = await SeedPlayerAsync(db, group.Id); // Time B
+
+        var (match, playerMap) = await SeedMatchUpToPostGameAsync(db, group.Id,
+            new[] { p1.Id, p2.Id }, new[] { p3.Id });
+
+        // p1 marca, p2 assiste
+        match.AddGoalByMatchPlayer(playerMap[p1.Id].Id, playerMap[p2.Id].Id, null);
+        match.FinalizeByVotes();
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var sut  = CreateSut(db);
+        var dtos = new List<PlayerRequestDto>
+        {
+            new(p1.Id, p1.Name, p1.IsGoalkeeper),
+            new(p2.Id, p2.Name, p2.IsGoalkeeper),
+            new(p3.Id, p3.Name, p3.IsGoalkeeper),
+        };
+
+        var result = await sut.EnrichPlayersAsync(dtos);
+
+        result.Single(r => r.PlayerId == p1.Id).Goals.Should().Be(1,   "p1 marcou o gol");
+        result.Single(r => r.PlayerId == p1.Id).Assists.Should().Be(0);
+        result.Single(r => r.PlayerId == p2.Id).Goals.Should().Be(0);
+        result.Single(r => r.PlayerId == p2.Id).Assists.Should().Be(1, "p2 deu a assistência");
+        result.Single(r => r.PlayerId == p3.Id).Goals.Should().Be(0);
+        result.Single(r => r.PlayerId == p3.Id).Assists.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task EnrichPlayersAsync_WBase_ShouldRankWinnerAboveLoser()
+    {
+        await using var db = DbContextFactory.Create(nameof(EnrichPlayersAsync_WBase_ShouldRankWinnerAboveLoser));
+
+        var group  = await SeedGroupAsync(db);
+        var winner = await SeedPlayerAsync(db, group.Id);
+        var loser  = await SeedPlayerAsync(db, group.Id);
+
+        // 3 partidas: winner (Time A) vence todas
+        for (int i = 0; i < 3; i++)
+        {
+            db.ChangeTracker.Clear();
+            await SeedFinalizedMatchAsync(db, group.Id, winner.Id, loser.Id);
+        }
+        db.ChangeTracker.Clear();
+
+        var sut  = CreateSut(db);
+        var dtos = new List<PlayerRequestDto>
+        {
+            new(winner.Id, winner.Name, winner.IsGoalkeeper),
+            new(loser.Id,  loser.Name,  loser.IsGoalkeeper),
+        };
+
+        var result = await sut.EnrichPlayersAsync(dtos);
+
+        var winnerStats = result.Single(r => r.PlayerId == winner.Id);
+        var loserStats  = result.Single(r => r.PlayerId == loser.Id);
+
+        // Bayesian WR: winner ≈ (3+1.5)/(3+3) = 0.75,  W_base ≥ 0.5+
+        winnerStats.WinRate.Should().BeGreaterThan(0.5,
+            "vencedor com 3/3 vitórias deve ter W_base > 0.5");
+        // Bayesian WR: loser ≈ (0+1.5)/(3+3) = 0.25, W_base < 0.5
+        loserStats.WinRate.Should().BeLessThan(0.5,
+            "perdedor com 0/3 vitórias deve ter W_base < 0.5");
+        winnerStats.WinRate.Should().BeGreaterThan(loserStats.WinRate,
+            "vencedor deve ter W_base maior que o perdedor");
+    }
+
+    // -----------------------------------------------------------------
+    // Testes — EnrichPlayersAsync / Synergy_eff
+    // -----------------------------------------------------------------
+
+    [Fact]
+    public async Task EnrichPlayersAsync_SynergyEff_ShouldBeZeroWhenPlayersNeverOnSameTeam()
+    {
+        await using var db = DbContextFactory.Create(nameof(EnrichPlayersAsync_SynergyEff_ShouldBeZeroWhenPlayersNeverOnSameTeam));
+
+        var group = await SeedGroupAsync(db);
+        var p1 = await SeedPlayerAsync(db, group.Id);
+        var p2 = await SeedPlayerAsync(db, group.Id);
+
+        // 3 partidas com p1 e p2 sempre em times *opostos*
+        for (int i = 0; i < 3; i++)
+        {
+            db.ChangeTracker.Clear();
+            await SeedFinalizedMatchAsync(db, group.Id, p1.Id, p2.Id);
+        }
+        db.ChangeTracker.Clear();
+
+        var sut  = CreateSut(db);
+        var dtos = new List<PlayerRequestDto>
+        {
+            new(p1.Id, p1.Name, p1.IsGoalkeeper),
+            new(p2.Id, p2.Name, p2.IsGoalkeeper),
+        };
+
+        var result = await sut.EnrichPlayersAsync(dtos);
+
+        var p1Stats = result.Single(r => r.PlayerId == p1.Id);
+        p1Stats.SynergyWith.Should().ContainKey(p2.Id);
+        p1Stats.SynergyWith[p2.Id].Should().BeApproximately(0.0, 1e-9,
+            "p1 e p2 nunca jogaram no mesmo time → Synergy_eff = 0");
+    }
+
+    [Fact]
+    public async Task EnrichPlayersAsync_SynergyEff_ShouldBePositiveWhenPairConsistentlyWinsTogether()
+    {
+        await using var db = DbContextFactory.Create(nameof(EnrichPlayersAsync_SynergyEff_ShouldBePositiveWhenPairConsistentlyWinsTogether));
+
+        var group = await SeedGroupAsync(db);
+        var p1 = await SeedPlayerAsync(db, group.Id);
+        var p2 = await SeedPlayerAsync(db, group.Id);
+        var p3 = await SeedPlayerAsync(db, group.Id);
+        var p4 = await SeedPlayerAsync(db, group.Id);
+
+        // 5 partidas: p1+p2 (Time A) vencem todas
+        // WR_adj individual ≈ (5+1.5)/(5+3) = 0.8125
+        // WR_together_adj = (5+1)/(5+2) ≈ 0.857 > baseline 0.8125 → Synergy_eff > 0
+        for (int i = 0; i < 5; i++)
+        {
+            db.ChangeTracker.Clear();
+            await SeedFinalizedMatchSameTeamAsync(db, group.Id,
+                p1.Id, p2.Id, p3.Id, p4.Id, teamAWins: true);
+        }
+        db.ChangeTracker.Clear();
+
+        var sut  = CreateSut(db);
+        var dtos = new List<PlayerRequestDto>
+        {
+            new(p1.Id, p1.Name, p1.IsGoalkeeper),
+            new(p2.Id, p2.Name, p2.IsGoalkeeper),
+            new(p3.Id, p3.Name, p3.IsGoalkeeper),
+            new(p4.Id, p4.Name, p4.IsGoalkeeper),
+        };
+
+        var result = await sut.EnrichPlayersAsync(dtos);
+
+        var p1Stats = result.Single(r => r.PlayerId == p1.Id);
+        p1Stats.SynergyWith.Should().ContainKey(p2.Id);
+        p1Stats.SynergyWith[p2.Id].Should().BeGreaterThan(0.0,
+            "p1 e p2 sempre vencem juntos → WR_together_adj > baseline → Synergy_eff > 0");
+    }
+
+    [Fact]
+    public async Task EnrichPlayersAsync_SynergyEff_ShouldBeNegativeWhenPairConsistentlyLosesTogether()
+    {
+        await using var db = DbContextFactory.Create(nameof(EnrichPlayersAsync_SynergyEff_ShouldBeNegativeWhenPairConsistentlyLosesTogether));
+
+        var group = await SeedGroupAsync(db);
+        var p1 = await SeedPlayerAsync(db, group.Id);
+        var p2 = await SeedPlayerAsync(db, group.Id);
+        var p3 = await SeedPlayerAsync(db, group.Id);
+        var p4 = await SeedPlayerAsync(db, group.Id);
+
+        // 5 partidas: p1+p2 (Time A) perdem todas
+        // WR_adj individual ≈ (0+1.5)/(5+3) = 0.1875
+        // WR_together_adj = (0+1)/(5+2) ≈ 0.143 < baseline 0.1875 → Synergy_eff < 0
+        for (int i = 0; i < 5; i++)
+        {
+            db.ChangeTracker.Clear();
+            await SeedFinalizedMatchSameTeamAsync(db, group.Id,
+                p1.Id, p2.Id, p3.Id, p4.Id, teamAWins: false);
+        }
+        db.ChangeTracker.Clear();
+
+        var sut  = CreateSut(db);
+        var dtos = new List<PlayerRequestDto>
+        {
+            new(p1.Id, p1.Name, p1.IsGoalkeeper),
+            new(p2.Id, p2.Name, p2.IsGoalkeeper),
+            new(p3.Id, p3.Name, p3.IsGoalkeeper),
+            new(p4.Id, p4.Name, p4.IsGoalkeeper),
+        };
+
+        var result = await sut.EnrichPlayersAsync(dtos);
+
+        var p1Stats = result.Single(r => r.PlayerId == p1.Id);
+        p1Stats.SynergyWith.Should().ContainKey(p2.Id);
+        p1Stats.SynergyWith[p2.Id].Should().BeLessThan(0.0,
+            "p1 e p2 sempre perdem juntos → WR_together_adj < baseline → Synergy_eff < 0");
+    }
+
+    // -----------------------------------------------------------------
+    // Seeds (tie helpers)
+    // -----------------------------------------------------------------
+
+    /// <summary>Seeds a finalized 1-v-1 match ending in a tie (1-1).</summary>
+    private static async Task SeedFinalizedMatchTieAsync(
+        BratnavaFC.Infrastructure.Data.AppDbContext db,
+        Guid groupId,
+        Guid p1Id,
+        Guid p2Id)
+    {
+        var p1 = await db.Players.FindAsync(p1Id) ?? throw new InvalidOperationException("p1 não encontrado.");
+        var p2 = await db.Players.FindAsync(p2Id) ?? throw new InvalidOperationException("p2 não encontrado.");
+
+        var match = new MatchEntity(groupId, DateTime.UtcNow.AddDays(-1), "Arena");
+        match.AddPlayer(new MatchPlayerEntity(p1.Id), p1);
+        match.AddPlayer(new MatchPlayerEntity(p2.Id), p2);
+        db.Matches.Add(match);
+        await db.SaveChangesAsync();
+
+        match.OpenAcceptation();
+        match.AcceptInvite(p1.Id);
+        match.AcceptInvite(p2.Id);
+        await db.SaveChangesAsync();
+
+        match.GoToMatchMaking();
+        match.AssignTeams(new[] { p1.Id }, new[] { p2.Id });
+        await db.SaveChangesAsync();
+
+        match.Start();
+        match.End();
+        match.GoToPostGame();
+        match.SetScore(1, 1);   // tie
+        match.FinalizeByVotes();
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Seeds a 4-player finalized match ending in a tie (1-1).
+    /// p1 + p2 on Team A;  p3 + p4 on Team B.
+    /// </summary>
+    private static async Task SeedFinalizedMatchSameTeamTieAsync(
+        BratnavaFC.Infrastructure.Data.AppDbContext db,
+        Guid groupId,
+        Guid p1Id, Guid p2Id,   // Team A
+        Guid p3Id, Guid p4Id)   // Team B
+    {
+        var p1 = await db.Players.FindAsync(p1Id) ?? throw new InvalidOperationException("p1 not found.");
+        var p2 = await db.Players.FindAsync(p2Id) ?? throw new InvalidOperationException("p2 not found.");
+        var p3 = await db.Players.FindAsync(p3Id) ?? throw new InvalidOperationException("p3 not found.");
+        var p4 = await db.Players.FindAsync(p4Id) ?? throw new InvalidOperationException("p4 not found.");
+
+        var match = new MatchEntity(groupId, DateTime.UtcNow.AddDays(-1), "Arena");
+        match.AddPlayer(new MatchPlayerEntity(p1Id), p1);
+        match.AddPlayer(new MatchPlayerEntity(p2Id), p2);
+        match.AddPlayer(new MatchPlayerEntity(p3Id), p3);
+        match.AddPlayer(new MatchPlayerEntity(p4Id), p4);
+
+        db.Matches.Add(match);
+        await db.SaveChangesAsync();
+
+        match.OpenAcceptation();
+        foreach (var pid in new[] { p1Id, p2Id, p3Id, p4Id })
+            match.AcceptInvite(pid);
+        await db.SaveChangesAsync();
+
+        match.GoToMatchMaking();
+        match.AssignTeams(new[] { p1Id, p2Id }, new[] { p3Id, p4Id });
+        await db.SaveChangesAsync();
+
+        match.Start();
+        match.End();
+        match.GoToPostGame();
+        match.SetScore(1, 1);   // tie
+        match.FinalizeByVotes();
+        await db.SaveChangesAsync();
+    }
+
+    // -----------------------------------------------------------------
+    // Testes — LoadRecentFinalizedMatchesAsync (last-20 window)
+    // -----------------------------------------------------------------
+
+    [Fact]
+    public async Task EnrichPlayersAsync_ShouldUseOnlyLast20Matches()
+    {
+        await using var db = DbContextFactory.Create(nameof(EnrichPlayersAsync_ShouldUseOnlyLast20Matches));
+
+        var group  = await SeedGroupAsync(db);
+        var winner = await SeedPlayerAsync(db, group.Id);
+        var dummy  = await SeedPlayerAsync(db, group.Id);
+
+        // Seed 21 finalized matches where winner always wins.
+        // LoadRecentFinalizedMatchesAsync caps the window at 20 → Wins == 20, not 21.
+        for (int i = 0; i < 21; i++)
+        {
+            db.ChangeTracker.Clear();
+            await SeedFinalizedMatchAsync(db, group.Id, winner.Id, dummy.Id);
+        }
+        db.ChangeTracker.Clear();
+
+        var sut  = CreateSut(db);
+        var dtos = new List<PlayerRequestDto>
+        {
+            new(winner.Id, winner.Name, winner.IsGoalkeeper),
+            new(dummy.Id,  dummy.Name,  dummy.IsGoalkeeper),
+        };
+
+        var result = await sut.EnrichPlayersAsync(dtos);
+
+        result.Single(r => r.PlayerId == winner.Id).Wins.Should().Be(20,
+            "LoadRecentFinalizedMatchesAsync must cap the window at 20 matches, not 21");
+    }
+
+    // -----------------------------------------------------------------
+    // Testes — BayesianWinRate with ties
+    // -----------------------------------------------------------------
+
+    [Fact]
+    public async Task EnrichPlayersAsync_WBase_TiesShouldRankBetweenWinAndLoss()
+    {
+        await using var db = DbContextFactory.Create(nameof(EnrichPlayersAsync_WBase_TiesShouldRankBetweenWinAndLoss));
+
+        var group     = await SeedGroupAsync(db);
+        var allWins   = await SeedPlayerAsync(db, group.Id);
+        var allLosses = await SeedPlayerAsync(db, group.Id);
+        var allTies   = await SeedPlayerAsync(db, group.Id);
+        var dummy     = await SeedPlayerAsync(db, group.Id);
+
+        // allWins (Team A) beats allLosses (Team B) — 3 times
+        for (int i = 0; i < 3; i++)
+        {
+            db.ChangeTracker.Clear();
+            await SeedFinalizedMatchAsync(db, group.Id, allWins.Id, allLosses.Id);
+        }
+
+        // allTies vs dummy — 3 tie games
+        for (int i = 0; i < 3; i++)
+        {
+            db.ChangeTracker.Clear();
+            await SeedFinalizedMatchTieAsync(db, group.Id, allTies.Id, dummy.Id);
+        }
+        db.ChangeTracker.Clear();
+
+        var sut  = CreateSut(db);
+        var dtos = new List<PlayerRequestDto>
+        {
+            new(allWins.Id,   allWins.Name,   allWins.IsGoalkeeper),
+            new(allTies.Id,   allTies.Name,   allTies.IsGoalkeeper),
+            new(allLosses.Id, allLosses.Name, allLosses.IsGoalkeeper),
+        };
+
+        var result = await sut.EnrichPlayersAsync(dtos);
+
+        var winsStats   = result.Single(r => r.PlayerId == allWins.Id);
+        var tiesStats   = result.Single(r => r.PlayerId == allTies.Id);
+        var lossesStats = result.Single(r => r.PlayerId == allLosses.Id);
+
+        // BayesianWR for all-ties: effectiveWins = 0 + 0.5×3 = 1.5, total = 3
+        // → (1.5 + 1.5) / (3 + 3) = 3.0 / 6.0 = 0.5  → W_base ≈ 0.5
+        tiesStats.WinRate.Should().BeApproximately(0.5, 0.02,
+            "3 ties → BayesianWR = 0.5 → W_base ≈ 0.5");
+        winsStats.WinRate.Should().BeGreaterThan(tiesStats.WinRate,
+            "all-wins must rank above all-ties");
+        tiesStats.WinRate.Should().BeGreaterThan(lossesStats.WinRate,
+            "all-ties must rank above all-losses");
+    }
+
+    // -----------------------------------------------------------------
+    // Testes — Synergy_eff with ties
+    // -----------------------------------------------------------------
+
+    [Fact]
+    public async Task EnrichPlayersAsync_SynergyEff_AllTiesTogetherShouldBeNeutral()
+    {
+        await using var db = DbContextFactory.Create(nameof(EnrichPlayersAsync_SynergyEff_AllTiesTogetherShouldBeNeutral));
+
+        var group = await SeedGroupAsync(db);
+        var p1 = await SeedPlayerAsync(db, group.Id);
+        var p2 = await SeedPlayerAsync(db, group.Id);
+        var p3 = await SeedPlayerAsync(db, group.Id);
+        var p4 = await SeedPlayerAsync(db, group.Id);
+
+        // 5 tie games: p1+p2 (Team A) vs p3+p4 (Team B), all 1-1
+        // TiesTogether(p1,p2) = 5, WinsTogether = 0
+        // effectiveWinsTogether = 0 + 0.5×5 = 2.5
+        // wrTogetherAdj = (2.5 + 1.0) / (5 + 2.0) = 3.5 / 7 = 0.5
+        // BayesianWR each: (0 + 2.5 + 1.5) / (5 + 3) = 4.0 / 8 = 0.5 → baseline = 0.5
+        // Synergy_eff = confidence × (0.5 − 0.5) = 0.0
+        for (int i = 0; i < 5; i++)
+        {
+            db.ChangeTracker.Clear();
+            await SeedFinalizedMatchSameTeamTieAsync(db, group.Id, p1.Id, p2.Id, p3.Id, p4.Id);
+        }
+        db.ChangeTracker.Clear();
+
+        var sut  = CreateSut(db);
+        var dtos = new List<PlayerRequestDto>
+        {
+            new(p1.Id, p1.Name, p1.IsGoalkeeper),
+            new(p2.Id, p2.Name, p2.IsGoalkeeper),
+            new(p3.Id, p3.Name, p3.IsGoalkeeper),
+            new(p4.Id, p4.Name, p4.IsGoalkeeper),
+        };
+
+        var result = await sut.EnrichPlayersAsync(dtos);
+
+        var p1Stats = result.Single(r => r.PlayerId == p1.Id);
+        p1Stats.SynergyWith.Should().ContainKey(p2.Id);
+        p1Stats.SynergyWith[p2.Id].Should().BeApproximately(0.0, 0.005,
+            "all-tie games: effectiveWinsTogether = 2.5, wrTogetherAdj = 0.5 = baseline → Synergy_eff = 0");
+    }
 }

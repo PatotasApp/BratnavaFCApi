@@ -33,7 +33,7 @@ public sealed class ManualStrategy : ITeamGenerationStrategy
         List<PlayerWeightDto> unassigned = players
             .Select(p => new PlayerWeightDto(
                 p.Id,
-                statsById.TryGetValue(p.Id, out PlayerStats? s) ? EffectiveWinRate(s) : NeutralWinRate))
+                statsById.TryGetValue(p.Id, out PlayerStats? s) ? EffectiveWeight(s) : NeutralWinRate))
             .ToList();
 
         // Always returns exactly one option (even if optionsCount > 1)
@@ -41,7 +41,7 @@ public sealed class ManualStrategy : ITeamGenerationStrategy
         [
             new(TeamA: [], TeamB: [], Unassigned: unassigned,
                 TeamAWeight: 0, TeamBWeight: 0, BalanceDiff: 0,
-                GoalkeeperDiff: 0, SynergyTotal: 0, Score: 0)
+                SynergyTotal: 0, Score: 0)
         ]);
     }
 }

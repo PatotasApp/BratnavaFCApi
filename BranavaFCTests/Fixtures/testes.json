@@ -1,0 +1,3305 @@
+{
+  "groupId": "3f401edf-d309-4bae-97d8-28eae0da7a8a",
+  "totalMatchesConsidered": 10,
+  "totalFinalizedMatches": 10,
+  "totalMatchesWithScore": 10,
+  "players": [
+    {
+      "playerId": "2cd0ae14-f505-4453-9d27-7432ba525b5d",
+      "name": "Bernardo",
+      "status": 1,
+      "isGoalkeeper": false,
+      "gamesPlayed": 1,
+      "wins": 1,
+      "ties": 0,
+      "losses": 0,
+      "winRate": 1,
+      "mvps": 0,
+      "goals": 0,
+      "assists": 0,
+      "ownGoals": 0,
+      "synergies": [
+        {
+          "withPlayerId": "b69f3218-00b8-49f8-8f64-bc960536897d",
+          "withPlayerName": "Patrick",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "024a5d93-0a84-431a-94d2-d0e978a05e41",
+          "withPlayerName": "Caio",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "2f99b652-3b59-4b69-b775-b7a6a10dfa55",
+          "withPlayerName": "Matheus",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "99c47049-7eaf-40f5-9dfe-7e788837282f",
+          "withPlayerName": "Pagel",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "9d768469-04a8-4144-8d1d-417efef840a0",
+          "withPlayerName": "Piccoli",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "cf6615d7-68aa-493e-aed0-d6695518eb93",
+          "withPlayerName": "Luis",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "d46719ca-1744-46ab-82ee-96ba7326a4ea",
+          "withPlayerName": "Artur",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "d97ef5cb-2ffb-443b-97f6-a56d8947bef1",
+          "withPlayerName": "Luska",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ab127e51-8697-4585-87a5-0a013ecf2a70",
+          "withPlayerName": "Marcos",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "54b98c3c-d265-4872-994d-224e1811d544",
+          "withPlayerName": "Romulo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "33410964-3193-4d44-b187-15234fae41c8",
+          "withPlayerName": "Todesco",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "729cbff3-3d8b-41fe-a3e2-5d88ddb0d5f4",
+          "withPlayerName": "Zaguini",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "51958888-4ccf-4896-86ea-d445c5f92f43",
+          "withPlayerName": "Pedro Roweder",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "63324c6b-9db1-47d7-9346-fe9d90a65957",
+          "withPlayerName": "Jonathan Muller",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "99a50778-f120-4a79-99b2-0904f8db0be5",
+          "withPlayerName": "Little Piccoli",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ece250cd-091a-494f-baad-cbd0813bb7e0",
+          "withPlayerName": "Sam",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9b2bbc09-de0d-4d86-b3a6-a85648616b28",
+          "withPlayerName": "Mozart",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "3b46b852-ee67-4481-8ba4-9625dd41c6e0",
+          "withPlayerName": "Veber",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9eb9dff5-e061-487c-8a4b-03fb74bb3a4a",
+          "withPlayerName": "Andrei",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "a99a9f5d-96ab-4206-bee9-4031a8174205",
+          "withPlayerName": "Marlon",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        }
+      ]
+    },
+    {
+      "playerId": "ece250cd-091a-494f-baad-cbd0813bb7e0",
+      "name": "Sam",
+      "status": 1,
+      "isGoalkeeper": false,
+      "gamesPlayed": 1,
+      "wins": 1,
+      "ties": 0,
+      "losses": 0,
+      "winRate": 1,
+      "mvps": 0,
+      "goals": 0,
+      "assists": 0,
+      "ownGoals": 0,
+      "synergies": [
+        {
+          "withPlayerId": "d97ef5cb-2ffb-443b-97f6-a56d8947bef1",
+          "withPlayerName": "Luska",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "024a5d93-0a84-431a-94d2-d0e978a05e41",
+          "withPlayerName": "Caio",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "51958888-4ccf-4896-86ea-d445c5f92f43",
+          "withPlayerName": "Pedro Roweder",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "99a50778-f120-4a79-99b2-0904f8db0be5",
+          "withPlayerName": "Little Piccoli",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "99c47049-7eaf-40f5-9dfe-7e788837282f",
+          "withPlayerName": "Pagel",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "b69f3218-00b8-49f8-8f64-bc960536897d",
+          "withPlayerName": "Patrick",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "cf6615d7-68aa-493e-aed0-d6695518eb93",
+          "withPlayerName": "Luis",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "d46719ca-1744-46ab-82ee-96ba7326a4ea",
+          "withPlayerName": "Artur",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ab127e51-8697-4585-87a5-0a013ecf2a70",
+          "withPlayerName": "Marcos",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "54b98c3c-d265-4872-994d-224e1811d544",
+          "withPlayerName": "Romulo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "33410964-3193-4d44-b187-15234fae41c8",
+          "withPlayerName": "Todesco",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "729cbff3-3d8b-41fe-a3e2-5d88ddb0d5f4",
+          "withPlayerName": "Zaguini",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2f99b652-3b59-4b69-b775-b7a6a10dfa55",
+          "withPlayerName": "Matheus",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "63324c6b-9db1-47d7-9346-fe9d90a65957",
+          "withPlayerName": "Jonathan Muller",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2cd0ae14-f505-4453-9d27-7432ba525b5d",
+          "withPlayerName": "Bernardo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9b2bbc09-de0d-4d86-b3a6-a85648616b28",
+          "withPlayerName": "Mozart",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9d768469-04a8-4144-8d1d-417efef840a0",
+          "withPlayerName": "Piccoli",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "3b46b852-ee67-4481-8ba4-9625dd41c6e0",
+          "withPlayerName": "Veber",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9eb9dff5-e061-487c-8a4b-03fb74bb3a4a",
+          "withPlayerName": "Andrei",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "a99a9f5d-96ab-4206-bee9-4031a8174205",
+          "withPlayerName": "Marlon",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        }
+      ]
+    },
+    {
+      "playerId": "024a5d93-0a84-431a-94d2-d0e978a05e41",
+      "name": "Caio",
+      "status": 1,
+      "isGoalkeeper": false,
+      "gamesPlayed": 8,
+      "wins": 7,
+      "ties": 0,
+      "losses": 1,
+      "winRate": 0.875,
+      "mvps": 1,
+      "goals": 6,
+      "assists": 6,
+      "ownGoals": 0,
+      "synergies": [
+        {
+          "withPlayerId": "99c47049-7eaf-40f5-9dfe-7e788837282f",
+          "withPlayerName": "Pagel",
+          "matchesTogether": 5,
+          "winsTogether": 5,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "b69f3218-00b8-49f8-8f64-bc960536897d",
+          "withPlayerName": "Patrick",
+          "matchesTogether": 4,
+          "winsTogether": 4,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "2f99b652-3b59-4b69-b775-b7a6a10dfa55",
+          "withPlayerName": "Matheus",
+          "matchesTogether": 4,
+          "winsTogether": 4,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "9eb9dff5-e061-487c-8a4b-03fb74bb3a4a",
+          "withPlayerName": "Andrei",
+          "matchesTogether": 4,
+          "winsTogether": 4,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "51958888-4ccf-4896-86ea-d445c5f92f43",
+          "withPlayerName": "Pedro Roweder",
+          "matchesTogether": 3,
+          "winsTogether": 3,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "9b2bbc09-de0d-4d86-b3a6-a85648616b28",
+          "withPlayerName": "Mozart",
+          "matchesTogether": 3,
+          "winsTogether": 3,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "cf6615d7-68aa-493e-aed0-d6695518eb93",
+          "withPlayerName": "Luis",
+          "matchesTogether": 3,
+          "winsTogether": 2,
+          "winRateTogether": 0.6666666666666666
+        },
+        {
+          "withPlayerId": "d97ef5cb-2ffb-443b-97f6-a56d8947bef1",
+          "withPlayerName": "Luska",
+          "matchesTogether": 3,
+          "winsTogether": 2,
+          "winRateTogether": 0.6666666666666666
+        },
+        {
+          "withPlayerId": "99a50778-f120-4a79-99b2-0904f8db0be5",
+          "withPlayerName": "Little Piccoli",
+          "matchesTogether": 3,
+          "winsTogether": 2,
+          "winRateTogether": 0.6666666666666666
+        },
+        {
+          "withPlayerId": "9d768469-04a8-4144-8d1d-417efef840a0",
+          "withPlayerName": "Piccoli",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "d46719ca-1744-46ab-82ee-96ba7326a4ea",
+          "withPlayerName": "Artur",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "729cbff3-3d8b-41fe-a3e2-5d88ddb0d5f4",
+          "withPlayerName": "Zaguini",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "ece250cd-091a-494f-baad-cbd0813bb7e0",
+          "withPlayerName": "Sam",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "2cd0ae14-f505-4453-9d27-7432ba525b5d",
+          "withPlayerName": "Bernardo",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "a99a9f5d-96ab-4206-bee9-4031a8174205",
+          "withPlayerName": "Marlon",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "63324c6b-9db1-47d7-9346-fe9d90a65957",
+          "withPlayerName": "Jonathan Muller",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ab127e51-8697-4585-87a5-0a013ecf2a70",
+          "withPlayerName": "Marcos",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "54b98c3c-d265-4872-994d-224e1811d544",
+          "withPlayerName": "Romulo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "33410964-3193-4d44-b187-15234fae41c8",
+          "withPlayerName": "Todesco",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "3b46b852-ee67-4481-8ba4-9625dd41c6e0",
+          "withPlayerName": "Veber",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        }
+      ]
+    },
+    {
+      "playerId": "9b2bbc09-de0d-4d86-b3a6-a85648616b28",
+      "name": "Mozart",
+      "status": 1,
+      "isGoalkeeper": false,
+      "gamesPlayed": 8,
+      "wins": 6,
+      "ties": 0,
+      "losses": 2,
+      "winRate": 0.75,
+      "mvps": 0,
+      "goals": 7,
+      "assists": 4,
+      "ownGoals": 1,
+      "synergies": [
+        {
+          "withPlayerId": "2f99b652-3b59-4b69-b775-b7a6a10dfa55",
+          "withPlayerName": "Matheus",
+          "matchesTogether": 5,
+          "winsTogether": 4,
+          "winRateTogether": 0.8
+        },
+        {
+          "withPlayerId": "d46719ca-1744-46ab-82ee-96ba7326a4ea",
+          "withPlayerName": "Artur",
+          "matchesTogether": 5,
+          "winsTogether": 3,
+          "winRateTogether": 0.6
+        },
+        {
+          "withPlayerId": "99c47049-7eaf-40f5-9dfe-7e788837282f",
+          "withPlayerName": "Pagel",
+          "matchesTogether": 4,
+          "winsTogether": 4,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "cf6615d7-68aa-493e-aed0-d6695518eb93",
+          "withPlayerName": "Luis",
+          "matchesTogether": 4,
+          "winsTogether": 2,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "b69f3218-00b8-49f8-8f64-bc960536897d",
+          "withPlayerName": "Patrick",
+          "matchesTogether": 3,
+          "winsTogether": 3,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "024a5d93-0a84-431a-94d2-d0e978a05e41",
+          "withPlayerName": "Caio",
+          "matchesTogether": 3,
+          "winsTogether": 3,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "9eb9dff5-e061-487c-8a4b-03fb74bb3a4a",
+          "withPlayerName": "Andrei",
+          "matchesTogether": 3,
+          "winsTogether": 2,
+          "winRateTogether": 0.6666666666666666
+        },
+        {
+          "withPlayerId": "d97ef5cb-2ffb-443b-97f6-a56d8947bef1",
+          "withPlayerName": "Luska",
+          "matchesTogether": 3,
+          "winsTogether": 1,
+          "winRateTogether": 0.3333333333333333
+        },
+        {
+          "withPlayerId": "99a50778-f120-4a79-99b2-0904f8db0be5",
+          "withPlayerName": "Little Piccoli",
+          "matchesTogether": 3,
+          "winsTogether": 1,
+          "winRateTogether": 0.3333333333333333
+        },
+        {
+          "withPlayerId": "51958888-4ccf-4896-86ea-d445c5f92f43",
+          "withPlayerName": "Pedro Roweder",
+          "matchesTogether": 2,
+          "winsTogether": 2,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "a99a9f5d-96ab-4206-bee9-4031a8174205",
+          "withPlayerName": "Marlon",
+          "matchesTogether": 2,
+          "winsTogether": 2,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "63324c6b-9db1-47d7-9346-fe9d90a65957",
+          "withPlayerName": "Jonathan Muller",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "9d768469-04a8-4144-8d1d-417efef840a0",
+          "withPlayerName": "Piccoli",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "ab127e51-8697-4585-87a5-0a013ecf2a70",
+          "withPlayerName": "Marcos",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "54b98c3c-d265-4872-994d-224e1811d544",
+          "withPlayerName": "Romulo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "33410964-3193-4d44-b187-15234fae41c8",
+          "withPlayerName": "Todesco",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "729cbff3-3d8b-41fe-a3e2-5d88ddb0d5f4",
+          "withPlayerName": "Zaguini",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ece250cd-091a-494f-baad-cbd0813bb7e0",
+          "withPlayerName": "Sam",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2cd0ae14-f505-4453-9d27-7432ba525b5d",
+          "withPlayerName": "Bernardo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "3b46b852-ee67-4481-8ba4-9625dd41c6e0",
+          "withPlayerName": "Veber",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        }
+      ]
+    },
+    {
+      "playerId": "99c47049-7eaf-40f5-9dfe-7e788837282f",
+      "name": "Pagel",
+      "status": 1,
+      "isGoalkeeper": true,
+      "gamesPlayed": 10,
+      "wins": 7,
+      "ties": 0,
+      "losses": 3,
+      "winRate": 0.7,
+      "mvps": 2,
+      "goals": 2,
+      "assists": 4,
+      "ownGoals": 0,
+      "synergies": [
+        {
+          "withPlayerId": "b69f3218-00b8-49f8-8f64-bc960536897d",
+          "withPlayerName": "Patrick",
+          "matchesTogether": 6,
+          "winsTogether": 4,
+          "winRateTogether": 0.6666666666666666
+        },
+        {
+          "withPlayerId": "024a5d93-0a84-431a-94d2-d0e978a05e41",
+          "withPlayerName": "Caio",
+          "matchesTogether": 5,
+          "winsTogether": 5,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "2f99b652-3b59-4b69-b775-b7a6a10dfa55",
+          "withPlayerName": "Matheus",
+          "matchesTogether": 5,
+          "winsTogether": 4,
+          "winRateTogether": 0.8
+        },
+        {
+          "withPlayerId": "9b2bbc09-de0d-4d86-b3a6-a85648616b28",
+          "withPlayerName": "Mozart",
+          "matchesTogether": 4,
+          "winsTogether": 4,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "51958888-4ccf-4896-86ea-d445c5f92f43",
+          "withPlayerName": "Pedro Roweder",
+          "matchesTogether": 4,
+          "winsTogether": 3,
+          "winRateTogether": 0.75
+        },
+        {
+          "withPlayerId": "9eb9dff5-e061-487c-8a4b-03fb74bb3a4a",
+          "withPlayerName": "Andrei",
+          "matchesTogether": 4,
+          "winsTogether": 3,
+          "winRateTogether": 0.75
+        },
+        {
+          "withPlayerId": "d46719ca-1744-46ab-82ee-96ba7326a4ea",
+          "withPlayerName": "Artur",
+          "matchesTogether": 4,
+          "winsTogether": 2,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "d97ef5cb-2ffb-443b-97f6-a56d8947bef1",
+          "withPlayerName": "Luska",
+          "matchesTogether": 4,
+          "winsTogether": 2,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "99a50778-f120-4a79-99b2-0904f8db0be5",
+          "withPlayerName": "Little Piccoli",
+          "matchesTogether": 2,
+          "winsTogether": 2,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "9d768469-04a8-4144-8d1d-417efef840a0",
+          "withPlayerName": "Piccoli",
+          "matchesTogether": 2,
+          "winsTogether": 2,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "729cbff3-3d8b-41fe-a3e2-5d88ddb0d5f4",
+          "withPlayerName": "Zaguini",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "63324c6b-9db1-47d7-9346-fe9d90a65957",
+          "withPlayerName": "Jonathan Muller",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "ece250cd-091a-494f-baad-cbd0813bb7e0",
+          "withPlayerName": "Sam",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "2cd0ae14-f505-4453-9d27-7432ba525b5d",
+          "withPlayerName": "Bernardo",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "ab127e51-8697-4585-87a5-0a013ecf2a70",
+          "withPlayerName": "Marcos",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "54b98c3c-d265-4872-994d-224e1811d544",
+          "withPlayerName": "Romulo",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "33410964-3193-4d44-b187-15234fae41c8",
+          "withPlayerName": "Todesco",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "3b46b852-ee67-4481-8ba4-9625dd41c6e0",
+          "withPlayerName": "Veber",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "cf6615d7-68aa-493e-aed0-d6695518eb93",
+          "withPlayerName": "Luis",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "a99a9f5d-96ab-4206-bee9-4031a8174205",
+          "withPlayerName": "Marlon",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        }
+      ]
+    },
+    {
+      "playerId": "a99a9f5d-96ab-4206-bee9-4031a8174205",
+      "name": "Marlon",
+      "status": 1,
+      "isGoalkeeper": false,
+      "gamesPlayed": 3,
+      "wins": 2,
+      "ties": 0,
+      "losses": 1,
+      "winRate": 0.6666666666666666,
+      "mvps": 0,
+      "goals": 7,
+      "assists": 6,
+      "ownGoals": 0,
+      "synergies": [
+        {
+          "withPlayerId": "cf6615d7-68aa-493e-aed0-d6695518eb93",
+          "withPlayerName": "Luis",
+          "matchesTogether": 3,
+          "winsTogether": 2,
+          "winRateTogether": 0.6666666666666666
+        },
+        {
+          "withPlayerId": "9b2bbc09-de0d-4d86-b3a6-a85648616b28",
+          "withPlayerName": "Mozart",
+          "matchesTogether": 2,
+          "winsTogether": 2,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "b69f3218-00b8-49f8-8f64-bc960536897d",
+          "withPlayerName": "Patrick",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "d46719ca-1744-46ab-82ee-96ba7326a4ea",
+          "withPlayerName": "Artur",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "51958888-4ccf-4896-86ea-d445c5f92f43",
+          "withPlayerName": "Pedro Roweder",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "024a5d93-0a84-431a-94d2-d0e978a05e41",
+          "withPlayerName": "Caio",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "2f99b652-3b59-4b69-b775-b7a6a10dfa55",
+          "withPlayerName": "Matheus",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "99a50778-f120-4a79-99b2-0904f8db0be5",
+          "withPlayerName": "Little Piccoli",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "d97ef5cb-2ffb-443b-97f6-a56d8947bef1",
+          "withPlayerName": "Luska",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ab127e51-8697-4585-87a5-0a013ecf2a70",
+          "withPlayerName": "Marcos",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "54b98c3c-d265-4872-994d-224e1811d544",
+          "withPlayerName": "Romulo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "33410964-3193-4d44-b187-15234fae41c8",
+          "withPlayerName": "Todesco",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "729cbff3-3d8b-41fe-a3e2-5d88ddb0d5f4",
+          "withPlayerName": "Zaguini",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "63324c6b-9db1-47d7-9346-fe9d90a65957",
+          "withPlayerName": "Jonathan Muller",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ece250cd-091a-494f-baad-cbd0813bb7e0",
+          "withPlayerName": "Sam",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "99c47049-7eaf-40f5-9dfe-7e788837282f",
+          "withPlayerName": "Pagel",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2cd0ae14-f505-4453-9d27-7432ba525b5d",
+          "withPlayerName": "Bernardo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9d768469-04a8-4144-8d1d-417efef840a0",
+          "withPlayerName": "Piccoli",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "3b46b852-ee67-4481-8ba4-9625dd41c6e0",
+          "withPlayerName": "Veber",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9eb9dff5-e061-487c-8a4b-03fb74bb3a4a",
+          "withPlayerName": "Andrei",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        }
+      ]
+    },
+    {
+      "playerId": "2f99b652-3b59-4b69-b775-b7a6a10dfa55",
+      "name": "Matheus",
+      "status": 1,
+      "isGoalkeeper": false,
+      "gamesPlayed": 10,
+      "wins": 6,
+      "ties": 0,
+      "losses": 4,
+      "winRate": 0.6,
+      "mvps": 2,
+      "goals": 8,
+      "assists": 13,
+      "ownGoals": 0,
+      "synergies": [
+        {
+          "withPlayerId": "b69f3218-00b8-49f8-8f64-bc960536897d",
+          "withPlayerName": "Patrick",
+          "matchesTogether": 7,
+          "winsTogether": 4,
+          "winRateTogether": 0.5714285714285714
+        },
+        {
+          "withPlayerId": "99c47049-7eaf-40f5-9dfe-7e788837282f",
+          "withPlayerName": "Pagel",
+          "matchesTogether": 5,
+          "winsTogether": 4,
+          "winRateTogether": 0.8
+        },
+        {
+          "withPlayerId": "9b2bbc09-de0d-4d86-b3a6-a85648616b28",
+          "withPlayerName": "Mozart",
+          "matchesTogether": 5,
+          "winsTogether": 4,
+          "winRateTogether": 0.8
+        },
+        {
+          "withPlayerId": "cf6615d7-68aa-493e-aed0-d6695518eb93",
+          "withPlayerName": "Luis",
+          "matchesTogether": 5,
+          "winsTogether": 2,
+          "winRateTogether": 0.4
+        },
+        {
+          "withPlayerId": "d97ef5cb-2ffb-443b-97f6-a56d8947bef1",
+          "withPlayerName": "Luska",
+          "matchesTogether": 5,
+          "winsTogether": 2,
+          "winRateTogether": 0.4
+        },
+        {
+          "withPlayerId": "024a5d93-0a84-431a-94d2-d0e978a05e41",
+          "withPlayerName": "Caio",
+          "matchesTogether": 4,
+          "winsTogether": 4,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "51958888-4ccf-4896-86ea-d445c5f92f43",
+          "withPlayerName": "Pedro Roweder",
+          "matchesTogether": 3,
+          "winsTogether": 2,
+          "winRateTogether": 0.6666666666666666
+        },
+        {
+          "withPlayerId": "9eb9dff5-e061-487c-8a4b-03fb74bb3a4a",
+          "withPlayerName": "Andrei",
+          "matchesTogether": 3,
+          "winsTogether": 2,
+          "winRateTogether": 0.6666666666666666
+        },
+        {
+          "withPlayerId": "9d768469-04a8-4144-8d1d-417efef840a0",
+          "withPlayerName": "Piccoli",
+          "matchesTogether": 2,
+          "winsTogether": 2,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "d46719ca-1744-46ab-82ee-96ba7326a4ea",
+          "withPlayerName": "Artur",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "3b46b852-ee67-4481-8ba4-9625dd41c6e0",
+          "withPlayerName": "Veber",
+          "matchesTogether": 2,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "63324c6b-9db1-47d7-9346-fe9d90a65957",
+          "withPlayerName": "Jonathan Muller",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "2cd0ae14-f505-4453-9d27-7432ba525b5d",
+          "withPlayerName": "Bernardo",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "a99a9f5d-96ab-4206-bee9-4031a8174205",
+          "withPlayerName": "Marlon",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "729cbff3-3d8b-41fe-a3e2-5d88ddb0d5f4",
+          "withPlayerName": "Zaguini",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "99a50778-f120-4a79-99b2-0904f8db0be5",
+          "withPlayerName": "Little Piccoli",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ab127e51-8697-4585-87a5-0a013ecf2a70",
+          "withPlayerName": "Marcos",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "54b98c3c-d265-4872-994d-224e1811d544",
+          "withPlayerName": "Romulo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "33410964-3193-4d44-b187-15234fae41c8",
+          "withPlayerName": "Todesco",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ece250cd-091a-494f-baad-cbd0813bb7e0",
+          "withPlayerName": "Sam",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        }
+      ]
+    },
+    {
+      "playerId": "9eb9dff5-e061-487c-8a4b-03fb74bb3a4a",
+      "name": "Andrei",
+      "status": 1,
+      "isGoalkeeper": false,
+      "gamesPlayed": 7,
+      "wins": 4,
+      "ties": 0,
+      "losses": 3,
+      "winRate": 0.5714285714285714,
+      "mvps": 1,
+      "goals": 7,
+      "assists": 0,
+      "ownGoals": 0,
+      "synergies": [
+        {
+          "withPlayerId": "024a5d93-0a84-431a-94d2-d0e978a05e41",
+          "withPlayerName": "Caio",
+          "matchesTogether": 4,
+          "winsTogether": 4,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "99c47049-7eaf-40f5-9dfe-7e788837282f",
+          "withPlayerName": "Pagel",
+          "matchesTogether": 4,
+          "winsTogether": 3,
+          "winRateTogether": 0.75
+        },
+        {
+          "withPlayerId": "b69f3218-00b8-49f8-8f64-bc960536897d",
+          "withPlayerName": "Patrick",
+          "matchesTogether": 3,
+          "winsTogether": 2,
+          "winRateTogether": 0.6666666666666666
+        },
+        {
+          "withPlayerId": "2f99b652-3b59-4b69-b775-b7a6a10dfa55",
+          "withPlayerName": "Matheus",
+          "matchesTogether": 3,
+          "winsTogether": 2,
+          "winRateTogether": 0.6666666666666666
+        },
+        {
+          "withPlayerId": "51958888-4ccf-4896-86ea-d445c5f92f43",
+          "withPlayerName": "Pedro Roweder",
+          "matchesTogether": 3,
+          "winsTogether": 2,
+          "winRateTogether": 0.6666666666666666
+        },
+        {
+          "withPlayerId": "9b2bbc09-de0d-4d86-b3a6-a85648616b28",
+          "withPlayerName": "Mozart",
+          "matchesTogether": 3,
+          "winsTogether": 2,
+          "winRateTogether": 0.6666666666666666
+        },
+        {
+          "withPlayerId": "cf6615d7-68aa-493e-aed0-d6695518eb93",
+          "withPlayerName": "Luis",
+          "matchesTogether": 3,
+          "winsTogether": 1,
+          "winRateTogether": 0.3333333333333333
+        },
+        {
+          "withPlayerId": "d46719ca-1744-46ab-82ee-96ba7326a4ea",
+          "withPlayerName": "Artur",
+          "matchesTogether": 3,
+          "winsTogether": 1,
+          "winRateTogether": 0.3333333333333333
+        },
+        {
+          "withPlayerId": "d97ef5cb-2ffb-443b-97f6-a56d8947bef1",
+          "withPlayerName": "Luska",
+          "matchesTogether": 3,
+          "winsTogether": 1,
+          "winRateTogether": 0.3333333333333333
+        },
+        {
+          "withPlayerId": "729cbff3-3d8b-41fe-a3e2-5d88ddb0d5f4",
+          "withPlayerName": "Zaguini",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "99a50778-f120-4a79-99b2-0904f8db0be5",
+          "withPlayerName": "Little Piccoli",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "3b46b852-ee67-4481-8ba4-9625dd41c6e0",
+          "withPlayerName": "Veber",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ab127e51-8697-4585-87a5-0a013ecf2a70",
+          "withPlayerName": "Marcos",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "54b98c3c-d265-4872-994d-224e1811d544",
+          "withPlayerName": "Romulo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "33410964-3193-4d44-b187-15234fae41c8",
+          "withPlayerName": "Todesco",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "63324c6b-9db1-47d7-9346-fe9d90a65957",
+          "withPlayerName": "Jonathan Muller",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ece250cd-091a-494f-baad-cbd0813bb7e0",
+          "withPlayerName": "Sam",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2cd0ae14-f505-4453-9d27-7432ba525b5d",
+          "withPlayerName": "Bernardo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9d768469-04a8-4144-8d1d-417efef840a0",
+          "withPlayerName": "Piccoli",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "a99a9f5d-96ab-4206-bee9-4031a8174205",
+          "withPlayerName": "Marlon",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        }
+      ]
+    },
+    {
+      "playerId": "51958888-4ccf-4896-86ea-d445c5f92f43",
+      "name": "Pedro Roweder",
+      "status": 1,
+      "isGoalkeeper": false,
+      "gamesPlayed": 9,
+      "wins": 5,
+      "ties": 0,
+      "losses": 4,
+      "winRate": 0.5555555555555556,
+      "mvps": 2,
+      "goals": 20,
+      "assists": 6,
+      "ownGoals": 0,
+      "synergies": [
+        {
+          "withPlayerId": "cf6615d7-68aa-493e-aed0-d6695518eb93",
+          "withPlayerName": "Luis",
+          "matchesTogether": 5,
+          "winsTogether": 2,
+          "winRateTogether": 0.4
+        },
+        {
+          "withPlayerId": "d46719ca-1744-46ab-82ee-96ba7326a4ea",
+          "withPlayerName": "Artur",
+          "matchesTogether": 5,
+          "winsTogether": 2,
+          "winRateTogether": 0.4
+        },
+        {
+          "withPlayerId": "d97ef5cb-2ffb-443b-97f6-a56d8947bef1",
+          "withPlayerName": "Luska",
+          "matchesTogether": 5,
+          "winsTogether": 2,
+          "winRateTogether": 0.4
+        },
+        {
+          "withPlayerId": "99c47049-7eaf-40f5-9dfe-7e788837282f",
+          "withPlayerName": "Pagel",
+          "matchesTogether": 4,
+          "winsTogether": 3,
+          "winRateTogether": 0.75
+        },
+        {
+          "withPlayerId": "b69f3218-00b8-49f8-8f64-bc960536897d",
+          "withPlayerName": "Patrick",
+          "matchesTogether": 4,
+          "winsTogether": 2,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "024a5d93-0a84-431a-94d2-d0e978a05e41",
+          "withPlayerName": "Caio",
+          "matchesTogether": 3,
+          "winsTogether": 3,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "2f99b652-3b59-4b69-b775-b7a6a10dfa55",
+          "withPlayerName": "Matheus",
+          "matchesTogether": 3,
+          "winsTogether": 2,
+          "winRateTogether": 0.6666666666666666
+        },
+        {
+          "withPlayerId": "9eb9dff5-e061-487c-8a4b-03fb74bb3a4a",
+          "withPlayerName": "Andrei",
+          "matchesTogether": 3,
+          "winsTogether": 2,
+          "winRateTogether": 0.6666666666666666
+        },
+        {
+          "withPlayerId": "729cbff3-3d8b-41fe-a3e2-5d88ddb0d5f4",
+          "withPlayerName": "Zaguini",
+          "matchesTogether": 3,
+          "winsTogether": 1,
+          "winRateTogether": 0.3333333333333333
+        },
+        {
+          "withPlayerId": "99a50778-f120-4a79-99b2-0904f8db0be5",
+          "withPlayerName": "Little Piccoli",
+          "matchesTogether": 3,
+          "winsTogether": 1,
+          "winRateTogether": 0.3333333333333333
+        },
+        {
+          "withPlayerId": "9b2bbc09-de0d-4d86-b3a6-a85648616b28",
+          "withPlayerName": "Mozart",
+          "matchesTogether": 2,
+          "winsTogether": 2,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "a99a9f5d-96ab-4206-bee9-4031a8174205",
+          "withPlayerName": "Marlon",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "ece250cd-091a-494f-baad-cbd0813bb7e0",
+          "withPlayerName": "Sam",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "9d768469-04a8-4144-8d1d-417efef840a0",
+          "withPlayerName": "Piccoli",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ab127e51-8697-4585-87a5-0a013ecf2a70",
+          "withPlayerName": "Marcos",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "54b98c3c-d265-4872-994d-224e1811d544",
+          "withPlayerName": "Romulo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "33410964-3193-4d44-b187-15234fae41c8",
+          "withPlayerName": "Todesco",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "63324c6b-9db1-47d7-9346-fe9d90a65957",
+          "withPlayerName": "Jonathan Muller",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2cd0ae14-f505-4453-9d27-7432ba525b5d",
+          "withPlayerName": "Bernardo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "3b46b852-ee67-4481-8ba4-9625dd41c6e0",
+          "withPlayerName": "Veber",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        }
+      ]
+    },
+    {
+      "playerId": "b69f3218-00b8-49f8-8f64-bc960536897d",
+      "name": "Patrick",
+      "status": 1,
+      "isGoalkeeper": false,
+      "gamesPlayed": 10,
+      "wins": 5,
+      "ties": 0,
+      "losses": 5,
+      "winRate": 0.5,
+      "mvps": 0,
+      "goals": 8,
+      "assists": 4,
+      "ownGoals": 0,
+      "synergies": [
+        {
+          "withPlayerId": "2f99b652-3b59-4b69-b775-b7a6a10dfa55",
+          "withPlayerName": "Matheus",
+          "matchesTogether": 7,
+          "winsTogether": 4,
+          "winRateTogether": 0.5714285714285714
+        },
+        {
+          "withPlayerId": "99c47049-7eaf-40f5-9dfe-7e788837282f",
+          "withPlayerName": "Pagel",
+          "matchesTogether": 6,
+          "winsTogether": 4,
+          "winRateTogether": 0.6666666666666666
+        },
+        {
+          "withPlayerId": "024a5d93-0a84-431a-94d2-d0e978a05e41",
+          "withPlayerName": "Caio",
+          "matchesTogether": 4,
+          "winsTogether": 4,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "51958888-4ccf-4896-86ea-d445c5f92f43",
+          "withPlayerName": "Pedro Roweder",
+          "matchesTogether": 4,
+          "winsTogether": 2,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "cf6615d7-68aa-493e-aed0-d6695518eb93",
+          "withPlayerName": "Luis",
+          "matchesTogether": 4,
+          "winsTogether": 1,
+          "winRateTogether": 0.25
+        },
+        {
+          "withPlayerId": "9b2bbc09-de0d-4d86-b3a6-a85648616b28",
+          "withPlayerName": "Mozart",
+          "matchesTogether": 3,
+          "winsTogether": 3,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "9eb9dff5-e061-487c-8a4b-03fb74bb3a4a",
+          "withPlayerName": "Andrei",
+          "matchesTogether": 3,
+          "winsTogether": 2,
+          "winRateTogether": 0.6666666666666666
+        },
+        {
+          "withPlayerId": "d46719ca-1744-46ab-82ee-96ba7326a4ea",
+          "withPlayerName": "Artur",
+          "matchesTogether": 3,
+          "winsTogether": 1,
+          "winRateTogether": 0.3333333333333333
+        },
+        {
+          "withPlayerId": "729cbff3-3d8b-41fe-a3e2-5d88ddb0d5f4",
+          "withPlayerName": "Zaguini",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "a99a9f5d-96ab-4206-bee9-4031a8174205",
+          "withPlayerName": "Marlon",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "d97ef5cb-2ffb-443b-97f6-a56d8947bef1",
+          "withPlayerName": "Luska",
+          "matchesTogether": 2,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "3b46b852-ee67-4481-8ba4-9625dd41c6e0",
+          "withPlayerName": "Veber",
+          "matchesTogether": 2,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2cd0ae14-f505-4453-9d27-7432ba525b5d",
+          "withPlayerName": "Bernardo",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "9d768469-04a8-4144-8d1d-417efef840a0",
+          "withPlayerName": "Piccoli",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "ab127e51-8697-4585-87a5-0a013ecf2a70",
+          "withPlayerName": "Marcos",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "54b98c3c-d265-4872-994d-224e1811d544",
+          "withPlayerName": "Romulo",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "33410964-3193-4d44-b187-15234fae41c8",
+          "withPlayerName": "Todesco",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "99a50778-f120-4a79-99b2-0904f8db0be5",
+          "withPlayerName": "Little Piccoli",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "63324c6b-9db1-47d7-9346-fe9d90a65957",
+          "withPlayerName": "Jonathan Muller",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ece250cd-091a-494f-baad-cbd0813bb7e0",
+          "withPlayerName": "Sam",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        }
+      ]
+    },
+    {
+      "playerId": "9d768469-04a8-4144-8d1d-417efef840a0",
+      "name": "Piccoli",
+      "status": 1,
+      "isGoalkeeper": false,
+      "gamesPlayed": 4,
+      "wins": 2,
+      "ties": 0,
+      "losses": 2,
+      "winRate": 0.5,
+      "mvps": 1,
+      "goals": 11,
+      "assists": 1,
+      "ownGoals": 0,
+      "synergies": [
+        {
+          "withPlayerId": "d97ef5cb-2ffb-443b-97f6-a56d8947bef1",
+          "withPlayerName": "Luska",
+          "matchesTogether": 3,
+          "winsTogether": 1,
+          "winRateTogether": 0.3333333333333333
+        },
+        {
+          "withPlayerId": "2f99b652-3b59-4b69-b775-b7a6a10dfa55",
+          "withPlayerName": "Matheus",
+          "matchesTogether": 2,
+          "winsTogether": 2,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "99c47049-7eaf-40f5-9dfe-7e788837282f",
+          "withPlayerName": "Pagel",
+          "matchesTogether": 2,
+          "winsTogether": 2,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "024a5d93-0a84-431a-94d2-d0e978a05e41",
+          "withPlayerName": "Caio",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "63324c6b-9db1-47d7-9346-fe9d90a65957",
+          "withPlayerName": "Jonathan Muller",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "cf6615d7-68aa-493e-aed0-d6695518eb93",
+          "withPlayerName": "Luis",
+          "matchesTogether": 2,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "99a50778-f120-4a79-99b2-0904f8db0be5",
+          "withPlayerName": "Little Piccoli",
+          "matchesTogether": 2,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "b69f3218-00b8-49f8-8f64-bc960536897d",
+          "withPlayerName": "Patrick",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "2cd0ae14-f505-4453-9d27-7432ba525b5d",
+          "withPlayerName": "Bernardo",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "9b2bbc09-de0d-4d86-b3a6-a85648616b28",
+          "withPlayerName": "Mozart",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "d46719ca-1744-46ab-82ee-96ba7326a4ea",
+          "withPlayerName": "Artur",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "51958888-4ccf-4896-86ea-d445c5f92f43",
+          "withPlayerName": "Pedro Roweder",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ab127e51-8697-4585-87a5-0a013ecf2a70",
+          "withPlayerName": "Marcos",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "54b98c3c-d265-4872-994d-224e1811d544",
+          "withPlayerName": "Romulo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "33410964-3193-4d44-b187-15234fae41c8",
+          "withPlayerName": "Todesco",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "729cbff3-3d8b-41fe-a3e2-5d88ddb0d5f4",
+          "withPlayerName": "Zaguini",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ece250cd-091a-494f-baad-cbd0813bb7e0",
+          "withPlayerName": "Sam",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "3b46b852-ee67-4481-8ba4-9625dd41c6e0",
+          "withPlayerName": "Veber",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9eb9dff5-e061-487c-8a4b-03fb74bb3a4a",
+          "withPlayerName": "Andrei",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "a99a9f5d-96ab-4206-bee9-4031a8174205",
+          "withPlayerName": "Marlon",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        }
+      ]
+    },
+    {
+      "playerId": "63324c6b-9db1-47d7-9346-fe9d90a65957",
+      "name": "Jonathan Muller",
+      "status": 1,
+      "isGoalkeeper": false,
+      "gamesPlayed": 2,
+      "wins": 1,
+      "ties": 0,
+      "losses": 1,
+      "winRate": 0.5,
+      "mvps": 0,
+      "goals": 1,
+      "assists": 1,
+      "ownGoals": 0,
+      "synergies": [
+        {
+          "withPlayerId": "d97ef5cb-2ffb-443b-97f6-a56d8947bef1",
+          "withPlayerName": "Luska",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "9d768469-04a8-4144-8d1d-417efef840a0",
+          "withPlayerName": "Piccoli",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "2f99b652-3b59-4b69-b775-b7a6a10dfa55",
+          "withPlayerName": "Matheus",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "99c47049-7eaf-40f5-9dfe-7e788837282f",
+          "withPlayerName": "Pagel",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "9b2bbc09-de0d-4d86-b3a6-a85648616b28",
+          "withPlayerName": "Mozart",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "cf6615d7-68aa-493e-aed0-d6695518eb93",
+          "withPlayerName": "Luis",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "024a5d93-0a84-431a-94d2-d0e978a05e41",
+          "withPlayerName": "Caio",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "99a50778-f120-4a79-99b2-0904f8db0be5",
+          "withPlayerName": "Little Piccoli",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "b69f3218-00b8-49f8-8f64-bc960536897d",
+          "withPlayerName": "Patrick",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "d46719ca-1744-46ab-82ee-96ba7326a4ea",
+          "withPlayerName": "Artur",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ab127e51-8697-4585-87a5-0a013ecf2a70",
+          "withPlayerName": "Marcos",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "54b98c3c-d265-4872-994d-224e1811d544",
+          "withPlayerName": "Romulo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "33410964-3193-4d44-b187-15234fae41c8",
+          "withPlayerName": "Todesco",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "729cbff3-3d8b-41fe-a3e2-5d88ddb0d5f4",
+          "withPlayerName": "Zaguini",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "51958888-4ccf-4896-86ea-d445c5f92f43",
+          "withPlayerName": "Pedro Roweder",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ece250cd-091a-494f-baad-cbd0813bb7e0",
+          "withPlayerName": "Sam",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2cd0ae14-f505-4453-9d27-7432ba525b5d",
+          "withPlayerName": "Bernardo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "3b46b852-ee67-4481-8ba4-9625dd41c6e0",
+          "withPlayerName": "Veber",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9eb9dff5-e061-487c-8a4b-03fb74bb3a4a",
+          "withPlayerName": "Andrei",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "a99a9f5d-96ab-4206-bee9-4031a8174205",
+          "withPlayerName": "Marlon",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        }
+      ]
+    },
+    {
+      "playerId": "d46719ca-1744-46ab-82ee-96ba7326a4ea",
+      "name": "Artur",
+      "status": 1,
+      "isGoalkeeper": false,
+      "gamesPlayed": 9,
+      "wins": 3,
+      "ties": 0,
+      "losses": 6,
+      "winRate": 0.3333333333333333,
+      "mvps": 0,
+      "goals": 14,
+      "assists": 4,
+      "ownGoals": 0,
+      "synergies": [
+        {
+          "withPlayerId": "9b2bbc09-de0d-4d86-b3a6-a85648616b28",
+          "withPlayerName": "Mozart",
+          "matchesTogether": 5,
+          "winsTogether": 3,
+          "winRateTogether": 0.6
+        },
+        {
+          "withPlayerId": "51958888-4ccf-4896-86ea-d445c5f92f43",
+          "withPlayerName": "Pedro Roweder",
+          "matchesTogether": 5,
+          "winsTogether": 2,
+          "winRateTogether": 0.4
+        },
+        {
+          "withPlayerId": "cf6615d7-68aa-493e-aed0-d6695518eb93",
+          "withPlayerName": "Luis",
+          "matchesTogether": 5,
+          "winsTogether": 1,
+          "winRateTogether": 0.2
+        },
+        {
+          "withPlayerId": "99a50778-f120-4a79-99b2-0904f8db0be5",
+          "withPlayerName": "Little Piccoli",
+          "matchesTogether": 5,
+          "winsTogether": 1,
+          "winRateTogether": 0.2
+        },
+        {
+          "withPlayerId": "99c47049-7eaf-40f5-9dfe-7e788837282f",
+          "withPlayerName": "Pagel",
+          "matchesTogether": 4,
+          "winsTogether": 2,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "d97ef5cb-2ffb-443b-97f6-a56d8947bef1",
+          "withPlayerName": "Luska",
+          "matchesTogether": 4,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "b69f3218-00b8-49f8-8f64-bc960536897d",
+          "withPlayerName": "Patrick",
+          "matchesTogether": 3,
+          "winsTogether": 1,
+          "winRateTogether": 0.3333333333333333
+        },
+        {
+          "withPlayerId": "9eb9dff5-e061-487c-8a4b-03fb74bb3a4a",
+          "withPlayerName": "Andrei",
+          "matchesTogether": 3,
+          "winsTogether": 1,
+          "winRateTogether": 0.3333333333333333
+        },
+        {
+          "withPlayerId": "2f99b652-3b59-4b69-b775-b7a6a10dfa55",
+          "withPlayerName": "Matheus",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "a99a9f5d-96ab-4206-bee9-4031a8174205",
+          "withPlayerName": "Marlon",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "024a5d93-0a84-431a-94d2-d0e978a05e41",
+          "withPlayerName": "Caio",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "ab127e51-8697-4585-87a5-0a013ecf2a70",
+          "withPlayerName": "Marcos",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "54b98c3c-d265-4872-994d-224e1811d544",
+          "withPlayerName": "Romulo",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "33410964-3193-4d44-b187-15234fae41c8",
+          "withPlayerName": "Todesco",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "729cbff3-3d8b-41fe-a3e2-5d88ddb0d5f4",
+          "withPlayerName": "Zaguini",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9d768469-04a8-4144-8d1d-417efef840a0",
+          "withPlayerName": "Piccoli",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "63324c6b-9db1-47d7-9346-fe9d90a65957",
+          "withPlayerName": "Jonathan Muller",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ece250cd-091a-494f-baad-cbd0813bb7e0",
+          "withPlayerName": "Sam",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2cd0ae14-f505-4453-9d27-7432ba525b5d",
+          "withPlayerName": "Bernardo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "3b46b852-ee67-4481-8ba4-9625dd41c6e0",
+          "withPlayerName": "Veber",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        }
+      ]
+    },
+    {
+      "playerId": "729cbff3-3d8b-41fe-a3e2-5d88ddb0d5f4",
+      "name": "Zaguini",
+      "status": 1,
+      "isGoalkeeper": false,
+      "gamesPlayed": 3,
+      "wins": 1,
+      "ties": 0,
+      "losses": 2,
+      "winRate": 0.3333333333333333,
+      "mvps": 0,
+      "goals": 1,
+      "assists": 3,
+      "ownGoals": 0,
+      "synergies": [
+        {
+          "withPlayerId": "51958888-4ccf-4896-86ea-d445c5f92f43",
+          "withPlayerName": "Pedro Roweder",
+          "matchesTogether": 3,
+          "winsTogether": 1,
+          "winRateTogether": 0.3333333333333333
+        },
+        {
+          "withPlayerId": "b69f3218-00b8-49f8-8f64-bc960536897d",
+          "withPlayerName": "Patrick",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "99c47049-7eaf-40f5-9dfe-7e788837282f",
+          "withPlayerName": "Pagel",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "9eb9dff5-e061-487c-8a4b-03fb74bb3a4a",
+          "withPlayerName": "Andrei",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "d97ef5cb-2ffb-443b-97f6-a56d8947bef1",
+          "withPlayerName": "Luska",
+          "matchesTogether": 2,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "024a5d93-0a84-431a-94d2-d0e978a05e41",
+          "withPlayerName": "Caio",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "cf6615d7-68aa-493e-aed0-d6695518eb93",
+          "withPlayerName": "Luis",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "d46719ca-1744-46ab-82ee-96ba7326a4ea",
+          "withPlayerName": "Artur",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2f99b652-3b59-4b69-b775-b7a6a10dfa55",
+          "withPlayerName": "Matheus",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ab127e51-8697-4585-87a5-0a013ecf2a70",
+          "withPlayerName": "Marcos",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "54b98c3c-d265-4872-994d-224e1811d544",
+          "withPlayerName": "Romulo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "33410964-3193-4d44-b187-15234fae41c8",
+          "withPlayerName": "Todesco",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "63324c6b-9db1-47d7-9346-fe9d90a65957",
+          "withPlayerName": "Jonathan Muller",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "99a50778-f120-4a79-99b2-0904f8db0be5",
+          "withPlayerName": "Little Piccoli",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ece250cd-091a-494f-baad-cbd0813bb7e0",
+          "withPlayerName": "Sam",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2cd0ae14-f505-4453-9d27-7432ba525b5d",
+          "withPlayerName": "Bernardo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9b2bbc09-de0d-4d86-b3a6-a85648616b28",
+          "withPlayerName": "Mozart",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9d768469-04a8-4144-8d1d-417efef840a0",
+          "withPlayerName": "Piccoli",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "3b46b852-ee67-4481-8ba4-9625dd41c6e0",
+          "withPlayerName": "Veber",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "a99a9f5d-96ab-4206-bee9-4031a8174205",
+          "withPlayerName": "Marlon",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        }
+      ]
+    },
+    {
+      "playerId": "cf6615d7-68aa-493e-aed0-d6695518eb93",
+      "name": "Luis",
+      "status": 1,
+      "isGoalkeeper": true,
+      "gamesPlayed": 10,
+      "wins": 3,
+      "ties": 0,
+      "losses": 7,
+      "winRate": 0.3,
+      "mvps": 0,
+      "goals": 6,
+      "assists": 3,
+      "ownGoals": 0,
+      "synergies": [
+        {
+          "withPlayerId": "d97ef5cb-2ffb-443b-97f6-a56d8947bef1",
+          "withPlayerName": "Luska",
+          "matchesTogether": 6,
+          "winsTogether": 1,
+          "winRateTogether": 0.16666666666666666
+        },
+        {
+          "withPlayerId": "2f99b652-3b59-4b69-b775-b7a6a10dfa55",
+          "withPlayerName": "Matheus",
+          "matchesTogether": 5,
+          "winsTogether": 2,
+          "winRateTogether": 0.4
+        },
+        {
+          "withPlayerId": "51958888-4ccf-4896-86ea-d445c5f92f43",
+          "withPlayerName": "Pedro Roweder",
+          "matchesTogether": 5,
+          "winsTogether": 2,
+          "winRateTogether": 0.4
+        },
+        {
+          "withPlayerId": "d46719ca-1744-46ab-82ee-96ba7326a4ea",
+          "withPlayerName": "Artur",
+          "matchesTogether": 5,
+          "winsTogether": 1,
+          "winRateTogether": 0.2
+        },
+        {
+          "withPlayerId": "99a50778-f120-4a79-99b2-0904f8db0be5",
+          "withPlayerName": "Little Piccoli",
+          "matchesTogether": 5,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9b2bbc09-de0d-4d86-b3a6-a85648616b28",
+          "withPlayerName": "Mozart",
+          "matchesTogether": 4,
+          "winsTogether": 2,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "b69f3218-00b8-49f8-8f64-bc960536897d",
+          "withPlayerName": "Patrick",
+          "matchesTogether": 4,
+          "winsTogether": 1,
+          "winRateTogether": 0.25
+        },
+        {
+          "withPlayerId": "024a5d93-0a84-431a-94d2-d0e978a05e41",
+          "withPlayerName": "Caio",
+          "matchesTogether": 3,
+          "winsTogether": 2,
+          "winRateTogether": 0.6666666666666666
+        },
+        {
+          "withPlayerId": "a99a9f5d-96ab-4206-bee9-4031a8174205",
+          "withPlayerName": "Marlon",
+          "matchesTogether": 3,
+          "winsTogether": 2,
+          "winRateTogether": 0.6666666666666666
+        },
+        {
+          "withPlayerId": "9eb9dff5-e061-487c-8a4b-03fb74bb3a4a",
+          "withPlayerName": "Andrei",
+          "matchesTogether": 3,
+          "winsTogether": 1,
+          "winRateTogether": 0.3333333333333333
+        },
+        {
+          "withPlayerId": "9d768469-04a8-4144-8d1d-417efef840a0",
+          "withPlayerName": "Piccoli",
+          "matchesTogether": 2,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "729cbff3-3d8b-41fe-a3e2-5d88ddb0d5f4",
+          "withPlayerName": "Zaguini",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "63324c6b-9db1-47d7-9346-fe9d90a65957",
+          "withPlayerName": "Jonathan Muller",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "3b46b852-ee67-4481-8ba4-9625dd41c6e0",
+          "withPlayerName": "Veber",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ab127e51-8697-4585-87a5-0a013ecf2a70",
+          "withPlayerName": "Marcos",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "54b98c3c-d265-4872-994d-224e1811d544",
+          "withPlayerName": "Romulo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "33410964-3193-4d44-b187-15234fae41c8",
+          "withPlayerName": "Todesco",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ece250cd-091a-494f-baad-cbd0813bb7e0",
+          "withPlayerName": "Sam",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "99c47049-7eaf-40f5-9dfe-7e788837282f",
+          "withPlayerName": "Pagel",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2cd0ae14-f505-4453-9d27-7432ba525b5d",
+          "withPlayerName": "Bernardo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        }
+      ]
+    },
+    {
+      "playerId": "d97ef5cb-2ffb-443b-97f6-a56d8947bef1",
+      "name": "Luska",
+      "status": 1,
+      "isGoalkeeper": false,
+      "gamesPlayed": 10,
+      "wins": 3,
+      "ties": 0,
+      "losses": 7,
+      "winRate": 0.3,
+      "mvps": 0,
+      "goals": 6,
+      "assists": 3,
+      "ownGoals": 0,
+      "synergies": [
+        {
+          "withPlayerId": "cf6615d7-68aa-493e-aed0-d6695518eb93",
+          "withPlayerName": "Luis",
+          "matchesTogether": 6,
+          "winsTogether": 1,
+          "winRateTogether": 0.16666666666666666
+        },
+        {
+          "withPlayerId": "2f99b652-3b59-4b69-b775-b7a6a10dfa55",
+          "withPlayerName": "Matheus",
+          "matchesTogether": 5,
+          "winsTogether": 2,
+          "winRateTogether": 0.4
+        },
+        {
+          "withPlayerId": "51958888-4ccf-4896-86ea-d445c5f92f43",
+          "withPlayerName": "Pedro Roweder",
+          "matchesTogether": 5,
+          "winsTogether": 2,
+          "winRateTogether": 0.4
+        },
+        {
+          "withPlayerId": "99a50778-f120-4a79-99b2-0904f8db0be5",
+          "withPlayerName": "Little Piccoli",
+          "matchesTogether": 5,
+          "winsTogether": 1,
+          "winRateTogether": 0.2
+        },
+        {
+          "withPlayerId": "99c47049-7eaf-40f5-9dfe-7e788837282f",
+          "withPlayerName": "Pagel",
+          "matchesTogether": 4,
+          "winsTogether": 2,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "d46719ca-1744-46ab-82ee-96ba7326a4ea",
+          "withPlayerName": "Artur",
+          "matchesTogether": 4,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "024a5d93-0a84-431a-94d2-d0e978a05e41",
+          "withPlayerName": "Caio",
+          "matchesTogether": 3,
+          "winsTogether": 2,
+          "winRateTogether": 0.6666666666666666
+        },
+        {
+          "withPlayerId": "9b2bbc09-de0d-4d86-b3a6-a85648616b28",
+          "withPlayerName": "Mozart",
+          "matchesTogether": 3,
+          "winsTogether": 1,
+          "winRateTogether": 0.3333333333333333
+        },
+        {
+          "withPlayerId": "9d768469-04a8-4144-8d1d-417efef840a0",
+          "withPlayerName": "Piccoli",
+          "matchesTogether": 3,
+          "winsTogether": 1,
+          "winRateTogether": 0.3333333333333333
+        },
+        {
+          "withPlayerId": "9eb9dff5-e061-487c-8a4b-03fb74bb3a4a",
+          "withPlayerName": "Andrei",
+          "matchesTogether": 3,
+          "winsTogether": 1,
+          "winRateTogether": 0.3333333333333333
+        },
+        {
+          "withPlayerId": "63324c6b-9db1-47d7-9346-fe9d90a65957",
+          "withPlayerName": "Jonathan Muller",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "b69f3218-00b8-49f8-8f64-bc960536897d",
+          "withPlayerName": "Patrick",
+          "matchesTogether": 2,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "729cbff3-3d8b-41fe-a3e2-5d88ddb0d5f4",
+          "withPlayerName": "Zaguini",
+          "matchesTogether": 2,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ece250cd-091a-494f-baad-cbd0813bb7e0",
+          "withPlayerName": "Sam",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "3b46b852-ee67-4481-8ba4-9625dd41c6e0",
+          "withPlayerName": "Veber",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ab127e51-8697-4585-87a5-0a013ecf2a70",
+          "withPlayerName": "Marcos",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "54b98c3c-d265-4872-994d-224e1811d544",
+          "withPlayerName": "Romulo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "33410964-3193-4d44-b187-15234fae41c8",
+          "withPlayerName": "Todesco",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2cd0ae14-f505-4453-9d27-7432ba525b5d",
+          "withPlayerName": "Bernardo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "a99a9f5d-96ab-4206-bee9-4031a8174205",
+          "withPlayerName": "Marlon",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        }
+      ]
+    },
+    {
+      "playerId": "99a50778-f120-4a79-99b2-0904f8db0be5",
+      "name": "Little Piccoli",
+      "status": 1,
+      "isGoalkeeper": false,
+      "gamesPlayed": 7,
+      "wins": 2,
+      "ties": 0,
+      "losses": 5,
+      "winRate": 0.2857142857142857,
+      "mvps": 0,
+      "goals": 3,
+      "assists": 4,
+      "ownGoals": 0,
+      "synergies": [
+        {
+          "withPlayerId": "d46719ca-1744-46ab-82ee-96ba7326a4ea",
+          "withPlayerName": "Artur",
+          "matchesTogether": 5,
+          "winsTogether": 1,
+          "winRateTogether": 0.2
+        },
+        {
+          "withPlayerId": "d97ef5cb-2ffb-443b-97f6-a56d8947bef1",
+          "withPlayerName": "Luska",
+          "matchesTogether": 5,
+          "winsTogether": 1,
+          "winRateTogether": 0.2
+        },
+        {
+          "withPlayerId": "cf6615d7-68aa-493e-aed0-d6695518eb93",
+          "withPlayerName": "Luis",
+          "matchesTogether": 5,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "024a5d93-0a84-431a-94d2-d0e978a05e41",
+          "withPlayerName": "Caio",
+          "matchesTogether": 3,
+          "winsTogether": 2,
+          "winRateTogether": 0.6666666666666666
+        },
+        {
+          "withPlayerId": "51958888-4ccf-4896-86ea-d445c5f92f43",
+          "withPlayerName": "Pedro Roweder",
+          "matchesTogether": 3,
+          "winsTogether": 1,
+          "winRateTogether": 0.3333333333333333
+        },
+        {
+          "withPlayerId": "9b2bbc09-de0d-4d86-b3a6-a85648616b28",
+          "withPlayerName": "Mozart",
+          "matchesTogether": 3,
+          "winsTogether": 1,
+          "winRateTogether": 0.3333333333333333
+        },
+        {
+          "withPlayerId": "99c47049-7eaf-40f5-9dfe-7e788837282f",
+          "withPlayerName": "Pagel",
+          "matchesTogether": 2,
+          "winsTogether": 2,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "9eb9dff5-e061-487c-8a4b-03fb74bb3a4a",
+          "withPlayerName": "Andrei",
+          "matchesTogether": 2,
+          "winsTogether": 1,
+          "winRateTogether": 0.5
+        },
+        {
+          "withPlayerId": "9d768469-04a8-4144-8d1d-417efef840a0",
+          "withPlayerName": "Piccoli",
+          "matchesTogether": 2,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ece250cd-091a-494f-baad-cbd0813bb7e0",
+          "withPlayerName": "Sam",
+          "matchesTogether": 1,
+          "winsTogether": 1,
+          "winRateTogether": 1
+        },
+        {
+          "withPlayerId": "b69f3218-00b8-49f8-8f64-bc960536897d",
+          "withPlayerName": "Patrick",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2f99b652-3b59-4b69-b775-b7a6a10dfa55",
+          "withPlayerName": "Matheus",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "63324c6b-9db1-47d7-9346-fe9d90a65957",
+          "withPlayerName": "Jonathan Muller",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "a99a9f5d-96ab-4206-bee9-4031a8174205",
+          "withPlayerName": "Marlon",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ab127e51-8697-4585-87a5-0a013ecf2a70",
+          "withPlayerName": "Marcos",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "54b98c3c-d265-4872-994d-224e1811d544",
+          "withPlayerName": "Romulo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "33410964-3193-4d44-b187-15234fae41c8",
+          "withPlayerName": "Todesco",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "729cbff3-3d8b-41fe-a3e2-5d88ddb0d5f4",
+          "withPlayerName": "Zaguini",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2cd0ae14-f505-4453-9d27-7432ba525b5d",
+          "withPlayerName": "Bernardo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "3b46b852-ee67-4481-8ba4-9625dd41c6e0",
+          "withPlayerName": "Veber",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        }
+      ]
+    },
+    {
+      "playerId": "3b46b852-ee67-4481-8ba4-9625dd41c6e0",
+      "name": "Veber",
+      "status": 1,
+      "isGoalkeeper": false,
+      "gamesPlayed": 2,
+      "wins": 0,
+      "ties": 0,
+      "losses": 2,
+      "winRate": 0,
+      "mvps": 0,
+      "goals": 1,
+      "assists": 0,
+      "ownGoals": 0,
+      "synergies": [
+        {
+          "withPlayerId": "b69f3218-00b8-49f8-8f64-bc960536897d",
+          "withPlayerName": "Patrick",
+          "matchesTogether": 2,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2f99b652-3b59-4b69-b775-b7a6a10dfa55",
+          "withPlayerName": "Matheus",
+          "matchesTogether": 2,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "cf6615d7-68aa-493e-aed0-d6695518eb93",
+          "withPlayerName": "Luis",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "d97ef5cb-2ffb-443b-97f6-a56d8947bef1",
+          "withPlayerName": "Luska",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "99c47049-7eaf-40f5-9dfe-7e788837282f",
+          "withPlayerName": "Pagel",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9eb9dff5-e061-487c-8a4b-03fb74bb3a4a",
+          "withPlayerName": "Andrei",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "d46719ca-1744-46ab-82ee-96ba7326a4ea",
+          "withPlayerName": "Artur",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ab127e51-8697-4585-87a5-0a013ecf2a70",
+          "withPlayerName": "Marcos",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "024a5d93-0a84-431a-94d2-d0e978a05e41",
+          "withPlayerName": "Caio",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "54b98c3c-d265-4872-994d-224e1811d544",
+          "withPlayerName": "Romulo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "33410964-3193-4d44-b187-15234fae41c8",
+          "withPlayerName": "Todesco",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "729cbff3-3d8b-41fe-a3e2-5d88ddb0d5f4",
+          "withPlayerName": "Zaguini",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "51958888-4ccf-4896-86ea-d445c5f92f43",
+          "withPlayerName": "Pedro Roweder",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "63324c6b-9db1-47d7-9346-fe9d90a65957",
+          "withPlayerName": "Jonathan Muller",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "99a50778-f120-4a79-99b2-0904f8db0be5",
+          "withPlayerName": "Little Piccoli",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ece250cd-091a-494f-baad-cbd0813bb7e0",
+          "withPlayerName": "Sam",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2cd0ae14-f505-4453-9d27-7432ba525b5d",
+          "withPlayerName": "Bernardo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9b2bbc09-de0d-4d86-b3a6-a85648616b28",
+          "withPlayerName": "Mozart",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9d768469-04a8-4144-8d1d-417efef840a0",
+          "withPlayerName": "Piccoli",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "a99a9f5d-96ab-4206-bee9-4031a8174205",
+          "withPlayerName": "Marlon",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        }
+      ]
+    },
+    {
+      "playerId": "ab127e51-8697-4585-87a5-0a013ecf2a70",
+      "name": "Marcos",
+      "status": 2,
+      "isGoalkeeper": false,
+      "gamesPlayed": 1,
+      "wins": 0,
+      "ties": 0,
+      "losses": 1,
+      "winRate": 0,
+      "mvps": 0,
+      "goals": 0,
+      "assists": 0,
+      "ownGoals": 0,
+      "synergies": [
+        {
+          "withPlayerId": "b69f3218-00b8-49f8-8f64-bc960536897d",
+          "withPlayerName": "Patrick",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "d46719ca-1744-46ab-82ee-96ba7326a4ea",
+          "withPlayerName": "Artur",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "54b98c3c-d265-4872-994d-224e1811d544",
+          "withPlayerName": "Romulo",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "33410964-3193-4d44-b187-15234fae41c8",
+          "withPlayerName": "Todesco",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "99c47049-7eaf-40f5-9dfe-7e788837282f",
+          "withPlayerName": "Pagel",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "cf6615d7-68aa-493e-aed0-d6695518eb93",
+          "withPlayerName": "Luis",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "d97ef5cb-2ffb-443b-97f6-a56d8947bef1",
+          "withPlayerName": "Luska",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "024a5d93-0a84-431a-94d2-d0e978a05e41",
+          "withPlayerName": "Caio",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "729cbff3-3d8b-41fe-a3e2-5d88ddb0d5f4",
+          "withPlayerName": "Zaguini",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2f99b652-3b59-4b69-b775-b7a6a10dfa55",
+          "withPlayerName": "Matheus",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "51958888-4ccf-4896-86ea-d445c5f92f43",
+          "withPlayerName": "Pedro Roweder",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "63324c6b-9db1-47d7-9346-fe9d90a65957",
+          "withPlayerName": "Jonathan Muller",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "99a50778-f120-4a79-99b2-0904f8db0be5",
+          "withPlayerName": "Little Piccoli",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ece250cd-091a-494f-baad-cbd0813bb7e0",
+          "withPlayerName": "Sam",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2cd0ae14-f505-4453-9d27-7432ba525b5d",
+          "withPlayerName": "Bernardo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9b2bbc09-de0d-4d86-b3a6-a85648616b28",
+          "withPlayerName": "Mozart",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9d768469-04a8-4144-8d1d-417efef840a0",
+          "withPlayerName": "Piccoli",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "3b46b852-ee67-4481-8ba4-9625dd41c6e0",
+          "withPlayerName": "Veber",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9eb9dff5-e061-487c-8a4b-03fb74bb3a4a",
+          "withPlayerName": "Andrei",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "a99a9f5d-96ab-4206-bee9-4031a8174205",
+          "withPlayerName": "Marlon",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        }
+      ]
+    },
+    {
+      "playerId": "54b98c3c-d265-4872-994d-224e1811d544",
+      "name": "Romulo",
+      "status": 2,
+      "isGoalkeeper": false,
+      "gamesPlayed": 1,
+      "wins": 0,
+      "ties": 0,
+      "losses": 1,
+      "winRate": 0,
+      "mvps": 0,
+      "goals": 0,
+      "assists": 0,
+      "ownGoals": 0,
+      "synergies": [
+        {
+          "withPlayerId": "b69f3218-00b8-49f8-8f64-bc960536897d",
+          "withPlayerName": "Patrick",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "d46719ca-1744-46ab-82ee-96ba7326a4ea",
+          "withPlayerName": "Artur",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ab127e51-8697-4585-87a5-0a013ecf2a70",
+          "withPlayerName": "Marcos",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "33410964-3193-4d44-b187-15234fae41c8",
+          "withPlayerName": "Todesco",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "99c47049-7eaf-40f5-9dfe-7e788837282f",
+          "withPlayerName": "Pagel",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "cf6615d7-68aa-493e-aed0-d6695518eb93",
+          "withPlayerName": "Luis",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "d97ef5cb-2ffb-443b-97f6-a56d8947bef1",
+          "withPlayerName": "Luska",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "024a5d93-0a84-431a-94d2-d0e978a05e41",
+          "withPlayerName": "Caio",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "729cbff3-3d8b-41fe-a3e2-5d88ddb0d5f4",
+          "withPlayerName": "Zaguini",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2f99b652-3b59-4b69-b775-b7a6a10dfa55",
+          "withPlayerName": "Matheus",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "51958888-4ccf-4896-86ea-d445c5f92f43",
+          "withPlayerName": "Pedro Roweder",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "63324c6b-9db1-47d7-9346-fe9d90a65957",
+          "withPlayerName": "Jonathan Muller",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "99a50778-f120-4a79-99b2-0904f8db0be5",
+          "withPlayerName": "Little Piccoli",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ece250cd-091a-494f-baad-cbd0813bb7e0",
+          "withPlayerName": "Sam",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2cd0ae14-f505-4453-9d27-7432ba525b5d",
+          "withPlayerName": "Bernardo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9b2bbc09-de0d-4d86-b3a6-a85648616b28",
+          "withPlayerName": "Mozart",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9d768469-04a8-4144-8d1d-417efef840a0",
+          "withPlayerName": "Piccoli",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "3b46b852-ee67-4481-8ba4-9625dd41c6e0",
+          "withPlayerName": "Veber",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9eb9dff5-e061-487c-8a4b-03fb74bb3a4a",
+          "withPlayerName": "Andrei",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "a99a9f5d-96ab-4206-bee9-4031a8174205",
+          "withPlayerName": "Marlon",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        }
+      ]
+    },
+    {
+      "playerId": "33410964-3193-4d44-b187-15234fae41c8",
+      "name": "Todesco",
+      "status": 2,
+      "isGoalkeeper": false,
+      "gamesPlayed": 1,
+      "wins": 0,
+      "ties": 0,
+      "losses": 1,
+      "winRate": 0,
+      "mvps": 0,
+      "goals": 0,
+      "assists": 0,
+      "ownGoals": 0,
+      "synergies": [
+        {
+          "withPlayerId": "b69f3218-00b8-49f8-8f64-bc960536897d",
+          "withPlayerName": "Patrick",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "d46719ca-1744-46ab-82ee-96ba7326a4ea",
+          "withPlayerName": "Artur",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ab127e51-8697-4585-87a5-0a013ecf2a70",
+          "withPlayerName": "Marcos",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "54b98c3c-d265-4872-994d-224e1811d544",
+          "withPlayerName": "Romulo",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "99c47049-7eaf-40f5-9dfe-7e788837282f",
+          "withPlayerName": "Pagel",
+          "matchesTogether": 1,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "cf6615d7-68aa-493e-aed0-d6695518eb93",
+          "withPlayerName": "Luis",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "d97ef5cb-2ffb-443b-97f6-a56d8947bef1",
+          "withPlayerName": "Luska",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "024a5d93-0a84-431a-94d2-d0e978a05e41",
+          "withPlayerName": "Caio",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "729cbff3-3d8b-41fe-a3e2-5d88ddb0d5f4",
+          "withPlayerName": "Zaguini",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2f99b652-3b59-4b69-b775-b7a6a10dfa55",
+          "withPlayerName": "Matheus",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "51958888-4ccf-4896-86ea-d445c5f92f43",
+          "withPlayerName": "Pedro Roweder",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "63324c6b-9db1-47d7-9346-fe9d90a65957",
+          "withPlayerName": "Jonathan Muller",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "99a50778-f120-4a79-99b2-0904f8db0be5",
+          "withPlayerName": "Little Piccoli",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "ece250cd-091a-494f-baad-cbd0813bb7e0",
+          "withPlayerName": "Sam",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "2cd0ae14-f505-4453-9d27-7432ba525b5d",
+          "withPlayerName": "Bernardo",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9b2bbc09-de0d-4d86-b3a6-a85648616b28",
+          "withPlayerName": "Mozart",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9d768469-04a8-4144-8d1d-417efef840a0",
+          "withPlayerName": "Piccoli",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "3b46b852-ee67-4481-8ba4-9625dd41c6e0",
+          "withPlayerName": "Veber",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "9eb9dff5-e061-487c-8a4b-03fb74bb3a4a",
+          "withPlayerName": "Andrei",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        },
+        {
+          "withPlayerId": "a99a9f5d-96ab-4206-bee9-4031a8174205",
+          "withPlayerName": "Marlon",
+          "matchesTogether": 0,
+          "winsTogether": 0,
+          "winRateTogether": 0
+        }
+      ]
+    }
+  ]
+}
