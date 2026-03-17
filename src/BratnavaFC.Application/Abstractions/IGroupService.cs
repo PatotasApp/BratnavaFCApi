@@ -13,6 +13,7 @@ public interface IGroupService
     Task InactivateAsync(Guid groupId, CancellationToken cancellationToken);
     Task ReactivateAsync(Guid groupId, CancellationToken cancellationToken);
     Task AddAdminToGroupAsync(Guid groupId, AddAdminToGroupDto request, CancellationToken cancellationToken);
+    Task RemoveAdminAsync(Guid groupId, Guid targetUserId, Guid requestingUserId, CancellationToken cancellationToken);
 
     // ── Convites ──────────────────────────────────────────────────────────────
     Task<GroupInviteDto> CreateInviteAsync(Guid groupId, CreateGroupInviteDto request, CancellationToken cancellationToken);

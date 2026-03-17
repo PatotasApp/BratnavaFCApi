@@ -31,7 +31,7 @@ public class GroupServiceTests
         await using var db = DbContextFactory.Create(nameof(CreateAsync_WhenAdminUserNotFound_ShouldThrow));
         var sut = CreateSut(db);
 
-        var req = new CreateGroupDto("Patota", [Guid.NewGuid()], null);
+        var req = new CreateGroupDto("Patota", [Guid.NewGuid()], null, Guid.NewGuid());
 
         // Act
         var act = async () => await sut.CreateAsync(req, CancellationToken.None);
@@ -52,7 +52,7 @@ public class GroupServiceTests
         await db.SaveChangesAsync();
 
         var sut = CreateSut(db);
-        var req = new CreateGroupDto("  Minha Patota  ", [user.Id], null);
+        var req = new CreateGroupDto("  Minha Patota  ", [user.Id], null, user.Id);
 
         // Act
         var groupId = await sut.CreateAsync(req, CancellationToken.None);
@@ -97,7 +97,7 @@ public class GroupServiceTests
         var user = new UserEntity("admin", "A", "B", "a@b.com", "hash", null, null);
         db.Users.Add(user);
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         group.SetAdmins([user.Id]);
         db.Groups.Add(group);
 
@@ -119,7 +119,7 @@ public class GroupServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(GetByIdAsync_ShouldIncludeInactivePlayers));
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         db.Groups.Add(group);
 
         var activePlayer   = new PlayerEntity("Ativo",   null, group.Id, 0, false, true);
@@ -151,7 +151,7 @@ public class GroupServiceTests
         var user = new UserEntity("andreifs", "Andrei", "S", "a@b.com", "hash", null, null);
         db.Users.Add(user);
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         db.Groups.Add(group);
 
         var player = new PlayerEntity("Andrei Salvador", user.Id, group.Id, 5, false, false, Status.Active);
@@ -175,7 +175,7 @@ public class GroupServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(GetByIdAsync_ShouldReturnNullUserName_ForGuestPlayer));
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         db.Groups.Add(group);
 
         var guest = new PlayerEntity("Zezinho", null, group.Id, 0, false, true, Status.Active);
@@ -199,8 +199,8 @@ public class GroupServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(GetByIdAsync_ShouldNotReturnPlayersFromOtherGroups));
 
-        var group1 = new GroupEntity("G1", null);
-        var group2 = new GroupEntity("G2", null);
+        var group1 = new GroupEntity("G1", null, Guid.NewGuid());
+        var group2 = new GroupEntity("G2", null, Guid.NewGuid());
         db.Groups.AddRange(group1, group2);
 
         db.Players.Add(new PlayerEntity("P1", null, group1.Id, 0, false, true, Status.Active));
@@ -230,10 +230,10 @@ public class GroupServiceTests
         var other = new UserEntity("other", "O", "T", "o@b.com", "hash", null, null);
         db.Users.AddRange(admin, other);
 
-        var group1 = new GroupEntity("Patota do Admin", null);
+        var group1 = new GroupEntity("Patota do Admin", null, admin.Id);
         group1.SetAdmins([admin.Id]);
 
-        var group2 = new GroupEntity("Outra Patota", null);
+        var group2 = new GroupEntity("Outra Patota", null, other.Id);
         group2.SetAdmins([other.Id]);
 
         db.Groups.AddRange(group1, group2);
@@ -257,8 +257,8 @@ public class GroupServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(GetAllGroupsAsync_ShouldReturnAllGroups_IncludingInactive));
 
-        var activeGroup = new GroupEntity("Ativa", null);
-        var inactiveGroup = new GroupEntity("Inativa", null);
+        var activeGroup = new GroupEntity("Ativa", null, Guid.NewGuid());
+        var inactiveGroup = new GroupEntity("Inativa", null, Guid.NewGuid());
         inactiveGroup.Inactivate();
 
         db.Groups.AddRange(activeGroup, inactiveGroup);
@@ -281,8 +281,8 @@ public class GroupServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(GetAllGroupsAsync_ShouldIncludePlayersFromEachGroup));
 
-        var group1 = new GroupEntity("G1", null);
-        var group2 = new GroupEntity("G2", null);
+        var group1 = new GroupEntity("G1", null, Guid.NewGuid());
+        var group2 = new GroupEntity("G2", null, Guid.NewGuid());
         db.Groups.AddRange(group1, group2);
 
         db.Players.Add(new PlayerEntity("P1", null, group1.Id, 0, false, true, Status.Active));
@@ -310,7 +310,7 @@ public class GroupServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(GetAllGroupsAsync_ShouldReturnPlayersAlphabeticallyByGroupName));
 
-        db.Groups.AddRange(new GroupEntity("Zebra", null), new GroupEntity("Alpha", null));
+        db.Groups.AddRange(new GroupEntity("Zebra", null, Guid.NewGuid()), new GroupEntity("Alpha", null, Guid.NewGuid()));
         await db.SaveChangesAsync();
 
         var sut = CreateSut(db);
@@ -329,7 +329,7 @@ public class GroupServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(GetAllGroupsAsync_ShouldIncludeInactivePlayersOfGroup));
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         db.Groups.Add(group);
 
         var active   = new PlayerEntity("Ativo",   null, group.Id, 0, false, true, Status.Active);
@@ -358,7 +358,7 @@ public class GroupServiceTests
         var user = new UserEntity("joaofc", "João", "FC", "j@b.com", "hash", null, null);
         db.Users.Add(user);
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         db.Groups.Add(group);
 
         var linked = new PlayerEntity("João FC", user.Id, group.Id, 5, false, false, Status.Active);
@@ -391,7 +391,7 @@ public class GroupServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(DeleteAsync_ShouldDeleteGroup_WhenNoRelatedData));
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         db.Groups.Add(group);
         await db.SaveChangesAsync();
 
@@ -411,7 +411,7 @@ public class GroupServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(DeleteAsync_ShouldDeletePlayers_WhenGroupHasPlayers));
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         db.Groups.Add(group);
 
         var player = new PlayerEntity("P1", null, group.Id, 0, false, true, Status.Active);
@@ -437,7 +437,7 @@ public class GroupServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(DeleteAsync_ShouldDeleteTeamColors_WhenGroupHasColors));
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         db.Groups.Add(group);
         await db.SaveChangesAsync();
 
@@ -481,7 +481,7 @@ public class GroupServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(AddAdminToGroupAsync_WhenUserNotFound_ShouldThrow));
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         db.Groups.Add(group);
         await db.SaveChangesAsync();
 
@@ -530,7 +530,7 @@ public class GroupServiceTests
         var user = new UserEntity("u", "F", "L", "u@b.com", "hash", null, null);
         db.Users.Add(user);
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         group.SetAdmins([user.Id]);
         db.Groups.Add(group);
 
@@ -560,7 +560,7 @@ public class GroupServiceTests
         var newAdmin      = new UserEntity("admin2", "C", "D", "c@b.com", "hash", null, null);
         db.Users.AddRange(existingAdmin, newAdmin);
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         group.SetAdmins([existingAdmin.Id]);
         db.Groups.Add(group);
 
@@ -578,5 +578,108 @@ public class GroupServiceTests
 
         saved.Admins.Should().HaveCount(2);
         saved.Admins.Select(a => a.UserId).Should().Contain(newAdmin.Id);
+    }
+
+    // ─── RemoveAdminAsync ─────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task RemoveAdminAsync_WhenGroupNotFound_ShouldThrow()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(RemoveAdminAsync_WhenGroupNotFound_ShouldThrow));
+        var sut = CreateSut(db);
+
+        // Act
+        var act = async () => await sut.RemoveAdminAsync(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowAsync<ApplicationException>()
+            .WithMessage("Group not found.");
+    }
+
+    [Fact]
+    public async Task RemoveAdminAsync_WhenRequestingUserIsNotAdmin_ShouldThrowUnauthorizedAccessException()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(RemoveAdminAsync_WhenRequestingUserIsNotAdmin_ShouldThrowUnauthorizedAccessException));
+
+        var creator = new UserEntity("creator", "C", "R", "c@b.com", "hash", null, null);
+        var target  = new UserEntity("target",  "T", "G", "t@b.com", "hash", null, null);
+        var noAdmin = new UserEntity("noadmin", "N", "A", "n@b.com", "hash", null, null);
+        db.Users.AddRange(creator, target, noAdmin);
+
+        var group = new GroupEntity("G", null, creator.Id);
+        group.SetAdmins([creator.Id, target.Id]);
+        db.Groups.Add(group);
+
+        await db.SaveChangesAsync();
+
+        var sut = CreateSut(db);
+
+        // Act — noAdmin tenta remover target
+        var act = async () => await sut.RemoveAdminAsync(
+            group.Id, target.Id, noAdmin.Id, CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowAsync<UnauthorizedAccessException>()
+            .WithMessage("Requesting user is not an admin of this group.");
+    }
+
+    [Fact]
+    public async Task RemoveAdminAsync_WhenTargetIsCreator_ShouldThrowInvalidOperationException()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(RemoveAdminAsync_WhenTargetIsCreator_ShouldThrowInvalidOperationException));
+
+        var creator = new UserEntity("creator", "C", "R", "c@b.com", "hash", null, null);
+        var admin   = new UserEntity("admin",   "A", "D", "a@b.com", "hash", null, null);
+        db.Users.AddRange(creator, admin);
+
+        var group = new GroupEntity("G", null, creator.Id);
+        group.SetAdmins([creator.Id, admin.Id]);
+        db.Groups.Add(group);
+
+        await db.SaveChangesAsync();
+
+        var sut = CreateSut(db);
+
+        // Act — admin tenta remover o próprio criador
+        var act = async () => await sut.RemoveAdminAsync(
+            group.Id, creator.Id, admin.Id, CancellationToken.None);
+
+        // Assert — GroupEntity.RemoveAdmin deve rejeitar
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("The group creator cannot be removed from admins.");
+    }
+
+    [Fact]
+    public async Task RemoveAdminAsync_WhenValid_ShouldRemoveAdminAndPersist()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(RemoveAdminAsync_WhenValid_ShouldRemoveAdminAndPersist));
+
+        var creator = new UserEntity("creator", "C", "R", "c@b.com", "hash", null, null);
+        var target  = new UserEntity("target",  "T", "G", "t@b.com", "hash", null, null);
+        db.Users.AddRange(creator, target);
+
+        var group = new GroupEntity("G", null, creator.Id);
+        group.SetAdmins([creator.Id, target.Id]);
+        db.Groups.Add(group);
+
+        await db.SaveChangesAsync();
+
+        var sut = CreateSut(db);
+
+        // Act — creator remove target
+        await sut.RemoveAdminAsync(group.Id, target.Id, creator.Id, CancellationToken.None);
+
+        // Assert
+        var saved = await db.Groups
+            .Include(g => g.Admins)
+            .FirstAsync(g => g.Id == group.Id);
+
+        saved.Admins.Should().ContainSingle()
+            .Which.UserId.Should().Be(creator.Id);
     }
 }

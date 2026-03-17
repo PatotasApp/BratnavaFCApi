@@ -29,7 +29,7 @@ public class GroupService : IGroupService
             if (!adminsExist)
                 throw new ApplicationException("User admin does not exists.");
 
-            var group = new GroupEntity(request.Name, request.ScheduleMatchDate);
+            var group = new GroupEntity(request.Name, request.ScheduleMatchDate, request.CreatedByUserId);
             group.SetAdmins(request.UserAdminIds);
 
             _repository.Add(group);
@@ -189,7 +189,8 @@ public class GroupService : IGroupService
                 group.ScheduleMatchDate,
                 group.Admins.Select(x => x.UserId).ToArray(),
                 group.Status,
-                players
+                players,
+                group.CreatedByUserId
             );
         }
         catch (Exception ex)
@@ -211,7 +212,8 @@ public class GroupService : IGroupService
                 g.Group.ScheduleMatchDate,
                 g.Group.Admins.Select(x => x.UserId).ToArray(),
                 g.Group.Status,
-                g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating)).ToList()
+                g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating)).ToList(),
+                g.Group.CreatedByUserId
             ))
             .ToListAsync(cancellationToken);
     }
@@ -233,7 +235,8 @@ public class GroupService : IGroupService
             g.Status,
             g.Players.Select(p => new Domain.Dtos.Players.PlayerDto(
                 p.Id, p.Name, p.UserId, p.User?.UserName,
-                p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating)).ToList()
+                p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating)).ToList(),
+            g.CreatedByUserId
         )).ToList();
     }
 
@@ -270,6 +273,33 @@ public class GroupService : IGroupService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error trying to add admin to group. GroupId={GroupId} UserId={UserId}", groupId, request?.UserId);
+            throw;
+        }
+    }
+
+    public async Task RemoveAdminAsync(Guid groupId, Guid targetUserId, Guid requestingUserId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var group = await _context.Groups
+                .Include(g => g.Admins)
+                .FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
+
+            if (group is null)
+                throw new ApplicationException("Group not found.");
+
+            var requestingIsAdmin = group.Admins.Any(a => a.UserId == requestingUserId);
+            if (!requestingIsAdmin)
+                throw new UnauthorizedAccessException("Requesting user is not an admin of this group.");
+
+            group.RemoveAdmin(targetUserId);
+
+            _context.Groups.Update(group);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error trying to remove admin from group. GroupId={GroupId} TargetUserId={TargetUserId}", groupId, targetUserId);
             throw;
         }
     }

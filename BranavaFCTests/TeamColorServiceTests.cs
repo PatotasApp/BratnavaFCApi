@@ -13,7 +13,7 @@ public class TeamColorServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(GetByIdAsync_WhenNotFound_ShouldThrow));
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         db.Groups.Add(group);
         await db.SaveChangesAsync();
 
@@ -48,7 +48,7 @@ public class TeamColorServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(CreateAsync_WhenValid_ShouldPersist));
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         db.Groups.Add(group);
         await db.SaveChangesAsync();
 
@@ -80,7 +80,7 @@ public class TeamColorServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(InactivateAsync_WhenNotFound_ShouldThrow));
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         db.Groups.Add(group);
         await db.SaveChangesAsync();
 

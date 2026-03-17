@@ -29,7 +29,7 @@ public class GroupSettingsServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(GetAsync_WhenNoSettings_ShouldReturnDefaults_IsPersistedFalse));
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         db.Groups.Add(group);
         await db.SaveChangesAsync();
 
@@ -51,7 +51,7 @@ public class GroupSettingsServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(UpsertAsync_WhenNew_ShouldCreate_AndReturnPersistedTrue));
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         db.Groups.Add(group);
         await db.SaveChangesAsync();
 
@@ -85,7 +85,7 @@ public class GroupSettingsServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(UpsertAsync_WhenExists_ShouldUpdate));
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         db.Groups.Add(group);
 
         var settings = new GroupSettingsEntity(group.Id, 5, 6, null, null, null);

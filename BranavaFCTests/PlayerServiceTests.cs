@@ -47,7 +47,7 @@ public class PlayerServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(CreateAsync_WhenUserNotExists_ShouldThrow));
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         db.Groups.Add(group);
         await db.SaveChangesAsync();
 
@@ -79,7 +79,7 @@ public class PlayerServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(CreateAsync_WhenPlayerAlreadyExistsInGroup_ShouldThrow));
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         var user = new UserEntity("u", "f", "l", "mail@test.com", "hash", null, null);
 
         db.Groups.Add(group);
@@ -118,7 +118,7 @@ public class PlayerServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(CreateAsync_WhenValid_ShouldAdd_AndSave_AndTrimName));
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         var user = new UserEntity("u", "f", "l", "mail@test.com", "hash", null, null);
 
         db.Groups.Add(group);
@@ -193,7 +193,7 @@ public class PlayerServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(UpdateAsync_WhenValid_ShouldUpdateFields_AndSave));
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         var user = new UserEntity("u", "f", "l", "mail@test.com", "hash", null, null);
 
         db.Groups.Add(group);
@@ -239,7 +239,7 @@ public class PlayerServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(UpdateAsync_WhenNameInvalid_ShouldThrow));
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         var user = new UserEntity("u", "f", "l", "mail@test.com", "hash", null, null);
 
         db.Groups.Add(group);
@@ -278,7 +278,7 @@ public class PlayerServiceTests
         // Arrange
         await using var db = DbContextFactory.Create(nameof(UpdateAsync_WhenSkillPointsNegative_ShouldThrow));
 
-        var group = new GroupEntity("G", null);
+        var group = new GroupEntity("G", null, Guid.NewGuid());
         var user = new UserEntity("u", "f", "l", "mail@test.com", "hash", null, null);
 
         db.Groups.Add(group);

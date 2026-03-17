@@ -207,6 +207,8 @@ public class AppDbContext : DbContext
 
             builder.Property(x => x.Name).IsRequired();
 
+            builder.Property(x => x.CreatedByUserId).IsRequired();
+
             builder.HasMany(x => x.Players)
                 .WithOne(x => x.Group)
                 .HasForeignKey(x => x.GroupId);
