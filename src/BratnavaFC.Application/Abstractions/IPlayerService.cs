@@ -11,4 +11,5 @@ public interface IPlayerService
     Task InactivateAsync(Guid playerId, CancellationToken cancellationToken);
     Task ReactivateAsync(Guid playerId, CancellationToken cancellationToken);
     Task<IReadOnlyList<MyPlayerDto>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken);
+    Task LeaveGroupAsync(Guid playerId, Guid requestingUserId, CancellationToken cancellationToken);
 }

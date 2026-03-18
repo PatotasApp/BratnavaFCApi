@@ -119,6 +119,30 @@ public class GroupsController : GroupAuthorizedController
         }
     }
 
+    [HttpPost("{groupId:guid}/leave-creator")]
+    [Authorize(Roles = "User,Admin,GodMode")]
+    public async Task<IActionResult> CreatorLeaveGroupAsync(Guid groupId, [FromBody] CreatorLeaveGroupDto request, CancellationToken cancellationToken)
+    {
+        if (request == null) return BadRequest();
+
+        var requestingUserId = GetCurrentUserId();
+        if (requestingUserId == null) return Unauthorized();
+
+        try
+        {
+            await _groupService.CreatorLeaveGroupAsync(groupId, requestingUserId.Value, request, cancellationToken);
+            return NoContent();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     // ── Convites ──────────────────────────────────────────────────────────────
 
     /// <summary>Admin da patota envia convite para um usuário.</summary>

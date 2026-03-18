@@ -73,4 +73,12 @@ public class GroupEntity : InactivatableEntity
 
         _admins.Remove(admin);
     }
+
+    public void TransferCreator(Guid newCreatorUserId)
+    {
+        if (!_admins.Any(a => a.UserId == newCreatorUserId))
+            throw new InvalidOperationException("The new creator must be an existing admin of the group.");
+
+        CreatedByUserId = newCreatorUserId;
+    }
 }

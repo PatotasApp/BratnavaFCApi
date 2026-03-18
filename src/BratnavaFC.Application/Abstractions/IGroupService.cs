@@ -21,4 +21,5 @@ public interface IGroupService
     Task<int> GetMyPendingInviteCountAsync(Guid userId, CancellationToken cancellationToken);
     Task AcceptInviteAsync(Guid inviteId, Guid userId, CancellationToken cancellationToken);
     Task RejectInviteAsync(Guid inviteId, Guid userId, CancellationToken cancellationToken);
+    Task CreatorLeaveGroupAsync(Guid groupId, Guid requestingUserId, CreatorLeaveGroupDto dto, CancellationToken cancellationToken);
 }
