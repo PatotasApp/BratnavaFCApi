@@ -23,6 +23,8 @@ public class AppDbContext : DbContext
     public DbSet<GroupSettingsEntity> GroupSettings => Set<GroupSettingsEntity>();
     public DbSet<GoalEntity> Goals => Set<GoalEntity>();
     public DbSet<GroupInviteEntity> GroupInvites => Set<GroupInviteEntity>();
+    public DbSet<CalendarCategoryEntity> CalendarCategories => Set<CalendarCategoryEntity>();
+    public DbSet<CalendarEventEntity> CalendarEvents => Set<CalendarEventEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -356,6 +358,47 @@ public class AppDbContext : DbContext
             builder.HasIndex(x => new { x.TargetUserId, x.Status });
             // evitar convites duplicados pendentes para o mesmo par usuário+grupo
             builder.HasIndex(x => new { x.GroupId, x.TargetUserId, x.Status });
+        });
+
+        modelBuilder.Entity<CalendarCategoryEntity>(builder =>
+        {
+            builder.HasKey(x => x.Id);
+
+            builder.Property(x => x.GroupId).IsRequired();
+            builder.Property(x => x.Name).IsRequired().HasMaxLength(100);
+            builder.Property(x => x.Color).HasMaxLength(20);
+            builder.Property(x => x.Icon).HasMaxLength(100);
+            builder.Property(x => x.IsSystem).IsRequired().HasDefaultValue(false);
+
+            builder.HasOne<GroupEntity>()
+                .WithMany()
+                .HasForeignKey(x => x.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasIndex(x => x.GroupId);
+        });
+
+        modelBuilder.Entity<CalendarEventEntity>(builder =>
+        {
+            builder.HasKey(x => x.Id);
+
+            builder.Property(x => x.GroupId).IsRequired();
+            builder.Property(x => x.Title).IsRequired().HasMaxLength(200);
+            builder.Property(x => x.Description).HasMaxLength(1000);
+            builder.Property(x => x.TimeTBD).IsRequired().HasDefaultValue(false);
+
+            builder.HasOne<GroupEntity>()
+                .WithMany()
+                .HasForeignKey(x => x.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(x => x.Category)
+                .WithMany()
+                .HasForeignKey(x => x.CategoryId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            builder.HasIndex(x => new { x.GroupId, x.EventDate });
         });
     }
 

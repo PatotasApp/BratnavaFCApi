@@ -90,6 +90,20 @@ builder.Services.AddScoped<IGroupService, GroupService>();
 builder.Services.AddScoped<TeamGenerationService>();
 builder.Services.AddScoped<PasswordHasher<UserEntity>>();
 builder.Services.AddScoped<IGroupSettingsService, GroupSettingsService>();
+builder.Services.AddScoped<ICalendarService, CalendarService>();
+
+// =====================
+// HOLIDAY SERVICE (BrasilAPI)
+// =====================
+builder.Services.AddHttpClient("BrasilApi", c =>
+{
+    c.BaseAddress = new Uri("https://brasilapi.com.br/");
+    c.DefaultRequestHeaders.Add("Accept", "application/json");
+    c.DefaultRequestHeaders.Add("User-Agent", "BratnavaFC/1.0");
+    c.Timeout = TimeSpan.FromSeconds(10);
+});
+builder.Services.AddMemoryCache(o => o.SizeLimit = 10_000);
+builder.Services.AddSingleton<IHolidayService, HolidayService>();
 
 
 // =====================

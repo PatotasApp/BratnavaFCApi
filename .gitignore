@@ -14,3 +14,7 @@
 /src/BratnavaFC.Infrastructure/bin/Debug/net8.0
 /BranavaFCTests/bin/Debug/net8.0
 /BranavaFCTests/obj
+/src/BratnavaFC.Api/bin/Release/net8.0
+/src/BratnavaFC.Application/bin/Release/net8.0
+/src/BratnavaFC.Domain/bin/Release/net8.0
+/src/BratnavaFC.Infrastructure/bin/Release/net8.0
