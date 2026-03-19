@@ -272,6 +272,85 @@ public class PlayerServiceTests
             .WithMessage("Player name is required.");
     }
 
+    // ─── LeaveGroupAsync ──────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task LeaveGroupAsync_ValidOwner_SetsIsGuestTrue()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(LeaveGroupAsync_ValidOwner_SetsIsGuestTrue));
+
+        var group = new GroupEntity("G", null, Guid.NewGuid());
+        var user  = new UserEntity("u", "F", "L", "u@test.com", "hash", null, null);
+        db.Groups.Add(group);
+        db.Users.Add(user);
+
+        var player = new PlayerEntity("P", user.Id, group.Id, 0m, false, false, Status.Active);
+        db.Players.Add(player);
+        await db.SaveChangesAsync();
+
+        var logger = new Mock<ILogger<PlayerService>>();
+        var repo   = new RepositoryBase<PlayerEntity>(db);
+        var sut    = new PlayerService(repo, logger.Object, db);
+
+        // Act
+        await sut.LeaveGroupAsync(player.Id, user.Id, CancellationToken.None);
+
+        // Assert
+        var reloaded = await db.Players.IgnoreQueryFilters().FirstAsync(p => p.Id == player.Id);
+        reloaded.IsGuest.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task LeaveGroupAsync_PlayerNotFound_ThrowsApplicationException()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(LeaveGroupAsync_PlayerNotFound_ThrowsApplicationException));
+
+        var logger = new Mock<ILogger<PlayerService>>();
+        var repo   = new Mock<IRepositoryBase<PlayerEntity>>();
+
+        repo.Setup(r => r.GetByIdIncludingInactiveAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PlayerEntity?)null);
+
+        var sut = new PlayerService(repo.Object, logger.Object, db);
+
+        // Act
+        var act = async () => await sut.LeaveGroupAsync(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowAsync<ApplicationException>()
+            .WithMessage("PlayerEntity not found.");
+    }
+
+    [Fact]
+    public async Task LeaveGroupAsync_WrongUser_ThrowsUnauthorizedAccessException()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(LeaveGroupAsync_WrongUser_ThrowsUnauthorizedAccessException));
+
+        var group   = new GroupEntity("G", null, Guid.NewGuid());
+        var owner   = new UserEntity("owner", "O", "W", "o@test.com", "hash", null, null);
+        var intruder = Guid.NewGuid();
+        db.Groups.Add(group);
+        db.Users.Add(owner);
+
+        var player = new PlayerEntity("P", owner.Id, group.Id, 0m, false, false, Status.Active);
+        db.Players.Add(player);
+        await db.SaveChangesAsync();
+
+        var logger = new Mock<ILogger<PlayerService>>();
+        var repo   = new RepositoryBase<PlayerEntity>(db);
+        var sut    = new PlayerService(repo, logger.Object, db);
+
+        // Act — requestingUserId não é o dono do player
+        var act = async () => await sut.LeaveGroupAsync(player.Id, intruder, CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowAsync<UnauthorizedAccessException>()
+            .WithMessage("You can only leave your own player.");
+    }
+
     [Fact]
     public async Task UpdateAsync_WhenSkillPointsNegative_ShouldThrow()
     {

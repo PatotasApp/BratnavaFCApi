@@ -63,6 +63,15 @@ public class PlayersController : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("{playerId:guid}/leave")]
+    [Authorize(Roles = "User,Admin,GodMode")]
+    public async Task<IActionResult> LeaveGroup(Guid playerId, CancellationToken cancellationToken)
+    {
+        var userId = GetUserIdOrThrow();
+        await _playerService.LeaveGroupAsync(playerId, userId, cancellationToken);
+        return NoContent();
+    }
+
     [HttpGet("mine")]
     [Authorize(Roles = "User,Admin,GodMode")]
     public async Task<IActionResult> GetMine(CancellationToken cancellationToken)

@@ -174,4 +174,56 @@ public class GroupEntityTests
         Assert.DoesNotContain(group.Admins, a => a.UserId == adminId);
         Assert.Contains(group.Admins, a => a.UserId == creatorId);
     }
+
+    // ─── TransferCreator ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void TransferCreator_WithValidAdmin_UpdatesCreatedByUserId()
+    {
+        // Arrange
+        var creatorId  = Guid.NewGuid();
+        var newCreator = Guid.NewGuid();
+        var group = new GroupEntity("G", null, creatorId);
+        group.SetAdmins([creatorId, newCreator]);
+
+        // Act
+        group.TransferCreator(newCreator);
+
+        // Assert
+        Assert.Equal(newCreator, group.CreatedByUserId);
+    }
+
+    [Fact]
+    public void TransferCreator_WithNonAdmin_ThrowsInvalidOperationException()
+    {
+        // Arrange
+        var creatorId   = Guid.NewGuid();
+        var nonAdminId  = Guid.NewGuid();
+        var group = new GroupEntity("G", null, creatorId);
+        group.SetAdmins([creatorId]);
+
+        // Act + Assert
+        var ex = Assert.Throws<InvalidOperationException>(() => group.TransferCreator(nonAdminId));
+        Assert.Equal("The new creator must be an existing admin of the group.", ex.Message);
+    }
+
+    [Fact]
+    public void TransferCreator_AfterTransfer_RemoveAdmin_AllowsRemovingOldCreator()
+    {
+        // Arrange
+        var oldCreatorId = Guid.NewGuid();
+        var newCreatorId = Guid.NewGuid();
+        var group = new GroupEntity("G", null, oldCreatorId);
+        group.SetAdmins([oldCreatorId, newCreatorId]);
+
+        // Act — transfere liderança; agora oldCreatorId não é mais o criador
+        group.TransferCreator(newCreatorId);
+
+        // O antigo criador deve poder ser removido dos admins porque CreatedByUserId mudou
+        group.RemoveAdmin(oldCreatorId);
+
+        // Assert
+        Assert.DoesNotContain(group.Admins, a => a.UserId == oldCreatorId);
+        Assert.Contains(group.Admins, a => a.UserId == newCreatorId);
+    }
 }

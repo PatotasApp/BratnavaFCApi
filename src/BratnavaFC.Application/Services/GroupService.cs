@@ -255,17 +255,7 @@ public class GroupService : IGroupService
             if (group is null)
                 throw new ApplicationException("Group not found.");
 
-            var alreadyAdmin = group.Admins.Any(a => a.UserId == request.UserId);
-            if (alreadyAdmin)
-                return;
-
-            var newAdmins = group.Admins
-                .Select(a => a.UserId)
-                .Append(request.UserId)
-                .Distinct()
-                .ToArray();
-
-            group.SetAdmins(newAdmins);
+            AddAdminToGroupInternal(group, request.UserId);
 
             _context.Groups.Update(group);
             await _context.SaveChangesAsync(cancellationToken);
@@ -275,6 +265,24 @@ public class GroupService : IGroupService
             _logger.LogError(ex, "Error trying to add admin to group. GroupId={GroupId} UserId={UserId}", groupId, request?.UserId);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Adiciona um usuário como admin de um grupo já carregado (sem load/save).
+    /// Idempotente: se já for admin, não faz nada.
+    /// </summary>
+    private static void AddAdminToGroupInternal(GroupEntity group, Guid userId)
+    {
+        if (group.Admins.Any(a => a.UserId == userId))
+            return;
+
+        var newAdmins = group.Admins
+            .Select(a => a.UserId)
+            .Append(userId)
+            .Distinct()
+            .ToArray();
+
+        group.SetAdmins(newAdmins);
     }
 
     public async Task RemoveAdminAsync(Guid groupId, Guid targetUserId, Guid requestingUserId, CancellationToken cancellationToken)
@@ -467,6 +475,90 @@ public class GroupService : IGroupService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error rejecting invite. InviteId={InviteId}", inviteId);
+            throw;
+        }
+    }
+
+    public async Task CreatorLeaveGroupAsync(Guid groupId, Guid requestingUserId, CreatorLeaveGroupDto dto, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var group = await _context.Groups
+                .Include(g => g.Admins)
+                .FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
+
+            if (group is null)
+                throw new ApplicationException("Group not found.");
+
+            if (group.CreatedByUserId != requestingUserId)
+                throw new UnauthorizedAccessException("Only the group creator can use this operation.");
+
+            // Opção 1: Deletar o grupo
+            if (dto.DeleteGroup)
+            {
+                await DeleteAsync(groupId, cancellationToken);
+                return;
+            }
+
+            // Localizar o player do criador neste grupo
+            var creatorPlayer = await _context.Players
+                .FirstOrDefaultAsync(p => p.GroupId == groupId && p.UserId == requestingUserId, cancellationToken);
+
+            // Opção 2: Transferir para admin existente
+            if (dto.TransferToUserId.HasValue)
+            {
+                var isExistingAdmin = group.Admins.Any(a => a.UserId == dto.TransferToUserId.Value);
+                if (!isExistingAdmin)
+                    throw new InvalidOperationException("TransferToUserId must be an existing admin.");
+
+                group.TransferCreator(dto.TransferToUserId.Value);
+
+                // Remove o criador original dos admins (agora que CreatedByUserId foi alterado)
+                var oldCreatorAdmin = group.Admins.FirstOrDefault(a => a.UserId == requestingUserId);
+                if (oldCreatorAdmin != null)
+                    group.RemoveAdmin(requestingUserId);
+
+                if (creatorPlayer != null)
+                    creatorPlayer.SetIsGuest(true);
+
+                _context.Groups.Update(group);
+                if (creatorPlayer != null) _context.Players.Update(creatorPlayer);
+                await _context.SaveChangesAsync(cancellationToken);
+                return;
+            }
+
+            // Opção 3: Promover jogador (não admin) e transferir
+            if (dto.PromoteAndTransferUserId.HasValue)
+            {
+                var targetUserId = dto.PromoteAndTransferUserId.Value;
+
+                var userExists = await _context.Users.AnyAsync(u => u.Id == targetUserId, cancellationToken);
+                if (!userExists)
+                    throw new ApplicationException("User to promote not found.");
+
+                // Adicionar como admin (reutiliza lógica de AddAdminToGroupAsync)
+                AddAdminToGroupInternal(group, targetUserId);
+
+                // Transferir liderança
+                group.TransferCreator(targetUserId);
+
+                // Remover criador original dos admins
+                group.RemoveAdmin(requestingUserId);
+
+                if (creatorPlayer != null)
+                    creatorPlayer.SetIsGuest(true);
+
+                _context.Groups.Update(group);
+                if (creatorPlayer != null) _context.Players.Update(creatorPlayer);
+                await _context.SaveChangesAsync(cancellationToken);
+                return;
+            }
+
+            throw new InvalidOperationException("Invalid leave operation: provide TransferToUserId, PromoteAndTransferUserId, or set DeleteGroup = true.");
+        }
+        catch (Exception ex) when (ex is not (ApplicationException or UnauthorizedAccessException or InvalidOperationException))
+        {
+            _logger.LogError(ex, "Error in CreatorLeaveGroupAsync. GroupId={GroupId}", groupId);
             throw;
         }
     }

@@ -196,6 +196,20 @@ public class PlayerService : IPlayerService
         return list;
     }
 
+    public async Task LeaveGroupAsync(Guid playerId, Guid requestingUserId, CancellationToken cancellationToken)
+    {
+        var player = await _repository.GetByIdIncludingInactiveAsync(playerId, cancellationToken);
+        if (player == null) throw new ApplicationException("PlayerEntity not found.");
+
+        if (player.UserId != requestingUserId)
+            throw new UnauthorizedAccessException("You can only leave your own player.");
+
+        player.SetIsGuest(true);
+
+        _repository.Update(player);
+        await _repository.SaveChangesAsync(cancellationToken);
+    }
+
     private static PlayerDto MapToDto(PlayerEntity player) => new(
         player.Id,
         player.Name,
