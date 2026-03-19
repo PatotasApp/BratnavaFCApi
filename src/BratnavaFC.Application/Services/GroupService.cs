@@ -400,9 +400,9 @@ public class GroupService : IGroupService
             var userExists = await _context.Users.AnyAsync(u => u.Id == request.TargetUserId, cancellationToken);
             if (!userExists) throw new ApplicationException("Target user not found.");
 
-            // Já é membro?
+            // Já é membro ativo (não-guest)?
             var alreadyMember = await _context.Players
-                .AnyAsync(p => p.GroupId == groupId && p.UserId == request.TargetUserId, cancellationToken);
+                .AnyAsync(p => p.GroupId == groupId && p.UserId == request.TargetUserId && !p.IsGuest, cancellationToken);
             if (alreadyMember) throw new InvalidOperationException("User is already a member of this group.");
 
             // Já tem convite pendente?
@@ -500,15 +500,29 @@ public class GroupService : IGroupService
             }
             else
             {
-                // Criar novo player para o usuário
-                var user = await _context.Users
-                    .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
-                if (user == null) throw new ApplicationException("User not found.");
+                // Verificar se já existe um player guest do mesmo usuário neste grupo (ex-mensalista que virou convidado)
+                var existingGuestPlayer = await _context.Players
+                    .FirstOrDefaultAsync(p => p.GroupId == invite.GroupId && p.UserId == userId && p.IsGuest, cancellationToken);
 
-                var name = $"{user.FirstName} {user.LastName}".Trim();
-                var newPlayer = new PlayerEntity(name, userId, invite.GroupId, 0, false, false, Status.Active);
-                _context.Players.Add(newPlayer);
-                thePlayer = newPlayer;
+                if (existingGuestPlayer != null)
+                {
+                    existingGuestPlayer.SetIsGuest(false);
+                    existingGuestPlayer.SetJoinedAt(DateTime.UtcNow);
+                    _context.Players.Update(existingGuestPlayer);
+                    thePlayer = existingGuestPlayer;
+                }
+                else
+                {
+                    // Criar novo player para o usuário
+                    var user = await _context.Users
+                        .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+                    if (user == null) throw new ApplicationException("User not found.");
+
+                    var name = $"{user.FirstName} {user.LastName}".Trim();
+                    var newPlayer = new PlayerEntity(name, userId, invite.GroupId, 0, false, false, Status.Active);
+                    _context.Players.Add(newPlayer);
+                    thePlayer = newPlayer;
+                }
             }
 
             // Se houver partida em Acceptation no grupo, incluir o novo jogador
