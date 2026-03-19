@@ -410,6 +410,7 @@ public class GroupService : IGroupService
                 if (player == null) throw new ApplicationException("Guest player not found.");
                 player.SetUser(userId);
                 player.SetIsGuest(false);
+                player.SetJoinedAt(DateTime.UtcNow);
                 _context.Players.Update(player);
                 thePlayer = player;
             }

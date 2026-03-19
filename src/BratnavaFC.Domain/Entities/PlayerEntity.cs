@@ -11,6 +11,12 @@ public class PlayerEntity : InactivatableEntity
     public bool IsGoalkeeper { get; private set; }
     public bool IsGuest { get; private set; }
 
+    /// <summary>
+    /// Data em que o jogador foi vinculado como mensalista (aceitou o convite).
+    /// Nulo para jogadores convidados ainda não vinculados.
+    /// </summary>
+    public DateTime? JoinedAt { get; private set; }
+
     private readonly List<MatchPlayerEntity> _matchPlayers = new();
     public IReadOnlyCollection<MatchPlayerEntity> MatchPlayers => _matchPlayers;
 
@@ -25,6 +31,9 @@ public class PlayerEntity : InactivatableEntity
         SetSkillPoints(skillPoints);
         SetGoalkeeper(isGoalkeeper);
         SetIsGuest(isGuest);
+        // Jogador criado diretamente já é mensalista — data de entrada = data de criação
+        if (!isGuest && userId.HasValue)
+            JoinedAt = DateTime.UtcNow;
     }
 
     public void Rename(string name)
@@ -67,6 +76,12 @@ public class PlayerEntity : InactivatableEntity
     public void SetIsGuest(bool isGuest)
     {
         IsGuest = isGuest;
+    }
+
+    /// <summary>Marca a data de entrada como mensalista. Chamado ao aceitar o convite.</summary>
+    public void SetJoinedAt(DateTime joinedAt)
+    {
+        JoinedAt = joinedAt;
     }
 
     public int? GuestStarRating { get; private set; }

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
+using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -43,6 +44,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 OwnGoalIcon    = null,
                 MvpIcon        = null,
                 PlayerIcon     = null,
+                MonthlyFee     = null,
             };
         }
 
@@ -68,6 +70,9 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 dto.DefaultKickoffTime);
 
             entity.SetIcons(dto.GoalIcon, dto.GoalkeeperIcon, dto.AssistIcon, dto.OwnGoalIcon, dto.MvpIcon, dto.PlayerIcon);
+            entity.SetMonthlyFee(dto.MonthlyFee);
+            if (dto.PaymentMode.HasValue)
+                entity.SetPaymentMode((PaymentMode)dto.PaymentMode.Value);
             await _context.GroupSettings.AddAsync(entity, ct);
         }
         else
@@ -79,6 +84,9 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 dto.DefaultDayOfWeek,
                 dto.DefaultKickoffTime);
             entity.SetIcons(dto.GoalIcon, dto.GoalkeeperIcon, dto.AssistIcon, dto.OwnGoalIcon, dto.MvpIcon, dto.PlayerIcon);
+            entity.SetMonthlyFee(dto.MonthlyFee);
+            if (dto.PaymentMode.HasValue)
+                entity.SetPaymentMode((PaymentMode)dto.PaymentMode.Value);
         }
 
         try
@@ -99,6 +107,9 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 dto.DefaultDayOfWeek,
                 dto.DefaultKickoffTime);
             existing.SetIcons(dto.GoalIcon, dto.GoalkeeperIcon, dto.AssistIcon, dto.OwnGoalIcon, dto.MvpIcon, dto.PlayerIcon);
+            existing.SetMonthlyFee(dto.MonthlyFee);
+            if (dto.PaymentMode.HasValue)
+                existing.SetPaymentMode((PaymentMode)dto.PaymentMode.Value);
 
             await _context.SaveChangesAsync(ct);
             entity = existing;
@@ -123,6 +134,8 @@ public sealed class GroupSettingsService : IGroupSettingsService
         OwnGoalIcon    = e.OwnGoalIcon,
         MvpIcon        = e.MvpIcon,
         PlayerIcon     = e.PlayerIcon,
+        PaymentMode    = (int)e.PaymentMode,
+        MonthlyFee     = e.MonthlyFee,
     };
 
     private async Task EnsureGroupExistsAsync(Guid groupId, CancellationToken ct)

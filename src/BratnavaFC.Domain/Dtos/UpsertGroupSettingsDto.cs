@@ -17,4 +17,9 @@ public sealed class UpsertGroupSettingsDto
     public string? OwnGoalIcon    { get; set; }
     public string? MvpIcon        { get; set; }
     public string? PlayerIcon     { get; set; }
+
+    // ── Pagamento ────────────────────────────────────────────────────────────
+    /// <summary>0 = Monthly, 1 = PerGame. Null = não alterar.</summary>
+    public int?     PaymentMode { get; set; }
+    public decimal? MonthlyFee  { get; set; }
 }

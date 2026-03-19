@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace BratnavaFC.Infrastructure.Data;
 
@@ -25,6 +26,9 @@ public class AppDbContext : DbContext
     public DbSet<GroupInviteEntity> GroupInvites => Set<GroupInviteEntity>();
     public DbSet<CalendarCategoryEntity> CalendarCategories => Set<CalendarCategoryEntity>();
     public DbSet<CalendarEventEntity> CalendarEvents => Set<CalendarEventEntity>();
+    public DbSet<MonthlyPaymentEntity> MonthlyPayments => Set<MonthlyPaymentEntity>();
+    public DbSet<ExtraChargeEntity> ExtraCharges => Set<ExtraChargeEntity>();
+    public DbSet<ExtraChargePaymentEntity> ExtraChargePayments => Set<ExtraChargePaymentEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -287,6 +291,10 @@ public class AppDbContext : DbContext
             builder.Property(x => x.DefaultDayOfWeek);
             builder.Property(x => x.DefaultKickoffTime);
 
+            builder.Property(x => x.PaymentMode)
+                .HasConversion<short>()
+                .HasDefaultValue(Domain.Enums.PaymentMode.Monthly);
+
             builder.HasIndex(x => x.GroupId).IsUnique();
         });
 
@@ -399,6 +407,97 @@ public class AppDbContext : DbContext
                 .OnDelete(DeleteBehavior.SetNull);
 
             builder.HasIndex(x => new { x.GroupId, x.EventDate });
+        });
+
+        modelBuilder.Entity<MonthlyPaymentEntity>(builder =>
+        {
+            builder.HasKey(x => x.Id);
+
+            builder.Property(x => x.GroupId).IsRequired();
+            builder.Property(x => x.PlayerId).IsRequired();
+            builder.Property(x => x.Year).IsRequired();
+            builder.Property(x => x.Month).IsRequired();
+            builder.Property(x => x.Amount).IsRequired().HasColumnType("numeric(10,2)");
+            builder.Property(x => x.Discount).IsRequired().HasDefaultValue(0m).HasColumnType("numeric(10,2)");
+            builder.Property(x => x.DiscountReason).HasMaxLength(500);
+            builder.Property(x => x.Status)
+                .HasConversion<short>()
+                .HasDefaultValue(PaymentStatus.Pending)
+                .IsRequired();
+
+            builder.HasOne(x => x.Player)
+                .WithMany()
+                .HasForeignKey(x => x.PlayerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(x => x.Group)
+                .WithMany()
+                .HasForeignKey(x => x.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Um registro por jogador por mês/ano
+            builder.HasIndex(x => new { x.GroupId, x.PlayerId, x.Year, x.Month })
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<ExtraChargeEntity>(builder =>
+        {
+            builder.HasKey(x => x.Id);
+
+            builder.Property(x => x.GroupId).IsRequired();
+            builder.Property(x => x.Name).IsRequired().HasMaxLength(200);
+            builder.Property(x => x.Description).HasMaxLength(1000);
+            builder.Property(x => x.Amount).IsRequired().HasColumnType("numeric(10,2)");
+            builder.Property(x => x.IsCancelled).IsRequired().HasDefaultValue(false);
+
+            builder.HasOne(x => x.Group)
+                .WithMany()
+                .HasForeignKey(x => x.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasMany(x => x.Payments)
+                .WithOne(x => x.ExtraCharge)
+                .HasForeignKey(x => x.ExtraChargeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasIndex(x => x.GroupId);
+        });
+
+        modelBuilder.Entity<ExtraChargePaymentEntity>(builder =>
+        {
+            builder.HasKey(x => x.Id);
+
+            builder.Property(x => x.ExtraChargeId).IsRequired();
+            builder.Property(x => x.PlayerId).IsRequired();
+            builder.Property(x => x.GroupId).IsRequired();
+            builder.Property(x => x.Amount).IsRequired().HasColumnType("numeric(10,2)");
+            builder.Property(x => x.Discount).IsRequired().HasDefaultValue(0m).HasColumnType("numeric(10,2)");
+            builder.Property(x => x.DiscountReason).HasMaxLength(500);
+            builder.Property(x => x.Status)
+                .HasConversion<short>()
+                .HasDefaultValue(PaymentStatus.Pending)
+                .IsRequired();
+
+            builder.Ignore(x => x.FinalAmount);
+
+            builder.HasOne(x => x.ExtraCharge)
+                .WithMany(x => x.Payments)
+                .HasForeignKey(x => x.ExtraChargeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(x => x.Player)
+                .WithMany()
+                .HasForeignKey(x => x.PlayerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(x => x.Group)
+                .WithMany()
+                .HasForeignKey(x => x.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Um pagamento por jogador por cobrança
+            builder.HasIndex(x => new { x.ExtraChargeId, x.PlayerId })
+                .IsUnique();
         });
     }
 

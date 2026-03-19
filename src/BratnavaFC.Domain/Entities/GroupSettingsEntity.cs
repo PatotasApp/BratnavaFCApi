@@ -1,4 +1,5 @@
 ﻿using System;
+using BratnavaFC.Domain.Enums;
 
 namespace BratnavaFC.Domain.Entities;
 
@@ -41,6 +42,12 @@ public sealed class GroupSettingsEntity : BaseEntity
     public string? OwnGoalIcon    { get; private set; }
     public string? MvpIcon        { get; private set; }
     public string? PlayerIcon     { get; private set; }
+
+    // ── Pagamento ─────────────────────────────────────────────────────────────
+    public PaymentMode PaymentMode { get; private set; } = PaymentMode.Monthly;
+    public decimal?    MonthlyFee  { get; private set; }
+
+    public void SetPaymentMode(PaymentMode mode) => PaymentMode = mode;
 
     public void Update(
         int minPlayers,
@@ -91,6 +98,14 @@ public sealed class GroupSettingsEntity : BaseEntity
     private void SetDefaultPlaceName(string? placeName)
     {
         DefaultPlaceName = string.IsNullOrWhiteSpace(placeName) ? null : placeName.Trim();
+    }
+
+    public void SetMonthlyFee(decimal? value)
+    {
+        if (value.HasValue && value.Value < 0)
+            throw new InvalidOperationException("MonthlyFee nao pode ser negativo.");
+
+        MonthlyFee = value;
     }
 
     private void SetDefaultSchedule(DayOfWeek? dayOfWeek, TimeSpan? kickoffTime)

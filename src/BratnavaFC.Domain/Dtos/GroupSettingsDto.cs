@@ -23,4 +23,9 @@ public sealed class GroupSettingsDto
     public string? OwnGoalIcon    { get; init; }
     public string? MvpIcon        { get; init; }
     public string? PlayerIcon     { get; init; }
+
+    // ── Pagamento ────────────────────────────────────────────────────────────
+    /// <summary>0 = Monthly, 1 = PerGame</summary>
+    public int      PaymentMode { get; init; }
+    public decimal? MonthlyFee  { get; init; }
 }
