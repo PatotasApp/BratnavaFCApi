@@ -171,6 +171,7 @@ public class GroupService : IGroupService
         {
             var group = await _context.Groups
                 .Include(g => g.Admins)
+                .Include(g => g.Financeiros)
                 .FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
 
             if (group == null)
@@ -188,6 +189,7 @@ public class GroupService : IGroupService
                 group.Name,
                 group.ScheduleMatchDate,
                 group.Admins.Select(x => x.UserId).ToArray(),
+                group.Financeiros.Select(x => x.UserId).ToArray(),
                 group.Status,
                 players,
                 group.CreatedByUserId
@@ -211,6 +213,26 @@ public class GroupService : IGroupService
                 g.Group.Name,
                 g.Group.ScheduleMatchDate,
                 g.Group.Admins.Select(x => x.UserId).ToArray(),
+                g.Group.Financeiros.Select(x => x.UserId).ToArray(),
+                g.Group.Status,
+                g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating)).ToList(),
+                g.Group.CreatedByUserId
+            ))
+            .ToListAsync(cancellationToken);
+    }
+
+    public Task<List<GroupDto>> GetByFinanceiroIdAsync(Guid financeiroId, CancellationToken cancellationToken)
+    {
+        return _context.GroupFinanceiros
+            .Include(x => x.Group)
+            .ThenInclude(x => x.Players)
+            .Where(x => x.UserId == financeiroId)
+            .Select(g => new GroupDto(
+                g.Group.Id,
+                g.Group.Name,
+                g.Group.ScheduleMatchDate,
+                g.Group.Admins.Select(x => x.UserId).ToArray(),
+                g.Group.Financeiros.Select(x => x.UserId).ToArray(),
                 g.Group.Status,
                 g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating)).ToList(),
                 g.Group.CreatedByUserId
@@ -224,6 +246,7 @@ public class GroupService : IGroupService
             .Include(g => g.Players)
                 .ThenInclude(p => p.User)
             .Include(g => g.Admins)
+            .Include(g => g.Financeiros)
             .OrderBy(g => g.Name)
             .ToListAsync(cancellationToken);
 
@@ -232,6 +255,7 @@ public class GroupService : IGroupService
             g.Name,
             g.ScheduleMatchDate,
             g.Admins.Select(a => a.UserId).ToArray(),
+            g.Financeiros.Select(f => f.UserId).ToArray(),
             g.Status,
             g.Players.Select(p => new Domain.Dtos.Players.PlayerDto(
                 p.Id, p.Name, p.UserId, p.User?.UserName,
@@ -308,6 +332,58 @@ public class GroupService : IGroupService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error trying to remove admin from group. GroupId={GroupId} TargetUserId={TargetUserId}", groupId, targetUserId);
+            throw;
+        }
+    }
+
+    // ── Financeiros ───────────────────────────────────────────────────────────
+
+    public async Task AddFinanceiroToGroupAsync(Guid groupId, Guid userId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var userExists = await _context.Users.AnyAsync(u => u.Id == userId, cancellationToken);
+            if (!userExists)
+                throw new ApplicationException("User not found.");
+
+            var group = await _context.Groups
+                .Include(g => g.Financeiros)
+                .FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
+
+            if (group is null)
+                throw new ApplicationException("Group not found.");
+
+            group.AddFinanceiro(userId);
+
+            _context.Groups.Update(group);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding financeiro to group. GroupId={GroupId} UserId={UserId}", groupId, userId);
+            throw;
+        }
+    }
+
+    public async Task RemoveFinanceiroAsync(Guid groupId, Guid userId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var group = await _context.Groups
+                .Include(g => g.Financeiros)
+                .FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
+
+            if (group is null)
+                throw new ApplicationException("Group not found.");
+
+            group.RemoveFinanceiro(userId);
+
+            _context.Groups.Update(group);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error removing financeiro from group. GroupId={GroupId} UserId={UserId}", groupId, userId);
             throw;
         }
     }

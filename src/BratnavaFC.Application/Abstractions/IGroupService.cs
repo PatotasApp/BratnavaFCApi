@@ -15,6 +15,11 @@ public interface IGroupService
     Task AddAdminToGroupAsync(Guid groupId, AddAdminToGroupDto request, CancellationToken cancellationToken);
     Task RemoveAdminAsync(Guid groupId, Guid targetUserId, Guid requestingUserId, CancellationToken cancellationToken);
 
+    // ── Financeiros ───────────────────────────────────────────────────────────
+    Task AddFinanceiroToGroupAsync(Guid groupId, Guid userId, CancellationToken cancellationToken);
+    Task RemoveFinanceiroAsync(Guid groupId, Guid userId, CancellationToken cancellationToken);
+    Task<List<GroupDto>> GetByFinanceiroIdAsync(Guid financeiroId, CancellationToken cancellationToken);
+
     // ── Convites ──────────────────────────────────────────────────────────────
     Task<GroupInviteDto> CreateInviteAsync(Guid groupId, CreateGroupInviteDto request, CancellationToken cancellationToken);
     Task<List<GroupInviteDto>> GetMyInvitesAsync(Guid userId, CancellationToken cancellationToken);

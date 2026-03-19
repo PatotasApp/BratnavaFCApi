@@ -31,7 +31,7 @@ public sealed class PaymentController : GroupAuthorizedController
     public async Task<IActionResult> InitiateMonthly(
         Guid groupId, int year, int month, CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct))
+        if (!await IsFinanceiroForGroupAsync(groupId, _db, ct))
             return Forbid();
 
         var (created, skipped) = await _payments.InitiateMonthlyAsync(groupId, year, month, ct);
@@ -43,7 +43,7 @@ public sealed class PaymentController : GroupAuthorizedController
     public async Task<IActionResult> IsMonthInitiated(
         Guid groupId, int year, int month, CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct))
+        if (!await IsFinanceiroForGroupAsync(groupId, _db, ct))
             return Forbid();
 
         var initiated = await _payments.IsMonthInitiatedAsync(groupId, year, month, ct);
@@ -55,7 +55,7 @@ public sealed class PaymentController : GroupAuthorizedController
     public async Task<IActionResult> GetMonthlyGrid(
         Guid groupId, int year, CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct))
+        if (!await IsFinanceiroForGroupAsync(groupId, _db, ct))
             return Forbid();
 
         var grid = await _payments.GetMonthlyGridAsync(groupId, year, ct);
@@ -75,7 +75,7 @@ public sealed class PaymentController : GroupAuthorizedController
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
 
-        var isAdmin = await IsAuthorizedForGroupAsync(groupId, _db, ct);
+        var isAdmin = await IsFinanceiroForGroupAsync(groupId, _db, ct);
 
         try
         {
@@ -94,7 +94,7 @@ public sealed class PaymentController : GroupAuthorizedController
     [HttpGet("extra-charges")]
     public async Task<IActionResult> GetExtraCharges(Guid groupId, CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct))
+        if (!await IsFinanceiroForGroupAsync(groupId, _db, ct))
             return Forbid();
 
         var charges = await _payments.GetExtraChargesAsync(groupId, ct);
@@ -108,7 +108,7 @@ public sealed class PaymentController : GroupAuthorizedController
         [FromBody] CreateExtraChargeDto dto,
         CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct))
+        if (!await IsFinanceiroForGroupAsync(groupId, _db, ct))
             return Forbid();
 
         var userId = GetCurrentUserId();
@@ -123,7 +123,7 @@ public sealed class PaymentController : GroupAuthorizedController
     public async Task<IActionResult> CancelExtraCharge(
         Guid groupId, Guid chargeId, CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct))
+        if (!await IsFinanceiroForGroupAsync(groupId, _db, ct))
             return Forbid();
 
         await _payments.CancelExtraChargeAsync(groupId, chargeId, ct);
@@ -135,7 +135,7 @@ public sealed class PaymentController : GroupAuthorizedController
     public async Task<IActionResult> BulkDiscountExtraCharge(
         Guid groupId, Guid chargeId, [FromBody] BulkExtraChargeDiscountDto dto, CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        if (!await IsFinanceiroForGroupAsync(groupId, _db, ct)) return Forbid();
 
         var adminId = GetCurrentUserId();
         if (adminId is null) return Unauthorized();
@@ -156,7 +156,7 @@ public sealed class PaymentController : GroupAuthorizedController
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
 
-        var isAdmin = await IsAuthorizedForGroupAsync(groupId, _db, ct);
+        var isAdmin = await IsFinanceiroForGroupAsync(groupId, _db, ct);
 
         try
         {
@@ -204,7 +204,7 @@ public sealed class PaymentController : GroupAuthorizedController
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
 
-        var isAdmin = await IsAuthorizedForGroupAsync(groupId, _db, ct);
+        var isAdmin = await IsFinanceiroForGroupAsync(groupId, _db, ct);
 
         if (!isAdmin)
         {
@@ -249,7 +249,7 @@ public sealed class PaymentController : GroupAuthorizedController
         var userId  = GetCurrentUserId();
         if (userId is null) return Unauthorized();
 
-        var isAdmin = await IsAuthorizedForGroupAsync(groupId, _db, ct);
+        var isAdmin = await IsFinanceiroForGroupAsync(groupId, _db, ct);
         if (!isAdmin)
         {
             var owns = _db.Players.Any(p => p.Id == playerId
@@ -269,7 +269,7 @@ public sealed class PaymentController : GroupAuthorizedController
         var userId  = GetCurrentUserId();
         if (userId is null) return Unauthorized();
 
-        var isAdmin = await IsAuthorizedForGroupAsync(groupId, _db, ct);
+        var isAdmin = await IsFinanceiroForGroupAsync(groupId, _db, ct);
         if (!isAdmin)
         {
             var owns = _db.Players.Any(p => p.Id == playerId

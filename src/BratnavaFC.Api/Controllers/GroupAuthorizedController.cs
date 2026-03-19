@@ -37,4 +37,19 @@ public abstract class GroupAuthorizedController : ControllerBase
         return await db.GroupAdmins
             .AnyAsync(x => x.GroupId == groupId && x.UserId == userId.Value, ct);
     }
+
+    /// <summary>
+    /// Returns true if the caller is GodMode OR is registered as a financeiro of the specific group.
+    /// Admins are NOT automatically financeiros — they must be explicitly added.
+    /// </summary>
+    protected async Task<bool> IsFinanceiroForGroupAsync(Guid groupId, AppDbContext db, CancellationToken ct)
+    {
+        if (User.IsInRole("GodMode")) return true;
+
+        var userId = GetCurrentUserId();
+        if (userId == null) return false;
+
+        return await db.GroupFinanceiros
+            .AnyAsync(x => x.GroupId == groupId && x.UserId == userId.Value, ct);
+    }
 }
