@@ -457,6 +457,23 @@ public class MatchesController : GroupAuthorizedController
         return Ok(items);
     }
 
+    /// <summary>
+    /// Retorna as últimas N partidas finalizadas de um jogador com dados enriquecidos
+    /// (time, gols, assistências, MVP) numa única query — usado pelo dashboard.
+    /// </summary>
+    [HttpGet("group/{groupId:guid}/player-recent")]
+    public async Task<IActionResult> GetPlayerRecentMatches(
+        Guid groupId,
+        [FromQuery] Guid playerId,
+        [FromQuery] int take = 3,
+        CancellationToken ct = default)
+    {
+        if (playerId == Guid.Empty) return BadRequest(new { error = "playerId é obrigatório." });
+
+        var items = await _service.GetPlayerRecentMatchesAsync(groupId, playerId, take, ct);
+        return Ok(items);
+    }
+
     [HttpPost("group/{groupId:guid}/{matchId:guid}/guests")]
     public async Task<IActionResult> AddGuestToMatch(
         Guid groupId,
