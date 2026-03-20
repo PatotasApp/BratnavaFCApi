@@ -12,6 +12,9 @@ public class GroupEntity : InactivatableEntity
     private readonly List<GroupAdminEntity> _admins = [];
     public IReadOnlyCollection<GroupAdminEntity> Admins => _admins;
 
+    private readonly List<GroupFinanceiroEntity> _financeiros = [];
+    public IReadOnlyCollection<GroupFinanceiroEntity> Financeiros => _financeiros;
+
     // EF
     private GroupEntity() { }
 
@@ -72,6 +75,20 @@ public class GroupEntity : InactivatableEntity
             throw new InvalidOperationException("User is not an admin of this group.");
 
         _admins.Remove(admin);
+    }
+
+    public void AddFinanceiro(Guid userId)
+    {
+        if (_financeiros.Any(f => f.UserId == userId)) return;
+        _financeiros.Add(new GroupFinanceiroEntity { GroupId = Id, UserId = userId });
+    }
+
+    public void RemoveFinanceiro(Guid userId)
+    {
+        var fin = _financeiros.FirstOrDefault(f => f.UserId == userId);
+        if (fin == null)
+            throw new InvalidOperationException("User is not a financeiro of this group.");
+        _financeiros.Remove(fin);
     }
 
     public void TransferCreator(Guid newCreatorUserId)

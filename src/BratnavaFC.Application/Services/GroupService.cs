@@ -171,6 +171,7 @@ public class GroupService : IGroupService
         {
             var group = await _context.Groups
                 .Include(g => g.Admins)
+                .Include(g => g.Financeiros)
                 .FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
 
             if (group == null)
@@ -188,6 +189,7 @@ public class GroupService : IGroupService
                 group.Name,
                 group.ScheduleMatchDate,
                 group.Admins.Select(x => x.UserId).ToArray(),
+                group.Financeiros.Select(x => x.UserId).ToArray(),
                 group.Status,
                 players,
                 group.CreatedByUserId
@@ -211,6 +213,26 @@ public class GroupService : IGroupService
                 g.Group.Name,
                 g.Group.ScheduleMatchDate,
                 g.Group.Admins.Select(x => x.UserId).ToArray(),
+                g.Group.Financeiros.Select(x => x.UserId).ToArray(),
+                g.Group.Status,
+                g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating)).ToList(),
+                g.Group.CreatedByUserId
+            ))
+            .ToListAsync(cancellationToken);
+    }
+
+    public Task<List<GroupDto>> GetByFinanceiroIdAsync(Guid financeiroId, CancellationToken cancellationToken)
+    {
+        return _context.GroupFinanceiros
+            .Include(x => x.Group)
+            .ThenInclude(x => x.Players)
+            .Where(x => x.UserId == financeiroId)
+            .Select(g => new GroupDto(
+                g.Group.Id,
+                g.Group.Name,
+                g.Group.ScheduleMatchDate,
+                g.Group.Admins.Select(x => x.UserId).ToArray(),
+                g.Group.Financeiros.Select(x => x.UserId).ToArray(),
                 g.Group.Status,
                 g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating)).ToList(),
                 g.Group.CreatedByUserId
@@ -224,6 +246,7 @@ public class GroupService : IGroupService
             .Include(g => g.Players)
                 .ThenInclude(p => p.User)
             .Include(g => g.Admins)
+            .Include(g => g.Financeiros)
             .OrderBy(g => g.Name)
             .ToListAsync(cancellationToken);
 
@@ -232,6 +255,7 @@ public class GroupService : IGroupService
             g.Name,
             g.ScheduleMatchDate,
             g.Admins.Select(a => a.UserId).ToArray(),
+            g.Financeiros.Select(f => f.UserId).ToArray(),
             g.Status,
             g.Players.Select(p => new Domain.Dtos.Players.PlayerDto(
                 p.Id, p.Name, p.UserId, p.User?.UserName,
@@ -312,6 +336,58 @@ public class GroupService : IGroupService
         }
     }
 
+    // ── Financeiros ───────────────────────────────────────────────────────────
+
+    public async Task AddFinanceiroToGroupAsync(Guid groupId, Guid userId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var userExists = await _context.Users.AnyAsync(u => u.Id == userId, cancellationToken);
+            if (!userExists)
+                throw new ApplicationException("User not found.");
+
+            var group = await _context.Groups
+                .Include(g => g.Financeiros)
+                .FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
+
+            if (group is null)
+                throw new ApplicationException("Group not found.");
+
+            group.AddFinanceiro(userId);
+
+            _context.Groups.Update(group);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding financeiro to group. GroupId={GroupId} UserId={UserId}", groupId, userId);
+            throw;
+        }
+    }
+
+    public async Task RemoveFinanceiroAsync(Guid groupId, Guid userId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var group = await _context.Groups
+                .Include(g => g.Financeiros)
+                .FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
+
+            if (group is null)
+                throw new ApplicationException("Group not found.");
+
+            group.RemoveFinanceiro(userId);
+
+            _context.Groups.Update(group);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error removing financeiro from group. GroupId={GroupId} UserId={UserId}", groupId, userId);
+            throw;
+        }
+    }
+
     // ── Convites ──────────────────────────────────────────────────────────────
 
     public async Task<GroupInviteDto> CreateInviteAsync(Guid groupId, CreateGroupInviteDto request, CancellationToken cancellationToken)
@@ -324,9 +400,9 @@ public class GroupService : IGroupService
             var userExists = await _context.Users.AnyAsync(u => u.Id == request.TargetUserId, cancellationToken);
             if (!userExists) throw new ApplicationException("Target user not found.");
 
-            // Já é membro?
+            // Já é membro ativo (não-guest)?
             var alreadyMember = await _context.Players
-                .AnyAsync(p => p.GroupId == groupId && p.UserId == request.TargetUserId, cancellationToken);
+                .AnyAsync(p => p.GroupId == groupId && p.UserId == request.TargetUserId && !p.IsGuest, cancellationToken);
             if (alreadyMember) throw new InvalidOperationException("User is already a member of this group.");
 
             // Já tem convite pendente?
@@ -424,15 +500,29 @@ public class GroupService : IGroupService
             }
             else
             {
-                // Criar novo player para o usuário
-                var user = await _context.Users
-                    .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
-                if (user == null) throw new ApplicationException("User not found.");
+                // Verificar se já existe um player guest do mesmo usuário neste grupo (ex-mensalista que virou convidado)
+                var existingGuestPlayer = await _context.Players
+                    .FirstOrDefaultAsync(p => p.GroupId == invite.GroupId && p.UserId == userId && p.IsGuest, cancellationToken);
 
-                var name = $"{user.FirstName} {user.LastName}".Trim();
-                var newPlayer = new PlayerEntity(name, userId, invite.GroupId, 0, false, false, Status.Active);
-                _context.Players.Add(newPlayer);
-                thePlayer = newPlayer;
+                if (existingGuestPlayer != null)
+                {
+                    existingGuestPlayer.SetIsGuest(false);
+                    existingGuestPlayer.SetJoinedAt(DateTime.UtcNow);
+                    _context.Players.Update(existingGuestPlayer);
+                    thePlayer = existingGuestPlayer;
+                }
+                else
+                {
+                    // Criar novo player para o usuário
+                    var user = await _context.Users
+                        .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+                    if (user == null) throw new ApplicationException("User not found.");
+
+                    var name = $"{user.FirstName} {user.LastName}".Trim();
+                    var newPlayer = new PlayerEntity(name, userId, invite.GroupId, 0, false, false, Status.Active);
+                    _context.Players.Add(newPlayer);
+                    thePlayer = newPlayer;
+                }
             }
 
             // Se houver partida em Acceptation no grupo, incluir o novo jogador

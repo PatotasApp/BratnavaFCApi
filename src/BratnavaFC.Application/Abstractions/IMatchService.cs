@@ -56,4 +56,10 @@ public interface IMatchService
     Task<IReadOnlyList<MatchHistoryItemDto>> GetHistoryAsync(Guid groupId, int take, CancellationToken cancellationToken, Guid? playerId = null);
 
     Task AddGuestToMatchAsync(Guid groupId, Guid matchId, AddGuestToMatchDto dto, CancellationToken ct);
+
+    Task<IReadOnlyList<PlayerRecentMatchDto>> GetPlayerRecentMatchesAsync(
+        Guid groupId,
+        Guid playerId,
+        int take,
+        CancellationToken ct);
 }

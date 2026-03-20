@@ -119,6 +119,51 @@ public class GroupsController : GroupAuthorizedController
         }
     }
 
+    // ── Financeiros ───────────────────────────────────────────────────────────
+
+    [HttpGet("financeiro/{financeiroId:guid}")]
+    public async Task<IActionResult> GetByFinanceiroIdAsync(Guid financeiroId, CancellationToken cancellationToken)
+    {
+        var response = await _groupService.GetByFinanceiroIdAsync(financeiroId, cancellationToken);
+        return Ok(response);
+    }
+
+    [HttpPost("{groupId:guid}/financeiros")]
+    public async Task<IActionResult> AddFinanceiroAsync(Guid groupId, [FromBody] AddAdminToGroupDto request, CancellationToken cancellationToken)
+    {
+        if (request == null) return BadRequest();
+
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
+            return Forbid();
+
+        try
+        {
+            await _groupService.AddFinanceiroToGroupAsync(groupId, request.UserId, cancellationToken);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpDelete("{groupId:guid}/financeiros/{userId:guid}")]
+    public async Task<IActionResult> RemoveFinanceiroAsync(Guid groupId, Guid userId, CancellationToken cancellationToken)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
+            return Forbid();
+
+        try
+        {
+            await _groupService.RemoveFinanceiroAsync(groupId, userId, cancellationToken);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     [HttpPost("{groupId:guid}/leave-creator")]
     [Authorize(Roles = "User,Admin,GodMode")]
     public async Task<IActionResult> CreatorLeaveGroupAsync(Guid groupId, [FromBody] CreatorLeaveGroupDto request, CancellationToken cancellationToken)

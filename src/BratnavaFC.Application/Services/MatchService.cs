@@ -1091,6 +1091,92 @@ public sealed class MatchService : IMatchService
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<PlayerRecentMatchDto>> GetPlayerRecentMatchesAsync(
+        Guid groupId,
+        Guid playerId,
+        int take,
+        CancellationToken ct)
+    {
+        take = take <= 0 ? 5 : Math.Min(take, 20);
+
+        // Uma única query — traz tudo que o dashboard precisa
+        var rows = await _context.Matches
+            .AsNoTracking()
+            .Where(m =>
+                m.GroupId == groupId &&
+                m.Status == MatchStatus.Finalized &&
+                m.Players.Any(p => p.PlayerId == playerId && p.Team > 0))
+            .OrderByDescending(m => m.PlayedAt)
+            .Take(take)
+            .Select(m => new
+            {
+                m.Id,
+                m.PlayedAt,
+                m.TeamAGoals,
+                m.TeamBGoals,
+                m.PlaceName,
+                StatusName = m.Status.ToString(),
+
+                TeamAColorHex  = m.TeamAColor != null ? m.TeamAColor.HexValue : null,
+                TeamAColorName = m.TeamAColor != null ? m.TeamAColor.Name     : null,
+                TeamBColorHex  = m.TeamBColor != null ? m.TeamBColor.HexValue : null,
+                TeamBColorName = m.TeamBColor != null ? m.TeamBColor.Name     : null,
+
+                // Time do jogador (1=A / 2=B)
+                PlayerTeam = m.Players
+                    .Where(p => p.PlayerId == playerId)
+                    .Select(p => (int)p.Team)
+                    .FirstOrDefault(),
+
+                // MatchPlayer.Id do jogador nesta partida (usado para gols/assists/mvp)
+                PlayerMatchPlayerId = m.Players
+                    .Where(p => p.PlayerId == playerId)
+                    .Select(p => (Guid?)p.Id)
+                    .FirstOrDefault(),
+
+                // Gols: conta goals cujo ScorerMatchPlayer pertence ao jogador
+                PlayerGoals = m.Goals.Count(g =>
+                    !g.IsOwnGoal &&
+                    m.Players.Any(mp => mp.Id == g.ScorerMatchPlayerId && mp.PlayerId == playerId)),
+
+                // Assistências: conta goals cujo AssistMatchPlayer pertence ao jogador
+                PlayerAssists = m.Goals.Count(g =>
+                    g.AssistMatchPlayerId.HasValue &&
+                    m.Players.Any(mp => mp.Id == g.AssistMatchPlayerId.Value && mp.PlayerId == playerId)),
+
+                // Votos recebidos por cada MatchPlayer — MVP calculado em memória
+                VotedForIds = m.Votes.Select(v => v.VotedForId).ToList(),
+            })
+            .ToListAsync(ct);
+
+        return rows.Select(m =>
+        {
+            // MVP = MatchPlayer.Id com mais votos (em memória — evita subquery complexa no EF)
+            var mvpMatchPlayerId = m.VotedForIds
+                .GroupBy(id => id)
+                .OrderByDescending(g => g.Count())
+                .Select(g => (Guid?)g.Key)
+                .FirstOrDefault();
+
+            return new PlayerRecentMatchDto(
+                MatchId:        m.Id,
+                PlayedAt:       m.PlayedAt,
+                TeamAGoals:     m.TeamAGoals ?? 0,
+                TeamBGoals:     m.TeamBGoals ?? 0,
+                StatusName:     m.StatusName,
+                PlaceName:      m.PlaceName,
+                TeamAColorHex:  m.TeamAColorHex,
+                TeamAColorName: m.TeamAColorName,
+                TeamBColorHex:  m.TeamBColorHex,
+                TeamBColorName: m.TeamBColorName,
+                PlayerTeam:     m.PlayerTeam,
+                PlayerGoals:    m.PlayerGoals,
+                PlayerAssists:  m.PlayerAssists,
+                IsPlayerMvp:    mvpMatchPlayerId.HasValue && mvpMatchPlayerId == m.PlayerMatchPlayerId
+            );
+        }).ToList();
+    }
+
     private static PlayerInMatchDto ToPlayerDto(MatchPlayerEntity mp) => new()
     {
         MatchPlayerId = mp.Id,

@@ -20,6 +20,7 @@ public class AppDbContext : DbContext
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
     public DbSet<GroupEntity> Groups => Set<GroupEntity>();
     public DbSet<GroupAdminEntity> GroupAdmins => Set<GroupAdminEntity>();
+    public DbSet<GroupFinanceiroEntity> GroupFinanceiros => Set<GroupFinanceiroEntity>();
     public DbSet<PlayerEntity> Players => Set<PlayerEntity>();
     public DbSet<GroupSettingsEntity> GroupSettings => Set<GroupSettingsEntity>();
     public DbSet<GoalEntity> Goals => Set<GoalEntity>();
@@ -239,6 +240,21 @@ public class AppDbContext : DbContext
 
             builder.HasOne(x => x.User)
                 .WithMany(x => x.Admins)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<GroupFinanceiroEntity>(builder =>
+        {
+            builder.HasKey(x => new { x.UserId, x.GroupId });
+
+            builder.HasOne(x => x.Group)
+                .WithMany(x => x.Financeiros)
+                .HasForeignKey(x => x.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(x => x.User)
+                .WithMany(x => x.Financeiros)
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });

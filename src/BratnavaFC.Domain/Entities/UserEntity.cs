@@ -27,6 +27,9 @@ public sealed class UserEntity : InactivatableEntity
     private readonly List<GroupAdminEntity> _admins = [];
     public IReadOnlyCollection<GroupAdminEntity> Admins => _admins;
 
+    private readonly List<GroupFinanceiroEntity> _financeiros = [];
+    public IReadOnlyCollection<GroupFinanceiroEntity> Financeiros => _financeiros;
+
     // EF
     private UserEntity() { }
 

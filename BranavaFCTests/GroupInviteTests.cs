@@ -252,6 +252,48 @@ public class GroupService_CreateInviteTests
 
         result.Status.Should().Be((int)GroupInviteStatus.Pending);
     }
+
+    [Fact]
+    public async Task WhenUserIsGuestInGroup_ShouldAllowInvite()
+    {
+        // Cenário: mensalista virou convidado (IsGuest=true, mas UserId ainda preenchido).
+        // O sistema NÃO deve bloquear o novo convite.
+        await using var db  = DbContextFactory.Create(nameof(WhenUserIsGuestInGroup_ShouldAllowInvite));
+        var sut = Builders.MakeSut(db);
+
+        var user  = Builders.MakeUser();
+        var group = Builders.MakeGroup();
+        db.Users.Add(user);
+        db.Groups.Add(group);
+        // Player com UserId preenchido mas marcado como guest (ex-mensalista)
+        db.Players.Add(new PlayerEntity("Ex-Mensalista", user.Id, group.Id, 5m, false, true, Status.Active));
+        await db.SaveChangesAsync();
+
+        var result = await sut.CreateInviteAsync(group.Id, new CreateGroupInviteDto(user.Id, null), CancellationToken.None);
+
+        result.Status.Should().Be((int)GroupInviteStatus.Pending);
+    }
+
+    [Fact]
+    public async Task WhenUserIsActiveMember_ShouldStillBlockInvite()
+    {
+        // Garantir que a correção não quebrou o bloqueio para mensalistas ativos.
+        await using var db  = DbContextFactory.Create(nameof(WhenUserIsActiveMember_ShouldStillBlockInvite));
+        var sut = Builders.MakeSut(db);
+
+        var user  = Builders.MakeUser();
+        var group = Builders.MakeGroup();
+        db.Users.Add(user);
+        db.Groups.Add(group);
+        db.Players.Add(new PlayerEntity("Mensalista Ativo", user.Id, group.Id, 5m, false, false, Status.Active));
+        await db.SaveChangesAsync();
+
+        var act = async () =>
+            await sut.CreateInviteAsync(group.Id, new CreateGroupInviteDto(user.Id, null), CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("User is already a member of this group.");
+    }
 }
 
 // ─── GroupService — GetMyInvitesAsync & GetMyPendingInviteCountAsync ──────────
@@ -471,6 +513,69 @@ public class GroupService_AcceptInviteTests
         var updatedMatch = db.Matches.Include(m => m.Players).First(m => m.Id == match.Id);
         updatedMatch.Players.Should().HaveCount(1);
         updatedMatch.Players.Should().Contain(mp => mp.PlayerId == newPlayer.Id);
+    }
+
+    [Fact]
+    public async Task WhenUserWasFormerMember_ShouldReactivateExistingPlayerRecord()
+    {
+        // Cenário: usuário era mensalista, virou guest (SetIsGuest(true), UserId mantido).
+        // Ao aceitar novo convite sem GuestPlayerId, deve reativar o player existente
+        // em vez de criar um duplicado.
+        await using var db  = DbContextFactory.Create(nameof(WhenUserWasFormerMember_ShouldReactivateExistingPlayerRecord));
+        var sut = Builders.MakeSut(db);
+
+        var user         = Builders.MakeUser();
+        var group        = Builders.MakeGroup();
+        var formerPlayer = new PlayerEntity("Ex-Mensalista", user.Id, group.Id, 8m, true, true, Status.Active);
+        db.Users.Add(user);
+        db.Groups.Add(group);
+        db.Players.Add(formerPlayer);
+        var invite = new GroupInviteEntity(group.Id, user.Id, null);
+        db.GroupInvites.Add(invite);
+        await db.SaveChangesAsync();
+
+        await sut.AcceptInviteAsync(invite.Id, user.Id, CancellationToken.None);
+
+        // Deve existir exatamente 1 player no grupo (o antigo reativado, sem duplicata)
+        var allPlayers = db.Players.Where(p => p.GroupId == group.Id).ToList();
+        allPlayers.Should().HaveCount(1);
+
+        var reactivated = allPlayers[0];
+        reactivated.Id.Should().Be(formerPlayer.Id);
+        reactivated.IsGuest.Should().BeFalse();
+        reactivated.UserId.Should().Be(user.Id);
+        // Habilidades preservadas
+        reactivated.SkillPoints.Should().Be(8m);
+        reactivated.IsGoalkeeper.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task WhenUserWasFormerMember_ReactivatedPlayer_ShouldBeAddedToAcceptationMatch()
+    {
+        // Ao reativar ex-mensalista, o player deve ser incluído na partida em Acceptation.
+        await using var db  = DbContextFactory.Create(nameof(WhenUserWasFormerMember_ReactivatedPlayer_ShouldBeAddedToAcceptationMatch));
+        var sut = Builders.MakeSut(db);
+
+        var user         = Builders.MakeUser();
+        var group        = Builders.MakeGroup();
+        var formerPlayer = new PlayerEntity("Ex-Mensalista", user.Id, group.Id, 5m, false, true, Status.Active);
+        db.Users.Add(user);
+        db.Groups.Add(group);
+        db.Players.Add(formerPlayer);
+
+        var match = new MatchEntity(group.Id, DateTime.UtcNow, "Arena");
+        match.OpenAcceptation();
+        db.Matches.Add(match);
+
+        var invite = new GroupInviteEntity(group.Id, user.Id, null);
+        db.GroupInvites.Add(invite);
+        await db.SaveChangesAsync();
+
+        await sut.AcceptInviteAsync(invite.Id, user.Id, CancellationToken.None);
+
+        var updatedMatch = db.Matches.Include(m => m.Players).First(m => m.Id == match.Id);
+        updatedMatch.Players.Should().HaveCount(1);
+        updatedMatch.Players.Should().Contain(mp => mp.PlayerId == formerPlayer.Id);
     }
 
     [Fact]
