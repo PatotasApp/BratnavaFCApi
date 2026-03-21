@@ -1,4 +1,5 @@
-﻿using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Authentication;
 using Microsoft.AspNetCore.Mvc;
 
@@ -6,7 +7,7 @@ namespace BratnavaFC.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public sealed class AuthenticationController : ControllerBase
+public sealed class AuthenticationController : BaseApiController
 {
     private readonly IAuthenticationService _authenticationService;
 
@@ -19,15 +20,15 @@ public sealed class AuthenticationController : ControllerBase
     public async Task<IActionResult> LoginAsync([FromBody] LoginDto request, CancellationToken cancellationToken)
     {
         if (request == null) return BadRequest();
-        var response = await _authenticationService.LoginAsync(request, cancellationToken);
-        return Ok(response);
+        var result = await _authenticationService.LoginAsync(request, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpPost("refresh-token")]
     public async Task<IActionResult> RefreshTokenAsync([FromBody] RefreshTokenDto request, CancellationToken cancellationToken)
     {
         if (request == null) return BadRequest();
-        var response = await _authenticationService.RefreshTokenAsync(request, cancellationToken);
-        return Ok(response);
+        var result = await _authenticationService.RefreshTokenAsync(request, cancellationToken);
+        return ToResponse(result);
     }
 }

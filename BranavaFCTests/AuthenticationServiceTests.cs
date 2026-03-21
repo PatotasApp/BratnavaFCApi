@@ -1,4 +1,5 @@
-﻿using BratnavaFC.Application.Services;
+using BratnavaFC.Application.Services;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Authentication;
 using BratnavaFC.Domain.Entities;
 using FluentAssertions;
@@ -27,10 +28,10 @@ public class AuthenticationServiceTests
     }
 
     [Fact]
-    public async Task LoginAsync_WhenUserNotFound_ShouldThrow()
+    public async Task LoginAsync_WhenUserNotFound_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(LoginAsync_WhenUserNotFound_ShouldThrow));
+        await using var db = DbContextFactory.Create(nameof(LoginAsync_WhenUserNotFound_ShouldReturnFailure));
 
         var logger = new Mock<ILogger<AuthenticationService>>();
         var hasher = new PasswordHasher<UserEntity>();
@@ -44,18 +45,19 @@ public class AuthenticationServiceTests
         );
 
         // Act
-        var act = async () => await sut.LoginAsync(request, CancellationToken.None);
+        var result = await sut.LoginAsync(request, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<ApplicationException>()
-            .WithMessage("User not found");
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("User not found");
+        result.Status.Should().Be(ResultStatus.BadRequest);
     }
 
     [Fact]
-    public async Task LoginAsync_WhenPasswordInvalid_ShouldThrow()
+    public async Task LoginAsync_WhenPasswordInvalid_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(LoginAsync_WhenPasswordInvalid_ShouldThrow));
+        await using var db = DbContextFactory.Create(nameof(LoginAsync_WhenPasswordInvalid_ShouldReturnFailure));
 
         var logger = new Mock<ILogger<AuthenticationService>>();
         var hasher = new PasswordHasher<UserEntity>();
@@ -76,11 +78,12 @@ public class AuthenticationServiceTests
         );
 
         // Act
-        var act = async () => await sut.LoginAsync(request, CancellationToken.None);
+        var result = await sut.LoginAsync(request, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<ApplicationException>()
-            .WithMessage("Invalid user or password.");
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("Invalid user or password.");
+        result.Status.Should().Be(ResultStatus.BadRequest);
     }
 
     [Fact]
@@ -107,29 +110,28 @@ public class AuthenticationServiceTests
         );
 
         // Act
-        var res = await sut.LoginAsync(request, CancellationToken.None);
+        var result = await sut.LoginAsync(request, CancellationToken.None);
 
         // Assert
-        res.Should().NotBeNull();
-        var (jwt, refreshToken) = res;
-        jwt.Should().NotBeNullOrWhiteSpace();
-        refreshToken.Should().NotBeNullOrWhiteSpace();
-        res.RefreshToken.Should().NotBeNullOrWhiteSpace();
+        result.Success.Should().BeTrue();
+        result.Data.Should().NotBeNull();
+        result.Data!.Token.Should().NotBeNullOrWhiteSpace();
+        result.Data.RefreshToken.Should().NotBeNullOrWhiteSpace();
 
         var token = db.RefreshTokens.Local.First();
 
         var persisted = await db.RefreshTokens.FindAsync(token.Id);
         persisted.Should().NotBeNull();
         persisted!.UserId.Should().Be(user.Id);
-        persisted.Token.Should().Be(res.RefreshToken);
+        persisted.Token.Should().Be(result.Data.RefreshToken);
         persisted.Expiration.Should().BeAfter(DateTime.UtcNow.AddDays(6)); // ~7 dias
     }
 
     [Fact]
-    public async Task RefreshTokenAsync_WhenTokenNotFound_ShouldThrow()
+    public async Task RefreshTokenAsync_WhenTokenNotFound_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(RefreshTokenAsync_WhenTokenNotFound_ShouldThrow));
+        await using var db = DbContextFactory.Create(nameof(RefreshTokenAsync_WhenTokenNotFound_ShouldReturnFailure));
 
         var logger = new Mock<ILogger<AuthenticationService>>();
         var hasher = new PasswordHasher<UserEntity>();
@@ -142,18 +144,19 @@ public class AuthenticationServiceTests
         );
 
         // Act
-        var act = async () => await sut.RefreshTokenAsync(request, CancellationToken.None);
+        var result = await sut.RefreshTokenAsync(request, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<ApplicationException>()
-            .WithMessage("User is logged out, try again.");
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("User is logged out, try again.");
+        result.Status.Should().Be(ResultStatus.BadRequest);
     }
 
     [Fact]
-    public async Task RefreshTokenAsync_WhenExpired_ShouldThrow()
+    public async Task RefreshTokenAsync_WhenExpired_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(RefreshTokenAsync_WhenExpired_ShouldThrow));
+        await using var db = DbContextFactory.Create(nameof(RefreshTokenAsync_WhenExpired_ShouldReturnFailure));
 
         var user = new UserEntity(
             userName: "user",
@@ -179,19 +182,19 @@ public class AuthenticationServiceTests
 
         var logger = Mock.Of<ILogger<AuthenticationService>>();
         var hasher = new PasswordHasher<UserEntity>();
-        var config = CreateJwtConfig(); 
+        var config = CreateJwtConfig();
 
         var sut = new AuthenticationService(db, logger, hasher, config);
 
         var request = new RefreshTokenDto(expiredToken);
 
         // Act
-        Func<Task> act = () => sut.RefreshTokenAsync(request, CancellationToken.None);
+        var result = await sut.RefreshTokenAsync(request, CancellationToken.None);
 
         // Assert
-        await act.Should()
-            .ThrowAsync<ApplicationException>()
-            .WithMessage("Refresh token expired.");
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("Refresh token expired.");
+        result.Status.Should().Be(ResultStatus.BadRequest);
     }
 
 
@@ -221,21 +224,18 @@ public class AuthenticationServiceTests
         var sut = new AuthenticationService(db, logger.Object, hasher, config);
 
         // Act
-
-        var request = new RefreshTokenDto(
-            RefreshToken: "nope"
-        );
-
-        var res = await sut.RefreshTokenAsync(new RefreshTokenDto(
+        var result = await sut.RefreshTokenAsync(new RefreshTokenDto(
             RefreshToken: "old"
         ), CancellationToken.None);
 
         // Assert
-        res.RefreshToken.Should().NotBeNullOrWhiteSpace();
-        res.RefreshToken.Should().NotBe("old");
+        result.Success.Should().BeTrue();
+        result.Data.Should().NotBeNull();
+        result.Data!.RefreshToken.Should().NotBeNullOrWhiteSpace();
+        result.Data.RefreshToken.Should().NotBe("old");
 
         var updated = await db.RefreshTokens.FindAsync(token.Id);
-        updated!.Token.Should().Be(res.RefreshToken);
+        updated!.Token.Should().Be(result.Data.RefreshToken);
         updated.Expiration.Should().BeAfter(DateTime.UtcNow.AddDays(6));
     }
 }

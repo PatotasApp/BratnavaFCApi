@@ -1,10 +1,11 @@
-﻿using System;
+using System;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Authentication;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Infrastructure.Data;
@@ -36,73 +37,69 @@ public sealed class AuthenticationService : IAuthenticationService
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
     }
 
-    public async Task<TokenDto> LoginAsync(LoginDto request, CancellationToken cancellationToken)
+    public async Task<Result<TokenDto>> LoginAsync(LoginDto request, CancellationToken cancellationToken)
     {
-        try
+        var username = request.Username.Trim().ToLower();
+        var user = await _db.Users.FirstOrDefaultAsync(x => x.UserName == username, cancellationToken);
+
+        if (user is null)
         {
-            var username = request.Username.Trim().ToLower();
-            var user = await _db.Users.FirstOrDefaultAsync(x => x.UserName == username, cancellationToken);
-
-            if (user is null)
-                throw new ApplicationException("User not found");
-
-            var verify = _passwordHasher.VerifyHashedPassword(user, user.Password, request.Password);
-
-            if (verify == PasswordVerificationResult.Failed)
-                throw new ApplicationException("Invalid user or password.");
-
-            var refreshToken = new RefreshTokenEntity
-            {
-                Token = GenerateRefreshToken(),
-                Expiration = DateTime.UtcNow.AddDays(7),
-                UserId = user.Id
-            };
-
-            _db.RefreshTokens.Add(refreshToken);
-            await _db.SaveChangesAsync(cancellationToken);
-
-            var jwt = CreateToken(user, _configuration);
-
-            return new TokenDto(jwt, refreshToken.Token);
+            _logger.LogWarning("Login attempt failed: user '{Username}' not found.", username);
+            return Result<TokenDto>.Fail("User not found");
         }
-        catch (Exception ex)
+
+        var verify = _passwordHasher.VerifyHashedPassword(user, user.Password, request.Password);
+
+        if (verify == PasswordVerificationResult.Failed)
         {
-            _logger.LogError(ex, "Error trying to login/authenticate user.");
-            throw;
+            _logger.LogWarning("Login attempt failed: invalid password for user '{Username}'.", username);
+            return Result<TokenDto>.Fail("Invalid user or password.");
         }
+
+        var refreshToken = new RefreshTokenEntity
+        {
+            Token = GenerateRefreshToken(),
+            Expiration = DateTime.UtcNow.AddDays(7),
+            UserId = user.Id
+        };
+
+        _db.RefreshTokens.Add(refreshToken);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        var jwt = CreateToken(user, _configuration);
+
+        return Result<TokenDto>.Ok(new TokenDto(jwt, refreshToken.Token));
     }
 
-    public async Task<TokenDto> RefreshTokenAsync(RefreshTokenDto request, CancellationToken cancellationToken)
+    public async Task<Result<TokenDto>> RefreshTokenAsync(RefreshTokenDto request, CancellationToken cancellationToken)
     {
-        try
+        var refreshToken = await _db.RefreshTokens
+            .Include(x => x.User)
+            .FirstOrDefaultAsync(x => x.Token == request.RefreshToken, cancellationToken);
+
+        if (refreshToken is null)
         {
-            var refreshToken = await _db.RefreshTokens
-                .Include(x => x.User)
-                .FirstOrDefaultAsync(x => x.Token == request.RefreshToken, cancellationToken);
-
-            if (refreshToken is null)
-                throw new ApplicationException("User is logged out, try again.");
-
-            if (DateTime.UtcNow > refreshToken.Expiration)
-                throw new ApplicationException("Refresh token expired.");
-
-            var user = refreshToken.User;
-
-            var newJwt = CreateToken(user, _configuration);
-            var newRefreshToken = GenerateRefreshToken();
-
-            refreshToken.Token = newRefreshToken;
-            refreshToken.Expiration = DateTime.UtcNow.AddDays(7);
-
-            await _db.SaveChangesAsync(cancellationToken);
-
-            return new TokenDto(newJwt, newRefreshToken);
+            _logger.LogWarning("Refresh token attempt failed: token not found.");
+            return Result<TokenDto>.Fail("User is logged out, try again.");
         }
-        catch (Exception ex)
+
+        if (DateTime.UtcNow > refreshToken.Expiration)
         {
-            _logger.LogError(ex, "Error trying to refresh token/authenticate user.");
-            throw;
+            _logger.LogWarning("Refresh token attempt failed: token expired.");
+            return Result<TokenDto>.Fail("Refresh token expired.");
         }
+
+        var user = refreshToken.User;
+
+        var newJwt = CreateToken(user, _configuration);
+        var newRefreshToken = GenerateRefreshToken();
+
+        refreshToken.Token = newRefreshToken;
+        refreshToken.Expiration = DateTime.UtcNow.AddDays(7);
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return Result<TokenDto>.Ok(new TokenDto(newJwt, newRefreshToken));
     }
 
     private static string CreateToken(UserEntity user, IConfiguration configuration)
@@ -132,7 +129,7 @@ public sealed class AuthenticationService : IAuthenticationService
             SigningCredentials = credentials,
             Issuer = issuer,
             Audience = audience,
-            
+
         };
 
         var handler = new JsonWebTokenHandler();
