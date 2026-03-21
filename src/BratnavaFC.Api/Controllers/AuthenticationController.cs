@@ -19,7 +19,6 @@ public sealed class AuthenticationController : BaseApiController
     [HttpPost("login")]
     public async Task<IActionResult> LoginAsync([FromBody] LoginDto request, CancellationToken cancellationToken)
     {
-        if (request == null) return BadRequest();
         var result = await _authenticationService.LoginAsync(request, cancellationToken);
         return ToResponse(result);
     }
@@ -27,7 +26,6 @@ public sealed class AuthenticationController : BaseApiController
     [HttpPost("refresh-token")]
     public async Task<IActionResult> RefreshTokenAsync([FromBody] RefreshTokenDto request, CancellationToken cancellationToken)
     {
-        if (request == null) return BadRequest();
         var result = await _authenticationService.RefreshTokenAsync(request, cancellationToken);
         return ToResponse(result);
     }
