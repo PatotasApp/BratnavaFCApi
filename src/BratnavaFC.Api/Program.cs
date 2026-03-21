@@ -153,17 +153,7 @@ var app = builder.Build();
 // =====================
 // MIDDLEWARE PIPELINE
 // =====================
-app.UseSwagger();
-app.UseSwaggerUI(c =>
-{
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "BratnavaFC API v1");
-});
-
-app.UseHttpsRedirection();
-
-// 🔥 CORS TEM QUE VIR ANTES DO AUTH
-app.UseCors("AllowAll");
-
+// 🔥 Exception handler must be FIRST to catch exceptions from all middleware
 app.UseExceptionHandler(appError =>
 {
     appError.Run(async context =>
@@ -175,6 +165,17 @@ app.UseExceptionHandler(appError =>
         await context.Response.WriteAsJsonAsync(response);
     });
 });
+
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "BratnavaFC API v1");
+});
+
+app.UseHttpsRedirection();
+
+// 🔥 CORS TEM QUE VIR ANTES DO AUTH
+app.UseCors("AllowAll");
 
 app.UseAuthentication();
 app.UseAuthorization();
