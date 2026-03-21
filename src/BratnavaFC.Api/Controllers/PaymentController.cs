@@ -34,7 +34,10 @@ public sealed class PaymentController : GroupAuthorizedController
         if (!await IsFinanceiroForGroupAsync(groupId, _db, ct))
             return Forbid();
 
-        var (created, skipped) = await _payments.InitiateMonthlyAsync(groupId, year, month, ct);
+        var result = await _payments.InitiateMonthlyAsync(groupId, year, month, ct);
+        if (!result.Success) return ToResponse(result);
+
+        var (created, skipped) = result.Data;
         return Ok(new { created, skipped });
     }
 
@@ -46,8 +49,10 @@ public sealed class PaymentController : GroupAuthorizedController
         if (!await IsFinanceiroForGroupAsync(groupId, _db, ct))
             return Forbid();
 
-        var initiated = await _payments.IsMonthInitiatedAsync(groupId, year, month, ct);
-        return Ok(new { isInitiated = initiated });
+        var result = await _payments.IsMonthInitiatedAsync(groupId, year, month, ct);
+        if (!result.Success) return ToResponse(result);
+
+        return Ok(new { isInitiated = result.Data });
     }
 
     /// <summary>Retorna a grade mensal de pagamentos para todos os mensalistas da patota.</summary>
@@ -58,8 +63,8 @@ public sealed class PaymentController : GroupAuthorizedController
         if (!await IsFinanceiroForGroupAsync(groupId, _db, ct))
             return Forbid();
 
-        var grid = await _payments.GetMonthlyGridAsync(groupId, year, ct);
-        return Ok(grid);
+        var result = await _payments.GetMonthlyGridAsync(groupId, year, ct);
+        return ToResponse(result);
     }
 
     /// <summary>
@@ -77,15 +82,8 @@ public sealed class PaymentController : GroupAuthorizedController
 
         var isAdmin = await IsFinanceiroForGroupAsync(groupId, _db, ct);
 
-        try
-        {
-            await _payments.UpsertMonthlyPaymentAsync(groupId, dto, userId.Value, isAdmin, ct);
-            return NoContent();
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Forbid(ex.Message);
-        }
+        var result = await _payments.UpsertMonthlyPaymentAsync(groupId, dto, userId.Value, isAdmin, ct);
+        return ToResponse(result);
     }
 
     // ── Cobranças extras ──────────────────────────────────────────────────────
@@ -97,8 +95,8 @@ public sealed class PaymentController : GroupAuthorizedController
         if (!await IsFinanceiroForGroupAsync(groupId, _db, ct))
             return Forbid();
 
-        var charges = await _payments.GetExtraChargesAsync(groupId, ct);
-        return Ok(charges);
+        var result = await _payments.GetExtraChargesAsync(groupId, ct);
+        return ToResponse(result);
     }
 
     /// <summary>Cria uma nova cobrança extra e atribui aos jogadores selecionados (apenas admin).</summary>
@@ -114,8 +112,8 @@ public sealed class PaymentController : GroupAuthorizedController
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
 
-        var charge = await _payments.CreateExtraChargeAsync(groupId, dto, userId.Value, ct);
-        return CreatedAtAction(nameof(GetExtraCharges), new { groupId }, charge);
+        var result = await _payments.CreateExtraChargeAsync(groupId, dto, userId.Value, ct);
+        return ToResponse(result);
     }
 
     /// <summary>Cancela (soft-delete) uma cobrança extra (apenas admin).</summary>
@@ -126,8 +124,8 @@ public sealed class PaymentController : GroupAuthorizedController
         if (!await IsFinanceiroForGroupAsync(groupId, _db, ct))
             return Forbid();
 
-        await _payments.CancelExtraChargeAsync(groupId, chargeId, ct);
-        return NoContent();
+        var result = await _payments.CancelExtraChargeAsync(groupId, chargeId, ct);
+        return ToResponse(result);
     }
 
     /// <summary>Aplica desconto em massa a vários jogadores de uma cobrança extra (apenas admin).</summary>
@@ -140,8 +138,8 @@ public sealed class PaymentController : GroupAuthorizedController
         var adminId = GetCurrentUserId();
         if (adminId is null) return Unauthorized();
 
-        await _payments.BulkDiscountExtraChargeAsync(groupId, chargeId, dto, adminId.Value, ct);
-        return NoContent();
+        var result = await _payments.BulkDiscountExtraChargeAsync(groupId, chargeId, dto, adminId.Value, ct);
+        return ToResponse(result);
     }
 
     /// <summary>Admin ou o próprio jogador: atualiza o status de pagamento de uma cobrança extra.</summary>
@@ -158,16 +156,9 @@ public sealed class PaymentController : GroupAuthorizedController
 
         var isAdmin = await IsFinanceiroForGroupAsync(groupId, _db, ct);
 
-        try
-        {
-            await _payments.UpsertExtraChargePaymentAsync(
-                groupId, chargeId, playerId, dto, userId.Value, isAdmin, ct);
-            return NoContent();
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Forbid(ex.Message);
-        }
+        var result = await _payments.UpsertExtraChargePaymentAsync(
+            groupId, chargeId, playerId, dto, userId.Value, isAdmin, ct);
+        return ToResponse(result);
     }
 
     // ── Endpoints do próprio usuário (view não-admin) ─────────────────────────
@@ -179,8 +170,8 @@ public sealed class PaymentController : GroupAuthorizedController
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
 
-        var row = await _payments.GetMyMonthlyRowAsync(groupId, userId.Value, year, ct);
-        return Ok(row);
+        var result = await _payments.GetMyMonthlyRowAsync(groupId, userId.Value, year, ct);
+        return ToResponse(result);
     }
 
     /// <summary>Retorna cobranças extras em que o jogador do usuário logado está incluído.</summary>
@@ -190,8 +181,8 @@ public sealed class PaymentController : GroupAuthorizedController
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
 
-        var charges = await _payments.GetMyExtraChargesAsync(groupId, userId.Value, ct);
-        return Ok(charges);
+        var result = await _payments.GetMyExtraChargesAsync(groupId, userId.Value, ct);
+        return ToResponse(result);
     }
 
     // ── Resumo de pendências ──────────────────────────────────────────────────
@@ -215,8 +206,8 @@ public sealed class PaymentController : GroupAuthorizedController
             if (!owns) return Forbid();
         }
 
-        var summary = await _payments.GetPaymentSummaryAsync(groupId, playerId, ct);
-        return Ok(summary);
+        var result = await _payments.GetPaymentSummaryAsync(groupId, playerId, ct);
+        return ToResponse(result);
     }
 
     /// <summary>Resumo do próprio usuário autenticado na patota (busca o player vinculado ao user).</summary>
@@ -236,8 +227,8 @@ public sealed class PaymentController : GroupAuthorizedController
         if (player is null)
             return Ok(new PaymentSummaryDto()); // sem player na patota → sem pendências
 
-        var summary = await _payments.GetPaymentSummaryAsync(groupId, player.Id, ct);
-        return Ok(summary);
+        var result = await _payments.GetPaymentSummaryAsync(groupId, player.Id, ct);
+        return ToResponse(result);
     }
 
     // ── Comprovantes ──────────────────────────────────────────────────────────
@@ -258,8 +249,8 @@ public sealed class PaymentController : GroupAuthorizedController
             if (!owns) return Forbid();
         }
 
-        var proof = await _payments.GetMonthlyProofAsync(groupId, playerId, year, month, ct);
-        return Ok(proof);
+        var result = await _payments.GetMonthlyProofAsync(groupId, playerId, year, month, ct);
+        return ToResponse(result);
     }
 
     [HttpGet("extra-charges/{chargeId:guid}/{playerId:guid}/proof")]
@@ -278,7 +269,7 @@ public sealed class PaymentController : GroupAuthorizedController
             if (!owns) return Forbid();
         }
 
-        var proof = await _payments.GetExtraChargeProofAsync(groupId, chargeId, playerId, ct);
-        return Ok(proof);
+        var result = await _payments.GetExtraChargeProofAsync(groupId, chargeId, playerId, ct);
+        return ToResponse(result);
     }
 }

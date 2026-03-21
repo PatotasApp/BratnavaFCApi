@@ -1,4 +1,5 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Payments;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
@@ -18,7 +19,7 @@ public sealed class PaymentService : IPaymentService
 
     // ── Grade mensal ──────────────────────────────────────────────────────────
 
-    public async Task<MonthlyGridDto> GetMonthlyGridAsync(Guid groupId, int year, CancellationToken ct = default)
+    public async Task<Result<MonthlyGridDto>> GetMonthlyGridAsync(Guid groupId, int year, CancellationToken ct = default)
     {
         // Mensalistas = jogadores ativos, não-guest, com UserId
         var players = await _context.Players
@@ -32,7 +33,7 @@ public sealed class PaymentService : IPaymentService
             .ToListAsync(ct);
 
         if (players.Count == 0)
-            return new MonthlyGridDto { Year = year };
+            return Result<MonthlyGridDto>.Ok(new MonthlyGridDto { Year = year });
 
         var playerIds = players.Select(p => p.Id).ToList();
 
@@ -100,21 +101,21 @@ public sealed class PaymentService : IPaymentService
             };
         }).ToArray();
 
-        return new MonthlyGridDto
+        return Result<MonthlyGridDto>.Ok(new MonthlyGridDto
         {
             Year       = year,
             MonthlyFee = monthlyFee,
             Players    = rows,
-        };
+        });
     }
 
     // ── Lançamento mensal em lote ──────────────────────────────────────────────
 
-    public async Task<(int Created, int Skipped)> InitiateMonthlyAsync(
+    public async Task<Result<(int Created, int Skipped)>> InitiateMonthlyAsync(
         Guid groupId, int year, int month, CancellationToken ct = default)
     {
         if (month < 1 || month > 12)
-            throw new ArgumentOutOfRangeException(nameof(month), "Mês deve estar entre 1 e 12.");
+            return Result<(int Created, int Skipped)>.Fail("Mês deve estar entre 1 e 12.", ResultStatus.BadRequest);
 
         var settings = await _context.GroupSettings
             .AsNoTracking()
@@ -132,7 +133,7 @@ public sealed class PaymentService : IPaymentService
             .Select(p => p.Id)
             .ToListAsync(ct);
 
-        if (playerIds.Count == 0) return (0, 0);
+        if (playerIds.Count == 0) return Result<(int Created, int Skipped)>.Ok((0, 0));
 
         // Quais já têm registro?
         var existing = await _context.MonthlyPayments
@@ -159,20 +160,22 @@ public sealed class PaymentService : IPaymentService
             await _context.SaveChangesAsync(ct);
         }
 
-        return (toCreate.Count, existingSet.Count);
+        return Result<(int Created, int Skipped)>.Ok((toCreate.Count, existingSet.Count));
     }
 
-    public async Task<bool> IsMonthInitiatedAsync(
+    public async Task<Result<bool>> IsMonthInitiatedAsync(
         Guid groupId, int year, int month, CancellationToken ct = default)
     {
-        return await _context.MonthlyPayments
+        var initiated = await _context.MonthlyPayments
             .AsNoTracking()
             .AnyAsync(m => m.GroupId == groupId
                         && m.Year == year
                         && m.Month == month, ct);
+
+        return Result<bool>.Ok(initiated);
     }
 
-    public async Task UpsertMonthlyPaymentAsync(
+    public async Task<Result> UpsertMonthlyPaymentAsync(
         Guid groupId,
         UpsertMonthlyPaymentDto dto,
         Guid actingUserId,
@@ -187,11 +190,11 @@ public sealed class PaymentService : IPaymentService
                             && p.GroupId == groupId
                             && p.UserId == actingUserId, ct);
             if (!ownsPlayer)
-                throw new UnauthorizedAccessException("Você só pode atualizar seu próprio pagamento.");
+                return Result.Fail("Sem permissão para esta operação.", ResultStatus.Forbidden);
 
             // Jogador não pode aplicar desconto
             if (dto.Discount.HasValue)
-                throw new UnauthorizedAccessException("Somente administradores podem aplicar descontos.");
+                return Result.Fail("Sem permissão para esta operação.", ResultStatus.Forbidden);
         }
 
         var settings = await _context.GroupSettings
@@ -235,11 +238,13 @@ public sealed class PaymentService : IPaymentService
         }
 
         await _context.SaveChangesAsync(ct);
+
+        return Result.Ok("Pagamento atualizado com sucesso.");
     }
 
     // ── Cobranças extras ──────────────────────────────────────────────────────
 
-    public async Task<IReadOnlyList<ExtraChargeDto>> GetExtraChargesAsync(Guid groupId, CancellationToken ct = default)
+    public async Task<Result<IReadOnlyList<ExtraChargeDto>>> GetExtraChargesAsync(Guid groupId, CancellationToken ct = default)
     {
         var charges = await _context.ExtraCharges
             .AsNoTracking()
@@ -261,17 +266,18 @@ public sealed class PaymentService : IPaymentService
                 .ToDictionaryAsync(p => p.Id, p => p.Name, ct)
             : new Dictionary<Guid, string>();
 
-        return charges.Select(c => ToExtraChargeDto(c, playerNames)).ToList();
+        IReadOnlyList<ExtraChargeDto> result = charges.Select(c => ToExtraChargeDto(c, playerNames)).ToList();
+        return Result<IReadOnlyList<ExtraChargeDto>>.Ok(result);
     }
 
-    public async Task<ExtraChargeDto> CreateExtraChargeAsync(
+    public async Task<Result<ExtraChargeDto>> CreateExtraChargeAsync(
         Guid groupId,
         CreateExtraChargeDto dto,
         Guid adminId,
         CancellationToken ct = default)
     {
         if (dto.PlayerIds is null || dto.PlayerIds.Length == 0)
-            throw new InvalidOperationException("Selecione ao menos um jogador.");
+            return Result<ExtraChargeDto>.Fail("Selecione ao menos um jogador.", ResultStatus.BadRequest);
 
         // Valida que os jogadores pertencem à patota
         var validPlayers = await _context.Players
@@ -281,7 +287,7 @@ public sealed class PaymentService : IPaymentService
             .ToListAsync(ct);
 
         if (validPlayers.Count == 0)
-            throw new InvalidOperationException("Nenhum jogador válido encontrado.");
+            return Result<ExtraChargeDto>.Fail("Nenhum jogador válido encontrado.", ResultStatus.BadRequest);
 
         var charge = new ExtraChargeEntity(
             groupId,
@@ -307,27 +313,30 @@ public sealed class PaymentService : IPaymentService
             .Include(c => c.Payments)
             .FirstAsync(c => c.Id == charge.Id, ct);
 
-        return ToExtraChargeDto(saved, playerNames);
+        return Result<ExtraChargeDto>.Ok(ToExtraChargeDto(saved, playerNames), "Cobrança extra criada com sucesso.", ResultStatus.Created);
     }
 
-    public async Task CancelExtraChargeAsync(Guid groupId, Guid chargeId, CancellationToken ct = default)
+    public async Task<Result> CancelExtraChargeAsync(Guid groupId, Guid chargeId, CancellationToken ct = default)
     {
         var charge = await _context.ExtraCharges
             .FirstOrDefaultAsync(c => c.Id == chargeId && c.GroupId == groupId, ct);
 
         if (charge is null)
-            throw new InvalidOperationException("Cobrança não encontrada.");
+            return Result.Fail("Cobrança extra não encontrada.", ResultStatus.NotFound);
 
         charge.Cancel();
         await _context.SaveChangesAsync(ct);
+
+        return Result.Ok("Cobrança extra removida com sucesso.");
     }
 
-    public async Task BulkDiscountExtraChargeAsync(
+    public async Task<Result> BulkDiscountExtraChargeAsync(
         Guid groupId, Guid chargeId, BulkExtraChargeDiscountDto dto, Guid adminId, CancellationToken ct = default)
     {
         if (dto.Discount < 0)
-            throw new ArgumentException("Desconto não pode ser negativo.");
-        if (dto.PlayerIds.Length == 0) return;
+            return Result.Fail("Desconto não pode ser negativo.", ResultStatus.BadRequest);
+
+        if (dto.PlayerIds.Length == 0) return Result.Ok();
 
         var payments = await _context.ExtraChargePayments
             .Where(p => p.ExtraChargeId == chargeId
@@ -339,9 +348,11 @@ public sealed class PaymentService : IPaymentService
             payment.ApplyDiscount(dto.Discount, dto.DiscountReason, adminId);
 
         await _context.SaveChangesAsync(ct);
+
+        return Result.Ok("Desconto aplicado com sucesso.");
     }
 
-    public async Task UpsertExtraChargePaymentAsync(
+    public async Task<Result> UpsertExtraChargePaymentAsync(
         Guid groupId,
         Guid chargeId,
         Guid playerId,
@@ -358,10 +369,10 @@ public sealed class PaymentService : IPaymentService
                             && p.GroupId == groupId
                             && p.UserId == actingUserId, ct);
             if (!ownsPlayer)
-                throw new UnauthorizedAccessException("Você só pode atualizar seu próprio pagamento.");
+                return Result.Fail("Sem permissão para esta operação.", ResultStatus.Forbidden);
 
             if (dto.Discount.HasValue)
-                throw new UnauthorizedAccessException("Somente administradores podem aplicar descontos.");
+                return Result.Fail("Sem permissão para esta operação.", ResultStatus.Forbidden);
         }
 
         var payment = await _context.ExtraChargePayments
@@ -370,7 +381,7 @@ public sealed class PaymentService : IPaymentService
                                    && p.GroupId      == groupId, ct);
 
         if (payment is null)
-            throw new InvalidOperationException("Pagamento não encontrado.");
+            return Result.Fail("Pagamento não encontrado.", ResultStatus.NotFound);
 
         if (dto.Discount.HasValue && isAdmin)
             payment.ApplyDiscount(dto.Discount.Value, dto.DiscountReason, actingUserId);
@@ -389,11 +400,13 @@ public sealed class PaymentService : IPaymentService
         }
 
         await _context.SaveChangesAsync(ct);
+
+        return Result.Ok("Pagamento atualizado com sucesso.");
     }
 
     // ── Visão do próprio usuário ──────────────────────────────────────────────
 
-    public async Task<PlayerMonthlyRowDto?> GetMyMonthlyRowAsync(
+    public async Task<Result<PlayerMonthlyRowDto?>> GetMyMonthlyRowAsync(
         Guid groupId, Guid userId, int year, CancellationToken ct = default)
     {
         var player = await _context.Players
@@ -405,7 +418,7 @@ public sealed class PaymentService : IPaymentService
             .Select(p => new { p.Id, p.Name, p.UserId, JoinDate = p.JoinedAt ?? p.CreateDate })
             .FirstOrDefaultAsync(ct);
 
-        if (player is null) return null;
+        if (player is null) return Result<PlayerMonthlyRowDto?>.Ok(null);
 
         var settings = await _context.GroupSettings
             .AsNoTracking()
@@ -452,7 +465,7 @@ public sealed class PaymentService : IPaymentService
                 };
         }).ToArray();
 
-        return new PlayerMonthlyRowDto
+        return Result<PlayerMonthlyRowDto?>.Ok(new PlayerMonthlyRowDto
         {
             PlayerId    = player.Id,
             UserId      = player.UserId,
@@ -460,10 +473,10 @@ public sealed class PaymentService : IPaymentService
             JoinedYear  = joinYear,
             JoinedMonth = joinMonth,
             Months      = months,
-        };
+        });
     }
 
-    public async Task<IReadOnlyList<ExtraChargeDto>> GetMyExtraChargesAsync(
+    public async Task<Result<IReadOnlyList<ExtraChargeDto>>> GetMyExtraChargesAsync(
         Guid groupId, Guid userId, CancellationToken ct = default)
     {
         var playerId = await _context.Players
@@ -474,7 +487,7 @@ public sealed class PaymentService : IPaymentService
             .Select(p => (Guid?)p.Id)
             .FirstOrDefaultAsync(ct);
 
-        if (playerId is null) return [];
+        if (playerId is null) return Result<IReadOnlyList<ExtraChargeDto>>.Ok([]);
 
         var payments = await _context.ExtraChargePayments
             .AsNoTracking()
@@ -483,7 +496,7 @@ public sealed class PaymentService : IPaymentService
             .Include(ep => ep.ExtraCharge)
             .ToListAsync(ct);
 
-        if (payments.Count == 0) return [];
+        if (payments.Count == 0) return Result<IReadOnlyList<ExtraChargeDto>>.Ok([]);
 
         var playerName = await _context.Players
             .AsNoTracking()
@@ -493,7 +506,7 @@ public sealed class PaymentService : IPaymentService
 
         var names = new Dictionary<Guid, string> { [playerId.Value] = playerName };
 
-        return payments
+        IReadOnlyList<ExtraChargeDto> result = payments
             .Where(ep => ep.ExtraCharge is not null)
             .GroupBy(ep => ep.ExtraChargeId)
             .Select(g =>
@@ -525,11 +538,13 @@ public sealed class PaymentService : IPaymentService
             })
             .OrderByDescending(c => c.CreatedAt)
             .ToList();
+
+        return Result<IReadOnlyList<ExtraChargeDto>>.Ok(result);
     }
 
     // ── Resumo ────────────────────────────────────────────────────────────────
 
-    public async Task<PaymentSummaryDto> GetPaymentSummaryAsync(
+    public async Task<Result<PaymentSummaryDto>> GetPaymentSummaryAsync(
         Guid groupId,
         Guid playerId,
         CancellationToken ct = default)
@@ -577,17 +592,17 @@ public sealed class PaymentService : IPaymentService
             })
             .ToListAsync(ct);
 
-        return new PaymentSummaryDto
+        return Result<PaymentSummaryDto>.Ok(new PaymentSummaryDto
         {
             HasPendingMonthly  = pendingMonths > 0,
             PendingMonthsCount = pendingMonths,
             PendingExtraCharges = pendingExtras.ToArray(),
-        };
+        });
     }
 
     // ── Comprovantes ──────────────────────────────────────────────────────────
 
-    public async Task<ProofResponseDto> GetMonthlyProofAsync(
+    public async Task<Result<ProofResponseDto>> GetMonthlyProofAsync(
         Guid groupId, Guid playerId, int year, int month, CancellationToken ct = default)
     {
         var record = await _context.MonthlyPayments
@@ -598,17 +613,17 @@ public sealed class PaymentService : IPaymentService
                                    && m.Month    == month, ct);
 
         if (record?.ProofBase64 is null)
-            throw new InvalidOperationException("Comprovante não encontrado.");
+            return Result<ProofResponseDto>.Fail("Comprovante não encontrado.", ResultStatus.NotFound);
 
-        return new ProofResponseDto
+        return Result<ProofResponseDto>.Ok(new ProofResponseDto
         {
             Base64   = record.ProofBase64,
             FileName = record.ProofFileName ?? "comprovante",
             MimeType = record.ProofMimeType ?? "application/octet-stream",
-        };
+        });
     }
 
-    public async Task<ProofResponseDto> GetExtraChargeProofAsync(
+    public async Task<Result<ProofResponseDto>> GetExtraChargeProofAsync(
         Guid groupId, Guid chargeId, Guid playerId, CancellationToken ct = default)
     {
         var record = await _context.ExtraChargePayments
@@ -618,14 +633,14 @@ public sealed class PaymentService : IPaymentService
                                    && p.PlayerId      == playerId, ct);
 
         if (record?.ProofBase64 is null)
-            throw new InvalidOperationException("Comprovante não encontrado.");
+            return Result<ProofResponseDto>.Fail("Comprovante não encontrado.", ResultStatus.NotFound);
 
-        return new ProofResponseDto
+        return Result<ProofResponseDto>.Ok(new ProofResponseDto
         {
             Base64   = record.ProofBase64,
             FileName = record.ProofFileName ?? "comprovante",
             MimeType = record.ProofMimeType ?? "application/octet-stream",
-        };
+        });
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
