@@ -1,9 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Infrastructure.Data;
@@ -20,107 +21,131 @@ public sealed class TeamColorService : ITeamColorService
         _context = context;
     }
 
-    public async Task<IReadOnlyList<TeamColorDto>> GetAllAsync(Guid groupId, bool activeOnly, CancellationToken ct)
+    public async Task<Result<IReadOnlyList<TeamColorDto>>> GetAllAsync(Guid groupId, bool activeOnly, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success)
+            return Result<IReadOnlyList<TeamColorDto>>.Fail(groupCheck.Error!, groupCheck.Status);
 
         IQueryable<TeamColorEntity> query = _context.TeamColors.AsNoTracking().Where(c => c.GroupId == groupId);
 
         if (activeOnly)
             query = query.Where(c => c.IsActive);
 
-        return await query
+        var list = await query
             .OrderByDescending(c => c.IsActive)
             .ThenBy(c => c.Name)
             .Select(ToDtoExpr())
             .ToListAsync(ct);
+
+        return Result<IReadOnlyList<TeamColorDto>>.Ok(list);
     }
 
-    public async Task<TeamColorDto> GetByIdAsync(Guid groupId, Guid colorId, CancellationToken ct)
+    public async Task<Result<TeamColorDto>> GetByIdAsync(Guid groupId, Guid colorId, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success)
+            return Result<TeamColorDto>.Fail(groupCheck.Error!, groupCheck.Status);
 
         var entity = await _context.TeamColors
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.GroupId == groupId && c.Id == colorId, ct);
 
         if (entity is null)
-            throw new InvalidOperationException("Cor do time nao encontrada para este grupo.");
+            return Result<TeamColorDto>.Fail("Cor do time nao encontrada para este grupo.", ResultStatus.NotFound);
 
-        return ToDto(entity);
+        return Result<TeamColorDto>.Ok(ToDto(entity));
     }
 
-    public async Task<TeamColorDto> CreateAsync(CreateTeamColorDto dto, CancellationToken ct)
+    public async Task<Result<TeamColorDto>> CreateAsync(CreateTeamColorDto dto, CancellationToken ct)
     {
-        if (dto is null) throw new InvalidOperationException("Payload invalido.");
-        await EnsureGroupExistsAsync(dto.GroupId, ct);
+        if (dto is null)
+            return Result<TeamColorDto>.Fail("Payload invalido.", ResultStatus.BadRequest);
+
+        var groupCheck = await EnsureGroupExistsAsync(dto.GroupId, ct);
+        if (!groupCheck.Success)
+            return Result<TeamColorDto>.Fail(groupCheck.Error!, groupCheck.Status);
 
         var entity = new TeamColorEntity(dto.GroupId, dto.Name, dto.HexValue);
 
         await _context.TeamColors.AddAsync(entity, ct);
         await _context.SaveChangesAsync(ct);
 
-        return ToDto(entity);
+        return Result<TeamColorDto>.Ok(ToDto(entity), "Cor do time criada com sucesso.", ResultStatus.Created);
     }
 
-    public async Task<TeamColorDto> UpdateAsync(Guid groupId, Guid colorId, UpdateTeamColorDto dto, CancellationToken ct)
+    public async Task<Result<TeamColorDto>> UpdateAsync(Guid groupId, Guid colorId, UpdateTeamColorDto dto, CancellationToken ct)
     {
-        if (dto is null) throw new InvalidOperationException("Payload invalido.");
-        await EnsureGroupExistsAsync(groupId, ct);
+        if (dto is null)
+            return Result<TeamColorDto>.Fail("Payload invalido.", ResultStatus.BadRequest);
+
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success)
+            return Result<TeamColorDto>.Fail(groupCheck.Error!, groupCheck.Status);
 
         var entity = await _context.TeamColors
             .FirstOrDefaultAsync(c => c.GroupId == groupId && c.Id == colorId, ct);
 
         if (entity is null)
-            throw new InvalidOperationException("Cor do time nao encontrada para este grupo.");
+            return Result<TeamColorDto>.Fail("Cor do time nao encontrada para este grupo.", ResultStatus.NotFound);
 
         entity.SetName(dto.Name);
         entity.SetHexValue(dto.HexValue);
 
         await _context.SaveChangesAsync(ct);
 
-        return ToDto(entity);
+        return Result<TeamColorDto>.Ok(ToDto(entity), "Cor do time atualizada com sucesso.");
     }
 
-    public async Task InactivateAsync(Guid groupId, Guid colorId, CancellationToken ct)
+    public async Task<Result> InactivateAsync(Guid groupId, Guid colorId, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success)
+            return Result.Fail(groupCheck.Error!, groupCheck.Status);
 
         var entity = await _context.TeamColors
             .FirstOrDefaultAsync(c => c.GroupId == groupId && c.Id == colorId, ct);
 
         if (entity is null)
-            throw new InvalidOperationException("Cor do time nao encontrada para este grupo.");
+            return Result.Fail("Cor do time nao encontrada para este grupo.", ResultStatus.NotFound);
 
         entity.Inactivate();
         await _context.SaveChangesAsync(ct);
+
+        return Result.Ok("Cor do time removida com sucesso.");
     }
 
-    public async Task ActivateAsync(Guid groupId, Guid colorId, CancellationToken ct)
+    public async Task<Result> ActivateAsync(Guid groupId, Guid colorId, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success)
+            return Result.Fail(groupCheck.Error!, groupCheck.Status);
 
         var entity = await _context.TeamColors
             .FirstOrDefaultAsync(c => c.GroupId == groupId && c.Id == colorId, ct);
 
         if (entity is null)
-            throw new InvalidOperationException("Cor do time nao encontrada para este grupo.");
+            return Result.Fail("Cor do time nao encontrada para este grupo.", ResultStatus.NotFound);
 
         entity.Activate();
         await _context.SaveChangesAsync(ct);
+
+        return Result.Ok("Cor do time atualizada com sucesso.");
     }
 
-    private async Task EnsureGroupExistsAsync(Guid groupId, CancellationToken ct)
+    private async Task<Result> EnsureGroupExistsAsync(Guid groupId, CancellationToken ct)
     {
         if (groupId == Guid.Empty)
-            throw new InvalidOperationException("GroupId e obrigatorio.");
+            return Result.Fail("GroupId e obrigatorio.", ResultStatus.BadRequest);
 
         var exists = await _context.Groups
             .AsNoTracking()
             .AnyAsync(g => g.Id == groupId, ct);
 
         if (!exists)
-            throw new InvalidOperationException("Group nao encontrado.");
+            return Result.Fail("Group nao encontrado.", ResultStatus.NotFound);
+
+        return Result.Ok();
     }
 
     private static TeamColorDto ToDto(TeamColorEntity e) => new()

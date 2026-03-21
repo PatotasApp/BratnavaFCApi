@@ -1,4 +1,5 @@
-﻿using BratnavaFC.Application.Services;
+using BratnavaFC.Application.Services;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
 using FluentAssertions;
@@ -8,10 +9,10 @@ namespace BranavaFC.Tests;
 public class TeamColorServiceTests
 {
     [Fact]
-    public async Task GetByIdAsync_WhenNotFound_ShouldThrow()
+    public async Task GetByIdAsync_WhenNotFound_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(GetByIdAsync_WhenNotFound_ShouldThrow));
+        await using var db = DbContextFactory.Create(nameof(GetByIdAsync_WhenNotFound_ShouldReturnFailure));
 
         var group = new GroupEntity("G", null, Guid.NewGuid());
         db.Groups.Add(group);
@@ -20,26 +21,28 @@ public class TeamColorServiceTests
         var sut = new TeamColorService(db);
 
         // Act
-        var act = async () => await sut.GetByIdAsync(group.Id, Guid.NewGuid(), CancellationToken.None);
+        var result = await sut.GetByIdAsync(group.Id, Guid.NewGuid(), CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Cor do time nao encontrada para este grupo.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Error.Should().Be("Cor do time nao encontrada para este grupo.");
     }
 
     [Fact]
-    public async Task CreateAsync_WhenDtoNull_ShouldThrow()
+    public async Task CreateAsync_WhenDtoNull_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(CreateAsync_WhenDtoNull_ShouldThrow));
+        await using var db = DbContextFactory.Create(nameof(CreateAsync_WhenDtoNull_ShouldReturnFailure));
         var sut = new TeamColorService(db);
 
         // Act
-        var act = async () => await sut.CreateAsync(null!, CancellationToken.None);
+        var result = await sut.CreateAsync(null!, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Payload invalido.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.BadRequest);
+        result.Error.Should().Be("Payload invalido.");
     }
 
     [Fact]
@@ -62,23 +65,24 @@ public class TeamColorServiceTests
         };
 
         // Act
-        var created = await sut.CreateAsync(dto, CancellationToken.None);
+        var result = await sut.CreateAsync(dto, CancellationToken.None);
 
         // Assert
-        created.GroupId.Should().Be(group.Id);
-        created.Name.Should().Be("Azul");
-        created.HexValue.Should().Be("#1A2B3C");
+        result.Success.Should().BeTrue();
+        result.Data!.GroupId.Should().Be(group.Id);
+        result.Data.Name.Should().Be("Azul");
+        result.Data.HexValue.Should().Be("#1A2B3C");
 
-        var saved = await db.TeamColors.FindAsync(created.Id);
+        var saved = await db.TeamColors.FindAsync(result.Data.Id);
         saved.Should().NotBeNull();
         saved!.Name.Should().Be("Azul");
     }
 
     [Fact]
-    public async Task InactivateAsync_WhenNotFound_ShouldThrow()
+    public async Task InactivateAsync_WhenNotFound_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(InactivateAsync_WhenNotFound_ShouldThrow));
+        await using var db = DbContextFactory.Create(nameof(InactivateAsync_WhenNotFound_ShouldReturnFailure));
 
         var group = new GroupEntity("G", null, Guid.NewGuid());
         db.Groups.Add(group);
@@ -87,10 +91,11 @@ public class TeamColorServiceTests
         var sut = new TeamColorService(db);
 
         // Act
-        var act = async () => await sut.InactivateAsync(group.Id, Guid.NewGuid(), CancellationToken.None);
+        var result = await sut.InactivateAsync(group.Id, Guid.NewGuid(), CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Cor do time nao encontrada para este grupo.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Error.Should().Be("Cor do time nao encontrada para este grupo.");
     }
 }
