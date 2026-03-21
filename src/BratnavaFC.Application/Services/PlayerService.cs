@@ -1,4 +1,5 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Dtos.Players;
 using BratnavaFC.Domain.Entities;
@@ -22,14 +23,15 @@ public class PlayerService : IPlayerService
         _context = context;
     }
 
-    public async Task<PlayerDto> CreateAsync(CreatePlayerDto request, CancellationToken cancellationToken)
+    public async Task<Result<PlayerDto>> CreateAsync(CreatePlayerDto request, CancellationToken cancellationToken)
     {
         try
         {
             var groupExists = await _context.Groups
                 .AnyAsync(x => x.Id == request.GroupId, cancellationToken);
 
-            if (!groupExists) throw new ApplicationException("Group does not exist.");
+            if (!groupExists)
+                return Result<PlayerDto>.Fail("Grupo não encontrado.", ResultStatus.NotFound);
 
             // Apenas valida usuario se nao for convidado e o UserId for informado
             if (!request.IsGuest && request.UserId.HasValue)
@@ -37,12 +39,14 @@ public class PlayerService : IPlayerService
                 var userExists = await _context.Users
                     .AnyAsync(x => x.Id == request.UserId.Value, cancellationToken);
 
-                if (!userExists) throw new ApplicationException("User does not exist.");
+                if (!userExists)
+                    return Result<PlayerDto>.Fail("Usuário não encontrado.", ResultStatus.NotFound);
 
                 var alreadyExists = await _context.Players
                     .AnyAsync(p => p.GroupId == request.GroupId && p.UserId == request.UserId.Value, cancellationToken);
 
-                if (alreadyExists) throw new InvalidOperationException("Player already exists in the group.");
+                if (alreadyExists)
+                    return Result<PlayerDto>.Fail("Player already exists in the group.", ResultStatus.BadRequest);
             }
 
             var player = new PlayerEntity(
@@ -60,7 +64,7 @@ public class PlayerService : IPlayerService
             _context.Players.Add(player);
             await _context.SaveChangesAsync(cancellationToken);
 
-            return MapToDto(player);
+            return Result<PlayerDto>.Ok(MapToDto(player), "Jogador criado com sucesso.", ResultStatus.Created);
         }
         catch (Exception ex)
         {
@@ -69,12 +73,13 @@ public class PlayerService : IPlayerService
         }
     }
 
-    public async Task<PlayerDto> UpdateAsync(Guid playerId, UpdatePlayerDto request, CancellationToken cancellationToken)
+    public async Task<Result<PlayerDto>> UpdateAsync(Guid playerId, UpdatePlayerDto request, CancellationToken cancellationToken)
     {
         try
         {
             var player = await _repository.GetByIdIncludingInactiveAsync(playerId, cancellationToken);
-            if (player == null) throw new ApplicationException("PlayerEntity not found.");
+            if (player == null)
+                return Result<PlayerDto>.Fail("Jogador não encontrado.", ResultStatus.NotFound);
 
             player.Rename(request.Name);
             player.SetSkillPoints(request.SkillPoints);
@@ -90,7 +95,7 @@ public class PlayerService : IPlayerService
             _repository.Update(player);
             await _repository.SaveChangesAsync(cancellationToken);
 
-            return MapToDto(player);
+            return Result<PlayerDto>.Ok(MapToDto(player), "Jogador atualizado com sucesso.");
         }
         catch (Exception ex)
         {
@@ -99,15 +104,18 @@ public class PlayerService : IPlayerService
         }
     }
 
-    public async Task DeleteAsync(Guid playerId, CancellationToken cancellationToken)
+    public async Task<Result> DeleteAsync(Guid playerId, CancellationToken cancellationToken)
     {
         try
         {
             var player = await _repository.GetByIdIncludingInactiveAsync(playerId, cancellationToken);
-            if (player == null) throw new ApplicationException("PlayerEntity not found.");
+            if (player == null)
+                return Result.Fail("Jogador não encontrado.", ResultStatus.NotFound);
 
             _repository.Remove(player);
             await _repository.SaveChangesAsync(cancellationToken);
+
+            return Result.Ok("Jogador removido com sucesso.");
         }
         catch (Exception ex)
         {
@@ -116,14 +124,15 @@ public class PlayerService : IPlayerService
         }
     }
 
-    public async Task<PlayerDto> GetByIdAsync(Guid playerId, CancellationToken cancellationToken)
+    public async Task<Result<PlayerDto>> GetByIdAsync(Guid playerId, CancellationToken cancellationToken)
     {
         try
         {
             var player = await _repository.GetByIdAsync(playerId, cancellationToken);
-            if (player == null) throw new ApplicationException("PlayerEntity not found.");
+            if (player == null)
+                return Result<PlayerDto>.Fail("Jogador não encontrado.", ResultStatus.NotFound);
 
-            return MapToDto(player);
+            return Result<PlayerDto>.Ok(MapToDto(player));
         }
         catch (Exception ex)
         {
@@ -132,17 +141,20 @@ public class PlayerService : IPlayerService
         }
     }
 
-    public async Task InactivateAsync(Guid playerId, CancellationToken cancellationToken)
+    public async Task<Result> InactivateAsync(Guid playerId, CancellationToken cancellationToken)
     {
         try
         {
             var player = await _repository.GetByIdIncludingInactiveAsync(playerId, cancellationToken);
-            if (player == null) throw new ApplicationException("PlayerEntity not found.");
+            if (player == null)
+                return Result.Fail("Jogador não encontrado.", ResultStatus.NotFound);
 
             player.Inactivate();
 
             _repository.Update(player);
             await _repository.SaveChangesAsync(cancellationToken);
+
+            return Result.Ok("Jogador atualizado com sucesso.");
         }
         catch (Exception ex)
         {
@@ -151,17 +163,20 @@ public class PlayerService : IPlayerService
         }
     }
 
-    public async Task ReactivateAsync(Guid playerId, CancellationToken cancellationToken)
+    public async Task<Result> ReactivateAsync(Guid playerId, CancellationToken cancellationToken)
     {
         try
         {
             var player = await _repository.GetByIdIncludingInactiveAsync(playerId, cancellationToken);
-            if (player == null) throw new ApplicationException("PlayerEntity not found.");
+            if (player == null)
+                return Result.Fail("Jogador não encontrado.", ResultStatus.NotFound);
 
             player.Reactivate();
 
             _repository.Update(player);
             await _repository.SaveChangesAsync(cancellationToken);
+
+            return Result.Ok("Jogador atualizado com sucesso.");
         }
         catch (Exception ex)
         {
@@ -170,10 +185,10 @@ public class PlayerService : IPlayerService
         }
     }
 
-    public async Task<IReadOnlyList<MyPlayerDto>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken)
+    public async Task<Result<IReadOnlyList<MyPlayerDto>>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken)
     {
         if (userId == Guid.Empty)
-            throw new InvalidOperationException("UserId is required.");
+            return Result<IReadOnlyList<MyPlayerDto>>.Fail("UserId is required.", ResultStatus.BadRequest);
 
         var list = await _context.Players
             .AsNoTracking()
@@ -193,21 +208,24 @@ public class PlayerService : IPlayerService
             ))
             .ToListAsync(cancellationToken);
 
-        return list;
+        return Result<IReadOnlyList<MyPlayerDto>>.Ok(list);
     }
 
-    public async Task LeaveGroupAsync(Guid playerId, Guid requestingUserId, CancellationToken cancellationToken)
+    public async Task<Result> LeaveGroupAsync(Guid playerId, Guid requestingUserId, CancellationToken cancellationToken)
     {
         var player = await _repository.GetByIdIncludingInactiveAsync(playerId, cancellationToken);
-        if (player == null) throw new ApplicationException("PlayerEntity not found.");
+        if (player == null)
+            return Result.Fail("Jogador não encontrado.", ResultStatus.NotFound);
 
         if (player.UserId != requestingUserId)
-            throw new UnauthorizedAccessException("You can only leave your own player.");
+            return Result.Fail("Sem permissão para esta operação.", ResultStatus.Forbidden);
 
         player.SetIsGuest(true);
 
         _repository.Update(player);
         await _repository.SaveChangesAsync(cancellationToken);
+
+        return Result.Ok("Jogador atualizado com sucesso.");
     }
 
     private static PlayerDto MapToDto(PlayerEntity player) => new(

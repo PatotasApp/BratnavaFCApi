@@ -1,4 +1,4 @@
-﻿using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos.Players;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,7 +8,7 @@ namespace BratnavaFC.Api.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-public class PlayersController : ControllerBase
+public class PlayersController : BaseApiController
 {
     private readonly IPlayerService _playerService;
 
@@ -22,22 +22,22 @@ public class PlayersController : ControllerBase
     {
         if (request == null) return BadRequest();
 
-        var playerCreated = await _playerService.CreateAsync(request, cancellationToken);
-        return Ok(playerCreated);
+        var result = await _playerService.CreateAsync(request, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpDelete("{playerId:guid}")]
     public async Task<IActionResult> DeletePlayer(Guid playerId, CancellationToken cancellationToken)
     {
-        await _playerService.DeleteAsync(playerId, cancellationToken);
-        return Ok();
+        var result = await _playerService.DeleteAsync(playerId, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpGet("{playerId:guid}")]
     public async Task<IActionResult> GetPlayer(Guid playerId, CancellationToken cancellationToken)
     {
-        var player = await _playerService.GetByIdAsync(playerId, cancellationToken);
-        return Ok(player);
+        var result = await _playerService.GetByIdAsync(playerId, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpPut("{playerId:guid}")]
@@ -45,22 +45,22 @@ public class PlayersController : ControllerBase
     {
         if (request == null) return BadRequest();
 
-        var playerUpdated = await _playerService.UpdateAsync(playerId, request, cancellationToken);
-        return Ok(playerUpdated);
+        var result = await _playerService.UpdateAsync(playerId, request, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpPost("{playerId:guid}/inactivate")]
     public async Task<IActionResult> InactivateAsync(Guid playerId, CancellationToken cancellationToken)
     {
-        await _playerService.InactivateAsync(playerId, cancellationToken);
-        return NoContent();
+        var result = await _playerService.InactivateAsync(playerId, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpPost("{playerId:guid}/reactivate")]
     public async Task<IActionResult> ReactivateAsync(Guid playerId, CancellationToken cancellationToken)
     {
-        await _playerService.ReactivateAsync(playerId, cancellationToken);
-        return NoContent();
+        var result = await _playerService.ReactivateAsync(playerId, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpPost("{playerId:guid}/leave")]
@@ -68,8 +68,8 @@ public class PlayersController : ControllerBase
     public async Task<IActionResult> LeaveGroup(Guid playerId, CancellationToken cancellationToken)
     {
         var userId = GetUserIdOrThrow();
-        await _playerService.LeaveGroupAsync(playerId, userId, cancellationToken);
-        return NoContent();
+        var result = await _playerService.LeaveGroupAsync(playerId, userId, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpGet("mine")]
@@ -77,16 +77,16 @@ public class PlayersController : ControllerBase
     public async Task<IActionResult> GetMine(CancellationToken cancellationToken)
     {
         var userId = GetUserIdOrThrow();
-        var items = await _playerService.GetByUserIdAsync(userId, cancellationToken);
-        return Ok(items);
+        var result = await _playerService.GetByUserIdAsync(userId, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpGet("by-user/{userId:guid}")]
     [Authorize(Roles = "Admin,GodMode")]
     public async Task<IActionResult> GetByUser(Guid userId, CancellationToken cancellationToken)
     {
-        var items = await _playerService.GetByUserIdAsync(userId, cancellationToken);
-        return Ok(items);
+        var result = await _playerService.GetByUserIdAsync(userId, cancellationToken);
+        return ToResponse(result);
     }
 
     private Guid GetUserIdOrThrow()

@@ -1,4 +1,5 @@
-﻿using BratnavaFC.Application.Services;
+using BratnavaFC.Application.Services;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Players;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
@@ -13,10 +14,10 @@ namespace BranavaFC.Tests;
 public class PlayerServiceTests
 {
     [Fact]
-    public async Task CreateAsync_WhenGroupNotExists_ShouldThrow()
+    public async Task CreateAsync_WhenGroupNotExists_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(CreateAsync_WhenGroupNotExists_ShouldThrow));
+        await using var db = DbContextFactory.Create(nameof(CreateAsync_WhenGroupNotExists_ShouldReturnFailure));
 
         var logger = new Mock<ILogger<PlayerService>>();
         var repo = new Mock<IRepositoryBase<PlayerEntity>>();
@@ -34,18 +35,19 @@ public class PlayerServiceTests
         );
 
         // Act
-        var act = async () => await sut.CreateAsync(req, CancellationToken.None);
+        var result = await sut.CreateAsync(req, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<ApplicationException>()
-            .WithMessage("Group does not exist.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Error.Should().Be("Grupo não encontrado.");
     }
 
     [Fact]
-    public async Task CreateAsync_WhenUserNotExists_ShouldThrow()
+    public async Task CreateAsync_WhenUserNotExists_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(CreateAsync_WhenUserNotExists_ShouldThrow));
+        await using var db = DbContextFactory.Create(nameof(CreateAsync_WhenUserNotExists_ShouldReturnFailure));
 
         var group = new GroupEntity("G", null, Guid.NewGuid());
         db.Groups.Add(group);
@@ -66,18 +68,19 @@ public class PlayerServiceTests
         );
 
         // Act
-        var act = async () => await sut.CreateAsync(req, CancellationToken.None);
+        var result = await sut.CreateAsync(req, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<ApplicationException>()
-            .WithMessage("User does not exist.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Error.Should().Be("Usuário não encontrado.");
     }
 
     [Fact]
-    public async Task CreateAsync_WhenPlayerAlreadyExistsInGroup_ShouldThrow()
+    public async Task CreateAsync_WhenPlayerAlreadyExistsInGroup_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(CreateAsync_WhenPlayerAlreadyExistsInGroup_ShouldThrow));
+        await using var db = DbContextFactory.Create(nameof(CreateAsync_WhenPlayerAlreadyExistsInGroup_ShouldReturnFailure));
 
         var group = new GroupEntity("G", null, Guid.NewGuid());
         var user = new UserEntity("u", "f", "l", "mail@test.com", "hash", null, null);
@@ -105,11 +108,12 @@ public class PlayerServiceTests
         );
 
         // Act
-        var act = async () => await sut.CreateAsync(req, CancellationToken.None);
+        var result = await sut.CreateAsync(req, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Player already exists in the group.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.BadRequest);
+        result.Error.Should().Be("Player already exists in the group.");
     }
 
     [Fact]
@@ -140,13 +144,15 @@ public class PlayerServiceTests
         );
 
         // Act
-        var player = await sut.CreateAsync(req, CancellationToken.None);
+        var result = await sut.CreateAsync(req, CancellationToken.None);
 
         // Assert
-        player.Should().NotBeNull();
-        player.Id.Should().NotBe(Guid.Empty);
+        result.Success.Should().BeTrue();
+        result.Status.Should().Be(ResultStatus.Created);
+        result.Data.Should().NotBeNull();
+        result.Data!.Id.Should().NotBe(Guid.Empty);
 
-        var created = await db.Players.IgnoreQueryFilters().FirstOrDefaultAsync(p => p.Id == player.Id);
+        var created = await db.Players.IgnoreQueryFilters().FirstOrDefaultAsync(p => p.Id == result.Data.Id);
         created.Should().NotBeNull();
         created!.Name.Should().Be("Caio");
         created.UserId.Should().Be(user.Id);
@@ -157,10 +163,10 @@ public class PlayerServiceTests
     }
 
     [Fact]
-    public async Task UpdateAsync_WhenNotFound_ShouldThrow()
+    public async Task UpdateAsync_WhenNotFound_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(UpdateAsync_WhenNotFound_ShouldThrow));
+        await using var db = DbContextFactory.Create(nameof(UpdateAsync_WhenNotFound_ShouldReturnFailure));
 
         var logger = new Mock<ILogger<PlayerService>>();
         var repo = new Mock<IRepositoryBase<PlayerEntity>>();
@@ -180,11 +186,12 @@ public class PlayerServiceTests
         );
 
         // Act
-        var act = async () => await sut.UpdateAsync(Guid.NewGuid(), req, CancellationToken.None);
+        var result = await sut.UpdateAsync(Guid.NewGuid(), req, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<ApplicationException>()
-            .WithMessage("PlayerEntity not found.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Error.Should().Be("Jogador não encontrado.");
     }
 
     [Fact]
@@ -218,19 +225,20 @@ public class PlayerServiceTests
         );
 
         // Act
-        var updated = await sut.UpdateAsync(existing.Id, req, CancellationToken.None);
+        var result = await sut.UpdateAsync(existing.Id, req, CancellationToken.None);
 
         // Assert
-        updated.Should().NotBeNull();
-        updated.Id.Should().Be(existing.Id);
+        result.Success.Should().BeTrue();
+        result.Data.Should().NotBeNull();
+        result.Data!.Id.Should().Be(existing.Id);
 
         var reloaded = await db.Players.IgnoreQueryFilters().FirstAsync(p => p.Id == existing.Id);
-        reloaded.Name.Should().Be("New Name");           // ✅ trim
+        reloaded.Name.Should().Be("New Name");           // trim
         reloaded.SkillPoints.Should().Be(9.5m);
         reloaded.IsGoalkeeper.Should().BeTrue();
         reloaded.Status.Should().Be(Status.Active);
         reloaded.GroupId.Should().Be(group.Id);
-        reloaded.UserId.Should().Be(user.Id);            // normalmente não muda no update
+        reloaded.UserId.Should().Be(user.Id);
     }
 
     [Fact]
@@ -294,18 +302,19 @@ public class PlayerServiceTests
         var sut    = new PlayerService(repo, logger.Object, db);
 
         // Act
-        await sut.LeaveGroupAsync(player.Id, user.Id, CancellationToken.None);
+        var result = await sut.LeaveGroupAsync(player.Id, user.Id, CancellationToken.None);
 
         // Assert
+        result.Success.Should().BeTrue();
         var reloaded = await db.Players.IgnoreQueryFilters().FirstAsync(p => p.Id == player.Id);
         reloaded.IsGuest.Should().BeTrue();
     }
 
     [Fact]
-    public async Task LeaveGroupAsync_PlayerNotFound_ThrowsApplicationException()
+    public async Task LeaveGroupAsync_PlayerNotFound_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(LeaveGroupAsync_PlayerNotFound_ThrowsApplicationException));
+        await using var db = DbContextFactory.Create(nameof(LeaveGroupAsync_PlayerNotFound_ShouldReturnFailure));
 
         var logger = new Mock<ILogger<PlayerService>>();
         var repo   = new Mock<IRepositoryBase<PlayerEntity>>();
@@ -316,18 +325,19 @@ public class PlayerServiceTests
         var sut = new PlayerService(repo.Object, logger.Object, db);
 
         // Act
-        var act = async () => await sut.LeaveGroupAsync(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None);
+        var result = await sut.LeaveGroupAsync(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<ApplicationException>()
-            .WithMessage("PlayerEntity not found.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Error.Should().Be("Jogador não encontrado.");
     }
 
     [Fact]
-    public async Task LeaveGroupAsync_WrongUser_ThrowsUnauthorizedAccessException()
+    public async Task LeaveGroupAsync_WrongUser_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(LeaveGroupAsync_WrongUser_ThrowsUnauthorizedAccessException));
+        await using var db = DbContextFactory.Create(nameof(LeaveGroupAsync_WrongUser_ShouldReturnFailure));
 
         var group   = new GroupEntity("G", null, Guid.NewGuid());
         var owner   = new UserEntity("owner", "O", "W", "o@test.com", "hash", null, null);
@@ -344,11 +354,12 @@ public class PlayerServiceTests
         var sut    = new PlayerService(repo, logger.Object, db);
 
         // Act — requestingUserId não é o dono do player
-        var act = async () => await sut.LeaveGroupAsync(player.Id, intruder, CancellationToken.None);
+        var result = await sut.LeaveGroupAsync(player.Id, intruder, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<UnauthorizedAccessException>()
-            .WithMessage("You can only leave your own player.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.Forbidden);
+        result.Error.Should().Be("Sem permissão para esta operação.");
     }
 
     [Fact]
