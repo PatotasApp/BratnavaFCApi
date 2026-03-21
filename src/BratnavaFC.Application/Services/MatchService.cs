@@ -1,4 +1,5 @@
-﻿using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
@@ -18,9 +19,10 @@ public sealed class MatchService : IMatchService
         _repository = repository;
     }
 
-    public async Task<List<MatchDetailsDto>> GetAllAsync(Guid groupId, CancellationToken ct = default)
+    public async Task<Result<List<MatchDetailsDto>>> GetAllAsync(Guid groupId, CancellationToken ct = default)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return Result<List<MatchDetailsDto>>.Fail(groupCheck.Error!, groupCheck.Status);
 
         var matches = await _context.Matches
             .AsNoTrackingWithIdentityResolution()
@@ -37,33 +39,44 @@ public sealed class MatchService : IMatchService
             .OrderByDescending(m => m.PlayedAt)
             .ToListAsync(ct);
 
-        return matches.Select(MapToDetailsDto).ToList();
+        return Result<List<MatchDetailsDto>>.Ok(matches.Select(MapToDetailsDto).ToList());
     }
 
-    public async Task<MatchEntity?> GetByIdAsync(Guid groupId, Guid matchId, CancellationToken ct = default)
+    public async Task<Result<MatchEntity>> GetByIdAsync(Guid groupId, Guid matchId, CancellationToken ct = default)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return Result<MatchEntity>.Fail(groupCheck.Error!, groupCheck.Status);
 
-        return await _context.Matches
+        var match = await _context.Matches
             .AsNoTracking()
             .Where(m => m.GroupId == groupId && m.Id == matchId)
             .Include(m => m.Players).ThenInclude(mp => mp.Player)
             .Include(m => m.Votes)
             .FirstOrDefaultAsync(ct);
+
+        if (match is null)
+            return Result<MatchEntity>.Fail("Partida não encontrada.", ResultStatus.NotFound);
+
+        return Result<MatchEntity>.Ok(match);
     }
 
-    public async Task<List<GoalDto>> GetGoalsAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    public async Task<Result<List<GoalDto>>> GetGoalsAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
-        EnsureMatchId(matchId);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return Result<List<GoalDto>>.Fail(groupCheck.Error!, groupCheck.Status);
+
+        var matchIdCheck = EnsureMatchId(matchId);
+        if (!matchIdCheck.Success) return Result<List<GoalDto>>.Fail(matchIdCheck.Error!, matchIdCheck.Status);
 
         var match = await _context.Matches
             .AsNoTracking()
             .Where(m => m.GroupId == groupId && m.Id == matchId)
             .Include(m => m.Goals)
             .Include(m => m.Players).ThenInclude(mp => mp.Player)
-            .FirstOrDefaultAsync(ct)
-            ?? throw new InvalidOperationException("Partida nao encontrada.");
+            .FirstOrDefaultAsync(ct);
+
+        if (match is null)
+            return Result<List<GoalDto>>.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
         var mpById = match.Players.ToDictionary(x => x.Id, x => x);
 
@@ -97,10 +110,10 @@ public sealed class MatchService : IMatchService
             })
             .ToList();
 
-        return goals;
+        return Result<List<GoalDto>>.Ok(goals);
     }
 
-    public async Task<MatchDetailsDto?> GetDetailsAsync(Guid matchId, CancellationToken ct)
+    public async Task<Result<MatchDetailsDto>> GetDetailsAsync(Guid matchId, CancellationToken ct)
     {
         var match = await _context.Matches
             .AsNoTrackingWithIdentityResolution()
@@ -115,7 +128,8 @@ public sealed class MatchService : IMatchService
             .Include(m => m.Votes).ThenInclude(v => v.VotedFor)
             .FirstOrDefaultAsync(m => m.Id == matchId, ct);
 
-        if (match is null) return null;
+        if (match is null)
+            return Result<MatchDetailsDto>.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
         var computedMvp = match.GetComputedMvp();
 
@@ -179,7 +193,7 @@ public sealed class MatchService : IMatchService
             .ThenBy(x => x.VotedForName)
             .ToList();
 
-        return new MatchDetailsDto
+        var dto = new MatchDetailsDto
         {
             MatchId = match.Id,
             GroupName = match.Group?.Name ?? string.Empty,
@@ -237,18 +251,21 @@ public sealed class MatchService : IMatchService
             VoteCounts = voteCounts,
             Goals = goals
         };
+
+        return Result<MatchDetailsDto>.Ok(dto);
     }
 
-    public async Task<MatchEntity> Create(Guid groupId, MatchEntity match, CancellationToken ct)
+    public async Task<Result<MatchEntity>> Create(Guid groupId, MatchEntity match, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return Result<MatchEntity>.Fail(groupCheck.Error!, groupCheck.Status);
 
         var hasOpenMatch = await _context.Matches
             .AsNoTracking()
             .AnyAsync(m => m.GroupId == groupId && m.Status != MatchStatus.Finalized, ct);
 
         if (hasOpenMatch)
-            throw new InvalidOperationException("Ja existe uma partida em andamento (não finalizada) para este grupo.");
+            return Result<MatchEntity>.Fail("Ja existe uma partida em andamento (não finalizada) para este grupo.");
 
         _repository.Add(match);
 
@@ -258,278 +275,360 @@ public sealed class MatchService : IMatchService
 
         await _repository.SaveChangesAsync(ct);
 
-        return match;
+        return Result<MatchEntity>.Ok(match, "Partida criada com sucesso.", ResultStatus.Created);
     }
 
-    public async Task GoToMatchMakingAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    public async Task<Result> GoToMatchMakingAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
 
         var match = await LoadMatchForDomainActionsAsync(groupId, matchId, ct);
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
+
         match.GoToMatchMaking();
 
         await _context.SaveChangesAsync(ct);
+        return Result.Ok("Partida atualizada com sucesso.");
     }
 
-    public async Task GoToPostGameAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    public async Task<Result> GoToPostGameAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
 
         var match = await LoadMatchForDomainActionsAsync(groupId, matchId, ct);
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
+
         match.GoToPostGame();
 
         await _context.SaveChangesAsync(ct);
+        return Result.Ok("Partida atualizada com sucesso.");
     }
 
-    public async Task UpdateAsync(Guid groupId, Guid matchId, UpdateMatchDto dto, CancellationToken ct)
+    public async Task<Result> UpdateAsync(Guid groupId, Guid matchId, UpdateMatchDto dto, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
 
         var match = await LoadMatchForSimpleUpdateAsync(groupId, matchId, ct);
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
         match.UpdateDetails(groupId, dto.PlayedAt, dto.PlaceName, matchIdFromRoute: matchId, dtoId: dto.Id);
 
         await _context.SaveChangesAsync(ct);
+        return Result.Ok("Partida atualizada com sucesso.");
     }
 
-    public async Task DeleteAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    public async Task<Result> DeleteAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
 
         var match = await LoadMatchForSimpleUpdateOrNullAsync(groupId, matchId, ct);
-        if (match is null) return;
+        if (match is null) return Result.Ok("Partida removida com sucesso.");
 
         match.EnsureCanDelete();
 
         _repository.Remove(match);
         await _repository.SaveChangesAsync(ct);
+        return Result.Ok("Partida removida com sucesso.");
     }
 
-    public async Task SyncPlayersFromGroupAsync(Guid groupId, MatchEntity match, CancellationToken ct)
+    public async Task<Result> SyncPlayersFromGroupAsync(Guid groupId, MatchEntity match, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
 
         await SyncPlayersFromGroupCoreAsync(groupId, match, ct);
 
         await _context.SaveChangesAsync(ct);
+        return Result.Ok();
     }
 
-    public async Task SyncPlayersFromGroupAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    public async Task<Result> SyncPlayersFromGroupAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
 
         var match = await LoadMatchForPlayersUpdateAsync(groupId, matchId, ct);
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
         await SyncPlayersFromGroupCoreAsync(groupId, match, ct);
 
         await _context.SaveChangesAsync(ct);
+        return Result.Ok();
     }
 
-    public async Task AcceptInviteAsync(Guid groupId, Guid matchId, Guid playerId, CancellationToken ct)
+    public async Task<Result> AcceptInviteAsync(Guid groupId, Guid matchId, Guid playerId, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
 
         var match = await LoadMatchForDomainActionsAsync(groupId, matchId, ct);
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
+
         match.AcceptInvite(playerId);
 
         await _context.SaveChangesAsync(ct);
+        return Result.Ok("Partida atualizada com sucesso.");
     }
 
-    public async Task RejectInviteAsync(Guid groupId, Guid matchId, Guid playerId, CancellationToken ct)
+    public async Task<Result> RejectInviteAsync(Guid groupId, Guid matchId, Guid playerId, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
 
         var match = await LoadMatchForDomainActionsAsync(groupId, matchId, ct);
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
+
         match.RejectInvite(playerId);
 
         await _context.SaveChangesAsync(ct);
+        return Result.Ok("Partida atualizada com sucesso.");
     }
 
-    public async Task StartMatchAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    public async Task<Result> StartMatchAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
 
         var match = await LoadMatchForSimpleUpdateAsync(groupId, matchId, ct);
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
         match.Start();
         await _context.SaveChangesAsync(ct);
+        return Result.Ok("Partida atualizada com sucesso.");
     }
 
-    public async Task EndMatchAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    public async Task<Result> EndMatchAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
 
         var match = await LoadMatchForSimpleUpdateAsync(groupId, matchId, ct);
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
         match.End();
         await _context.SaveChangesAsync(ct);
+        return Result.Ok("Partida atualizada com sucesso.");
     }
 
-    public async Task VoteAsync(Guid groupId, Guid matchId, Guid voterMatchPlayerId, Guid votedMatchPlayerId, CancellationToken ct)
+    public async Task<Result> VoteAsync(Guid groupId, Guid matchId, Guid voterMatchPlayerId, Guid votedMatchPlayerId, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
 
         var match = await LoadMatchForDomainActionsAsync(groupId, matchId, ct);
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
+
         var vote = match.CreateVote(voterMatchPlayerId, votedMatchPlayerId);
 
         await _context.Votes.AddAsync(vote, ct);
         await _context.SaveChangesAsync(ct);
+        return Result.Ok("Partida atualizada com sucesso.");
     }
 
-    public async Task<MatchPlayerEntity?> GetMvpAsync(Guid groupId, Guid matchId, CancellationToken ct = default)
+    public async Task<Result<MatchPlayerEntity>> GetMvpAsync(Guid groupId, Guid matchId, CancellationToken ct = default)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return Result<MatchPlayerEntity>.Fail(groupCheck.Error!, groupCheck.Status);
 
         var match = await LoadMatchForDomainActionsAsync(groupId, matchId, ct);
-        return match.GetComputedMvp();
+        if (match is null)
+            return Result<MatchPlayerEntity>.Fail("Partida não encontrada.", ResultStatus.NotFound);
+
+        return Result<MatchPlayerEntity>.Ok(match.GetComputedMvp()!);
     }
 
-    public async Task SetScoreAsync(Guid groupId, Guid matchId, int teamAGoals, int teamBGoals, CancellationToken ct)
+    public async Task<Result> SetScoreAsync(Guid groupId, Guid matchId, int teamAGoals, int teamBGoals, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
 
         var match = await LoadMatchForSimpleUpdateAsync(groupId, matchId, ct);
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
         match.SetScore(teamAGoals, teamBGoals);
         await _context.SaveChangesAsync(ct);
+        return Result.Ok("Partida atualizada com sucesso.");
     }
 
-    public async Task SetTeamColorsAsync(Guid groupId, Guid matchId, Guid? teamAColorId, Guid? teamBColorId, bool randomize, CancellationToken ct)
+    public async Task<Result> SetTeamColorsAsync(Guid groupId, Guid matchId, Guid? teamAColorId, Guid? teamBColorId, bool randomize, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
 
         var match = await LoadMatchForSimpleUpdateAsync(groupId, matchId, ct);
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
         if (randomize)
         {
             var colors = await _context.TeamColors.AsNoTracking().ToListAsync(ct);
             match.SetTeamColorsRandomly(colors);
             await _context.SaveChangesAsync(ct);
-            return;
+            return Result.Ok("Partida atualizada com sucesso.");
         }
 
         if (teamAColorId.HasValue)
-            await EnsureTeamColorExistsAsync(teamAColorId.Value, "Cor do time A nao encontrada.", ct);
+        {
+            var colorCheck = await EnsureTeamColorExistsAsync(teamAColorId.Value, "Cor do time A nao encontrada.", ct);
+            if (!colorCheck.Success) return colorCheck;
+        }
 
         if (teamBColorId.HasValue)
-            await EnsureTeamColorExistsAsync(teamBColorId.Value, "Cor do time B nao encontrada.", ct);
+        {
+            var colorCheck = await EnsureTeamColorExistsAsync(teamBColorId.Value, "Cor do time B nao encontrada.", ct);
+            if (!colorCheck.Success) return colorCheck;
+        }
 
         match.SetTeamColors(teamAColorId, teamBColorId);
 
         await _context.SaveChangesAsync(ct);
+        return Result.Ok("Partida atualizada com sucesso.");
     }
 
-    public async Task FinalizeMatchAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    public async Task<Result> FinalizeMatchAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
 
         var match = await LoadMatchForDomainActionsAsync(groupId, matchId, ct);
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
+
         match.FinalizeByVotes();
 
         await _context.SaveChangesAsync(ct);
+        return Result.Ok("Partida atualizada com sucesso.");
     }
 
-    public async Task AssignTeamsAsync(Guid groupId, Guid matchId, AssignTeamsDto dto, CancellationToken ct)
+    public async Task<Result> AssignTeamsAsync(Guid groupId, Guid matchId, AssignTeamsDto dto, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
-        EnsureMatchId(matchId);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
+
+        var matchIdCheck = EnsureMatchId(matchId);
+        if (!matchIdCheck.Success) return matchIdCheck;
 
         dto.TeamAMatchPlayerIds ??= [];
         dto.TeamBMatchPlayerIds ??= [];
 
         var match = await LoadMatchForPlayersUpdateAsync(groupId, matchId, ct);
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
         match.AssignTeams(dto.TeamAMatchPlayerIds, dto.TeamBMatchPlayerIds);
 
         await _context.SaveChangesAsync(ct);
+        return Result.Ok("Partida atualizada com sucesso.");
     }
 
-    public async Task SwapPlayersByPlayerIdAsync(
+    public async Task<Result> SwapPlayersByPlayerIdAsync(
         Guid groupId,
         Guid matchId,
         Guid playerAId,
         Guid playerBId,
         CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
-        EnsureMatchId(matchId);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
+
+        var matchIdCheck = EnsureMatchId(matchId);
+        if (!matchIdCheck.Success) return matchIdCheck;
 
         if (playerAId == Guid.Empty || playerBId == Guid.Empty)
-            throw new InvalidOperationException("PlayerId é obrigatório.");
+            return Result.Fail("PlayerId é obrigatório.");
 
         if (playerAId == playerBId)
-            throw new InvalidOperationException("Não é possível trocar o mesmo jogador.");
+            return Result.Fail("Não é possível trocar o mesmo jogador.");
 
         var match = await _context.Matches
             .Include(m => m.Players)
             .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct);
 
         if (match is null)
-            throw new InvalidOperationException("Partida não encontrada.");
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
         var mpA = match.Players.FirstOrDefault(p => p.PlayerId == playerAId);
         var mpB = match.Players.FirstOrDefault(p => p.PlayerId == playerBId);
 
         if (mpA is null || mpB is null)
-            throw new InvalidOperationException("Um ou ambos os jogadores não pertencem a esta partida.");
+            return Result.Fail("Um ou ambos os jogadores não pertencem a esta partida.");
 
         match.SwapPlayers(mpA.Id, mpB.Id);
 
         await _context.SaveChangesAsync(ct);
+        return Result.Ok("Partida atualizada com sucesso.");
     }
 
-    public async Task SetPlayerRoleAsync(
+    public async Task<Result> SetPlayerRoleAsync(
         Guid groupId, Guid matchId, Guid matchPlayerId,
         SetPlayerRoleDto dto, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
+
         var match = await LoadMatchForPlayersUpdateAsync(groupId, matchId, ct);
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
+
         match.SetPlayerRole(matchPlayerId, dto.IsGoalkeeper);
         await _context.SaveChangesAsync(ct);
+        return Result.Ok("Partida atualizada com sucesso.");
     }
 
-    private async Task<MatchEntity> LoadMatchForSimpleUpdateAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    private async Task<MatchEntity?> LoadMatchForSimpleUpdateAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
-        EnsureMatchId(matchId);
+        var check = EnsureMatchId(matchId);
+        if (!check.Success) return null;
 
-        var match = await _context.Matches
+        return await _context.Matches
             .Include(m => m.Players)
             .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct);
-
-        return match ?? throw new InvalidOperationException("Partida não encontrada.");
     }
 
     private async Task<MatchEntity?> LoadMatchForSimpleUpdateOrNullAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
-        EnsureMatchId(matchId);
+        var check = EnsureMatchId(matchId);
+        if (!check.Success) return null;
 
         return await _context.Matches
             .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct);
     }
 
-    private async Task<MatchEntity> LoadMatchForDomainActionsAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    private async Task<MatchEntity?> LoadMatchForDomainActionsAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
-        EnsureMatchId(matchId);
+        var check = EnsureMatchId(matchId);
+        if (!check.Success) return null;
 
-        var match = await _context.Matches
+        return await _context.Matches
             .Where(m => m.GroupId == groupId && m.Id == matchId)
             .Include(m => m.Players)
             .Include(m => m.Votes)
             .FirstOrDefaultAsync(ct);
-
-        return match ?? throw new InvalidOperationException("Partida não encontrada.");
     }
 
-    private async Task<MatchEntity> LoadMatchForPlayersUpdateAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    private async Task<MatchEntity?> LoadMatchForPlayersUpdateAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
-        EnsureMatchId(matchId);
+        var check = EnsureMatchId(matchId);
+        if (!check.Success) return null;
 
-        var match = await _context.Matches
+        return await _context.Matches
             .Where(m => m.GroupId == groupId && m.Id == matchId)
             .Include(m => m.Players)
             .FirstOrDefaultAsync(ct);
-
-        return match ?? throw new InvalidOperationException("Partida não encontrada.");
     }
 
     private async Task SyncPlayersFromGroupCoreAsync(Guid groupId, MatchEntity match, CancellationToken ct)
@@ -550,61 +649,77 @@ public sealed class MatchService : IMatchService
         }
     }
 
-    private async Task EnsureGroupExistsAsync(Guid groupId, CancellationToken ct)
+    private async Task<Result> EnsureGroupExistsAsync(Guid groupId, CancellationToken ct)
     {
-        EnsureGroupId(groupId);
+        var idCheck = EnsureGroupId(groupId);
+        if (!idCheck.Success) return idCheck;
 
         var exists = await _context.Groups
             .AsNoTracking()
             .AnyAsync(g => g.Id == groupId, ct);
 
         if (!exists)
-            throw new InvalidOperationException("Group não encontrado.");
+            return Result.Fail("Group não encontrado.", ResultStatus.NotFound);
+
+        return Result.Ok();
     }
 
-    private async Task EnsureTeamColorExistsAsync(Guid colorId, string errorMessage, CancellationToken ct)
+    private async Task<Result> EnsureTeamColorExistsAsync(Guid colorId, string errorMessage, CancellationToken ct)
     {
         var exists = await _context.TeamColors
             .AsNoTracking()
             .AnyAsync(c => c.Id == colorId, ct);
 
         if (!exists)
-            throw new InvalidOperationException(errorMessage);
+            return Result.Fail(errorMessage, ResultStatus.NotFound);
+
+        return Result.Ok();
     }
 
-    private static void EnsureGroupId(Guid groupId)
+    private static Result EnsureGroupId(Guid groupId)
     {
         if (groupId == Guid.Empty)
-            throw new InvalidOperationException("GroupId é obrigatório.");
+            return Result.Fail("GroupId é obrigatório.");
+
+        return Result.Ok();
     }
 
-    private static void EnsureMatchId(Guid matchId)
+    private static Result EnsureMatchId(Guid matchId)
     {
         if (matchId == Guid.Empty)
-            throw new InvalidOperationException("MatchId é obrigatório.");
+            return Result.Fail("MatchId é obrigatório.");
+
+        return Result.Ok();
     }
 
-    public async Task AddGoalAsync(Guid groupId, Guid matchId, AddGoalRequestDto dto, CancellationToken ct)
+    public async Task<Result> AddGoalAsync(Guid groupId, Guid matchId, AddGoalRequestDto dto, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
-        EnsureMatchId(matchId);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
 
-        if (dto is null) throw new ArgumentNullException(nameof(dto));
+        var matchIdCheck = EnsureMatchId(matchId);
+        if (!matchIdCheck.Success) return matchIdCheck;
+
+        if (dto is null) return Result.Fail("Dto é obrigatório.");
 
         var match = await _context.Matches
             .Include(m => m.Players)
             .Include(m => m.Goals)
-            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct)
-            ?? throw new InvalidOperationException("Partida nao encontrada.");
+            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct);
 
-        var scorerMp = match.Players.FirstOrDefault(p => p.PlayerId == dto.ScorerPlayerId)
-            ?? throw new InvalidOperationException("O jogador do gol nao pertence a esta partida.");
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
+
+        var scorerMp = match.Players.FirstOrDefault(p => p.PlayerId == dto.ScorerPlayerId);
+        if (scorerMp is null)
+            return Result.Fail("O jogador do gol nao pertence a esta partida.");
 
         MatchPlayerEntity? assistMp = null;
         if (dto.AssistPlayerId.HasValue)
         {
-            assistMp = match.Players.FirstOrDefault(p => p.PlayerId == dto.AssistPlayerId.Value)
-                ?? throw new InvalidOperationException("O jogador da assistencia nao pertence a esta partida.");
+            assistMp = match.Players.FirstOrDefault(p => p.PlayerId == dto.AssistPlayerId.Value);
+            if (assistMp is null)
+                return Result.Fail("O jogador da assistencia nao pertence a esta partida.");
         }
 
         var seconds = MatchTimeParser.ParseToSeconds(dto.Time);
@@ -616,31 +731,40 @@ public sealed class MatchService : IMatchService
             isOwnGoal: dto.IsOwnGoal);
 
         await _context.SaveChangesAsync(ct);
+        return Result.Ok("Gol adicionado com sucesso.");
     }
 
-    public async Task UpdateGoalAsync(Guid groupId, Guid matchId, Guid goalId, UpdateGoalRequestDto dto, CancellationToken ct)
+    public async Task<Result> UpdateGoalAsync(Guid groupId, Guid matchId, Guid goalId, UpdateGoalRequestDto dto, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
-        EnsureMatchId(matchId);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
+
+        var matchIdCheck = EnsureMatchId(matchId);
+        if (!matchIdCheck.Success) return matchIdCheck;
 
         if (goalId == Guid.Empty)
-            throw new InvalidOperationException("GoalId e obrigatorio.");
-        if (dto is null) throw new ArgumentNullException(nameof(dto));
+            return Result.Fail("GoalId e obrigatorio.");
+
+        if (dto is null) return Result.Fail("Dto é obrigatório.");
 
         var match = await _context.Matches
             .Include(m => m.Players)
             .Include(m => m.Goals)
-            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct)
-            ?? throw new InvalidOperationException("Partida nao encontrada.");
+            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct);
 
-        var scorerMp = match.Players.FirstOrDefault(p => p.PlayerId == dto.ScorerPlayerId)
-            ?? throw new InvalidOperationException("O jogador do gol nao pertence a esta partida.");
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
+
+        var scorerMp = match.Players.FirstOrDefault(p => p.PlayerId == dto.ScorerPlayerId);
+        if (scorerMp is null)
+            return Result.Fail("O jogador do gol nao pertence a esta partida.");
 
         MatchPlayerEntity? assistMp = null;
         if (dto.AssistPlayerId.HasValue)
         {
-            assistMp = match.Players.FirstOrDefault(p => p.PlayerId == dto.AssistPlayerId.Value)
-                ?? throw new InvalidOperationException("O jogador da assistencia nao pertence a esta partida.");
+            assistMp = match.Players.FirstOrDefault(p => p.PlayerId == dto.AssistPlayerId.Value);
+            if (assistMp is null)
+                return Result.Fail("O jogador da assistencia nao pertence a esta partida.");
         }
 
         var seconds = MatchTimeParser.ParseToSeconds(dto.Time);
@@ -653,62 +777,77 @@ public sealed class MatchService : IMatchService
             isOwnGoal: dto.IsOwnGoal);
 
         await _context.SaveChangesAsync(ct);
+        return Result.Ok("Gol atualizado com sucesso.");
     }
 
-    public async Task RemoveGoalAsync(Guid groupId, Guid matchId, Guid goalId, CancellationToken ct)
+    public async Task<Result> RemoveGoalAsync(Guid groupId, Guid matchId, Guid goalId, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
-        EnsureMatchId(matchId);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
+
+        var matchIdCheck = EnsureMatchId(matchId);
+        if (!matchIdCheck.Success) return matchIdCheck;
 
         if (goalId == Guid.Empty)
-            throw new InvalidOperationException("GoalId e obrigatorio.");
+            return Result.Fail("GoalId e obrigatorio.");
 
         var match = await _context.Matches
             .Include(m => m.Goals)
             .Include(m => m.Players)
-            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct)
-            ?? throw new InvalidOperationException("Partida nao encontrada.");
+            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct);
+
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
         var goal = match.Goals.FirstOrDefault(g => g.Id == goalId);
         if (goal is null)
-            return;
+            return Result.Ok("Gol removido com sucesso.");
 
         match.RemoveGoal(goalId);
 
         _context.Goals.Remove(goal);
 
         await _context.SaveChangesAsync(ct);
+        return Result.Ok("Gol removido com sucesso.");
     }
 
-    public async Task<MatchEntity?> GetCurrentAsync(Guid groupId, CancellationToken ct = default)
+    public async Task<Result<MatchEntity>> GetCurrentAsync(Guid groupId, CancellationToken ct = default)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return Result<MatchEntity>.Fail(groupCheck.Error!, groupCheck.Status);
 
-        return await _context.Matches
+        var match = await _context.Matches
             .AsNoTracking()
             .Where(m => m.GroupId == groupId && m.Status != MatchStatus.Finalized)
             .OrderByDescending(m => m.PlayedAt)
             .FirstOrDefaultAsync(ct);
+
+        return Result<MatchEntity>.Ok(match!);
     }
 
-    public async Task AddGoalsBulkAsync(Guid groupId, Guid matchId, AddGoalsBulkRequestDto dto, CancellationToken ct)
+    public async Task<Result> AddGoalsBulkAsync(Guid groupId, Guid matchId, AddGoalsBulkRequestDto dto, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
-        EnsureMatchId(matchId);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
 
-        if (dto is null) throw new ArgumentNullException(nameof(dto));
+        var matchIdCheck = EnsureMatchId(matchId);
+        if (!matchIdCheck.Success) return matchIdCheck;
+
+        if (dto is null) return Result.Fail("Dto é obrigatório.");
 
         var goals = dto.Goals ?? new List<AddGoalRequestDto>();
 
         if (goals.Count == 0)
-            throw new InvalidOperationException("A lista de gols nao pode ser vazia.");
+            return Result.Fail("A lista de gols nao pode ser vazia.");
 
         var match = await _context.Matches
             .Include(m => m.Players)
                 .ThenInclude(mp => mp.Player)
             .Include(m => m.Goals)
-            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct)
-            ?? throw new InvalidOperationException("Partida nao encontrada.");
+            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct);
+
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
         var mpByPlayerId = match.Players.ToDictionary(p => p.PlayerId, p => p);
 
@@ -750,14 +889,18 @@ public sealed class MatchService : IMatchService
             await tx.RollbackAsync(ct);
             throw;
         }
+
+        return Result.Ok("Gols adicionados com sucesso.");
     }
 
-    public async Task RewindOneStepAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    public async Task<Result> RewindOneStepAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
         var match = await _context.Matches
             .Where(m => m.Id == matchId && m.GroupId == groupId)
-            .FirstOrDefaultAsync(ct)
-            ?? throw new InvalidOperationException("Partida nao encontrada.");
+            .FirstOrDefaultAsync(ct);
+
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
         var wasMatchMaking = match.Status == MatchStatus.MatchMaking;
 
@@ -796,14 +939,18 @@ public sealed class MatchService : IMatchService
         }
 
         await _context.SaveChangesAsync(ct);
+        return Result.Ok("Partida atualizada com sucesso.");
     }
 
-    public async Task<MatchHeaderDto?> GetHeaderAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    public async Task<Result<MatchHeaderDto>> GetHeaderAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
-        EnsureMatchId(matchId);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return Result<MatchHeaderDto>.Fail(groupCheck.Error!, groupCheck.Status);
 
-        return await _context.Matches
+        var matchIdCheck = EnsureMatchId(matchId);
+        if (!matchIdCheck.Success) return Result<MatchHeaderDto>.Fail(matchIdCheck.Error!, matchIdCheck.Status);
+
+        var dto = await _context.Matches
             .AsNoTracking()
             .Where(m => m.GroupId == groupId && m.Id == matchId)
             .Select(m => new MatchHeaderDto
@@ -818,14 +965,22 @@ public sealed class MatchService : IMatchService
                 TeamBGoals = m.TeamBGoals
             })
             .FirstOrDefaultAsync(ct);
+
+        if (dto is null)
+            return Result<MatchHeaderDto>.Fail("Partida não encontrada.", ResultStatus.NotFound);
+
+        return Result<MatchHeaderDto>.Ok(dto);
     }
 
-    public async Task<MatchAcceptationDto?> GetAcceptationAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    public async Task<Result<MatchAcceptationDto>> GetAcceptationAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
-        EnsureMatchId(matchId);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return Result<MatchAcceptationDto>.Fail(groupCheck.Error!, groupCheck.Status);
 
-        return await _context.Matches
+        var matchIdCheck = EnsureMatchId(matchId);
+        if (!matchIdCheck.Success) return Result<MatchAcceptationDto>.Fail(matchIdCheck.Error!, matchIdCheck.Status);
+
+        var dto = await _context.Matches
             .AsNoTracking()
             .Where(m => m.GroupId == groupId && m.Id == matchId)
             .Select(m => new MatchAcceptationDto
@@ -848,14 +1003,22 @@ public sealed class MatchService : IMatchService
                     .ToList()
             })
             .FirstOrDefaultAsync(ct);
+
+        if (dto is null)
+            return Result<MatchAcceptationDto>.Fail("Partida não encontrada.", ResultStatus.NotFound);
+
+        return Result<MatchAcceptationDto>.Ok(dto);
     }
 
-    public async Task<MatchMatchMakingDto?> GetMatchMakingAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    public async Task<Result<MatchMatchMakingDto>> GetMatchMakingAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
-        EnsureMatchId(matchId);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return Result<MatchMatchMakingDto>.Fail(groupCheck.Error!, groupCheck.Status);
 
-        return await _context.Matches
+        var matchIdCheck = EnsureMatchId(matchId);
+        if (!matchIdCheck.Success) return Result<MatchMatchMakingDto>.Fail(matchIdCheck.Error!, matchIdCheck.Status);
+
+        var dto = await _context.Matches
             .AsNoTracking()
             .Where(m => m.GroupId == groupId && m.Id == matchId)
             .Select(m => new MatchMatchMakingDto
@@ -925,12 +1088,20 @@ public sealed class MatchService : IMatchService
                     .ToList(),
             })
             .FirstOrDefaultAsync(ct);
+
+        if (dto is null)
+            return Result<MatchMatchMakingDto>.Fail("Partida não encontrada.", ResultStatus.NotFound);
+
+        return Result<MatchMatchMakingDto>.Ok(dto);
     }
 
-    public async Task<MatchPostGameDto?> GetPostGameAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    public async Task<Result<MatchPostGameDto>> GetPostGameAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
-        EnsureMatchId(matchId);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return Result<MatchPostGameDto>.Fail(groupCheck.Error!, groupCheck.Status);
+
+        var matchIdCheck = EnsureMatchId(matchId);
+        if (!matchIdCheck.Success) return Result<MatchPostGameDto>.Fail(matchIdCheck.Error!, matchIdCheck.Status);
 
         var baseData = await _context.Matches
             .AsNoTracking()
@@ -968,7 +1139,8 @@ public sealed class MatchService : IMatchService
             })
             .FirstOrDefaultAsync(ct);
 
-        if (baseData is null) return null;
+        if (baseData is null)
+            return Result<MatchPostGameDto>.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
         var nameByMpId = baseData.Players.ToDictionary(x => x.Id, x => x.PlayerName);
         var playerIdByMpId = baseData.Players.ToDictionary(x => x.Id, x => x.PlayerId);
@@ -1035,7 +1207,7 @@ public sealed class MatchService : IMatchService
             })
             .ToList();
 
-        return new MatchPostGameDto
+        return Result<MatchPostGameDto>.Ok(new MatchPostGameDto
         {
             MatchId = baseData.Id,
             Status = baseData.Status,
@@ -1044,17 +1216,17 @@ public sealed class MatchService : IMatchService
             ComputedMvp = computedMvp,
             VoteCounts = voteCounts,
             Goals = goals
-        };
+        });
     }
 
-    public async Task<IReadOnlyList<MatchHistoryItemDto>> GetHistoryAsync(
+    public async Task<Result<IReadOnlyList<MatchHistoryItemDto>>> GetHistoryAsync(
         Guid groupId,
         int take,
         CancellationToken cancellationToken,
         Guid? playerId = null)
     {
         if (groupId == Guid.Empty)
-            throw new InvalidOperationException("GroupId e obrigatorio.");
+            return Result<IReadOnlyList<MatchHistoryItemDto>>.Fail("GroupId e obrigatorio.");
 
         take = take <= 0 ? 200 : Math.Min(take, 500);
 
@@ -1071,7 +1243,7 @@ public sealed class MatchService : IMatchService
                 p.Team > 0));
         }
 
-        return await query
+        var items = await query
             .OrderByDescending(m => m.PlayedAt)
             .Take(take)
             .Select(m => new MatchHistoryItemDto(
@@ -1089,9 +1261,11 @@ public sealed class MatchService : IMatchService
                     .ToList()
             ))
             .ToListAsync(cancellationToken);
+
+        return Result<IReadOnlyList<MatchHistoryItemDto>>.Ok(items);
     }
 
-    public async Task<IReadOnlyList<PlayerRecentMatchDto>> GetPlayerRecentMatchesAsync(
+    public async Task<Result<IReadOnlyList<PlayerRecentMatchDto>>> GetPlayerRecentMatchesAsync(
         Guid groupId,
         Guid playerId,
         int take,
@@ -1149,7 +1323,7 @@ public sealed class MatchService : IMatchService
             })
             .ToListAsync(ct);
 
-        return rows.Select(m =>
+        var result = rows.Select(m =>
         {
             // MVP = MatchPlayer.Id com mais votos (em memória — evita subquery complexa no EF)
             var mvpMatchPlayerId = m.VotedForIds
@@ -1175,6 +1349,8 @@ public sealed class MatchService : IMatchService
                 IsPlayerMvp:    mvpMatchPlayerId.HasValue && mvpMatchPlayerId == m.PlayerMatchPlayerId
             );
         }).ToList();
+
+        return Result<IReadOnlyList<PlayerRecentMatchDto>>.Ok(result);
     }
 
     private static PlayerInMatchDto ToPlayerDto(MatchPlayerEntity mp) => new()
@@ -1310,18 +1486,20 @@ public sealed class MatchService : IMatchService
 
     // ── Adicionar convidado direto na partida (status Acceptation) ─────────────
 
-    public async Task AddGuestToMatchAsync(Guid groupId, Guid matchId, AddGuestToMatchDto dto, CancellationToken ct)
+    public async Task<Result> AddGuestToMatchAsync(Guid groupId, Guid matchId, AddGuestToMatchDto dto, CancellationToken ct)
     {
         var match = await _context.Matches
             .Include(m => m.Players)
-            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct)
-            ?? throw new ApplicationException("Match not found.");
+            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct);
+
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
         if (match.Status != MatchStatus.Acceptation)
-            throw new InvalidOperationException("Só é possível adicionar convidado quando a partida está em Acceptation.");
+            return Result.Fail("Só é possível adicionar convidado quando a partida está em Acceptation.");
 
         if (string.IsNullOrWhiteSpace(dto.Name))
-            throw new ArgumentException("Nome do convidado é obrigatório.");
+            return Result.Fail("Nome do convidado é obrigatório.");
 
         // Valida o GuestStarRating antes de criar o jogador
         if (dto.GuestStarRating.HasValue && (dto.GuestStarRating.Value < 1 || dto.GuestStarRating.Value > 5))
@@ -1341,5 +1519,6 @@ public sealed class MatchService : IMatchService
         _context.MatchPlayers.Add(mp);
 
         await _context.SaveChangesAsync(ct);
+        return Result.Ok("Convidado adicionado com sucesso.");
     }
 }

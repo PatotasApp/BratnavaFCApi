@@ -1,4 +1,5 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Models;
 using static BratnavaFC.Application.TeamGeneration.StrategyHelpers;
@@ -33,7 +34,10 @@ public sealed class GroupByWinsStrategy : ITeamGenerationStrategy
         if (maxAssignable == 0)
             return BuildEmptyResult(players);
 
-        Dictionary<Guid, PlayerStats> statsById = await LoadStatsByPlayerId(_statsService, candidates, cancellationToken);
+        var statsResult = await LoadStatsByPlayerId(_statsService, candidates, cancellationToken);
+        if (!statsResult.Success)
+            return BuildEmptyResult(players);
+        Dictionary<Guid, PlayerStats> statsById = statsResult.Data!;
 
         // Sort by Wins desc → EffectiveWeight desc → Id asc (deterministic tie-break)
         List<CandidatePlayer> ordered = candidates

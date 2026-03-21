@@ -108,8 +108,8 @@ public sealed class PlayerStatsServiceTests
 
         var result = await sut.EnrichPlayersAsync(new List<PlayerRequestDto> { dto });
 
-        result.Should().HaveCount(1);
-        result[0].NeutralOverride.Should().BeApproximately(expectedOverride, 1e-9,
+        result.Data!.Should().HaveCount(1);
+        result.Data![0].NeutralOverride.Should().BeApproximately(expectedOverride, 1e-9,
             $"GuestStarRating={starRating} deve produzir NeutralOverride={expectedOverride}");
     }
 
@@ -126,8 +126,8 @@ public sealed class PlayerStatsServiceTests
 
         var result = await sut.EnrichPlayersAsync(new List<PlayerRequestDto> { dto });
 
-        result.Should().HaveCount(1);
-        result[0].NeutralOverride.Should().BeNull(
+        result.Data!.Should().HaveCount(1);
+        result.Data![0].NeutralOverride.Should().BeNull(
             "sem GuestStarRating a constante padrão 0.5 deve ser usada (NeutralOverride = null)");
     }
 
@@ -156,10 +156,10 @@ public sealed class PlayerStatsServiceTests
 
         var result = await sut.EnrichPlayersAsync(new List<PlayerRequestDto> { dto });
 
-        result.Should().HaveCount(1);
-        result[0].NeutralOverride.Should().BeNull(
+        result.Data!.Should().HaveCount(1);
+        result.Data![0].NeutralOverride.Should().BeNull(
             "NeutralOverride não deve ser aplicado quando o jogador tem partidas suficientes");
-        result[0].WinRate.Should().BeGreaterThan(0,
+        result.Data![0].WinRate.Should().BeGreaterThan(0,
             "WinRate real deve ser calculado com base nas partidas finalizadas");
     }
 
@@ -174,8 +174,8 @@ public sealed class PlayerStatsServiceTests
 
         var result = await sut.EnrichPlayersAsync(new List<PlayerRequestDto> { dto });
 
-        result.Should().HaveCount(1);
-        result[0].NeutralOverride.Should().BeNull(
+        result.Data!.Should().HaveCount(1);
+        result.Data![0].NeutralOverride.Should().BeNull(
             "jogador ausente no banco não possui GuestStarRating, portanto NeutralOverride = null");
     }
 
@@ -623,12 +623,12 @@ public sealed class PlayerStatsServiceTests
 
         var result = await sut.EnrichPlayersAsync(dtos);
 
-        result.Single(r => r.PlayerId == p1.Id).Goals.Should().Be(1,   "p1 marcou o gol");
-        result.Single(r => r.PlayerId == p1.Id).Assists.Should().Be(0);
-        result.Single(r => r.PlayerId == p2.Id).Goals.Should().Be(0);
-        result.Single(r => r.PlayerId == p2.Id).Assists.Should().Be(1, "p2 deu a assistência");
-        result.Single(r => r.PlayerId == p3.Id).Goals.Should().Be(0);
-        result.Single(r => r.PlayerId == p3.Id).Assists.Should().Be(0);
+        result.Data!.Single(r => r.PlayerId == p1.Id).Goals.Should().Be(1,   "p1 marcou o gol");
+        result.Data!.Single(r => r.PlayerId == p1.Id).Assists.Should().Be(0);
+        result.Data!.Single(r => r.PlayerId == p2.Id).Goals.Should().Be(0);
+        result.Data!.Single(r => r.PlayerId == p2.Id).Assists.Should().Be(1, "p2 deu a assistência");
+        result.Data!.Single(r => r.PlayerId == p3.Id).Goals.Should().Be(0);
+        result.Data!.Single(r => r.PlayerId == p3.Id).Assists.Should().Be(0);
     }
 
     [Fact]
@@ -657,8 +657,8 @@ public sealed class PlayerStatsServiceTests
 
         var result = await sut.EnrichPlayersAsync(dtos);
 
-        var winnerStats = result.Single(r => r.PlayerId == winner.Id);
-        var loserStats  = result.Single(r => r.PlayerId == loser.Id);
+        var winnerStats = result.Data!.Single(r => r.PlayerId == winner.Id);
+        var loserStats  = result.Data!.Single(r => r.PlayerId == loser.Id);
 
         // Bayesian WR: winner ≈ (3+1.5)/(3+3) = 0.75,  W_base ≥ 0.5+
         winnerStats.WinRate.Should().BeGreaterThan(0.5,
@@ -700,7 +700,7 @@ public sealed class PlayerStatsServiceTests
 
         var result = await sut.EnrichPlayersAsync(dtos);
 
-        var p1Stats = result.Single(r => r.PlayerId == p1.Id);
+        var p1Stats = result.Data!.Single(r => r.PlayerId == p1.Id);
         p1Stats.SynergyWith.Should().ContainKey(p2.Id);
         p1Stats.SynergyWith[p2.Id].Should().BeApproximately(0.0, 1e-9,
             "p1 e p2 nunca jogaram no mesmo time → Synergy_eff = 0");
@@ -739,7 +739,7 @@ public sealed class PlayerStatsServiceTests
 
         var result = await sut.EnrichPlayersAsync(dtos);
 
-        var p1Stats = result.Single(r => r.PlayerId == p1.Id);
+        var p1Stats = result.Data!.Single(r => r.PlayerId == p1.Id);
         p1Stats.SynergyWith.Should().ContainKey(p2.Id);
         p1Stats.SynergyWith[p2.Id].Should().BeGreaterThan(0.0,
             "p1 e p2 sempre vencem juntos → WR_together_adj > baseline → Synergy_eff > 0");
@@ -778,7 +778,7 @@ public sealed class PlayerStatsServiceTests
 
         var result = await sut.EnrichPlayersAsync(dtos);
 
-        var p1Stats = result.Single(r => r.PlayerId == p1.Id);
+        var p1Stats = result.Data!.Single(r => r.PlayerId == p1.Id);
         p1Stats.SynergyWith.Should().ContainKey(p2.Id);
         p1Stats.SynergyWith[p2.Id].Should().BeLessThan(0.0,
             "p1 e p2 sempre perdem juntos → WR_together_adj < baseline → Synergy_eff < 0");
@@ -893,7 +893,7 @@ public sealed class PlayerStatsServiceTests
 
         var result = await sut.EnrichPlayersAsync(dtos);
 
-        result.Single(r => r.PlayerId == winner.Id).Wins.Should().Be(20,
+        result.Data!.Single(r => r.PlayerId == winner.Id).Wins.Should().Be(20,
             "LoadRecentFinalizedMatchesAsync must cap the window at 20 matches, not 21");
     }
 
@@ -937,9 +937,9 @@ public sealed class PlayerStatsServiceTests
 
         var result = await sut.EnrichPlayersAsync(dtos);
 
-        var winsStats   = result.Single(r => r.PlayerId == allWins.Id);
-        var tiesStats   = result.Single(r => r.PlayerId == allTies.Id);
-        var lossesStats = result.Single(r => r.PlayerId == allLosses.Id);
+        var winsStats   = result.Data!.Single(r => r.PlayerId == allWins.Id);
+        var tiesStats   = result.Data!.Single(r => r.PlayerId == allTies.Id);
+        var lossesStats = result.Data!.Single(r => r.PlayerId == allLosses.Id);
 
         // BayesianWR for all-ties: effectiveWins = 0 + 0.5×3 = 1.5, total = 3
         // → (1.5 + 1.5) / (3 + 3) = 3.0 / 6.0 = 0.5  → W_base ≈ 0.5
@@ -990,7 +990,7 @@ public sealed class PlayerStatsServiceTests
 
         var result = await sut.EnrichPlayersAsync(dtos);
 
-        var p1Stats = result.Single(r => r.PlayerId == p1.Id);
+        var p1Stats = result.Data!.Single(r => r.PlayerId == p1.Id);
         p1Stats.SynergyWith.Should().ContainKey(p2.Id);
         p1Stats.SynergyWith[p2.Id].Should().BeApproximately(0.0, 0.005,
             "all-tie games: effectiveWinsTogether = 2.5, wrTogetherAdj = 0.5 = baseline → Synergy_eff = 0");

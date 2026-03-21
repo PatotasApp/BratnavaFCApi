@@ -1,4 +1,5 @@
-﻿using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Groups;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
@@ -21,13 +22,13 @@ public class GroupService : IGroupService
         _repository = repository;
     }
 
-    public async Task<Guid> CreateAsync(CreateGroupDto request, CancellationToken cancellationToken)
+    public async Task<Result<Guid>> CreateAsync(CreateGroupDto request, CancellationToken cancellationToken)
     {
         try
         {
             var adminsExist = await _context.Users.AnyAsync(u => request.UserAdminIds.Contains(u.Id), cancellationToken);
             if (!adminsExist)
-                throw new ApplicationException("User admin does not exists.");
+                return Result<Guid>.Fail("Usuário administrador não encontrado.", ResultStatus.NotFound);
 
             var group = new GroupEntity(request.Name, request.ScheduleMatchDate, request.CreatedByUserId);
             group.SetAdmins(request.UserAdminIds);
@@ -35,7 +36,7 @@ public class GroupService : IGroupService
             _repository.Add(group);
             await _repository.SaveChangesAsync(cancellationToken);
 
-            return group.Id;
+            return Result<Guid>.Ok(group.Id, "Grupo criado com sucesso.", ResultStatus.Created);
         }
         catch (Exception ex)
         {
@@ -44,13 +45,13 @@ public class GroupService : IGroupService
         }
     }
 
-    public async Task UpdateAsync(Guid groupId, UpdateGroupDto request, CancellationToken cancellationToken)
+    public async Task<Result> UpdateAsync(Guid groupId, UpdateGroupDto request, CancellationToken cancellationToken)
     {
         try
         {
             var group = await _repository.GetByIdIncludingInactiveAsync(groupId, cancellationToken);
             if (group == null)
-                throw new ApplicationException("Group not found.");
+                return Result.Fail("Grupo não encontrado.", ResultStatus.NotFound);
 
             group.Rename(request.Name);
             group.Reschedule(request.ScheduleMatchDate);
@@ -62,6 +63,8 @@ public class GroupService : IGroupService
 
             _repository.Update(group);
             await _repository.SaveChangesAsync(cancellationToken);
+
+            return Result.Ok("Grupo atualizado com sucesso.");
         }
         catch (Exception ex)
         {
@@ -70,7 +73,7 @@ public class GroupService : IGroupService
         }
     }
 
-    public async Task DeleteAsync(Guid groupId, CancellationToken cancellationToken)
+    public async Task<Result> DeleteAsync(Guid groupId, CancellationToken cancellationToken)
     {
         await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);
         try
@@ -79,7 +82,7 @@ public class GroupService : IGroupService
                 .FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
 
             if (group == null)
-                throw new ApplicationException("Group not found.");
+                return Result.Fail("Grupo não encontrado.", ResultStatus.NotFound);
 
             // 1. Partidas → cascateia MatchPlayers, Votes e Goals (MatchId = Cascade)
             var matches = await _context.Matches
@@ -117,6 +120,8 @@ public class GroupService : IGroupService
             await _context.SaveChangesAsync(cancellationToken);
 
             await tx.CommitAsync(cancellationToken);
+
+            return Result.Ok("Grupo removido com sucesso.");
         }
         catch (Exception ex)
         {
@@ -125,18 +130,20 @@ public class GroupService : IGroupService
         }
     }
 
-    public async Task InactivateAsync(Guid groupId, CancellationToken cancellationToken)
+    public async Task<Result> InactivateAsync(Guid groupId, CancellationToken cancellationToken)
     {
         try
         {
             var group = await _repository.GetByIdIncludingInactiveAsync(groupId, cancellationToken);
             if (group == null)
-                throw new ApplicationException("Group not found.");
+                return Result.Fail("Grupo não encontrado.", ResultStatus.NotFound);
 
             group.Inactivate();
 
             _repository.Update(group);
             await _repository.SaveChangesAsync(cancellationToken);
+
+            return Result.Ok("Grupo atualizado com sucesso.");
         }
         catch (Exception ex)
         {
@@ -145,18 +152,20 @@ public class GroupService : IGroupService
         }
     }
 
-    public async Task ReactivateAsync(Guid groupId, CancellationToken cancellationToken)
+    public async Task<Result> ReactivateAsync(Guid groupId, CancellationToken cancellationToken)
     {
         try
         {
             var group = await _repository.GetByIdIncludingInactiveAsync(groupId, cancellationToken);
             if (group == null)
-                throw new ApplicationException("Group not found.");
+                return Result.Fail("Grupo não encontrado.", ResultStatus.NotFound);
 
             group.Reactivate();
 
             _repository.Update(group);
             await _repository.SaveChangesAsync(cancellationToken);
+
+            return Result.Ok("Grupo atualizado com sucesso.");
         }
         catch (Exception ex)
         {
@@ -165,7 +174,7 @@ public class GroupService : IGroupService
         }
     }
 
-    public async Task<GroupDto> GetByIdAsync(Guid groupId, CancellationToken cancellationToken)
+    public async Task<Result<GroupDto>> GetByIdAsync(Guid groupId, CancellationToken cancellationToken)
     {
         try
         {
@@ -175,7 +184,7 @@ public class GroupService : IGroupService
                 .FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
 
             if (group == null)
-                throw new ApplicationException("Group not found.");
+                return Result<GroupDto>.Fail("Grupo não encontrado.", ResultStatus.NotFound);
 
             var allPlayers = await _context.Players
                 .Include(p => p.User)
@@ -184,7 +193,7 @@ public class GroupService : IGroupService
 
             var players = allPlayers.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, p.User?.UserName, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating)).ToList();
 
-            return new GroupDto(
+            var dto = new GroupDto(
                 group.Id,
                 group.Name,
                 group.ScheduleMatchDate,
@@ -194,6 +203,8 @@ public class GroupService : IGroupService
                 players,
                 group.CreatedByUserId
             );
+
+            return Result<GroupDto>.Ok(dto);
         }
         catch (Exception ex)
         {
@@ -202,9 +213,9 @@ public class GroupService : IGroupService
         }
     }
 
-    public Task<List<GroupDto>> GetByAdminIdAsync(Guid adminId, CancellationToken cancellationToken)
+    public async Task<Result<List<GroupDto>>> GetByAdminIdAsync(Guid adminId, CancellationToken cancellationToken)
     {
-        return _context.GroupAdmins
+        var list = await _context.GroupAdmins
             .Include(x => x.Group)
             .ThenInclude(x => x.Players)
             .Where(x => x.UserId == adminId)
@@ -219,11 +230,13 @@ public class GroupService : IGroupService
                 g.Group.CreatedByUserId
             ))
             .ToListAsync(cancellationToken);
+
+        return Result<List<GroupDto>>.Ok(list);
     }
 
-    public Task<List<GroupDto>> GetByFinanceiroIdAsync(Guid financeiroId, CancellationToken cancellationToken)
+    public async Task<Result<List<GroupDto>>> GetByFinanceiroIdAsync(Guid financeiroId, CancellationToken cancellationToken)
     {
-        return _context.GroupFinanceiros
+        var list = await _context.GroupFinanceiros
             .Include(x => x.Group)
             .ThenInclude(x => x.Players)
             .Where(x => x.UserId == financeiroId)
@@ -238,9 +251,11 @@ public class GroupService : IGroupService
                 g.Group.CreatedByUserId
             ))
             .ToListAsync(cancellationToken);
+
+        return Result<List<GroupDto>>.Ok(list);
     }
 
-    public async Task<List<GroupDto>> GetAllGroupsAsync(CancellationToken cancellationToken)
+    public async Task<Result<List<GroupDto>>> GetAllGroupsAsync(CancellationToken cancellationToken)
     {
         var groups = await _context.Groups
             .Include(g => g.Players)
@@ -250,7 +265,7 @@ public class GroupService : IGroupService
             .OrderBy(g => g.Name)
             .ToListAsync(cancellationToken);
 
-        return groups.Select(g => new GroupDto(
+        var list = groups.Select(g => new GroupDto(
             g.Id,
             g.Name,
             g.ScheduleMatchDate,
@@ -262,27 +277,31 @@ public class GroupService : IGroupService
                 p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating)).ToList(),
             g.CreatedByUserId
         )).ToList();
+
+        return Result<List<GroupDto>>.Ok(list);
     }
 
-    public async Task AddAdminToGroupAsync(Guid groupId, AddAdminToGroupDto request, CancellationToken cancellationToken)
+    public async Task<Result> AddAdminToGroupAsync(Guid groupId, AddAdminToGroupDto request, CancellationToken cancellationToken)
     {
         try
         {
             var userExists = await _context.Users.AnyAsync(u => u.Id == request.UserId, cancellationToken);
             if (!userExists)
-                throw new ApplicationException("User admin does not exists.");
+                return Result.Fail("Usuário não encontrado.", ResultStatus.NotFound);
 
             var group = await _context.Groups
                 .Include(g => g.Admins)
                 .FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
 
             if (group is null)
-                throw new ApplicationException("Group not found.");
+                return Result.Fail("Grupo não encontrado.", ResultStatus.NotFound);
 
             AddAdminToGroupInternal(group, request.UserId);
 
             _context.Groups.Update(group);
             await _context.SaveChangesAsync(cancellationToken);
+
+            return Result.Ok("Admin adicionado com sucesso.");
         }
         catch (Exception ex)
         {
@@ -309,7 +328,7 @@ public class GroupService : IGroupService
         group.SetAdmins(newAdmins);
     }
 
-    public async Task RemoveAdminAsync(Guid groupId, Guid targetUserId, Guid requestingUserId, CancellationToken cancellationToken)
+    public async Task<Result> RemoveAdminAsync(Guid groupId, Guid targetUserId, Guid requestingUserId, CancellationToken cancellationToken)
     {
         try
         {
@@ -318,16 +337,18 @@ public class GroupService : IGroupService
                 .FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
 
             if (group is null)
-                throw new ApplicationException("Group not found.");
+                return Result.Fail("Grupo não encontrado.", ResultStatus.NotFound);
 
             var requestingIsAdmin = group.Admins.Any(a => a.UserId == requestingUserId);
             if (!requestingIsAdmin)
-                throw new UnauthorizedAccessException("Requesting user is not an admin of this group.");
+                return Result.Fail("Sem permissão para esta operação.", ResultStatus.Forbidden);
 
             group.RemoveAdmin(targetUserId);
 
             _context.Groups.Update(group);
             await _context.SaveChangesAsync(cancellationToken);
+
+            return Result.Ok("Admin removido com sucesso.");
         }
         catch (Exception ex)
         {
@@ -338,25 +359,27 @@ public class GroupService : IGroupService
 
     // ── Financeiros ───────────────────────────────────────────────────────────
 
-    public async Task AddFinanceiroToGroupAsync(Guid groupId, Guid userId, CancellationToken cancellationToken)
+    public async Task<Result> AddFinanceiroToGroupAsync(Guid groupId, Guid userId, CancellationToken cancellationToken)
     {
         try
         {
             var userExists = await _context.Users.AnyAsync(u => u.Id == userId, cancellationToken);
             if (!userExists)
-                throw new ApplicationException("User not found.");
+                return Result.Fail("Usuário não encontrado.", ResultStatus.NotFound);
 
             var group = await _context.Groups
                 .Include(g => g.Financeiros)
                 .FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
 
             if (group is null)
-                throw new ApplicationException("Group not found.");
+                return Result.Fail("Grupo não encontrado.", ResultStatus.NotFound);
 
             group.AddFinanceiro(userId);
 
             _context.Groups.Update(group);
             await _context.SaveChangesAsync(cancellationToken);
+
+            return Result.Ok("Financeiro adicionado com sucesso.");
         }
         catch (Exception ex)
         {
@@ -365,7 +388,7 @@ public class GroupService : IGroupService
         }
     }
 
-    public async Task RemoveFinanceiroAsync(Guid groupId, Guid userId, CancellationToken cancellationToken)
+    public async Task<Result> RemoveFinanceiroAsync(Guid groupId, Guid userId, CancellationToken cancellationToken)
     {
         try
         {
@@ -374,12 +397,14 @@ public class GroupService : IGroupService
                 .FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
 
             if (group is null)
-                throw new ApplicationException("Group not found.");
+                return Result.Fail("Grupo não encontrado.", ResultStatus.NotFound);
 
             group.RemoveFinanceiro(userId);
 
             _context.Groups.Update(group);
             await _context.SaveChangesAsync(cancellationToken);
+
+            return Result.Ok("Financeiro removido com sucesso.");
         }
         catch (Exception ex)
         {
@@ -390,26 +415,30 @@ public class GroupService : IGroupService
 
     // ── Convites ──────────────────────────────────────────────────────────────
 
-    public async Task<GroupInviteDto> CreateInviteAsync(Guid groupId, CreateGroupInviteDto request, CancellationToken cancellationToken)
+    public async Task<Result<GroupInviteDto>> CreateInviteAsync(Guid groupId, CreateGroupInviteDto request, CancellationToken cancellationToken)
     {
         try
         {
             var groupExists = await _context.Groups.AnyAsync(g => g.Id == groupId, cancellationToken);
-            if (!groupExists) throw new ApplicationException("Group not found.");
+            if (!groupExists)
+                return Result<GroupInviteDto>.Fail("Grupo não encontrado.", ResultStatus.NotFound);
 
             var userExists = await _context.Users.AnyAsync(u => u.Id == request.TargetUserId, cancellationToken);
-            if (!userExists) throw new ApplicationException("Target user not found.");
+            if (!userExists)
+                return Result<GroupInviteDto>.Fail("Usuário não encontrado.", ResultStatus.NotFound);
 
             // Já é membro ativo (não-guest)?
             var alreadyMember = await _context.Players
                 .AnyAsync(p => p.GroupId == groupId && p.UserId == request.TargetUserId && !p.IsGuest, cancellationToken);
-            if (alreadyMember) throw new InvalidOperationException("User is already a member of this group.");
+            if (alreadyMember)
+                return Result<GroupInviteDto>.Fail("Usuário já é membro deste grupo.", ResultStatus.BadRequest);
 
             // Já tem convite pendente?
             var alreadyPending = await _context.GroupInvites
                 .AnyAsync(i => i.GroupId == groupId && i.TargetUserId == request.TargetUserId
                             && i.Status == GroupInviteStatus.Pending, cancellationToken);
-            if (alreadyPending) throw new InvalidOperationException("There is already a pending invite for this user.");
+            if (alreadyPending)
+                return Result<GroupInviteDto>.Fail("Já existe um convite pendente para este usuário.", ResultStatus.BadRequest);
 
             // Validar guest player (se informado)
             string? guestPlayerName = null;
@@ -418,7 +447,7 @@ public class GroupService : IGroupService
                 var guest = await _context.Players
                     .FirstOrDefaultAsync(p => p.Id == request.GuestPlayerId.Value && p.GroupId == groupId && p.IsGuest, cancellationToken);
                 if (guest == null)
-                    throw new ApplicationException("Guest player not found in this group.");
+                    return Result<GroupInviteDto>.Fail("Jogador convidado não encontrado neste grupo.", ResultStatus.NotFound);
                 guestPlayerName = guest.Name;
             }
 
@@ -428,7 +457,7 @@ public class GroupService : IGroupService
 
             var group = await _context.Groups.FindAsync([groupId], cancellationToken);
 
-            return new GroupInviteDto(
+            var dto = new GroupInviteDto(
                 invite.Id,
                 invite.GroupId,
                 group?.Name ?? "",
@@ -438,6 +467,8 @@ public class GroupService : IGroupService
                 (int)invite.Status,
                 invite.CreateDate
             );
+
+            return Result<GroupInviteDto>.Ok(dto, "Convite criado com sucesso.", ResultStatus.Created);
         }
         catch (Exception ex)
         {
@@ -446,9 +477,9 @@ public class GroupService : IGroupService
         }
     }
 
-    public async Task<List<GroupInviteDto>> GetMyInvitesAsync(Guid userId, CancellationToken cancellationToken)
+    public async Task<Result<List<GroupInviteDto>>> GetMyInvitesAsync(Guid userId, CancellationToken cancellationToken)
     {
-        return await _context.GroupInvites
+        var list = await _context.GroupInvites
             .Include(i => i.Group)
             .Include(i => i.GuestPlayer)
             .Where(i => i.TargetUserId == userId && i.Status == GroupInviteStatus.Pending)
@@ -464,15 +495,19 @@ public class GroupService : IGroupService
                 i.CreateDate
             ))
             .ToListAsync(cancellationToken);
+
+        return Result<List<GroupInviteDto>>.Ok(list);
     }
 
-    public async Task<int> GetMyPendingInviteCountAsync(Guid userId, CancellationToken cancellationToken)
+    public async Task<Result<int>> GetMyPendingInviteCountAsync(Guid userId, CancellationToken cancellationToken)
     {
-        return await _context.GroupInvites
+        var count = await _context.GroupInvites
             .CountAsync(i => i.TargetUserId == userId && i.Status == GroupInviteStatus.Pending, cancellationToken);
+
+        return Result<int>.Ok(count);
     }
 
-    public async Task AcceptInviteAsync(Guid inviteId, Guid userId, CancellationToken cancellationToken)
+    public async Task<Result> AcceptInviteAsync(Guid inviteId, Guid userId, CancellationToken cancellationToken)
     {
         try
         {
@@ -480,8 +515,11 @@ public class GroupService : IGroupService
                 .Include(i => i.Group)
                 .FirstOrDefaultAsync(i => i.Id == inviteId && i.TargetUserId == userId, cancellationToken);
 
-            if (invite == null) throw new ApplicationException("Invite not found.");
-            if (invite.Status != GroupInviteStatus.Pending) throw new InvalidOperationException("Invite is not pending.");
+            if (invite == null)
+                return Result.Fail("Convite não encontrado.", ResultStatus.NotFound);
+
+            if (invite.Status != GroupInviteStatus.Pending)
+                return Result.Fail("Convite não está pendente.", ResultStatus.BadRequest);
 
             PlayerEntity thePlayer;
 
@@ -491,7 +529,9 @@ public class GroupService : IGroupService
                 var player = await _context.Players
                     .FirstOrDefaultAsync(p => p.Id == invite.GuestPlayerId.Value, cancellationToken);
 
-                if (player == null) throw new ApplicationException("Guest player not found.");
+                if (player == null)
+                    return Result.Fail("Jogador convidado não encontrado.", ResultStatus.NotFound);
+
                 player.SetUser(userId);
                 player.SetIsGuest(false);
                 player.SetJoinedAt(DateTime.UtcNow);
@@ -516,7 +556,8 @@ public class GroupService : IGroupService
                     // Criar novo player para o usuário
                     var user = await _context.Users
                         .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
-                    if (user == null) throw new ApplicationException("User not found.");
+                    if (user == null)
+                        return Result.Fail("Usuário não encontrado.", ResultStatus.NotFound);
 
                     var name = $"{user.FirstName} {user.LastName}".Trim();
                     var newPlayer = new PlayerEntity(name, userId, invite.GroupId, 0, false, false, Status.Active);
@@ -540,6 +581,8 @@ public class GroupService : IGroupService
             invite.Accept();
             _context.GroupInvites.Update(invite);
             await _context.SaveChangesAsync(cancellationToken);
+
+            return Result.Ok("Convite aceito com sucesso.");
         }
         catch (Exception ex)
         {
@@ -548,19 +591,24 @@ public class GroupService : IGroupService
         }
     }
 
-    public async Task RejectInviteAsync(Guid inviteId, Guid userId, CancellationToken cancellationToken)
+    public async Task<Result> RejectInviteAsync(Guid inviteId, Guid userId, CancellationToken cancellationToken)
     {
         try
         {
             var invite = await _context.GroupInvites
                 .FirstOrDefaultAsync(i => i.Id == inviteId && i.TargetUserId == userId, cancellationToken);
 
-            if (invite == null) throw new ApplicationException("Invite not found.");
-            if (invite.Status != GroupInviteStatus.Pending) throw new InvalidOperationException("Invite is not pending.");
+            if (invite == null)
+                return Result.Fail("Convite não encontrado.", ResultStatus.NotFound);
+
+            if (invite.Status != GroupInviteStatus.Pending)
+                return Result.Fail("Convite não está pendente.", ResultStatus.BadRequest);
 
             invite.Reject();
             _context.GroupInvites.Update(invite);
             await _context.SaveChangesAsync(cancellationToken);
+
+            return Result.Ok("Convite rejeitado com sucesso.");
         }
         catch (Exception ex)
         {
@@ -569,7 +617,7 @@ public class GroupService : IGroupService
         }
     }
 
-    public async Task CreatorLeaveGroupAsync(Guid groupId, Guid requestingUserId, CreatorLeaveGroupDto dto, CancellationToken cancellationToken)
+    public async Task<Result> CreatorLeaveGroupAsync(Guid groupId, Guid requestingUserId, CreatorLeaveGroupDto dto, CancellationToken cancellationToken)
     {
         try
         {
@@ -578,16 +626,18 @@ public class GroupService : IGroupService
                 .FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
 
             if (group is null)
-                throw new ApplicationException("Group not found.");
+                return Result.Fail("Grupo não encontrado.", ResultStatus.NotFound);
 
             if (group.CreatedByUserId != requestingUserId)
-                throw new UnauthorizedAccessException("Only the group creator can use this operation.");
+                return Result.Fail("Sem permissão para esta operação.", ResultStatus.Forbidden);
 
             // Opção 1: Deletar o grupo
             if (dto.DeleteGroup)
             {
-                await DeleteAsync(groupId, cancellationToken);
-                return;
+                var deleteResult = await DeleteAsync(groupId, cancellationToken);
+                return deleteResult.Success
+                    ? Result.Ok("Grupo removido com sucesso.")
+                    : deleteResult;
             }
 
             // Localizar o player do criador neste grupo
@@ -599,7 +649,7 @@ public class GroupService : IGroupService
             {
                 var isExistingAdmin = group.Admins.Any(a => a.UserId == dto.TransferToUserId.Value);
                 if (!isExistingAdmin)
-                    throw new InvalidOperationException("TransferToUserId must be an existing admin.");
+                    return Result.Fail("TransferToUserId deve ser um admin existente.", ResultStatus.BadRequest);
 
                 group.TransferCreator(dto.TransferToUserId.Value);
 
@@ -614,7 +664,7 @@ public class GroupService : IGroupService
                 _context.Groups.Update(group);
                 if (creatorPlayer != null) _context.Players.Update(creatorPlayer);
                 await _context.SaveChangesAsync(cancellationToken);
-                return;
+                return Result.Ok("Grupo atualizado com sucesso.");
             }
 
             // Opção 3: Promover jogador (não admin) e transferir
@@ -624,7 +674,7 @@ public class GroupService : IGroupService
 
                 var userExists = await _context.Users.AnyAsync(u => u.Id == targetUserId, cancellationToken);
                 if (!userExists)
-                    throw new ApplicationException("User to promote not found.");
+                    return Result.Fail("Usuário a promover não encontrado.", ResultStatus.NotFound);
 
                 // Adicionar como admin (reutiliza lógica de AddAdminToGroupAsync)
                 AddAdminToGroupInternal(group, targetUserId);
@@ -641,12 +691,12 @@ public class GroupService : IGroupService
                 _context.Groups.Update(group);
                 if (creatorPlayer != null) _context.Players.Update(creatorPlayer);
                 await _context.SaveChangesAsync(cancellationToken);
-                return;
+                return Result.Ok("Grupo atualizado com sucesso.");
             }
 
-            throw new InvalidOperationException("Invalid leave operation: provide TransferToUserId, PromoteAndTransferUserId, or set DeleteGroup = true.");
+            return Result.Fail("Operação inválida: forneça TransferToUserId, PromoteAndTransferUserId, ou defina DeleteGroup = true.", ResultStatus.BadRequest);
         }
-        catch (Exception ex) when (ex is not (ApplicationException or UnauthorizedAccessException or InvalidOperationException))
+        catch (Exception ex)
         {
             _logger.LogError(ex, "Error in CreatorLeaveGroupAsync. GroupId={GroupId}", groupId);
             throw;

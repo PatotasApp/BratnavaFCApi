@@ -1,5 +1,7 @@
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Models;
+using System.Collections.Generic;
 
 namespace BranavaFC.Tests;
 
@@ -88,7 +90,7 @@ internal sealed class FakeStatsService : IPlayerStatsService
         _byId = stats.ToDictionary(s => s.PlayerId);
     }
 
-    public Task<List<PlayerStats>> EnrichPlayersAsync(
+    public Task<Result<List<PlayerStats>>> EnrichPlayersAsync(
         List<PlayerRequestDto> players,
         CancellationToken cancellationToken = default)
     {
@@ -98,7 +100,7 @@ internal sealed class FakeStatsService : IPlayerStatsService
                 : TestHelpers.NeutralStats(p.Id, p.Name)
         ).ToList();
 
-        return Task.FromResult(result);
+        return Task.FromResult(Result<List<PlayerStats>>.Ok(result));
     }
 
     public Task<PlayerVisualStatsReport> GetVisualReportAsync(

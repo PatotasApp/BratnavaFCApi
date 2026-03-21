@@ -1,4 +1,5 @@
 ﻿using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Models;
 using Microsoft.Extensions.Logging;
@@ -16,7 +17,7 @@ public sealed class TeamGenerationService
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
     }
 
-    public Task<TeamsOptionsResultDto> GenerateAsync(
+    public async Task<Result<TeamsOptionsResultDto>> GenerateAsync(
         List<PlayerRequestDto> players,
         StrategyType strategyType,
         int playersPerTeam,
@@ -33,18 +34,21 @@ public sealed class TeamGenerationService
         };
 
         var strategy = TeamGenerationFactory.Create(strategyType, _statsService, _loggerFactory);
-        return strategy.GenerateTeamsAsync(players, settings, optionsCount, cancellationToken);
+        var dto = await strategy.GenerateTeamsAsync(players, settings, optionsCount, cancellationToken);
+        return Result<TeamsOptionsResultDto>.Ok(dto);
     }
 
-    public Task<TeamsOptionsResultDto> GenerateAsync(
+    public async Task<Result<TeamsOptionsResultDto>> GenerateAsync(
         TeamGenerationRequestDto request,
         int optionsCount = 3,
         CancellationToken cancellationToken = default)
     {
-        if (request is null) throw new ArgumentNullException(nameof(request));
-        if (request.Players is null) throw new InvalidOperationException("Players is required.");
+        if (request is null)
+            return Result<TeamsOptionsResultDto>.Fail("Request inválido.", ResultStatus.BadRequest);
+        if (request.Players is null)
+            return Result<TeamsOptionsResultDto>.Fail("Players é obrigatório.", ResultStatus.BadRequest);
 
-        return GenerateAsync(
+        return await GenerateAsync(
             request.Players,
             request.StrategyType,
             request.PlayersPerTeam,

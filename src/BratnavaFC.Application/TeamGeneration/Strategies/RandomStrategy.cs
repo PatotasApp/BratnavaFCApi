@@ -1,4 +1,5 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Models;
 using static BratnavaFC.Application.TeamGeneration.StrategyHelpers;
@@ -31,7 +32,10 @@ public sealed class RandomStrategy : ITeamGenerationStrategy
 
         List<PlayerRequestDto>        pool          = FilterCandidates(players, settings);
         int                           maxAssignable = Math.Min(pool.Count, settings.PlayersPerTeam * 2);
-        Dictionary<Guid, PlayerStats> statsById     = await LoadStatsByPlayerId(_statsService, pool, cancellationToken);
+        var statsResult = await LoadStatsByPlayerId(_statsService, pool, cancellationToken);
+        if (!statsResult.Success)
+            return BuildEmptyResult(players);
+        Dictionary<Guid, PlayerStats> statsById = statsResult.Data!;
 
         double WeightOf(Guid id)
             => statsById.TryGetValue(id, out PlayerStats? s) ? EffectiveWeight(s) : NeutralWinRate;

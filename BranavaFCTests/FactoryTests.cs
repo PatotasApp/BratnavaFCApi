@@ -1,8 +1,10 @@
 ﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.TeamGeneration;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Models;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Collections.Generic;
 using Xunit;
 
 namespace BranavaFC.Tests;
@@ -60,10 +62,10 @@ public class FactoryTests
     private sealed class FakeStatsService : IPlayerStatsService
     {
         // ✅ assinatura correta do seu IPlayerStatsService (SEM optionsCount)
-        public Task<List<PlayerStats>> EnrichPlayersAsync(
+        public Task<Result<List<PlayerStats>>> EnrichPlayersAsync(
             List<PlayerRequestDto> players,
             CancellationToken cancellationToken = default)
-            => Task.FromResult(new List<PlayerStats>());
+            => Task.FromResult(Result<List<PlayerStats>>.Ok(new List<PlayerStats>()));
 
         public Task<PlayerVisualStatsReport> GetVisualReportAsync(Guid groupId, CancellationToken cancellationToken = default)
             => Task.FromResult(new PlayerVisualStatsReport

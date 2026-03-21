@@ -1,3 +1,4 @@
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Calendar;
 
 namespace BratnavaFC.Application.Abstractions;
@@ -12,5 +13,5 @@ public interface IHolidayService
     /// Retorna os feriados do ano informado.
     /// Em caso de falha na API externa, retorna lista vazia (não propaga exceção).
     /// </summary>
-    Task<IReadOnlyList<HolidayDto>> GetHolidaysAsync(int year, CancellationToken ct = default);
+    Task<Result<IReadOnlyList<HolidayDto>>> GetHolidaysAsync(int year, CancellationToken ct = default);
 }

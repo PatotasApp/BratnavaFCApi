@@ -7,6 +7,7 @@ using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
 using FluentAssertions;
@@ -238,10 +239,11 @@ public sealed class MatchServiceTests
 
         var newMatch = new MatchEntity(group.Id, DateTime.UtcNow, "Boca Jrs");
 
-        var act = async () => await sut.Create(group.Id, newMatch, CancellationToken.None);
+        var result = await sut.Create(group.Id, newMatch, CancellationToken.None);
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Ja existe uma partida em andamento (não finalizada) para este grupo.");
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("Ja existe uma partida em andamento (não finalizada) para este grupo.");
+        result.Status.Should().Be(ResultStatus.BadRequest);
 
         var afterCount = await db.Matches.CountAsync();
         afterCount.Should().Be(beforeCount);
@@ -362,7 +364,7 @@ public sealed class MatchServiceTests
 
         var current = await sut.GetCurrentAsync(group.Id, CancellationToken.None);
 
-        current.Should().BeNull();
+        current.Data.Should().BeNull();
     }
 
     [Fact]
@@ -378,7 +380,7 @@ public sealed class MatchServiceTests
 
         var current = await sut.GetCurrentAsync(group.Id, CancellationToken.None);
 
-        current.Should().BeNull();
+        current.Data.Should().BeNull();
     }
 
     [Fact]
@@ -411,9 +413,9 @@ public sealed class MatchServiceTests
 
         var current = await sut.GetCurrentAsync(group.Id, CancellationToken.None);
 
-        current.Should().NotBeNull();
-        current!.Id.Should().Be(m2.Id);
-        current.Status.Should().NotBe(MatchStatus.Finalized);
+        current.Data.Should().NotBeNull();
+        current.Data!.Id.Should().Be(m2.Id);
+        current.Data!.Status.Should().NotBe(MatchStatus.Finalized);
     }
 
     // =========================
@@ -953,14 +955,14 @@ public sealed class MatchServiceTests
 
         var goals = await sut.GetGoalsAsync(group.Id, match.Id, CancellationToken.None);
 
-        goals.Should().HaveCount(3);
+        goals.Data!.Should().HaveCount(3);
 
-        goals[0].TimeSeconds.Should().Be(10);
-        goals[1].TimeSeconds.Should().Be(20);
-        goals[2].TimeSeconds.Should().BeNull();
+        goals.Data![0].TimeSeconds.Should().Be(10);
+        goals.Data![1].TimeSeconds.Should().Be(20);
+        goals.Data![2].TimeSeconds.Should().BeNull();
 
-        goals.All(g => !string.IsNullOrWhiteSpace(g.ScorerName)).Should().BeTrue();
-        goals.Select(g => g.ScorerPlayerId).Should().NotContain(Guid.Empty);
+        goals.Data!.All(g => !string.IsNullOrWhiteSpace(g.ScorerName)).Should().BeTrue();
+        goals.Data!.Select(g => g.ScorerPlayerId).Should().NotContain(Guid.Empty);
     }
 
     [Fact]
@@ -1078,12 +1080,14 @@ public sealed class MatchServiceTests
 
         var group = await SeedGroupAsync(db);
 
-        var act = async () => await sut.AddGuestToMatchAsync(
+        var result = await sut.AddGuestToMatchAsync(
             group.Id, Guid.NewGuid(),
             new AddGuestToMatchDto("Fulano", false),
             CancellationToken.None);
 
-        await act.Should().ThrowAsync<ApplicationException>().WithMessage("Match not found.");
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("Partida não encontrada.");
+        result.Status.Should().Be(ResultStatus.NotFound);
     }
 
     [Fact]
@@ -1101,13 +1105,13 @@ public sealed class MatchServiceTests
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
 
-        var act = async () => await sut.AddGuestToMatchAsync(
+        var result = await sut.AddGuestToMatchAsync(
             group.Id, match.Id,
             new AddGuestToMatchDto("Fulano", false),
             CancellationToken.None);
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*Acceptation*");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.BadRequest);
     }
 
     [Fact]
@@ -1125,13 +1129,13 @@ public sealed class MatchServiceTests
             acceptAllInvites: true, defineTeamsIfPossible: true);
         db.ChangeTracker.Clear();
 
-        var act = async () => await sut.AddGuestToMatchAsync(
+        var result = await sut.AddGuestToMatchAsync(
             group.Id, match.Id,
             new AddGuestToMatchDto("Fulano", false),
             CancellationToken.None);
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*Acceptation*");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.BadRequest);
     }
 
     [Theory]
@@ -1352,10 +1356,10 @@ public sealed class MatchServiceTests
 
         var result = await sut.GetHistoryAsync(group.Id, 200, CancellationToken.None);
 
-        result.Should().HaveCount(3);
-        result[0].PlayedAt.Should().BeCloseTo(dateNew, TimeSpan.FromSeconds(1), "mais recente primeiro");
-        result[1].PlayedAt.Should().BeCloseTo(dateMid, TimeSpan.FromSeconds(1));
-        result[2].PlayedAt.Should().BeCloseTo(dateOld, TimeSpan.FromSeconds(1), "mais antiga por último");
+        result.Data!.Should().HaveCount(3);
+        result.Data![0].PlayedAt.Should().BeCloseTo(dateNew, TimeSpan.FromSeconds(1), "mais recente primeiro");
+        result.Data![1].PlayedAt.Should().BeCloseTo(dateMid, TimeSpan.FromSeconds(1));
+        result.Data![2].PlayedAt.Should().BeCloseTo(dateOld, TimeSpan.FromSeconds(1), "mais antiga por último");
     }
 
     [Fact]
@@ -1382,7 +1386,7 @@ public sealed class MatchServiceTests
 
         var result = await sut.GetHistoryAsync(group.Id, 200, CancellationToken.None);
 
-        result.Should().HaveCount(1, "somente partidas Finalized devem ser retornadas");
+        result.Data!.Should().HaveCount(1, "somente partidas Finalized devem ser retornadas");
     }
 
     [Fact]
@@ -1403,7 +1407,7 @@ public sealed class MatchServiceTests
 
         var result = await sut.GetHistoryAsync(group.Id, take: 3, CancellationToken.None);
 
-        result.Should().HaveCount(3, "take=3 deve limitar o resultado a 3 partidas");
+        result.Data!.Should().HaveCount(3, "take=3 deve limitar o resultado a 3 partidas");
     }
 
     [Fact]
@@ -1428,8 +1432,8 @@ public sealed class MatchServiceTests
 
         var result = await sut.GetHistoryAsync(group.Id, 200, CancellationToken.None, player1.Id);
 
-        result.Should().HaveCount(1, "filtro por playerId deve retornar apenas a partida em que ele jogou");
-        result[0].PlayerIds.Should().Contain(player1.Id);
+        result.Data!.Should().HaveCount(1, "filtro por playerId deve retornar apenas a partida em que ele jogou");
+        result.Data![0].PlayerIds.Should().Contain(player1.Id);
     }
 
     [Fact]
@@ -1452,7 +1456,7 @@ public sealed class MatchServiceTests
 
         var result = await sut.GetHistoryAsync(group.Id, 200, CancellationToken.None, strangerPlayer.Id);
 
-        result.Should().BeEmpty("jogador sem partidas não deve aparecer no histórico");
+        result.Data!.Should().BeEmpty("jogador sem partidas não deve aparecer no histórico");
     }
 
     [Fact]
@@ -1501,7 +1505,7 @@ public sealed class MatchServiceTests
 
         var result = await sut.GetHistoryAsync(group.Id, 200, CancellationToken.None, player.Id);
 
-        result.Should().HaveCount(1,
+        result.Data!.Should().HaveCount(1,
             "só a partida onde o jogador estava escalado num time (Team > 0) deve aparecer");
     }
 
@@ -1520,8 +1524,8 @@ public sealed class MatchServiceTests
 
         var result = await sut.GetHistoryAsync(group.Id, 200, CancellationToken.None);
 
-        result.Should().HaveCount(1);
-        var playerIds = result[0].PlayerIds;
+        result.Data!.Should().HaveCount(1);
+        var playerIds = result.Data![0].PlayerIds;
         playerIds.Should().HaveCount(players.Count);
 
         foreach (var p in players)

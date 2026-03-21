@@ -1,4 +1,5 @@
 using BratnavaFC.Application.Services;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Groups;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
@@ -24,27 +25,27 @@ public class GroupServiceCreatorLeaveTests
     // ─── Validações gerais ────────────────────────────────────────────────────
 
     [Fact]
-    public async Task CreatorLeaveGroupAsync_GroupNotFound_ThrowsApplicationException()
+    public async Task CreatorLeaveGroupAsync_GroupNotFound_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(CreatorLeaveGroupAsync_GroupNotFound_ThrowsApplicationException));
+        await using var db = DbContextFactory.Create(nameof(CreatorLeaveGroupAsync_GroupNotFound_ShouldReturnFailure));
         var sut = CreateSut(db);
 
         var dto = new CreatorLeaveGroupDto(DeleteGroup: true);
 
         // Act
-        var act = async () => await sut.CreatorLeaveGroupAsync(Guid.NewGuid(), Guid.NewGuid(), dto, CancellationToken.None);
+        var result = await sut.CreatorLeaveGroupAsync(Guid.NewGuid(), Guid.NewGuid(), dto, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<ApplicationException>()
-            .WithMessage("Group not found.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
     }
 
     [Fact]
-    public async Task CreatorLeaveGroupAsync_NotCreator_ThrowsUnauthorizedAccessException()
+    public async Task CreatorLeaveGroupAsync_NotCreator_ShouldReturnForbidden()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(CreatorLeaveGroupAsync_NotCreator_ThrowsUnauthorizedAccessException));
+        await using var db = DbContextFactory.Create(nameof(CreatorLeaveGroupAsync_NotCreator_ShouldReturnForbidden));
 
         var creator  = new UserEntity("creator", "C", "R", "c@b.com", "hash", null, null);
         var nonOwner = new UserEntity("other",   "O", "T", "o@b.com", "hash", null, null);
@@ -59,18 +60,18 @@ public class GroupServiceCreatorLeaveTests
         var dto = new CreatorLeaveGroupDto(DeleteGroup: true);
 
         // Act — nonOwner tenta usar a operação de criador
-        var act = async () => await sut.CreatorLeaveGroupAsync(group.Id, nonOwner.Id, dto, CancellationToken.None);
+        var result = await sut.CreatorLeaveGroupAsync(group.Id, nonOwner.Id, dto, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<UnauthorizedAccessException>()
-            .WithMessage("Only the group creator can use this operation.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.Forbidden);
     }
 
     [Fact]
-    public async Task CreatorLeaveGroupAsync_NoOptionProvided_ThrowsInvalidOperationException()
+    public async Task CreatorLeaveGroupAsync_NoOptionProvided_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(CreatorLeaveGroupAsync_NoOptionProvided_ThrowsInvalidOperationException));
+        await using var db = DbContextFactory.Create(nameof(CreatorLeaveGroupAsync_NoOptionProvided_ShouldReturnFailure));
 
         var creator = new UserEntity("creator", "C", "R", "c@b.com", "hash", null, null);
         db.Users.Add(creator);
@@ -86,11 +87,11 @@ public class GroupServiceCreatorLeaveTests
         var dto = new CreatorLeaveGroupDto(TransferToUserId: null, PromoteAndTransferUserId: null, DeleteGroup: false);
 
         // Act
-        var act = async () => await sut.CreatorLeaveGroupAsync(group.Id, creator.Id, dto, CancellationToken.None);
+        var result = await sut.CreatorLeaveGroupAsync(group.Id, creator.Id, dto, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Invalid leave operation: provide TransferToUserId, PromoteAndTransferUserId, or set DeleteGroup = true.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.BadRequest);
     }
 
     // ─── Opção DeleteGroup ────────────────────────────────────────────────────
@@ -113,9 +114,10 @@ public class GroupServiceCreatorLeaveTests
         var dto = new CreatorLeaveGroupDto(DeleteGroup: true);
 
         // Act
-        await sut.CreatorLeaveGroupAsync(group.Id, creator.Id, dto, CancellationToken.None);
+        var result = await sut.CreatorLeaveGroupAsync(group.Id, creator.Id, dto, CancellationToken.None);
 
         // Assert
+        result.Success.Should().BeTrue();
         var exists = await db.Groups.IgnoreQueryFilters().AnyAsync(g => g.Id == group.Id);
         exists.Should().BeFalse();
     }
@@ -145,9 +147,10 @@ public class GroupServiceCreatorLeaveTests
         var dto = new CreatorLeaveGroupDto(TransferToUserId: newOwner.Id);
 
         // Act
-        await sut.CreatorLeaveGroupAsync(group.Id, creator.Id, dto, CancellationToken.None);
+        var result = await sut.CreatorLeaveGroupAsync(group.Id, creator.Id, dto, CancellationToken.None);
 
         // Assert
+        result.Success.Should().BeTrue();
         var savedGroup = await db.Groups
             .IgnoreQueryFilters()
             .Include(g => g.Admins)
@@ -162,10 +165,10 @@ public class GroupServiceCreatorLeaveTests
     }
 
     [Fact]
-    public async Task CreatorLeaveGroupAsync_TransferToNonAdmin_ThrowsInvalidOperationException()
+    public async Task CreatorLeaveGroupAsync_TransferToNonAdmin_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(CreatorLeaveGroupAsync_TransferToNonAdmin_ThrowsInvalidOperationException));
+        await using var db = DbContextFactory.Create(nameof(CreatorLeaveGroupAsync_TransferToNonAdmin_ShouldReturnFailure));
 
         var creator    = new UserEntity("creator", "C", "R", "c@b.com", "hash", null, null);
         var nonAdmin   = new UserEntity("nonadmin", "N", "A", "na@b.com", "hash", null, null);
@@ -180,11 +183,11 @@ public class GroupServiceCreatorLeaveTests
         var dto = new CreatorLeaveGroupDto(TransferToUserId: nonAdmin.Id);
 
         // Act
-        var act = async () => await sut.CreatorLeaveGroupAsync(group.Id, creator.Id, dto, CancellationToken.None);
+        var result = await sut.CreatorLeaveGroupAsync(group.Id, creator.Id, dto, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("TransferToUserId must be an existing admin.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.BadRequest);
     }
 
     // ─── Opção PromoteAndTransferUserId ───────────────────────────────────────
@@ -212,9 +215,10 @@ public class GroupServiceCreatorLeaveTests
         var dto = new CreatorLeaveGroupDto(PromoteAndTransferUserId: promoted.Id);
 
         // Act
-        await sut.CreatorLeaveGroupAsync(group.Id, creator.Id, dto, CancellationToken.None);
+        var result = await sut.CreatorLeaveGroupAsync(group.Id, creator.Id, dto, CancellationToken.None);
 
         // Assert
+        result.Success.Should().BeTrue();
         var savedGroup = await db.Groups
             .IgnoreQueryFilters()
             .Include(g => g.Admins)
@@ -229,10 +233,10 @@ public class GroupServiceCreatorLeaveTests
     }
 
     [Fact]
-    public async Task CreatorLeaveGroupAsync_PromoteNonExistentUser_ThrowsApplicationException()
+    public async Task CreatorLeaveGroupAsync_PromoteNonExistentUser_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(CreatorLeaveGroupAsync_PromoteNonExistentUser_ThrowsApplicationException));
+        await using var db = DbContextFactory.Create(nameof(CreatorLeaveGroupAsync_PromoteNonExistentUser_ShouldReturnFailure));
 
         var creator = new UserEntity("creator", "C", "R", "c@b.com", "hash", null, null);
         db.Users.Add(creator);
@@ -246,10 +250,10 @@ public class GroupServiceCreatorLeaveTests
         var dto = new CreatorLeaveGroupDto(PromoteAndTransferUserId: Guid.NewGuid());
 
         // Act
-        var act = async () => await sut.CreatorLeaveGroupAsync(group.Id, creator.Id, dto, CancellationToken.None);
+        var result = await sut.CreatorLeaveGroupAsync(group.Id, creator.Id, dto, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<ApplicationException>()
-            .WithMessage("User to promote not found.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
     }
 }

@@ -30,15 +30,15 @@ public class GroupsController : GroupAuthorizedController
 
         var requestWithCreator = request with { CreatedByUserId = currentUserId.Value };
 
-        var newGroupId = await _groupService.CreateAsync(requestWithCreator, cancellationToken);
-        return Ok(newGroupId);
+        var result = await _groupService.CreateAsync(requestWithCreator, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpDelete("{groupId:guid}")]
     public async Task<IActionResult> DeleteGroupAsync(Guid groupId, CancellationToken cancellationToken)
     {
-        await _groupService.DeleteAsync(groupId, cancellationToken);
-        return Ok();
+        var result = await _groupService.DeleteAsync(groupId, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpPut("{groupId:guid}")]
@@ -46,44 +46,44 @@ public class GroupsController : GroupAuthorizedController
     {
         if (request == null) return BadRequest();
 
-        await _groupService.UpdateAsync(groupId, request, cancellationToken);
-        return Ok();
+        var result = await _groupService.UpdateAsync(groupId, request, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpPut("{groupId:guid}/inactivate")]
     public async Task<IActionResult> InactivateAsync(Guid groupId, CancellationToken cancellationToken)
     {
-        await _groupService.InactivateAsync(groupId, cancellationToken);
-        return NoContent();
+        var result = await _groupService.InactivateAsync(groupId, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpPut("{groupId:guid}/reactivate")]
     public async Task<IActionResult> ReactivateAsync(Guid groupId, CancellationToken cancellationToken)
     {
-        await _groupService.ReactivateAsync(groupId, cancellationToken);
-        return NoContent();
+        var result = await _groupService.ReactivateAsync(groupId, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpGet]
     [Authorize(Roles = "GodMode")]
     public async Task<IActionResult> GetAllGroupsAsync(CancellationToken cancellationToken)
     {
-        var response = await _groupService.GetAllGroupsAsync(cancellationToken);
-        return Ok(response);
+        var result = await _groupService.GetAllGroupsAsync(cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpGet("{groupId:guid}")]
     public async Task<IActionResult> GetByIdAsync(Guid groupId, CancellationToken cancellationToken)
     {
-        var response = await _groupService.GetByIdAsync(groupId, cancellationToken);
-        return Ok(response);
+        var result = await _groupService.GetByIdAsync(groupId, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpGet("admin/{adminId:guid}")]
     public async Task<IActionResult> GetByAdminIdAsync(Guid adminId, CancellationToken cancellationToken)
     {
-        var response = await _groupService.GetByAdminIdAsync(adminId, cancellationToken);
-        return Ok(response);
+        var result = await _groupService.GetByAdminIdAsync(adminId, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpPost("{groupId:guid}/admins")]
@@ -91,8 +91,8 @@ public class GroupsController : GroupAuthorizedController
     {
         if (request == null) return BadRequest();
 
-        await _groupService.AddAdminToGroupAsync(groupId, request, cancellationToken);
-        return NoContent();
+        var result = await _groupService.AddAdminToGroupAsync(groupId, request, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpDelete("{groupId:guid}/admins/{userId:guid}")]
@@ -104,19 +104,8 @@ public class GroupsController : GroupAuthorizedController
         if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
             return Forbid();
 
-        try
-        {
-            await _groupService.RemoveAdminAsync(groupId, userId, requestingUserId.Value, cancellationToken);
-            return NoContent();
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
+        var result = await _groupService.RemoveAdminAsync(groupId, userId, requestingUserId.Value, cancellationToken);
+        return ToResponse(result);
     }
 
     // ── Financeiros ───────────────────────────────────────────────────────────
@@ -124,8 +113,8 @@ public class GroupsController : GroupAuthorizedController
     [HttpGet("financeiro/{financeiroId:guid}")]
     public async Task<IActionResult> GetByFinanceiroIdAsync(Guid financeiroId, CancellationToken cancellationToken)
     {
-        var response = await _groupService.GetByFinanceiroIdAsync(financeiroId, cancellationToken);
-        return Ok(response);
+        var result = await _groupService.GetByFinanceiroIdAsync(financeiroId, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpPost("{groupId:guid}/financeiros")]
@@ -136,15 +125,8 @@ public class GroupsController : GroupAuthorizedController
         if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
             return Forbid();
 
-        try
-        {
-            await _groupService.AddFinanceiroToGroupAsync(groupId, request.UserId, cancellationToken);
-            return NoContent();
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var result = await _groupService.AddFinanceiroToGroupAsync(groupId, request.UserId, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpDelete("{groupId:guid}/financeiros/{userId:guid}")]
@@ -153,15 +135,8 @@ public class GroupsController : GroupAuthorizedController
         if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
             return Forbid();
 
-        try
-        {
-            await _groupService.RemoveFinanceiroAsync(groupId, userId, cancellationToken);
-            return NoContent();
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var result = await _groupService.RemoveFinanceiroAsync(groupId, userId, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpPost("{groupId:guid}/leave-creator")]
@@ -173,19 +148,8 @@ public class GroupsController : GroupAuthorizedController
         var requestingUserId = GetCurrentUserId();
         if (requestingUserId == null) return Unauthorized();
 
-        try
-        {
-            await _groupService.CreatorLeaveGroupAsync(groupId, requestingUserId.Value, request, cancellationToken);
-            return NoContent();
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var result = await _groupService.CreatorLeaveGroupAsync(groupId, requestingUserId.Value, request, cancellationToken);
+        return ToResponse(result);
     }
 
     // ── Convites ──────────────────────────────────────────────────────────────
@@ -201,15 +165,8 @@ public class GroupsController : GroupAuthorizedController
         if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
             return Forbid();
 
-        try
-        {
-            var result = await _groupService.CreateInviteAsync(groupId, request, cancellationToken);
-            return Ok(result);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var result = await _groupService.CreateInviteAsync(groupId, request, cancellationToken);
+        return ToResponse(result);
     }
 
     /// <summary>Lista convites pendentes do usuário logado.</summary>
@@ -220,8 +177,8 @@ public class GroupsController : GroupAuthorizedController
         var userId = GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        var list = await _groupService.GetMyInvitesAsync(userId.Value, cancellationToken);
-        return Ok(list);
+        var result = await _groupService.GetMyInvitesAsync(userId.Value, cancellationToken);
+        return ToResponse(result);
     }
 
     /// <summary>Quantidade de convites pendentes do usuário logado.</summary>
@@ -232,8 +189,8 @@ public class GroupsController : GroupAuthorizedController
         var userId = GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        var count = await _groupService.GetMyPendingInviteCountAsync(userId.Value, cancellationToken);
-        return Ok(new { count });
+        var result = await _groupService.GetMyPendingInviteCountAsync(userId.Value, cancellationToken);
+        return ToResponse(result);
     }
 
     /// <summary>Usuário aceita um convite.</summary>
@@ -244,15 +201,8 @@ public class GroupsController : GroupAuthorizedController
         var userId = GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        try
-        {
-            await _groupService.AcceptInviteAsync(inviteId, userId.Value, cancellationToken);
-            return NoContent();
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var result = await _groupService.AcceptInviteAsync(inviteId, userId.Value, cancellationToken);
+        return ToResponse(result);
     }
 
     /// <summary>Usuário rejeita um convite.</summary>
@@ -263,14 +213,7 @@ public class GroupsController : GroupAuthorizedController
         var userId = GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        try
-        {
-            await _groupService.RejectInviteAsync(inviteId, userId.Value, cancellationToken);
-            return NoContent();
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var result = await _groupService.RejectInviteAsync(inviteId, userId.Value, cancellationToken);
+        return ToResponse(result);
     }
 }

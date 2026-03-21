@@ -1,5 +1,6 @@
 using System.Text;
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Models;
 using Microsoft.Extensions.Logging;
@@ -93,7 +94,10 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         if (maxAssignable == 0)
             return BuildEmptyResult(players);
 
-        Dictionary<Guid, PlayerStats> statsById = await LoadStatsByPlayerId(_statsService, candidates, cancellationToken);
+        var statsResult = await LoadStatsByPlayerId(_statsService, candidates, cancellationToken);
+        if (!statsResult.Success)
+            return BuildEmptyResult(players);
+        Dictionary<Guid, PlayerStats> statsById = statsResult.Data!;
 
         // Rank candidates by effective weight descending; break ties by Id for determinism.
         List<CandidatePlayer> candidatesByStrength = candidates

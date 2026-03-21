@@ -1,4 +1,5 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Models;
 
@@ -85,16 +86,20 @@ internal static class StrategyHelpers
     // ── Stats loading ─────────────────────────────────────────────────────────
 
     /// <summary>Loads stats for each player and returns them keyed by PlayerId.</summary>
-    internal static async Task<Dictionary<Guid, PlayerStats>> LoadStatsByPlayerId(
+    internal static async Task<Result<Dictionary<Guid, PlayerStats>>> LoadStatsByPlayerId(
         IPlayerStatsService statsService,
         List<PlayerRequestDto> players,
         CancellationToken cancellationToken = default)
     {
-        List<PlayerStats> statsList = await statsService
+        Result<List<PlayerStats>> statsResult = await statsService
             .EnrichPlayersAsync(players, cancellationToken)
             .ConfigureAwait(false);
 
-        return statsList.ToDictionary(s => s.PlayerId, s => s);
+        if (!statsResult.Success)
+            return Result<Dictionary<Guid, PlayerStats>>.Fail(statsResult.Error!, statsResult.Status);
+
+        return Result<Dictionary<Guid, PlayerStats>>.Ok(
+            statsResult.Data!.ToDictionary(s => s.PlayerId, s => s));
     }
 
     /// <summary>

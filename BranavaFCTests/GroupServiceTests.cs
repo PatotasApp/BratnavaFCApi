@@ -1,4 +1,5 @@
 using BratnavaFC.Application.Services;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Groups;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
@@ -25,20 +26,20 @@ public class GroupServiceTests
     // ─── CreateAsync ──────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task CreateAsync_WhenAdminUserNotFound_ShouldThrow()
+    public async Task CreateAsync_WhenAdminUserNotFound_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(CreateAsync_WhenAdminUserNotFound_ShouldThrow));
+        await using var db = DbContextFactory.Create(nameof(CreateAsync_WhenAdminUserNotFound_ShouldReturnFailure));
         var sut = CreateSut(db);
 
         var req = new CreateGroupDto("Patota", [Guid.NewGuid()], null, Guid.NewGuid());
 
         // Act
-        var act = async () => await sut.CreateAsync(req, CancellationToken.None);
+        var result = await sut.CreateAsync(req, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<ApplicationException>()
-            .WithMessage("User admin does not exists.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
     }
 
     [Fact]
@@ -55,11 +56,14 @@ public class GroupServiceTests
         var req = new CreateGroupDto("  Minha Patota  ", [user.Id], null, user.Id);
 
         // Act
-        var groupId = await sut.CreateAsync(req, CancellationToken.None);
+        var result = await sut.CreateAsync(req, CancellationToken.None);
 
         // Assert
-        groupId.Should().NotBe(Guid.Empty);
+        result.Success.Should().BeTrue();
+        result.Status.Should().Be(ResultStatus.Created);
+        result.Data.Should().NotBe(Guid.Empty);
 
+        var groupId = result.Data;
         var saved = await db.Groups
             .IgnoreQueryFilters()
             .Include(g => g.Admins)
@@ -74,18 +78,18 @@ public class GroupServiceTests
     // ─── GetByIdAsync ─────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetByIdAsync_WhenGroupNotFound_ShouldThrow()
+    public async Task GetByIdAsync_WhenGroupNotFound_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(GetByIdAsync_WhenGroupNotFound_ShouldThrow));
+        await using var db = DbContextFactory.Create(nameof(GetByIdAsync_WhenGroupNotFound_ShouldReturnFailure));
         var sut = CreateSut(db);
 
         // Act
-        var act = async () => await sut.GetByIdAsync(Guid.NewGuid(), CancellationToken.None);
+        var result = await sut.GetByIdAsync(Guid.NewGuid(), CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<ApplicationException>()
-            .WithMessage("Group not found.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
     }
 
     [Fact]
@@ -109,7 +113,8 @@ public class GroupServiceTests
         var result = await sut.GetByIdAsync(group.Id, CancellationToken.None);
 
         // Assert — garante que adminIds é populado (fix do .Include(g => g.Admins))
-        result.AdminIds.Should().ContainSingle()
+        result.Success.Should().BeTrue();
+        result.Data!.AdminIds.Should().ContainSingle()
             .Which.Should().Be(user.Id);
     }
 
@@ -137,9 +142,10 @@ public class GroupServiceTests
         var result = await sut.GetByIdAsync(group.Id, CancellationToken.None);
 
         // Assert — garante que inativos são retornados (fix do IgnoreQueryFilters)
-        result.Players.Should().HaveCount(2);
-        result.Players.Should().Contain(p => p.Name == "Ativo"   && p.Status == Status.Active);
-        result.Players.Should().Contain(p => p.Name == "Inativo" && p.Status == Status.Inactive);
+        result.Success.Should().BeTrue();
+        result.Data!.Players.Should().HaveCount(2);
+        result.Data.Players.Should().Contain(p => p.Name == "Ativo"   && p.Status == Status.Active);
+        result.Data.Players.Should().Contain(p => p.Name == "Inativo" && p.Status == Status.Inactive);
     }
 
     [Fact]
@@ -165,7 +171,8 @@ public class GroupServiceTests
         var result = await sut.GetByIdAsync(group.Id, CancellationToken.None);
 
         // Assert — garante que UserName é populado (fix do .ThenInclude(p => p.User))
-        var dto = result.Players.Should().ContainSingle().Subject;
+        result.Success.Should().BeTrue();
+        var dto = result.Data!.Players.Should().ContainSingle().Subject;
         dto.UserName.Should().Be("andreifs");
     }
 
@@ -189,7 +196,8 @@ public class GroupServiceTests
         var result = await sut.GetByIdAsync(group.Id, CancellationToken.None);
 
         // Assert — convidado sem conta vinculada deve ter UserName nulo
-        var dto = result.Players.Should().ContainSingle().Subject;
+        result.Success.Should().BeTrue();
+        var dto = result.Data!.Players.Should().ContainSingle().Subject;
         dto.UserName.Should().BeNull();
     }
 
@@ -214,7 +222,8 @@ public class GroupServiceTests
         var result = await sut.GetByIdAsync(group1.Id, CancellationToken.None);
 
         // Assert
-        result.Players.Should().ContainSingle()
+        result.Success.Should().BeTrue();
+        result.Data!.Players.Should().ContainSingle()
             .Which.Name.Should().Be("P1");
     }
 
@@ -245,7 +254,8 @@ public class GroupServiceTests
         var result = await sut.GetByAdminIdAsync(admin.Id, CancellationToken.None);
 
         // Assert
-        result.Should().ContainSingle()
+        result.Success.Should().BeTrue();
+        result.Data.Should().ContainSingle()
             .Which.Name.Should().Be("Patota do Admin");
     }
 
@@ -270,9 +280,10 @@ public class GroupServiceTests
         var result = await sut.GetAllGroupsAsync(CancellationToken.None);
 
         // Assert
-        result.Should().HaveCount(2);
-        result.Should().Contain(g => g.Name == "Ativa"   && g.Status == Status.Active);
-        result.Should().Contain(g => g.Name == "Inativa" && g.Status == Status.Inactive);
+        result.Success.Should().BeTrue();
+        result.Data.Should().HaveCount(2);
+        result.Data.Should().Contain(g => g.Name == "Ativa"   && g.Status == Status.Active);
+        result.Data.Should().Contain(g => g.Name == "Inativa" && g.Status == Status.Inactive);
     }
 
     [Fact]
@@ -297,8 +308,9 @@ public class GroupServiceTests
         var result = await sut.GetAllGroupsAsync(CancellationToken.None);
 
         // Assert
-        var g1 = result.Should().ContainSingle(g => g.Name == "G1").Subject;
-        var g2 = result.Should().ContainSingle(g => g.Name == "G2").Subject;
+        result.Success.Should().BeTrue();
+        var g1 = result.Data.Should().ContainSingle(g => g.Name == "G1").Subject;
+        var g2 = result.Data.Should().ContainSingle(g => g.Name == "G2").Subject;
 
         g1.Players.Should().HaveCount(2);
         g2.Players.Should().HaveCount(1).And.Contain(p => p.Name == "P3");
@@ -319,8 +331,9 @@ public class GroupServiceTests
         var result = await sut.GetAllGroupsAsync(CancellationToken.None);
 
         // Assert — ordenados por nome
-        result.First().Name.Should().Be("Alpha");
-        result.Last().Name.Should().Be("Zebra");
+        result.Success.Should().BeTrue();
+        result.Data.First().Name.Should().Be("Alpha");
+        result.Data.Last().Name.Should().Be("Zebra");
     }
 
     [Fact]
@@ -345,7 +358,8 @@ public class GroupServiceTests
         var result = await sut.GetAllGroupsAsync(CancellationToken.None);
 
         // Assert — deve incluir inativos (IgnoreQueryFilters)
-        var g = result.Should().ContainSingle().Subject;
+        result.Success.Should().BeTrue();
+        var g = result.Data.Should().ContainSingle().Subject;
         g.Players.Should().HaveCount(2);
     }
 
@@ -373,7 +387,8 @@ public class GroupServiceTests
         var result = await sut.GetAllGroupsAsync(CancellationToken.None);
 
         // Assert
-        var g = result.Should().ContainSingle().Subject;
+        result.Success.Should().BeTrue();
+        var g = result.Data.Should().ContainSingle().Subject;
         g.Players.Should().HaveCount(2);
 
         var linkedDto = g.Players.Should().ContainSingle(p => p.Name == "João FC").Subject;
@@ -398,9 +413,10 @@ public class GroupServiceTests
         var sut = CreateSut(db);
 
         // Act
-        await sut.DeleteAsync(group.Id, CancellationToken.None);
+        var result = await sut.DeleteAsync(group.Id, CancellationToken.None);
 
         // Assert
+        result.Success.Should().BeTrue();
         var exists = await db.Groups.IgnoreQueryFilters().AnyAsync(g => g.Id == group.Id);
         exists.Should().BeFalse();
     }
@@ -421,9 +437,10 @@ public class GroupServiceTests
         var sut = CreateSut(db);
 
         // Act
-        await sut.DeleteAsync(group.Id, CancellationToken.None);
+        var result = await sut.DeleteAsync(group.Id, CancellationToken.None);
 
         // Assert
+        result.Success.Should().BeTrue();
         var groupExists  = await db.Groups.IgnoreQueryFilters().AnyAsync(g => g.Id == group.Id);
         var playerExists = await db.Players.IgnoreQueryFilters().AnyAsync(p => p.Id == player.Id);
 
@@ -448,9 +465,10 @@ public class GroupServiceTests
         var sut = CreateSut(db);
 
         // Act
-        await sut.DeleteAsync(group.Id, CancellationToken.None);
+        var result = await sut.DeleteAsync(group.Id, CancellationToken.None);
 
         // Assert
+        result.Success.Should().BeTrue();
         var groupExists = await db.Groups.IgnoreQueryFilters().AnyAsync(g => g.Id == group.Id);
         var colorExists = await db.TeamColors.IgnoreQueryFilters().AnyAsync(c => c.Id == color.Id);
 
@@ -459,27 +477,27 @@ public class GroupServiceTests
     }
 
     [Fact]
-    public async Task DeleteAsync_WhenGroupNotFound_ShouldThrow()
+    public async Task DeleteAsync_WhenGroupNotFound_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(DeleteAsync_WhenGroupNotFound_ShouldThrow));
+        await using var db = DbContextFactory.Create(nameof(DeleteAsync_WhenGroupNotFound_ShouldReturnFailure));
         var sut = CreateSut(db);
 
         // Act
-        var act = async () => await sut.DeleteAsync(Guid.NewGuid(), CancellationToken.None);
+        var result = await sut.DeleteAsync(Guid.NewGuid(), CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<ApplicationException>()
-            .WithMessage("Group not found.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
     }
 
     // ─── AddAdminToGroupAsync ─────────────────────────────────────────────────
 
     [Fact]
-    public async Task AddAdminToGroupAsync_WhenUserNotFound_ShouldThrow()
+    public async Task AddAdminToGroupAsync_WhenUserNotFound_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(AddAdminToGroupAsync_WhenUserNotFound_ShouldThrow));
+        await using var db = DbContextFactory.Create(nameof(AddAdminToGroupAsync_WhenUserNotFound_ShouldReturnFailure));
 
         var group = new GroupEntity("G", null, Guid.NewGuid());
         db.Groups.Add(group);
@@ -488,21 +506,21 @@ public class GroupServiceTests
         var sut = CreateSut(db);
 
         // Act
-        var act = async () => await sut.AddAdminToGroupAsync(
+        var result = await sut.AddAdminToGroupAsync(
             group.Id,
             new AddAdminToGroupDto(Guid.NewGuid()),
             CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<ApplicationException>()
-            .WithMessage("User admin does not exists.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
     }
 
     [Fact]
-    public async Task AddAdminToGroupAsync_WhenGroupNotFound_ShouldThrow()
+    public async Task AddAdminToGroupAsync_WhenGroupNotFound_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(AddAdminToGroupAsync_WhenGroupNotFound_ShouldThrow));
+        await using var db = DbContextFactory.Create(nameof(AddAdminToGroupAsync_WhenGroupNotFound_ShouldReturnFailure));
 
         var user = new UserEntity("u", "F", "L", "u@b.com", "hash", null, null);
         db.Users.Add(user);
@@ -511,14 +529,14 @@ public class GroupServiceTests
         var sut = CreateSut(db);
 
         // Act
-        var act = async () => await sut.AddAdminToGroupAsync(
+        var result = await sut.AddAdminToGroupAsync(
             Guid.NewGuid(),
             new AddAdminToGroupDto(user.Id),
             CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<ApplicationException>()
-            .WithMessage("Group not found.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
     }
 
     [Fact]
@@ -583,26 +601,26 @@ public class GroupServiceTests
     // ─── RemoveAdminAsync ─────────────────────────────────────────────────────
 
     [Fact]
-    public async Task RemoveAdminAsync_WhenGroupNotFound_ShouldThrow()
+    public async Task RemoveAdminAsync_WhenGroupNotFound_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(RemoveAdminAsync_WhenGroupNotFound_ShouldThrow));
+        await using var db = DbContextFactory.Create(nameof(RemoveAdminAsync_WhenGroupNotFound_ShouldReturnFailure));
         var sut = CreateSut(db);
 
         // Act
-        var act = async () => await sut.RemoveAdminAsync(
+        var result = await sut.RemoveAdminAsync(
             Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<ApplicationException>()
-            .WithMessage("Group not found.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
     }
 
     [Fact]
-    public async Task RemoveAdminAsync_WhenRequestingUserIsNotAdmin_ShouldThrowUnauthorizedAccessException()
+    public async Task RemoveAdminAsync_WhenRequestingUserIsNotAdmin_ShouldReturnForbidden()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(RemoveAdminAsync_WhenRequestingUserIsNotAdmin_ShouldThrowUnauthorizedAccessException));
+        await using var db = DbContextFactory.Create(nameof(RemoveAdminAsync_WhenRequestingUserIsNotAdmin_ShouldReturnForbidden));
 
         var creator = new UserEntity("creator", "C", "R", "c@b.com", "hash", null, null);
         var target  = new UserEntity("target",  "T", "G", "t@b.com", "hash", null, null);
@@ -618,12 +636,12 @@ public class GroupServiceTests
         var sut = CreateSut(db);
 
         // Act — noAdmin tenta remover target
-        var act = async () => await sut.RemoveAdminAsync(
+        var result = await sut.RemoveAdminAsync(
             group.Id, target.Id, noAdmin.Id, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<UnauthorizedAccessException>()
-            .WithMessage("Requesting user is not an admin of this group.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.Forbidden);
     }
 
     [Fact]
@@ -648,7 +666,7 @@ public class GroupServiceTests
         var act = async () => await sut.RemoveAdminAsync(
             group.Id, creator.Id, admin.Id, CancellationToken.None);
 
-        // Assert — GroupEntity.RemoveAdmin deve rejeitar
+        // Assert — GroupEntity.RemoveAdmin deve rejeitar (entity-level throw, not service-level)
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("The group creator cannot be removed from admins.");
     }
@@ -672,9 +690,10 @@ public class GroupServiceTests
         var sut = CreateSut(db);
 
         // Act — creator remove target
-        await sut.RemoveAdminAsync(group.Id, target.Id, creator.Id, CancellationToken.None);
+        var result = await sut.RemoveAdminAsync(group.Id, target.Id, creator.Id, CancellationToken.None);
 
         // Assert
+        result.Success.Should().BeTrue();
         var saved = await db.Groups
             .Include(g => g.Admins)
             .FirstAsync(g => g.Id == group.Id);

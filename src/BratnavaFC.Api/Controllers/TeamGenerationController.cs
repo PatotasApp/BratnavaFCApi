@@ -1,14 +1,14 @@
 ﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.TeamGeneration;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Models;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BratnavaFC.Api.Controllers;
 
-[ApiController]
 [Route("api/[controller]")]
-public class TeamGenerationController : ControllerBase
+public class TeamGenerationController : BaseApiController
 {
     private readonly TeamGenerationService _teamService;
     private readonly IPlayerStatsService _playerStats;
@@ -20,23 +20,25 @@ public class TeamGenerationController : ControllerBase
     }
 
     [HttpPost("generate")]
-    [ProducesResponseType(typeof(TeamsOptionsResultDto), StatusCodes.Status200OK)]
-    public async Task<ActionResult<TeamsOptionsResultDto>> Generate(
+    [ProducesResponseType(typeof(ApiResponse<TeamsOptionsResultDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<TeamsOptionsResultDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Generate(
         [FromBody] TeamGenerationRequestDto request,
         [FromQuery] int count = 3,
         CancellationToken cancellationToken = default)
     {
-        if (request == null) return BadRequest();
+        if (request == null)
+            return ToResponse(Result<TeamsOptionsResultDto>.Fail("Request inválido.", ResultStatus.BadRequest));
 
         var result = await _teamService.GenerateAsync(request, count, cancellationToken);
-        return Ok(result);
+        return ToResponse(result);
     }
 
     [HttpGet("visual-stats/{groupId:guid}")]
-    [ProducesResponseType(typeof(PlayerVisualStatsReport), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<PlayerVisualStatsReport>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetVisualStats([FromRoute] Guid groupId, CancellationToken cancellationToken)
     {
         var report = await _playerStats.GetVisualReportAsync(groupId, cancellationToken);
-        return Ok(report);
+        return ToResponse(Result<PlayerVisualStatsReport>.Ok(report));
     }
 }

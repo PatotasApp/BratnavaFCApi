@@ -1,4 +1,5 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Models;
 using static BratnavaFC.Application.TeamGeneration.StrategyHelpers;
@@ -26,8 +27,11 @@ public sealed class ManualStrategy : ITeamGenerationStrategy
         if (players.Count == 0)
             return new TeamsOptionsResultDto([]);
 
-        Dictionary<Guid, PlayerStats> statsById = await LoadStatsByPlayerId(
+        var statsResult = await LoadStatsByPlayerId(
             _statsService, FilterCandidates(players, settings), cancellationToken);
+        if (!statsResult.Success)
+            return new TeamsOptionsResultDto([]);
+        Dictionary<Guid, PlayerStats> statsById = statsResult.Data!;
 
         // All players are unassigned — the caller assigns them manually via the UI
         List<PlayerWeightDto> unassigned = players

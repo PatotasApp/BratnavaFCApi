@@ -1,5 +1,6 @@
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Groups;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
@@ -111,13 +112,15 @@ public class GroupService_CreateInviteTests
 
         var result = await sut.CreateInviteAsync(group.Id, new CreateGroupInviteDto(user.Id, null), CancellationToken.None);
 
-        result.Should().NotBeNull();
-        result.GroupId.Should().Be(group.Id);
-        result.TargetUserId.Should().Be(user.Id);
-        result.GuestPlayerId.Should().BeNull();
-        result.Status.Should().Be((int)GroupInviteStatus.Pending);
+        result.Success.Should().BeTrue();
+        result.Status.Should().Be(ResultStatus.Created);
+        result.Data.Should().NotBeNull();
+        result.Data!.GroupId.Should().Be(group.Id);
+        result.Data.TargetUserId.Should().Be(user.Id);
+        result.Data.GuestPlayerId.Should().BeNull();
+        result.Data.Status.Should().Be((int)GroupInviteStatus.Pending);
 
-        var persisted = await db.GroupInvites.FindAsync(result.Id);
+        var persisted = await db.GroupInvites.FindAsync(result.Data.Id);
         persisted.Should().NotBeNull();
     }
 
@@ -137,46 +140,47 @@ public class GroupService_CreateInviteTests
 
         var result = await sut.CreateInviteAsync(group.Id, new CreateGroupInviteDto(user.Id, guest.Id), CancellationToken.None);
 
-        result.GuestPlayerId.Should().Be(guest.Id);
-        result.GuestPlayerName.Should().Be("Convidado Teste");
+        result.Success.Should().BeTrue();
+        result.Data!.GuestPlayerId.Should().Be(guest.Id);
+        result.Data.GuestPlayerName.Should().Be("Convidado Teste");
     }
 
     [Fact]
-    public async Task WhenGroupNotFound_ShouldThrow()
+    public async Task WhenGroupNotFound_ShouldReturnFailure()
     {
-        await using var db  = DbContextFactory.Create(nameof(WhenGroupNotFound_ShouldThrow));
+        await using var db  = DbContextFactory.Create(nameof(WhenGroupNotFound_ShouldReturnFailure));
         var sut = Builders.MakeSut(db);
 
         var user = Builders.MakeUser();
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        var act = async () =>
-            await sut.CreateInviteAsync(Guid.NewGuid(), new CreateGroupInviteDto(user.Id, null), CancellationToken.None);
+        var result = await sut.CreateInviteAsync(Guid.NewGuid(), new CreateGroupInviteDto(user.Id, null), CancellationToken.None);
 
-        await act.Should().ThrowAsync<ApplicationException>().WithMessage("Group not found.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
     }
 
     [Fact]
-    public async Task WhenUserNotFound_ShouldThrow()
+    public async Task WhenUserNotFound_ShouldReturnFailure()
     {
-        await using var db  = DbContextFactory.Create(nameof(WhenUserNotFound_ShouldThrow));
+        await using var db  = DbContextFactory.Create(nameof(WhenUserNotFound_ShouldReturnFailure));
         var sut = Builders.MakeSut(db);
 
         var group = Builders.MakeGroup();
         db.Groups.Add(group);
         await db.SaveChangesAsync();
 
-        var act = async () =>
-            await sut.CreateInviteAsync(group.Id, new CreateGroupInviteDto(Guid.NewGuid(), null), CancellationToken.None);
+        var result = await sut.CreateInviteAsync(group.Id, new CreateGroupInviteDto(Guid.NewGuid(), null), CancellationToken.None);
 
-        await act.Should().ThrowAsync<ApplicationException>().WithMessage("Target user not found.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
     }
 
     [Fact]
-    public async Task WhenUserAlreadyMember_ShouldThrow()
+    public async Task WhenUserAlreadyMember_ShouldReturnFailure()
     {
-        await using var db  = DbContextFactory.Create(nameof(WhenUserAlreadyMember_ShouldThrow));
+        await using var db  = DbContextFactory.Create(nameof(WhenUserAlreadyMember_ShouldReturnFailure));
         var sut = Builders.MakeSut(db);
 
         var user  = Builders.MakeUser();
@@ -186,17 +190,16 @@ public class GroupService_CreateInviteTests
         db.Players.Add(new PlayerEntity("Membro", user.Id, group.Id, 0m, false, false, Status.Active));
         await db.SaveChangesAsync();
 
-        var act = async () =>
-            await sut.CreateInviteAsync(group.Id, new CreateGroupInviteDto(user.Id, null), CancellationToken.None);
+        var result = await sut.CreateInviteAsync(group.Id, new CreateGroupInviteDto(user.Id, null), CancellationToken.None);
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("User is already a member of this group.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.BadRequest);
     }
 
     [Fact]
-    public async Task WhenDuplicatePendingInvite_ShouldThrow()
+    public async Task WhenDuplicatePendingInvite_ShouldReturnFailure()
     {
-        await using var db  = DbContextFactory.Create(nameof(WhenDuplicatePendingInvite_ShouldThrow));
+        await using var db  = DbContextFactory.Create(nameof(WhenDuplicatePendingInvite_ShouldReturnFailure));
         var sut = Builders.MakeSut(db);
 
         var user  = Builders.MakeUser();
@@ -206,17 +209,16 @@ public class GroupService_CreateInviteTests
         db.GroupInvites.Add(new GroupInviteEntity(group.Id, user.Id, null));
         await db.SaveChangesAsync();
 
-        var act = async () =>
-            await sut.CreateInviteAsync(group.Id, new CreateGroupInviteDto(user.Id, null), CancellationToken.None);
+        var result = await sut.CreateInviteAsync(group.Id, new CreateGroupInviteDto(user.Id, null), CancellationToken.None);
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("There is already a pending invite for this user.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.BadRequest);
     }
 
     [Fact]
-    public async Task WhenGuestPlayerNotInGroup_ShouldThrow()
+    public async Task WhenGuestPlayerNotInGroup_ShouldReturnFailure()
     {
-        await using var db  = DbContextFactory.Create(nameof(WhenGuestPlayerNotInGroup_ShouldThrow));
+        await using var db  = DbContextFactory.Create(nameof(WhenGuestPlayerNotInGroup_ShouldReturnFailure));
         var sut = Builders.MakeSut(db);
 
         var user  = Builders.MakeUser();
@@ -225,11 +227,10 @@ public class GroupService_CreateInviteTests
         db.Groups.Add(group);
         await db.SaveChangesAsync();
 
-        var act = async () =>
-            await sut.CreateInviteAsync(group.Id, new CreateGroupInviteDto(user.Id, Guid.NewGuid()), CancellationToken.None);
+        var result = await sut.CreateInviteAsync(group.Id, new CreateGroupInviteDto(user.Id, Guid.NewGuid()), CancellationToken.None);
 
-        await act.Should().ThrowAsync<ApplicationException>()
-            .WithMessage("Guest player not found in this group.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
     }
 
     [Fact]
@@ -250,7 +251,8 @@ public class GroupService_CreateInviteTests
         // Convite rejeitado não deve bloquear um novo convite
         var result = await sut.CreateInviteAsync(group.Id, new CreateGroupInviteDto(user.Id, null), CancellationToken.None);
 
-        result.Status.Should().Be((int)GroupInviteStatus.Pending);
+        result.Success.Should().BeTrue();
+        result.Data!.Status.Should().Be((int)GroupInviteStatus.Pending);
     }
 
     [Fact]
@@ -271,7 +273,8 @@ public class GroupService_CreateInviteTests
 
         var result = await sut.CreateInviteAsync(group.Id, new CreateGroupInviteDto(user.Id, null), CancellationToken.None);
 
-        result.Status.Should().Be((int)GroupInviteStatus.Pending);
+        result.Success.Should().BeTrue();
+        result.Data!.Status.Should().Be((int)GroupInviteStatus.Pending);
     }
 
     [Fact]
@@ -288,11 +291,10 @@ public class GroupService_CreateInviteTests
         db.Players.Add(new PlayerEntity("Mensalista Ativo", user.Id, group.Id, 5m, false, false, Status.Active));
         await db.SaveChangesAsync();
 
-        var act = async () =>
-            await sut.CreateInviteAsync(group.Id, new CreateGroupInviteDto(user.Id, null), CancellationToken.None);
+        var result = await sut.CreateInviteAsync(group.Id, new CreateGroupInviteDto(user.Id, null), CancellationToken.None);
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("User is already a member of this group.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.BadRequest);
     }
 }
 
@@ -321,8 +323,9 @@ public class GroupService_GetInviteTests
 
         var result = await sut.GetMyInvitesAsync(user.Id, CancellationToken.None);
 
-        result.Should().HaveCount(1);
-        result[0].Id.Should().Be(pending.Id);
+        result.Success.Should().BeTrue();
+        result.Data.Should().HaveCount(1);
+        result.Data![0].Id.Should().Be(pending.Id);
     }
 
     [Fact]
@@ -341,7 +344,8 @@ public class GroupService_GetInviteTests
 
         var result = await sut.GetMyInvitesAsync(user2.Id, CancellationToken.None);
 
-        result.Should().BeEmpty();
+        result.Success.Should().BeTrue();
+        result.Data.Should().BeEmpty();
     }
 
     [Fact]
@@ -364,9 +368,10 @@ public class GroupService_GetInviteTests
         db.GroupInvites.AddRange(pending1, pending2, accepted);
         await db.SaveChangesAsync();
 
-        var count = await sut.GetMyPendingInviteCountAsync(user.Id, CancellationToken.None);
+        var result = await sut.GetMyPendingInviteCountAsync(user.Id, CancellationToken.None);
 
-        count.Should().Be(2);
+        result.Success.Should().BeTrue();
+        result.Data.Should().Be(2);
     }
 }
 
@@ -388,7 +393,9 @@ public class GroupService_AcceptInviteTests
         db.GroupInvites.Add(invite);
         await db.SaveChangesAsync();
 
-        await sut.AcceptInviteAsync(invite.Id, user.Id, CancellationToken.None);
+        var result = await sut.AcceptInviteAsync(invite.Id, user.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
 
         // convite deve ser Accepted
         var updatedInvite = await db.GroupInvites.FindAsync(invite.Id);
@@ -418,7 +425,9 @@ public class GroupService_AcceptInviteTests
         db.GroupInvites.Add(invite);
         await db.SaveChangesAsync();
 
-        await sut.AcceptInviteAsync(invite.Id, user.Id, CancellationToken.None);
+        var result = await sut.AcceptInviteAsync(invite.Id, user.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
 
         var updatedInvite = await db.GroupInvites.FindAsync(invite.Id);
         updatedInvite!.Status.Should().Be(GroupInviteStatus.Accepted);
@@ -432,21 +441,21 @@ public class GroupService_AcceptInviteTests
     }
 
     [Fact]
-    public async Task WhenInviteNotFound_ShouldThrow()
+    public async Task WhenInviteNotFound_ShouldReturnFailure()
     {
-        await using var db  = DbContextFactory.Create(nameof(WhenInviteNotFound_ShouldThrow));
+        await using var db  = DbContextFactory.Create(nameof(WhenInviteNotFound_ShouldReturnFailure));
         var sut = Builders.MakeSut(db);
 
-        var act = async () =>
-            await sut.AcceptInviteAsync(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None);
+        var result = await sut.AcceptInviteAsync(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None);
 
-        await act.Should().ThrowAsync<ApplicationException>().WithMessage("Invite not found.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
     }
 
     [Fact]
-    public async Task WhenInviteBelongsToAnotherUser_ShouldThrow()
+    public async Task WhenInviteBelongsToAnotherUser_ShouldReturnFailure()
     {
-        await using var db  = DbContextFactory.Create(nameof(WhenInviteBelongsToAnotherUser_ShouldThrow));
+        await using var db  = DbContextFactory.Create(nameof(WhenInviteBelongsToAnotherUser_ShouldReturnFailure));
         var sut = Builders.MakeSut(db);
 
         var owner = Builders.MakeUser("owner");
@@ -459,16 +468,16 @@ public class GroupService_AcceptInviteTests
         await db.SaveChangesAsync();
 
         // "other" tenta aceitar o convite de "owner"
-        var act = async () =>
-            await sut.AcceptInviteAsync(invite.Id, other.Id, CancellationToken.None);
+        var result = await sut.AcceptInviteAsync(invite.Id, other.Id, CancellationToken.None);
 
-        await act.Should().ThrowAsync<ApplicationException>().WithMessage("Invite not found.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
     }
 
     [Fact]
-    public async Task WhenAlreadyAccepted_ShouldThrow()
+    public async Task WhenAlreadyAccepted_ShouldReturnFailure()
     {
-        await using var db  = DbContextFactory.Create(nameof(WhenAlreadyAccepted_ShouldThrow));
+        await using var db  = DbContextFactory.Create(nameof(WhenAlreadyAccepted_ShouldReturnFailure));
         var sut = Builders.MakeSut(db);
 
         var user  = Builders.MakeUser();
@@ -480,10 +489,10 @@ public class GroupService_AcceptInviteTests
         db.GroupInvites.Add(invite);
         await db.SaveChangesAsync();
 
-        var act = async () =>
-            await sut.AcceptInviteAsync(invite.Id, user.Id, CancellationToken.None);
+        var result = await sut.AcceptInviteAsync(invite.Id, user.Id, CancellationToken.None);
 
-        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("Invite is not pending.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.BadRequest);
     }
 
     [Fact]
@@ -626,7 +635,9 @@ public class GroupService_RejectInviteTests
         db.GroupInvites.Add(invite);
         await db.SaveChangesAsync();
 
-        await sut.RejectInviteAsync(invite.Id, user.Id, CancellationToken.None);
+        var result = await sut.RejectInviteAsync(invite.Id, user.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
 
         var updatedInvite = await db.GroupInvites.FindAsync(invite.Id);
         updatedInvite!.Status.Should().Be(GroupInviteStatus.Rejected);
@@ -652,21 +663,21 @@ public class GroupService_RejectInviteTests
     }
 
     [Fact]
-    public async Task WhenInviteNotFound_ShouldThrow()
+    public async Task WhenInviteNotFound_ShouldReturnFailure()
     {
-        await using var db  = DbContextFactory.Create(nameof(WhenInviteNotFound_ShouldThrow));
+        await using var db  = DbContextFactory.Create(nameof(WhenInviteNotFound_ShouldReturnFailure));
         var sut = Builders.MakeSut(db);
 
-        var act = async () =>
-            await sut.RejectInviteAsync(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None);
+        var result = await sut.RejectInviteAsync(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None);
 
-        await act.Should().ThrowAsync<ApplicationException>().WithMessage("Invite not found.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
     }
 
     [Fact]
-    public async Task WhenAlreadyRejected_ShouldThrow()
+    public async Task WhenAlreadyRejected_ShouldReturnFailure()
     {
-        await using var db  = DbContextFactory.Create(nameof(WhenAlreadyRejected_ShouldThrow));
+        await using var db  = DbContextFactory.Create(nameof(WhenAlreadyRejected_ShouldReturnFailure));
         var sut = Builders.MakeSut(db);
 
         var user  = Builders.MakeUser();
@@ -678,16 +689,16 @@ public class GroupService_RejectInviteTests
         db.GroupInvites.Add(invite);
         await db.SaveChangesAsync();
 
-        var act = async () =>
-            await sut.RejectInviteAsync(invite.Id, user.Id, CancellationToken.None);
+        var result = await sut.RejectInviteAsync(invite.Id, user.Id, CancellationToken.None);
 
-        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("Invite is not pending.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.BadRequest);
     }
 
     [Fact]
-    public async Task WhenInviteBelongsToAnotherUser_ShouldThrow()
+    public async Task WhenInviteBelongsToAnotherUser_ShouldReturnFailure()
     {
-        await using var db  = DbContextFactory.Create(nameof(WhenInviteBelongsToAnotherUser_ShouldThrow));
+        await using var db  = DbContextFactory.Create(nameof(WhenInviteBelongsToAnotherUser_ShouldReturnFailure));
         var sut = Builders.MakeSut(db);
 
         var owner = Builders.MakeUser("owner");
@@ -699,9 +710,9 @@ public class GroupService_RejectInviteTests
         db.GroupInvites.Add(invite);
         await db.SaveChangesAsync();
 
-        var act = async () =>
-            await sut.RejectInviteAsync(invite.Id, other.Id, CancellationToken.None);
+        var result = await sut.RejectInviteAsync(invite.Id, other.Id, CancellationToken.None);
 
-        await act.Should().ThrowAsync<ApplicationException>().WithMessage("Invite not found.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
     }
 }

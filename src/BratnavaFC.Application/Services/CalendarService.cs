@@ -118,7 +118,7 @@ public sealed class CalendarService : ICalendarService
 
         await Task.WhenAll(holidayTasks);
 
-        var allHolidays = holidayTasks.SelectMany(t => t.Result).ToArray();
+        var allHolidays = holidayTasks.SelectMany(t => t.Result.Data ?? Array.Empty<HolidayDto>()).ToArray();
 
         var result = new List<CalendarEventDto>(
             manualEvents.Count +

@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Calendar;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -30,19 +31,19 @@ public sealed class HolidayService : IHolidayService
         _logger = logger;
     }
 
-    public async Task<IReadOnlyList<HolidayDto>> GetHolidaysAsync(int year, CancellationToken ct = default)
+    public async Task<Result<IReadOnlyList<HolidayDto>>> GetHolidaysAsync(int year, CancellationToken ct = default)
     {
         var cacheKey = $"holidays:{year}";
 
         if (_cache.TryGetValue(cacheKey, out IReadOnlyList<HolidayDto>? cached) && cached is not null)
-            return cached;
+            return Result<IReadOnlyList<HolidayDto>>.Ok(cached);
 
         try
         {
             var client = _httpFactory.CreateClient("BrasilApi");
             var raw = await client.GetFromJsonAsync<BrasilApiHoliday[]>($"{BaseUrl}{year}", ct);
 
-            var result = raw is null
+            var list = raw is null
                 ? Array.Empty<HolidayDto>()
                 : (IReadOnlyList<HolidayDto>)raw
                     .Where(h => !string.IsNullOrWhiteSpace(h.Date) && !string.IsNullOrWhiteSpace(h.Name))
@@ -54,16 +55,16 @@ public sealed class HolidayService : IHolidayService
             {
                 AbsoluteExpirationRelativeToNow = CacheDuration,
                 Priority = CacheItemPriority.Low,
-                Size = result.Count,
+                Size = list.Count,
             };
-            _cache.Set(cacheKey, result, expiry);
+            _cache.Set(cacheKey, list, expiry);
 
-            return result;
+            return Result<IReadOnlyList<HolidayDto>>.Ok(list);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Falha ao buscar feriados da BrasilAPI para o ano {Year}. O calendário será exibido sem feriados.", year);
-            return Array.Empty<HolidayDto>();
+            return Result<IReadOnlyList<HolidayDto>>.Ok(Array.Empty<HolidayDto>());
         }
     }
 

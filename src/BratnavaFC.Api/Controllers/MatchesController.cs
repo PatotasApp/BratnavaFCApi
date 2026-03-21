@@ -1,4 +1,5 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Infrastructure.Data;
@@ -33,15 +34,15 @@ public class MatchesController : GroupAuthorizedController
     {
         var match = await _service.GetByIdAsync(groupId, matchId, cancellationToken);
         if (match == null) return NotFound();
-        return Ok(ToDto(match));
+        return ToResponse(Result<MatchDto>.Ok(ToDto(match.Data)));
     }
 
     [HttpGet("group/{groupId:guid}/current")]
     public async Task<IActionResult> GetCurrent(Guid groupId, CancellationToken cancellationToken)
     {
-            var match = await _service.GetCurrentAsync(groupId, cancellationToken);
+        var match = await _service.GetCurrentAsync(groupId, cancellationToken);
         if (match is null) return NotFound();
-        return Ok(ToDto(match));
+        return ToResponse(Result<MatchDto>.Ok(ToDto(match.Data)));
     }
 
     // header leve (pra stepper / status)
@@ -86,7 +87,7 @@ public class MatchesController : GroupAuthorizedController
             var entity = new MatchEntity(groupId, dto.PlayedAt, dto.PlaceName);
             var created = await _service.Create(groupId, entity, cancellationToken);
 
-            return CreatedAtAction(nameof(Get), new { groupId, matchId = created.Id }, ToDto(created));
+            return CreatedAtAction(nameof(Get), new { groupId, matchId = created.Data?.Id }, ToDto(created.Data));
         }
         catch (InvalidOperationException ex)
         {
@@ -217,7 +218,7 @@ public class MatchesController : GroupAuthorizedController
         var mvp = await _service.GetMvpAsync(groupId, matchId, cancellationToken);
         if (mvp == null) return NotFound();
 
-        return Ok(new MatchPlayerDto(mvp.Id, mvp.Player?.Name ?? string.Empty, mvp.IsMvp));
+        return ToResponse(Result<MatchPlayerDto>.Ok(new MatchPlayerDto(mvp.Data.Id, mvp.Data.Player?.Name ?? string.Empty, mvp.Data.IsMvp)));
     }
 
     [HttpPatch("group/{groupId:guid}/{matchId:guid}/score")]
@@ -273,7 +274,7 @@ public class MatchesController : GroupAuthorizedController
     {
         var details = await _service.GetDetailsAsync(matchId, cancellationToken);
         if (details is null) return NotFound();
-        if (details.GroupId != groupId) return NotFound();
+        if (details.Data?.GroupId != groupId) return NotFound();
         return Ok(details);
     }
 

@@ -1,4 +1,5 @@
 ﻿using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
@@ -22,12 +23,12 @@ public sealed class PlayerStatsService : IPlayerStatsService
         _context = context ?? throw new ArgumentNullException(nameof(context));
     }
 
-    public async Task<List<PlayerStats>> EnrichPlayersAsync(
+    public async Task<Result<List<PlayerStats>>> EnrichPlayersAsync(
         List<PlayerRequestDto> players,
         CancellationToken cancellationToken = default)
     {
         if (players is null) throw new ArgumentNullException(nameof(players));
-        if (players.Count == 0) return new List<PlayerStats>();
+        if (players.Count == 0) return Result<List<PlayerStats>>.Ok(new List<PlayerStats>());
 
         var playerIds = players.Select(p => p.Id).ToHashSet();
 
@@ -94,7 +95,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
             });
         }
 
-        return result;
+        return Result<List<PlayerStats>>.Ok(result);
     }
 
     public async Task<PlayerVisualStatsReport> GetVisualReportAsync(
