@@ -1,7 +1,8 @@
-﻿using System;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
@@ -19,9 +20,10 @@ public sealed class GroupSettingsService : IGroupSettingsService
         _context = context;
     }
 
-    public async Task<GroupSettingsDto> GetAsync(Guid groupId, CancellationToken ct)
+    public async Task<Result<GroupSettingsDto>> GetAsync(Guid groupId, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return Result<GroupSettingsDto>.Fail(groupCheck.Error!, groupCheck.Status);
 
         var entity = await _context.GroupSettings
             .AsNoTracking()
@@ -29,7 +31,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
 
         if (entity is null)
         {
-            return new GroupSettingsDto
+            return Result<GroupSettingsDto>.Ok(new GroupSettingsDto
             {
                 GroupId = groupId,
                 MinPlayers = 5,
@@ -45,15 +47,17 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 MvpIcon        = null,
                 PlayerIcon     = null,
                 MonthlyFee     = null,
-            };
+            });
         }
 
-        return ToDto(entity, isPersisted: true);
+        return Result<GroupSettingsDto>.Ok(ToDto(entity, isPersisted: true));
     }
 
-    public async Task<GroupSettingsDto> UpsertAsync(Guid groupId, UpsertGroupSettingsDto dto, CancellationToken ct)
+    public async Task<Result<GroupSettingsDto>> UpsertAsync(Guid groupId, UpsertGroupSettingsDto dto, CancellationToken ct)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return Result<GroupSettingsDto>.Fail(groupCheck.Error!, groupCheck.Status);
+
         ArgumentNullException.ThrowIfNull(dto);
 
         var entity = await _context.GroupSettings
@@ -115,7 +119,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
             entity = existing;
         }
 
-        return ToDto(entity, isPersisted: true);
+        return Result<GroupSettingsDto>.Ok(ToDto(entity, isPersisted: true), "GroupSettings atualizado com sucesso.");
     }
 
 
@@ -138,16 +142,18 @@ public sealed class GroupSettingsService : IGroupSettingsService
         MonthlyFee     = e.MonthlyFee,
     };
 
-    private async Task EnsureGroupExistsAsync(Guid groupId, CancellationToken ct)
+    private async Task<Result> EnsureGroupExistsAsync(Guid groupId, CancellationToken ct)
     {
         if (groupId == Guid.Empty)
-            throw new InvalidOperationException("GroupId e obrigatorio.");
+            return Result.Fail("GroupId e obrigatorio.", ResultStatus.BadRequest);
 
         var exists = await _context.Groups
             .AsNoTracking()
             .AnyAsync(g => g.Id == groupId, ct);
 
         if (!exists)
-            throw new InvalidOperationException("Group nao encontrado.");
+            return Result.Fail("Group nao encontrado.", ResultStatus.NotFound);
+
+        return Result.Ok();
     }
 }

@@ -1,12 +1,13 @@
-﻿using System;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 
 namespace BratnavaFC.Application.Abstractions;
 
 public interface IGroupSettingsService
 {
-    Task<GroupSettingsDto> GetAsync(Guid groupId, CancellationToken ct);
-    Task<GroupSettingsDto> UpsertAsync(Guid groupId, UpsertGroupSettingsDto dto, CancellationToken ct);
+    Task<Result<GroupSettingsDto>> GetAsync(Guid groupId, CancellationToken ct);
+    Task<Result<GroupSettingsDto>> UpsertAsync(Guid groupId, UpsertGroupSettingsDto dto, CancellationToken ct);
 }

@@ -1,4 +1,4 @@
-﻿using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
@@ -23,29 +23,15 @@ public sealed class GroupSettingsController : GroupAuthorizedController
     [HttpGet("group/{groupId:guid}")]
     public async Task<IActionResult> Get(Guid groupId, CancellationToken ct)
     {
-        try
-        {
-            var result = await _service.GetAsync(groupId, ct);
-            return Ok(result);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var result = await _service.GetAsync(groupId, ct);
+        return ToResponse(result);
     }
 
     [HttpPut("group/{groupId:guid}")]
     public async Task<IActionResult> Upsert(Guid groupId, [FromBody] UpsertGroupSettingsDto dto, CancellationToken ct)
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
-        try
-        {
-            var result = await _service.UpsertAsync(groupId, dto, ct);
-            return Ok(result);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var result = await _service.UpsertAsync(groupId, dto, ct);
+        return ToResponse(result);
     }
 }

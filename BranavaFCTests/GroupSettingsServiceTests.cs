@@ -1,4 +1,5 @@
-﻿using BratnavaFC.Application.Services;
+using BratnavaFC.Application.Services;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
 using FluentAssertions;
@@ -9,18 +10,19 @@ namespace BranavaFC.Tests;
 public class GroupSettingsServiceTests
 {
     [Fact]
-    public async Task GetAsync_WhenGroupNotFound_ShouldThrow()
+    public async Task GetAsync_WhenGroupNotFound_ShouldReturnFailure()
     {
         // Arrange
-        await using var db = DbContextFactory.Create(nameof(GetAsync_WhenGroupNotFound_ShouldThrow));
+        await using var db = DbContextFactory.Create(nameof(GetAsync_WhenGroupNotFound_ShouldReturnFailure));
         var sut = new GroupSettingsService(db);
 
         // Act
-        var act = async () => await sut.GetAsync(Guid.NewGuid(), CancellationToken.None);
+        var result = await sut.GetAsync(Guid.NewGuid(), CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Group nao encontrado.");
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Error.Should().Be("Group nao encontrado.");
     }
 
     [Fact]
@@ -36,13 +38,14 @@ public class GroupSettingsServiceTests
         var sut = new GroupSettingsService(db);
 
         // Act
-        var dto = await sut.GetAsync(group.Id, CancellationToken.None);
+        var result = await sut.GetAsync(group.Id, CancellationToken.None);
 
         // Assert
-        dto.GroupId.Should().Be(group.Id);
-        dto.MinPlayers.Should().Be(5);
-        dto.MaxPlayers.Should().Be(6);
-        dto.IsPersisted.Should().BeFalse();
+        result.Success.Should().BeTrue();
+        result.Data!.GroupId.Should().Be(group.Id);
+        result.Data.MinPlayers.Should().Be(5);
+        result.Data.MaxPlayers.Should().Be(6);
+        result.Data.IsPersisted.Should().BeFalse();
     }
 
     [Fact]
@@ -67,13 +70,14 @@ public class GroupSettingsServiceTests
         };
 
         // Act
-        var dto = await sut.UpsertAsync(group.Id, req, CancellationToken.None);
+        var result = await sut.UpsertAsync(group.Id, req, CancellationToken.None);
 
         // Assert
-        dto.IsPersisted.Should().BeTrue();
-        dto.MinPlayers.Should().Be(6);
-        dto.MaxPlayers.Should().Be(12);
-        dto.DefaultPlaceName.Should().Be("Boca");
+        result.Success.Should().BeTrue();
+        result.Data!.IsPersisted.Should().BeTrue();
+        result.Data.MinPlayers.Should().Be(6);
+        result.Data.MaxPlayers.Should().Be(12);
+        result.Data.DefaultPlaceName.Should().Be("Boca");
 
         var saved = await db.GroupSettings.FirstOrDefaultAsync(x => x.GroupId == group.Id);
         saved.Should().NotBeNull();
@@ -105,12 +109,13 @@ public class GroupSettingsServiceTests
         };
 
         // Act
-        var dto = await sut.UpsertAsync(group.Id, req, CancellationToken.None);
+        var result = await sut.UpsertAsync(group.Id, req, CancellationToken.None);
 
         // Assert
-        dto.MinPlayers.Should().Be(7);
-        dto.MaxPlayers.Should().Be(10);
-        dto.DefaultDayOfWeek.Should().Be(DayOfWeek.Friday);
+        result.Success.Should().BeTrue();
+        result.Data!.MinPlayers.Should().Be(7);
+        result.Data.MaxPlayers.Should().Be(10);
+        result.Data.DefaultDayOfWeek.Should().Be(DayOfWeek.Friday);
 
         var saved = await db.GroupSettings.FirstAsync(x => x.GroupId == group.Id);
         saved.MinPlayers.Should().Be(7);
