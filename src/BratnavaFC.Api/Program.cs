@@ -10,6 +10,7 @@ using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.TeamGeneration;
 using Microsoft.AspNetCore.Identity;
 using BratnavaFC.Domain.Entities;
+using BratnavaFC.Domain.Common;
 using Microsoft.OpenApi.Models;
 using System.IdentityModel.Tokens.Jwt;
 
@@ -162,6 +163,18 @@ app.UseHttpsRedirection();
 
 // 🔥 CORS TEM QUE VIR ANTES DO AUTH
 app.UseCors("AllowAll");
+
+app.UseExceptionHandler(appError =>
+{
+    appError.Run(async context =>
+    {
+        context.Response.StatusCode = 500;
+        context.Response.ContentType = "application/json";
+        var response = new ApiResponse<object>(
+            false, null, null, "Erro interno no servidor.", []);
+        await context.Response.WriteAsJsonAsync(response);
+    });
+});
 
 app.UseAuthentication();
 app.UseAuthorization();
