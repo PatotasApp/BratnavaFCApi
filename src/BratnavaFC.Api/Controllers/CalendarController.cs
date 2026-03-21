@@ -1,4 +1,5 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Calendar;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
@@ -37,12 +38,8 @@ public sealed class CalendarController : GroupAuthorizedController
         if (endDate < startDate)
             return BadRequest(new { error = "'end' deve ser maior ou igual a 'start'." });
 
-        try
-        {
-            var result = await _service.GetEventsAsync(groupId, startDate, endDate, ct);
-            return Ok(result);
-        }
-        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+        var result = await _service.GetEventsAsync(groupId, startDate, endDate, ct);
+        return ToResponse(result);
     }
 
     /// <summary>Cria um evento manual. Somente admins do grupo.</summary>
@@ -53,12 +50,9 @@ public sealed class CalendarController : GroupAuthorizedController
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
-        try
-        {
-            var result = await _service.CreateEventAsync(groupId, userId.Value, dto, ct);
-            return Created($"/api/Calendar/group/{groupId}/events/{result.Id}", result);
-        }
-        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+
+        var result = await _service.CreateEventAsync(groupId, userId.Value, dto, ct);
+        return ToResponse(result);
     }
 
     /// <summary>Atualiza um evento manual. Somente admins do grupo.</summary>
@@ -67,12 +61,9 @@ public sealed class CalendarController : GroupAuthorizedController
         Guid groupId, Guid eventId, [FromBody] UpdateCalendarEventDto dto, CancellationToken ct)
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
-        try
-        {
-            var result = await _service.UpdateEventAsync(groupId, eventId, dto, ct);
-            return Ok(result);
-        }
-        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+
+        var result = await _service.UpdateEventAsync(groupId, eventId, dto, ct);
+        return ToResponse(result);
     }
 
     /// <summary>Remove um evento manual. Somente admins do grupo.</summary>
@@ -81,12 +72,9 @@ public sealed class CalendarController : GroupAuthorizedController
         Guid groupId, Guid eventId, CancellationToken ct)
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
-        try
-        {
-            await _service.DeleteEventAsync(groupId, eventId, ct);
-            return NoContent();
-        }
-        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+
+        var result = await _service.DeleteEventAsync(groupId, eventId, ct);
+        return ToResponse(result);
     }
 
     // ─── Categorias ──────────────────────────────────────────────────────────
@@ -95,12 +83,8 @@ public sealed class CalendarController : GroupAuthorizedController
     [HttpGet("group/{groupId:guid}/categories")]
     public async Task<IActionResult> GetCategories(Guid groupId, CancellationToken ct)
     {
-        try
-        {
-            var result = await _service.GetCategoriesAsync(groupId, ct);
-            return Ok(result);
-        }
-        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+        var result = await _service.GetCategoriesAsync(groupId, ct);
+        return ToResponse(result);
     }
 
     /// <summary>Cria uma categoria. Somente admins do grupo.</summary>
@@ -109,12 +93,9 @@ public sealed class CalendarController : GroupAuthorizedController
         Guid groupId, [FromBody] CreateCalendarCategoryDto dto, CancellationToken ct)
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
-        try
-        {
-            var result = await _service.CreateCategoryAsync(groupId, dto, ct);
-            return Created($"/api/Calendar/group/{groupId}/categories/{result.Id}", result);
-        }
-        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+
+        var result = await _service.CreateCategoryAsync(groupId, dto, ct);
+        return ToResponse(result);
     }
 
     /// <summary>Atualiza uma categoria. Somente admins do grupo.</summary>
@@ -123,12 +104,9 @@ public sealed class CalendarController : GroupAuthorizedController
         Guid groupId, Guid categoryId, [FromBody] UpdateCalendarCategoryDto dto, CancellationToken ct)
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
-        try
-        {
-            var result = await _service.UpdateCategoryAsync(groupId, categoryId, dto, ct);
-            return Ok(result);
-        }
-        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+
+        var result = await _service.UpdateCategoryAsync(groupId, categoryId, dto, ct);
+        return ToResponse(result);
     }
 
     /// <summary>Remove uma categoria (não-system). Somente admins do grupo.</summary>
@@ -137,11 +115,8 @@ public sealed class CalendarController : GroupAuthorizedController
         Guid groupId, Guid categoryId, CancellationToken ct)
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
-        try
-        {
-            await _service.DeleteCategoryAsync(groupId, categoryId, ct);
-            return NoContent();
-        }
-        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+
+        var result = await _service.DeleteCategoryAsync(groupId, categoryId, ct);
+        return ToResponse(result);
     }
 }

@@ -1,4 +1,5 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Calendar;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
@@ -42,16 +43,17 @@ public sealed class CalendarService : ICalendarService
     // Events
     // ─────────────────────────────────────────────────────────────────────────
 
-    public async Task<List<CalendarEventDto>> GetEventsAsync(
+    public async Task<Result<List<CalendarEventDto>>> GetEventsAsync(
         Guid groupId,
         DateOnly start,
         DateOnly end,
         CancellationToken ct = default)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return Result<List<CalendarEventDto>>.Fail(groupCheck.Error!, groupCheck.Status);
 
         if (start > end)
-            throw new InvalidOperationException("A data inicial não pode ser maior que a data final.");
+            return Result<List<CalendarEventDto>>.Fail("A data inicial não pode ser maior que a data final.", ResultStatus.BadRequest);
 
         var (startUtc, endUtc) = BuildUtcRange(start, end);
 
@@ -130,24 +132,32 @@ public sealed class CalendarService : ICalendarService
         result.AddRange(BuildHolidayEvents(allHolidays, start, end));
 
         result.Sort(EventComparer);
-        return result;
+        return Result<List<CalendarEventDto>>.Ok(result);
     }
 
-    public async Task<CalendarEventDto> CreateEventAsync(
+    public async Task<Result<CalendarEventDto>> CreateEventAsync(
         Guid groupId,
         Guid userId,
         CreateCalendarEventDto dto,
         CancellationToken ct = default)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return Result<CalendarEventDto>.Fail(groupCheck.Error!, groupCheck.Status);
 
-        var eventDate = ParseRequiredDate(dto.Date);
-        var (eventTime, timeTbd) = ParseEventTime(dto.Time, dto.TimeTBD);
+        var dateResult = ParseRequiredDate(dto.Date);
+        if (!dateResult.Success) return Result<CalendarEventDto>.Fail(dateResult.Error!, dateResult.Status);
+        var eventDate = dateResult.Data!;
+
+        var timeResult = ParseEventTime(dto.Time, dto.TimeTBD);
+        if (!timeResult.Success) return Result<CalendarEventDto>.Fail(timeResult.Error!, timeResult.Status);
+        var (eventTime, timeTbd) = timeResult.Data!;
 
         CalendarCategoryEntity? category = null;
         if (dto.CategoryId.HasValue)
         {
-            category = await GetCategoryOrThrowAsync(groupId, dto.CategoryId.Value, ct);
+            var categoryResult = await GetCategoryOrFailAsync(groupId, dto.CategoryId.Value, ct);
+            if (!categoryResult.Success) return Result<CalendarEventDto>.Fail(categoryResult.Error!, categoryResult.Status);
+            category = categoryResult.Data!;
         }
 
         var ev = new CalendarEventEntity(
@@ -163,10 +173,10 @@ public sealed class CalendarService : ICalendarService
         _context.CalendarEvents.Add(ev);
         await _context.SaveChangesAsync(ct);
 
-        return MapEventToDto(ev, category);
+        return Result<CalendarEventDto>.Ok(MapEventToDto(ev, category), "Evento criado com sucesso.", ResultStatus.Created);
     }
 
-    public async Task<CalendarEventDto> UpdateEventAsync(
+    public async Task<Result<CalendarEventDto>> UpdateEventAsync(
         Guid groupId,
         Guid eventId,
         UpdateCalendarEventDto dto,
@@ -174,20 +184,32 @@ public sealed class CalendarService : ICalendarService
     {
         var ev = await _context.CalendarEvents
             .Include(e => e.Category)
-            .FirstOrDefaultAsync(e => e.Id == eventId && e.GroupId == groupId, ct)
-            ?? throw new InvalidOperationException("Evento não encontrado.");
+            .FirstOrDefaultAsync(e => e.Id == eventId && e.GroupId == groupId, ct);
 
-        var newDate = dto.Date is not null ? ParseRequiredDate(dto.Date) : (DateOnly?)null;
+        if (ev is null)
+            return Result<CalendarEventDto>.Fail("Evento não encontrado.", ResultStatus.NotFound);
+
+        DateOnly? newDate = null;
+        if (dto.Date is not null)
+        {
+            var dateResult = ParseRequiredDate(dto.Date);
+            if (!dateResult.Success) return Result<CalendarEventDto>.Fail(dateResult.Error!, dateResult.Status);
+            newDate = dateResult.Data!;
+        }
 
         var effectiveTimeTbd = dto.TimeTBD ?? ev.TimeTBD;
-        var effectiveTime = ResolveUpdatedTime(ev, dto, effectiveTimeTbd);
+        var timeResult = ResolveUpdatedTime(ev, dto, effectiveTimeTbd);
+        if (!timeResult.Success) return Result<CalendarEventDto>.Fail(timeResult.Error!, timeResult.Status);
+        var effectiveTime = timeResult.Data;
 
         Guid? newCategoryId = dto.CategoryId ?? ev.CategoryId;
         CalendarCategoryEntity? category = ev.Category;
 
         if (dto.CategoryId.HasValue)
         {
-            category = await GetCategoryOrThrowAsync(groupId, dto.CategoryId.Value, ct);
+            var categoryResult = await GetCategoryOrFailAsync(groupId, dto.CategoryId.Value, ct);
+            if (!categoryResult.Success) return Result<CalendarEventDto>.Fail(categoryResult.Error!, categoryResult.Status);
+            category = categoryResult.Data!;
         }
 
         ev.Update(
@@ -200,10 +222,10 @@ public sealed class CalendarService : ICalendarService
 
         await _context.SaveChangesAsync(ct);
 
-        return MapEventToDto(ev, category);
+        return Result<CalendarEventDto>.Ok(MapEventToDto(ev, category), "Evento atualizado com sucesso.");
     }
 
-    public async Task DeleteEventAsync(
+    public async Task<Result> DeleteEventAsync(
         Guid groupId,
         Guid eventId,
         CancellationToken ct = default)
@@ -212,54 +234,62 @@ public sealed class CalendarService : ICalendarService
             .FirstOrDefaultAsync(e => e.Id == eventId && e.GroupId == groupId, ct);
 
         if (ev is null)
-            return;
+            return Result.Ok("Evento removido com sucesso.");
 
         _context.CalendarEvents.Remove(ev);
         await _context.SaveChangesAsync(ct);
+
+        return Result.Ok("Evento removido com sucesso.");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Categories
     // ─────────────────────────────────────────────────────────────────────────
 
-    public async Task<List<CalendarCategoryDto>> GetCategoriesAsync(
+    public async Task<Result<List<CalendarCategoryDto>>> GetCategoriesAsync(
         Guid groupId,
         CancellationToken ct = default)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return Result<List<CalendarCategoryDto>>.Fail(groupCheck.Error!, groupCheck.Status);
 
-        return await _context.CalendarCategories
+        var categories = await _context.CalendarCategories
             .AsNoTracking()
             .Where(c => c.GroupId == groupId)
             .OrderBy(c => c.Name)
             .Select(c => MapCategoryToDto(c))
             .ToListAsync(ct);
+
+        return Result<List<CalendarCategoryDto>>.Ok(categories);
     }
 
-    public async Task<CalendarCategoryDto> CreateCategoryAsync(
+    public async Task<Result<CalendarCategoryDto>> CreateCategoryAsync(
         Guid groupId,
         CreateCalendarCategoryDto dto,
         CancellationToken ct = default)
     {
-        await EnsureGroupExistsAsync(groupId, ct);
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return Result<CalendarCategoryDto>.Fail(groupCheck.Error!, groupCheck.Status);
 
         var category = new CalendarCategoryEntity(groupId, dto.Name, dto.Color, dto.Icon);
 
         _context.CalendarCategories.Add(category);
         await _context.SaveChangesAsync(ct);
 
-        return MapCategoryToDto(category);
+        return Result<CalendarCategoryDto>.Ok(MapCategoryToDto(category), "Categoria criada com sucesso.", ResultStatus.Created);
     }
 
-    public async Task<CalendarCategoryDto> UpdateCategoryAsync(
+    public async Task<Result<CalendarCategoryDto>> UpdateCategoryAsync(
         Guid groupId,
         Guid categoryId,
         UpdateCalendarCategoryDto dto,
         CancellationToken ct = default)
     {
         var category = await _context.CalendarCategories
-            .FirstOrDefaultAsync(c => c.Id == categoryId && c.GroupId == groupId, ct)
-            ?? throw new InvalidOperationException("Categoria não encontrada.");
+            .FirstOrDefaultAsync(c => c.Id == categoryId && c.GroupId == groupId, ct);
+
+        if (category is null)
+            return Result<CalendarCategoryDto>.Fail("Categoria não encontrada.", ResultStatus.NotFound);
 
         if (dto.Name is not null)
             category.Rename(dto.Name);
@@ -272,10 +302,10 @@ public sealed class CalendarService : ICalendarService
 
         await _context.SaveChangesAsync(ct);
 
-        return MapCategoryToDto(category);
+        return Result<CalendarCategoryDto>.Ok(MapCategoryToDto(category), "Categoria atualizada com sucesso.");
     }
 
-    public async Task DeleteCategoryAsync(
+    public async Task<Result> DeleteCategoryAsync(
         Guid groupId,
         Guid categoryId,
         CancellationToken ct = default)
@@ -284,33 +314,37 @@ public sealed class CalendarService : ICalendarService
             .FirstOrDefaultAsync(c => c.Id == categoryId && c.GroupId == groupId, ct);
 
         if (category is null)
-            return;
+            return Result.Ok("Categoria removida com sucesso.");
 
         if (category.IsSystem)
-            throw new InvalidOperationException("Categorias do sistema não podem ser excluídas.");
+            return Result.Fail("Categorias do sistema não podem ser excluídas.", ResultStatus.BadRequest);
 
         _context.CalendarCategories.Remove(category);
         await _context.SaveChangesAsync(ct);
+
+        return Result.Ok("Categoria removida com sucesso.");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
 
-    private async Task EnsureGroupExistsAsync(Guid groupId, CancellationToken ct)
+    private async Task<Result> EnsureGroupExistsAsync(Guid groupId, CancellationToken ct)
     {
         if (groupId == Guid.Empty)
-            throw new InvalidOperationException("GroupId inválido.");
+            return Result.Fail("GroupId inválido.", ResultStatus.BadRequest);
 
         var exists = await _context.Groups
             .AsNoTracking()
             .AnyAsync(g => g.Id == groupId, ct);
 
         if (!exists)
-            throw new InvalidOperationException("Grupo não encontrado.");
+            return Result.Fail("Grupo não encontrado.", ResultStatus.NotFound);
+
+        return Result.Ok();
     }
 
-    private async Task<CalendarCategoryEntity> GetCategoryOrThrowAsync(
+    private async Task<Result<CalendarCategoryEntity>> GetCategoryOrFailAsync(
         Guid groupId,
         Guid categoryId,
         CancellationToken ct)
@@ -319,48 +353,51 @@ public sealed class CalendarService : ICalendarService
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == categoryId && c.GroupId == groupId, ct);
 
-        return category ?? throw new InvalidOperationException("Categoria não encontrada.");
+        if (category is null)
+            return Result<CalendarCategoryEntity>.Fail("Categoria não encontrada.", ResultStatus.NotFound);
+
+        return Result<CalendarCategoryEntity>.Ok(category);
     }
 
-    private static DateOnly ParseRequiredDate(string date)
+    private static Result<DateOnly> ParseRequiredDate(string date)
     {
         if (!DateOnly.TryParse(date, out var parsed))
-            throw new InvalidOperationException("Data inválida. Use o formato YYYY-MM-DD.");
+            return Result<DateOnly>.Fail("Data inválida. Use o formato YYYY-MM-DD.", ResultStatus.BadRequest);
 
-        return parsed;
+        return Result<DateOnly>.Ok(parsed);
     }
 
-    private static (TimeOnly? Time, bool TimeTbd) ParseEventTime(string? time, bool timeTbd)
+    private static Result<(TimeOnly? Time, bool TimeTbd)> ParseEventTime(string? time, bool timeTbd)
     {
         if (timeTbd)
-            return (null, true);
+            return Result<(TimeOnly? Time, bool TimeTbd)>.Ok((null, true));
 
         if (string.IsNullOrWhiteSpace(time))
-            return (null, false);
+            return Result<(TimeOnly? Time, bool TimeTbd)>.Ok((null, false));
 
         if (!TimeOnly.TryParse(time, out var parsed))
-            throw new InvalidOperationException("Horário inválido. Use o formato HH:mm.");
+            return Result<(TimeOnly? Time, bool TimeTbd)>.Fail("Horário inválido. Use o formato HH:mm.", ResultStatus.BadRequest);
 
-        return (parsed, false);
+        return Result<(TimeOnly? Time, bool TimeTbd)>.Ok((parsed, false));
     }
 
-    private static TimeOnly? ResolveUpdatedTime(
+    private static Result<TimeOnly?> ResolveUpdatedTime(
         CalendarEventEntity currentEvent,
         UpdateCalendarEventDto dto,
         bool effectiveTimeTbd)
     {
         if (effectiveTimeTbd)
-            return null;
+            return Result<TimeOnly?>.Ok(null);
 
         if (dto.Time is not null)
         {
             if (!TimeOnly.TryParse(dto.Time, out var parsed))
-                throw new InvalidOperationException("Horário inválido. Use o formato HH:mm.");
+                return Result<TimeOnly?>.Fail("Horário inválido. Use o formato HH:mm.", ResultStatus.BadRequest);
 
-            return parsed;
+            return Result<TimeOnly?>.Ok(parsed);
         }
 
-        return currentEvent.EventTime;
+        return Result<TimeOnly?>.Ok(currentEvent.EventTime);
     }
 
     private static (DateTime StartUtc, DateTime EndUtc) BuildUtcRange(DateOnly start, DateOnly end)
