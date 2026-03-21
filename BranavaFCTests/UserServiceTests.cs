@@ -1,5 +1,6 @@
-﻿// Tests/Application/Services/UserServiceTests.cs
+// Tests/Application/Services/UserServiceTests.cs
 using BratnavaFC.Application.Services;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Users;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
@@ -52,11 +53,12 @@ public class UserServiceTests
             BirthDate: null);
 
         // Act
-        Func<Task> act = () => sut.CreateUserAsync(dto, CancellationToken.None);
+        var result = await sut.CreateUserAsync(dto, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<ApplicationException>()
-            .WithMessage("User already exists with the user name 'luis'.");
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("User already exists with the user name 'luis'.");
+        result.Status.Should().Be(ResultStatus.BadRequest);
     }
 
     [Fact]
@@ -94,11 +96,12 @@ public class UserServiceTests
             BirthDate: null);
 
         // Act
-        Func<Task> act = () => sut.CreateUserAsync(dto, CancellationToken.None);
+        var result = await sut.CreateUserAsync(dto, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<ApplicationException>()
-            .WithMessage("User already exists with the user name '  LUIS  '.");
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("User already exists with the user name '  LUIS  '.");
+        result.Status.Should().Be(ResultStatus.BadRequest);
     }
 
     [Fact]
@@ -129,11 +132,12 @@ public class UserServiceTests
         );
 
         // Act
-        var act = async () => await sut.CreateUserAsync(dto, CancellationToken.None);
+        var result = await sut.CreateUserAsync(dto, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<ApplicationException>()
-            .WithMessage("User already exists with the email 'a@test.com'.");
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("User already exists with the email 'a@test.com'.");
+        result.Status.Should().Be(ResultStatus.BadRequest);
     }
 
     [Fact]
@@ -167,9 +171,11 @@ public class UserServiceTests
         );
 
         // Act
-        await sut.CreateUserAsync(dto, CancellationToken.None);
+        var result = await sut.CreateUserAsync(dto, CancellationToken.None);
 
         // Assert
+        result.Success.Should().BeTrue();
+
         repo.Verify(r => r.Add(It.IsAny<UserEntity>()), Times.Once);
         repo.Verify(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
 
@@ -220,12 +226,12 @@ public class UserServiceTests
         };
 
         // Act
-        Func<Task> act = async () => await sut.GetAllAsync(req, CancellationToken.None);
+        var result = await sut.GetAllAsync(req, CancellationToken.None);
 
         // Assert (não pode estourar Nullable object must have a value)
-        await act.Should().NotThrowAsync();
+        result.Success.Should().BeTrue();
 
-        var res = await sut.GetAllAsync(req, CancellationToken.None);
+        var res = result.Data!;
         res.Items.Should().HaveCount(1);
         res.Items[0].Id.Should().Be(user.Id);
 
@@ -265,11 +271,12 @@ public class UserServiceTests
         };
 
         // Act
-        Func<Task> act = () => sut.ChangePasswordAsync(user.Id, dto, CancellationToken.None);
+        var result = await sut.ChangePasswordAsync(user.Id, dto, CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<ApplicationException>()
-            .WithMessage("Current password is invalid.");
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("Current password is invalid.");
+        result.Status.Should().Be(ResultStatus.BadRequest);
     }
 
     [Fact]
@@ -306,9 +313,11 @@ public class UserServiceTests
         };
 
         // Act
-        await sut.ChangePasswordAsync(user.Id, dto, CancellationToken.None);
+        var result = await sut.ChangePasswordAsync(user.Id, dto, CancellationToken.None);
 
         // Assert
+        result.Success.Should().BeTrue();
+
         repo.Verify(r => r.Update(It.IsAny<UserEntity>()), Times.Once);
         repo.Verify(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
 
@@ -347,10 +356,11 @@ public class UserServiceTests
             Status = Status.Inactive
         };
 
-        // Act + Assert
-        // Se você não tem UpdateAsync no service, remova esse teste.
-        Func<Task> act = () => sut.UpdateAsync(user.Id, dto, CancellationToken.None);
-        await act.Should().NotThrowAsync();
+        // Act
+        var result = await sut.UpdateAsync(user.Id, dto, CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
 
         user.Status.Should().Be(Status.Inactive);
         user.InactivatedAt.Should().NotBeNull();
@@ -386,10 +396,11 @@ public class UserServiceTests
             Status = Status.Active
         };
 
-        // Act + Assert
-        // Se você não tem UpdateAsync no service, remova esse teste.
-        Func<Task> act = () => sut.UpdateAsync(user.Id, dto, CancellationToken.None);
-        await act.Should().NotThrowAsync();
+        // Act
+        var result = await sut.UpdateAsync(user.Id, dto, CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
 
         user.Status.Should().Be(Status.Active);
         user.InactivatedAt.Should().BeNull();

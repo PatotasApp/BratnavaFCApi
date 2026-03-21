@@ -1,4 +1,4 @@
-﻿using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos.Users;
 using BratnavaFC.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
@@ -9,7 +9,7 @@ namespace BratnavaFC.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = "User,Admin,GodMode")]
-public sealed class UsersController : ControllerBase
+public sealed class UsersController : BaseApiController
 {
     private readonly IUserService _userService;
 
@@ -24,15 +24,15 @@ public sealed class UsersController : ControllerBase
     {
         if (dto == null) return BadRequest();
 
-        await _userService.CreateUserAsync(dto, cancellationToken);
-        return StatusCode(StatusCodes.Status201Created);
+        var result = await _userService.CreateUserAsync(dto, cancellationToken);
+        return ToResponse(result, overrideSuccessStatus: 201);
     }
 
     [HttpGet("{userId:guid}")]
     public async Task<IActionResult> GetUserAsync(Guid userId, CancellationToken cancellationToken)
     {
-        var user = await _userService.GetUserByIdAsync(userId, cancellationToken);
-        return Ok(user);
+        var result = await _userService.GetUserByIdAsync(userId, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpGet]
@@ -56,7 +56,7 @@ public sealed class UsersController : ControllerBase
         };
 
         var result = await _userService.GetAllAsync(req, cancellationToken);
-        return Ok(result);
+        return ToResponse(result);
     }
 
     [HttpPut("{userId:guid}")]
@@ -64,8 +64,8 @@ public sealed class UsersController : ControllerBase
     {
         if (dto == null) return BadRequest();
 
-        await _userService.UpdateAsync(userId, dto, cancellationToken);
-        return NoContent();
+        var result = await _userService.UpdateAsync(userId, dto, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpPut("{userId:guid}/password")]
@@ -73,28 +73,21 @@ public sealed class UsersController : ControllerBase
     {
         if (dto == null) return BadRequest();
 
-        try
-        {
-            await _userService.ChangePasswordAsync(userId, dto, cancellationToken);
-            return NoContent();
-        }
-        catch (ApplicationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var result = await _userService.ChangePasswordAsync(userId, dto, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpPut("{userId:guid}/inactivate")]
     public async Task<IActionResult> InactivateAsync(Guid userId, CancellationToken cancellationToken)
     {
-        await _userService.InactivateAsync(userId, cancellationToken);
-        return NoContent();
+        var result = await _userService.InactivateAsync(userId, cancellationToken);
+        return ToResponse(result);
     }
 
     [HttpPut("{userId:guid}/reactivate")]
     public async Task<IActionResult> ReactivateAsync(Guid userId, CancellationToken cancellationToken)
     {
-        await _userService.ReactivateAsync(userId, cancellationToken);
-        return NoContent();
+        var result = await _userService.ReactivateAsync(userId, cancellationToken);
+        return ToResponse(result);
     }
 }

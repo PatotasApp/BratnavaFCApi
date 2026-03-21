@@ -1,4 +1,5 @@
-﻿using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Dtos.Users;
 using BratnavaFC.Domain.Entities;
@@ -29,46 +30,40 @@ public class UserService : IUserService
         _db = db;
     }
 
-    public async Task CreateUserAsync(CreateUserDto dto, CancellationToken cancellationToken)
+    public async Task<Result> CreateUserAsync(CreateUserDto dto, CancellationToken cancellationToken)
     {
-        try
-        {
-            var username = dto.UserName?.Trim().ToLower();
+        var username = dto.UserName?.Trim().ToLower();
 
-            var existing = await _db.Users
-                .FirstOrDefaultAsync(x => x.Email == dto.Email || x.UserName == username, cancellationToken);
+        var existing = await _db.Users
+            .FirstOrDefaultAsync(x => x.Email == dto.Email || x.UserName == username, cancellationToken);
 
-            if (existing?.UserName == username)
-                throw new ApplicationException($"User already exists with the user name '{dto.UserName}'.");
+        if (existing?.UserName == username)
+            return Result.Fail($"User already exists with the user name '{dto.UserName}'.", ResultStatus.BadRequest);
 
-            if (existing?.Email == dto.Email)
-                throw new ApplicationException($"User already exists with the email '{dto.Email}'.");
+        if (existing?.Email == dto.Email)
+            return Result.Fail($"User already exists with the email '{dto.Email}'.", ResultStatus.BadRequest);
 
-            var tempUser = new UserEntity(
-                dto.UserName,
-                dto.FirstName,
-                dto.LastName,
-                dto.Email,
-                passwordHashed: "temp",
-                phone: dto.Phone,
-                birthDate: dto.BirthDate);
+        var tempUser = new UserEntity(
+            dto.UserName,
+            dto.FirstName,
+            dto.LastName,
+            dto.Email,
+            passwordHashed: "temp",
+            phone: dto.Phone,
+            birthDate: dto.BirthDate);
 
-            var hashed = _passwordHasher.HashPassword(tempUser, dto.Password);
-            tempUser.SetPasswordHash(hashed);
+        var hashed = _passwordHasher.HashPassword(tempUser, dto.Password);
+        tempUser.SetPasswordHash(hashed);
 
-            _repository.Add(tempUser);
-            await _repository.SaveChangesAsync(cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error trying to register user.");
-            throw;
-        }
+        _repository.Add(tempUser);
+        await _repository.SaveChangesAsync(cancellationToken);
+
+        return Result.Ok("Usuário criado com sucesso.");
     }
 
-    public Task<UserDto?> GetUserByIdAsync(Guid userId, CancellationToken cancellationToken)
+    public async Task<Result<UserDto>> GetUserByIdAsync(Guid userId, CancellationToken cancellationToken)
     {
-        return _db.Users
+        var user = await _db.Users
             .Include(x => x.Admins)
             .Include(x => x.Players)
             .Select(u => new UserDto
@@ -93,9 +88,14 @@ public class UserService : IUserService
                 GroupAdminIds = u.Admins.Select(x => x.GroupId).ToArray()
             })
             .FirstOrDefaultAsync(x => x.Id == userId, cancellationToken);
+
+        if (user is null)
+            return Result<UserDto>.Fail("Usuário não encontrado.", ResultStatus.NotFound);
+
+        return Result<UserDto>.Ok(user);
     }
 
-    public async Task<PagedResultDto<UserListItemDto>> GetAllAsync(ListUsersRequestDto req, CancellationToken cancellationToken)
+    public async Task<Result<PagedResultDto<UserListItemDto>>> GetAllAsync(ListUsersRequestDto req, CancellationToken cancellationToken)
     {
         var page = req.Page <= 0 ? 1 : req.Page;
         var pageSize = req.PageSize <= 0 ? 20 : req.PageSize;
@@ -145,153 +145,137 @@ public class UserService : IUserService
             })
             .ToListAsync(cancellationToken);
 
-        return new PagedResultDto<UserListItemDto>
+        var pagedResult = new PagedResultDto<UserListItemDto>
         {
             Page = page,
             PageSize = pageSize,
             Total = total,
             Items = items
         };
+
+        return Result<PagedResultDto<UserListItemDto>>.Ok(pagedResult);
     }
 
-    public async Task UpdateAsync(Guid userId, UpdateUserDto dto, CancellationToken cancellationToken)
+    public async Task<Result> UpdateAsync(Guid userId, UpdateUserDto dto, CancellationToken cancellationToken)
     {
-        try
+        var user = await _repository.GetByIdIncludingInactiveAsync(userId, cancellationToken);
+        if (user == null)
+            return Result.Fail("Usuário não encontrado.", ResultStatus.NotFound);
+
+        // username/email duplicados (se vierem)
+        if (!string.IsNullOrWhiteSpace(dto.UserName))
         {
-            var user = await _repository.GetByIdIncludingInactiveAsync(userId, cancellationToken);
-            if (user == null) throw new ApplicationException("User not found.");
+            var username = dto.UserName.Trim().ToLower();
+            var existsUserName = await _db.Users
+                .AnyAsync(u => u.Id != userId && u.UserName.ToLower() == username, cancellationToken);
 
-            // username/email duplicados (se vierem)
-            if (!string.IsNullOrWhiteSpace(dto.UserName))
-            {
-                var username = dto.UserName.Trim().ToLower();
-                var existsUserName = await _db.Users
-                    .AnyAsync(u => u.Id != userId && u.UserName.ToLower() == username, cancellationToken);
+            if (existsUserName)
+                return Result.Fail($"User already exists with the user name '{dto.UserName}'.", ResultStatus.BadRequest);
 
-                if (existsUserName)
-                    throw new ApplicationException($"User already exists with the user name '{dto.UserName}'.");
-                user.SetUserName(dto.UserName);
-            }
-
-            if (!string.IsNullOrWhiteSpace(dto.Email))
-            {
-                var email = dto.Email.Trim().ToLower();
-                var existsEmail = await _db.Users
-                    .AnyAsync(u => u.Id != userId && u.Email.ToLower() == email, cancellationToken);
-
-                if (existsEmail)
-                    throw new ApplicationException($"User already exists with the email '{dto.Email}'.");
-                user.SetEmail(dto.Email);
-            }
-
-            // profile (só aplica se tiver algo)
-            var anyProfile =
-                !string.IsNullOrWhiteSpace(dto.FirstName) ||
-                !string.IsNullOrWhiteSpace(dto.LastName) ||
-                dto.BirthDate.HasValue ||
-                dto.Phone != null; // null pode ser intenção de limpar
-
-            if (anyProfile)
-            {
-                user.UpdateProfile(
-                    firstName: string.IsNullOrWhiteSpace(dto.FirstName) ? user.FirstName : dto.FirstName!,
-                    lastName: string.IsNullOrWhiteSpace(dto.LastName) ? user.LastName : dto.LastName!,
-                    birthDate: dto.BirthDate.HasValue ? dto.BirthDate : user.BirthDate,
-                    phone: dto.Phone // pode vir null pra limpar
-                );
-            }
-
-            if (dto.Role.HasValue)
-            {
-                if (!Enum.IsDefined(typeof(UserRole), dto.Role.Value))
-                    throw new ApplicationException("Invalid role.");
-
-                user.SetRole((UserRole)dto.Role.Value);
-            }
-
-            if (dto.Status.HasValue)
-            {
-                if (!Enum.IsDefined(typeof(Status), dto.Status.Value))
-                    throw new ApplicationException("Invalid status.");
-
-                user.ChangeStatus((Status)dto.Status.Value);
-            }
-
-            _repository.Update(user);
-            await _repository.SaveChangesAsync(cancellationToken);
+            user.SetUserName(dto.UserName);
         }
-        catch (Exception ex)
+
+        if (!string.IsNullOrWhiteSpace(dto.Email))
         {
-            _logger.LogError(ex, "Error trying to update user.");
-            throw;
+            var email = dto.Email.Trim().ToLower();
+            var existsEmail = await _db.Users
+                .AnyAsync(u => u.Id != userId && u.Email.ToLower() == email, cancellationToken);
+
+            if (existsEmail)
+                return Result.Fail($"User already exists with the email '{dto.Email}'.", ResultStatus.BadRequest);
+
+            user.SetEmail(dto.Email);
         }
+
+        // profile (só aplica se tiver algo)
+        var anyProfile =
+            !string.IsNullOrWhiteSpace(dto.FirstName) ||
+            !string.IsNullOrWhiteSpace(dto.LastName) ||
+            dto.BirthDate.HasValue ||
+            dto.Phone != null; // null pode ser intenção de limpar
+
+        if (anyProfile)
+        {
+            user.UpdateProfile(
+                firstName: string.IsNullOrWhiteSpace(dto.FirstName) ? user.FirstName : dto.FirstName!,
+                lastName: string.IsNullOrWhiteSpace(dto.LastName) ? user.LastName : dto.LastName!,
+                birthDate: dto.BirthDate.HasValue ? dto.BirthDate : user.BirthDate,
+                phone: dto.Phone // pode vir null pra limpar
+            );
+        }
+
+        if (dto.Role.HasValue)
+        {
+            if (!Enum.IsDefined(typeof(UserRole), dto.Role.Value))
+                return Result.Fail("Invalid role.", ResultStatus.BadRequest);
+
+            user.SetRole((UserRole)dto.Role.Value);
+        }
+
+        if (dto.Status.HasValue)
+        {
+            if (!Enum.IsDefined(typeof(Status), dto.Status.Value))
+                return Result.Fail("Invalid status.", ResultStatus.BadRequest);
+
+            user.ChangeStatus((Status)dto.Status.Value);
+        }
+
+        _repository.Update(user);
+        await _repository.SaveChangesAsync(cancellationToken);
+
+        return Result.Ok("Usuário atualizado com sucesso.");
     }
 
-    public async Task ChangePasswordAsync(Guid userId, ChangePasswordDto dto, CancellationToken cancellationToken)
+    public async Task<Result> ChangePasswordAsync(Guid userId, ChangePasswordDto dto, CancellationToken cancellationToken)
     {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(dto.CurrentPassword))
-                throw new ApplicationException("CurrentPassword is required.");
+        if (string.IsNullOrWhiteSpace(dto.CurrentPassword))
+            return Result.Fail("CurrentPassword is required.", ResultStatus.BadRequest);
 
-            if (string.IsNullOrWhiteSpace(dto.NewPassword))
-                throw new ApplicationException("NewPassword is required.");
+        if (string.IsNullOrWhiteSpace(dto.NewPassword))
+            return Result.Fail("NewPassword is required.", ResultStatus.BadRequest);
 
-            var user = await _repository.GetByIdIncludingInactiveAsync(userId, cancellationToken);
-            if (user == null) throw new ApplicationException("User not found.");
+        var user = await _repository.GetByIdIncludingInactiveAsync(userId, cancellationToken);
+        if (user == null)
+            return Result.Fail("Usuário não encontrado.", ResultStatus.NotFound);
 
-            var verify = _passwordHasher.VerifyHashedPassword(user, user.Password, dto.CurrentPassword);
-            if (verify == PasswordVerificationResult.Failed)
-                throw new ApplicationException("Current password is invalid.");
+        var verify = _passwordHasher.VerifyHashedPassword(user, user.Password, dto.CurrentPassword);
+        if (verify == PasswordVerificationResult.Failed)
+            return Result.Fail("Current password is invalid.", ResultStatus.BadRequest);
 
-            var newHash = _passwordHasher.HashPassword(user, dto.NewPassword);
-            user.SetPasswordHash(newHash);
+        var newHash = _passwordHasher.HashPassword(user, dto.NewPassword);
+        user.SetPasswordHash(newHash);
 
-            _repository.Update(user);
-            await _repository.SaveChangesAsync(cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error trying to change password.");
-            throw;
-        }
+        _repository.Update(user);
+        await _repository.SaveChangesAsync(cancellationToken);
+
+        return Result.Ok("Senha atualizada com sucesso.");
     }
 
-    public async Task InactivateAsync(Guid userId, CancellationToken cancellationToken)
+    public async Task<Result> InactivateAsync(Guid userId, CancellationToken cancellationToken)
     {
-        try
-        {
-            var user = await _repository.GetByIdIncludingInactiveAsync(userId, cancellationToken);
-            if (user == null) throw new ApplicationException("User not found.");
+        var user = await _repository.GetByIdIncludingInactiveAsync(userId, cancellationToken);
+        if (user == null)
+            return Result.Fail("Usuário não encontrado.", ResultStatus.NotFound);
 
-            user.Inactivate();
+        user.Inactivate();
 
-            _repository.Update(user);
-            await _repository.SaveChangesAsync(cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error trying to inactivate user.");
-            throw;
-        }
+        _repository.Update(user);
+        await _repository.SaveChangesAsync(cancellationToken);
+
+        return Result.Ok("Usuário removido com sucesso.");
     }
 
-    public async Task ReactivateAsync(Guid userId, CancellationToken cancellationToken)
+    public async Task<Result> ReactivateAsync(Guid userId, CancellationToken cancellationToken)
     {
-        try
-        {
-            var user = await _repository.GetByIdIncludingInactiveAsync(userId, cancellationToken);
-            if (user == null) throw new ApplicationException("User not found.");
+        var user = await _repository.GetByIdIncludingInactiveAsync(userId, cancellationToken);
+        if (user == null)
+            return Result.Fail("Usuário não encontrado.", ResultStatus.NotFound);
 
-            user.Reactivate();
+        user.Reactivate();
 
-            _repository.Update(user);
-            await _repository.SaveChangesAsync(cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error trying to reactivate user.");
-            throw;
-        }
+        _repository.Update(user);
+        await _repository.SaveChangesAsync(cancellationToken);
+
+        return Result.Ok("Usuário atualizado com sucesso.");
     }
 }
