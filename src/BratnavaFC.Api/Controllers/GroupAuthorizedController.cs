@@ -1,3 +1,4 @@
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -8,7 +9,7 @@ namespace BratnavaFC.Api.Controllers;
 /// <summary>
 /// Base controller that adds group-level admin authorization on top of global role checks.
 /// </summary>
-public abstract class GroupAuthorizedController : ControllerBase
+public abstract class GroupAuthorizedController : BaseApiController
 {
     protected Guid? GetCurrentUserId()
     {
