@@ -1,0 +1,441 @@
+using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
+using BratnavaFC.Domain.Dtos.Polls;
+using BratnavaFC.Domain.Entities;
+using BratnavaFC.Domain.Enums;
+using BratnavaFC.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
+
+namespace BratnavaFC.Application.Services;
+
+public sealed class PollService : IPollService
+{
+    private readonly AppDbContext _db;
+
+    public PollService(AppDbContext db) => _db = db;
+
+    public async Task<Result<List<PollSummaryDto>>> GetPollsAsync(Guid groupId, Guid playerId, CancellationToken ct = default)
+    {
+        try
+        {
+            var polls = await _db.Polls
+                .AsNoTracking()
+                .Where(p => p.GroupId == groupId)
+                .OrderByDescending(p => p.CreateDate)
+                .Select(p => new
+                {
+                    p.Id, p.Title, p.Description, p.AllowMultipleVotes, p.ShowVotes, p.Status, p.CreateDate,
+                    p.DeadlineDate, p.DeadlineTime,
+                    p.Type, p.EventDate, p.EventTime, p.EventLocation, p.EventIcon, p.CostType, p.CostAmount,
+                    OptionCount = p.Options.Count,
+                    TotalVoters = p.Votes.Select(v => v.PlayerId).Distinct().Count(),
+                    HasVoted = p.Votes.Any(v => v.PlayerId == playerId)
+                })
+                .ToListAsync(ct);
+
+            var dtos = polls.Select(p => new PollSummaryDto
+            {
+                Id = p.Id,
+                Title = p.Title,
+                Description = p.Description,
+                AllowMultipleVotes = p.AllowMultipleVotes,
+                ShowVotes = p.ShowVotes,
+                Status = p.Status,
+                DeadlineDate = p.DeadlineDate?.ToString("yyyy-MM-dd"),
+                DeadlineTime = p.DeadlineTime?.ToString("HH:mm"),
+                Type = p.Type,
+                EventDate = p.EventDate?.ToString("yyyy-MM-dd"),
+                EventTime = p.EventTime?.ToString("HH:mm"),
+                EventLocation = p.EventLocation,
+                EventIcon = p.EventIcon,
+                CostType = p.CostType,
+                CostAmount = p.CostAmount,
+                OptionCount = p.OptionCount,
+                TotalVoters = p.TotalVoters,
+                HasVoted = p.HasVoted,
+                CreateDate = p.CreateDate
+            }).ToList();
+
+            return Result<List<PollSummaryDto>>.Ok(dtos);
+        }
+        catch (Exception ex)
+        {
+            return Result<List<PollSummaryDto>>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<PollDto>> GetPollAsync(Guid groupId, Guid pollId, Guid playerId, bool isAdmin, CancellationToken ct = default)
+    {
+        try
+        {
+            var poll = await _db.Polls
+                .AsNoTracking()
+                .Include(p => p.Options)
+                .Include(p => p.Votes)
+                    .ThenInclude(v => v.Option)
+                .FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
+
+            if (poll is null)
+                return Result<PollDto>.Fail("Votação não encontrada.");
+
+            var votesWithPlayer = await _db.PollVotes
+                .AsNoTracking()
+                .Where(v => v.PollId == pollId)
+                .Join(_db.Players.AsNoTracking(), v => v.PlayerId, p => p.Id, (v, p) => new PollVoteDto
+                {
+                    OptionId = v.OptionId,
+                    PlayerId = v.PlayerId,
+                    PlayerName = p.Name
+                })
+                .ToListAsync(ct);
+
+            var myVotes = votesWithPlayer.Where(v => v.PlayerId == playerId).Select(v => v.OptionId).ToList();
+            var totalVoters = votesWithPlayer.Select(v => v.PlayerId).Distinct().Count();
+            var optionVoteCounts = votesWithPlayer.GroupBy(v => v.OptionId).ToDictionary(g => g.Key, g => g.Count());
+
+            List<PollMemberVoteDto>? members = null;
+            if (isAdmin)
+            {
+                var allPlayers = await _db.Players
+                    .AsNoTracking()
+                    .Where(p => p.GroupId == groupId && !p.IsGuest && p.UserId != null && p.Status == Status.Active)
+                    .OrderBy(p => p.Name)
+                    .Select(p => new { p.Id, p.Name })
+                    .ToListAsync(ct);
+
+                var votesByPlayer = votesWithPlayer
+                    .GroupBy(v => v.PlayerId)
+                    .ToDictionary(g => g.Key, g => g.Select(v => v.OptionId).ToList());
+
+                members = allPlayers.Select(p => new PollMemberVoteDto
+                {
+                    PlayerId = p.Id,
+                    PlayerName = p.Name,
+                    VotedOptionIds = votesByPlayer.TryGetValue(p.Id, out var ids) ? ids : new List<Guid>()
+                }).ToList();
+            }
+
+            var dto = new PollDto
+            {
+                Id = poll.Id,
+                Title = poll.Title,
+                Description = poll.Description,
+                AllowMultipleVotes = poll.AllowMultipleVotes,
+                ShowVotes = poll.ShowVotes,
+                Status = poll.Status,
+                DeadlineDate = poll.DeadlineDate?.ToString("yyyy-MM-dd"),
+                DeadlineTime = poll.DeadlineTime?.ToString("HH:mm"),
+                Type = poll.Type,
+                EventDate = poll.EventDate?.ToString("yyyy-MM-dd"),
+                EventTime = poll.EventTime?.ToString("HH:mm"),
+                EventLocation = poll.EventLocation,
+                EventIcon = poll.EventIcon,
+                CostType = poll.CostType,
+                CostAmount = poll.CostAmount,
+                CreateDate = poll.CreateDate,
+                MyVotedOptionIds = myVotes,
+                TotalVoters = totalVoters,
+                Votes = (poll.ShowVotes || isAdmin) ? votesWithPlayer : null,
+                Options = poll.Options.OrderBy(o => o.SortOrder).ThenBy(o => o.CreateDate)
+                    .Select(o => MapOption(o, optionVoteCounts.GetValueOrDefault(o.Id, 0))).ToList(),
+                Members = members
+            };
+
+            return Result<PollDto>.Ok(dto);
+        }
+        catch (Exception ex)
+        {
+            return Result<PollDto>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<PollDto>> CreatePollAsync(Guid groupId, Guid userId, CreatePollDto dto, CancellationToken ct = default)
+    {
+        try
+        {
+            if (!await _db.Groups.AnyAsync(g => g.Id == groupId, ct))
+                return Result<PollDto>.Fail("Grupo não encontrado.");
+
+            DateOnly? deadlineDate = dto.DeadlineDate is not null && DateOnly.TryParse(dto.DeadlineDate, out var dd) ? dd : null;
+            TimeOnly? deadlineTime = dto.DeadlineTime is not null && TimeOnly.TryParse(dto.DeadlineTime, out var dt) ? dt : null;
+            var poll = new PollEntity(groupId, dto.Title, dto.Description, dto.AllowMultipleVotes, dto.ShowVotes, userId, deadlineDate, deadlineTime);
+            _db.Polls.Add(poll);
+
+            if (dto.AddToCalendar && deadlineDate.HasValue)
+            {
+                var reminder = new CalendarEventEntity(
+                    groupId,
+                    $"Encerramento: {dto.Title}",
+                    dto.Description,
+                    categoryId: null,
+                    eventDate: deadlineDate.Value,
+                    eventTime: deadlineTime,
+                    timeTbd: deadlineTime is null,
+                    createdByUserId: userId,
+                    icon: "🗳️");
+                _db.CalendarEvents.Add(reminder);
+            }
+
+            await _db.SaveChangesAsync(ct);
+            return await GetPollAsync(groupId, poll.Id, Guid.Empty, true, ct);
+        }
+        catch (Exception ex)
+        {
+            return Result<PollDto>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<PollDto>> CreateEventPollAsync(Guid groupId, Guid userId, CreateEventPollDto dto, CancellationToken ct = default)
+    {
+        try
+        {
+            if (!await _db.Groups.AnyAsync(g => g.Id == groupId, ct))
+                return Result<PollDto>.Fail("Grupo não encontrado.");
+
+            if (!DateOnly.TryParse(dto.EventDate, out var eventDate))
+                return Result<PollDto>.Fail("Data do evento é obrigatória.");
+
+            TimeOnly? eventTime = dto.EventTime is not null && TimeOnly.TryParse(dto.EventTime, out var et) ? et : null;
+            DateOnly? deadlineDate = dto.DeadlineDate is not null && DateOnly.TryParse(dto.DeadlineDate, out var dd) ? dd : null;
+            TimeOnly? deadlineTime = dto.DeadlineTime is not null && TimeOnly.TryParse(dto.DeadlineTime, out var dt) ? dt : null;
+
+            var poll = new PollEntity(
+                groupId, dto.Title, dto.Description,
+                allowMultipleVotes: false, showVotes: dto.ShowVotes,
+                userId, deadlineDate, deadlineTime,
+                type: "event", eventDate: eventDate, eventTime: eventTime,
+                eventLocation: dto.EventLocation, eventIcon: dto.EventIcon,
+                costType: dto.CostType, costAmount: dto.CostAmount);
+
+            _db.Polls.Add(poll);
+            _db.PollOptions.Add(new PollOptionEntity(poll.Id, "Sim", null, null, 0));
+            _db.PollOptions.Add(new PollOptionEntity(poll.Id, "Talvez", null, null, 1));
+            _db.PollOptions.Add(new PollOptionEntity(poll.Id, "Não", null, null, 2));
+            await _db.SaveChangesAsync(ct);
+            return await GetPollAsync(groupId, poll.Id, Guid.Empty, true, ct);
+        }
+        catch (Exception ex)
+        {
+            return Result<PollDto>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result> ClosePollAsync(Guid groupId, Guid pollId, Guid userId, ClosePollDto dto, CancellationToken ct = default)
+    {
+        try
+        {
+            var poll = await _db.Polls.FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
+            if (poll is null) return Result.Fail("Votação não encontrada.");
+
+            poll.Close();
+
+            if (dto.CreateEvent && !string.IsNullOrWhiteSpace(dto.EventTitle) && !string.IsNullOrWhiteSpace(dto.EventDate)
+                && DateOnly.TryParse(dto.EventDate, out var eventDate))
+            {
+                TimeOnly? eventTime = dto.EventTime is not null && TimeOnly.TryParse(dto.EventTime, out var et) ? et : null;
+                Guid? categoryId = dto.CategoryId is not null && Guid.TryParse(dto.CategoryId, out var cid) ? cid : null;
+                var calendarEvent = new CalendarEventEntity(
+                    groupId, dto.EventTitle, dto.EventDescription, categoryId,
+                    eventDate, eventTime, false, userId, dto.EventIcon);
+                _db.CalendarEvents.Add(calendarEvent);
+            }
+
+            await _db.SaveChangesAsync(ct);
+            return Result.Ok();
+        }
+        catch (Exception ex)
+        {
+            return Result.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result> ReopenPollAsync(Guid groupId, Guid pollId, CancellationToken ct = default)
+    {
+        try
+        {
+            var poll = await _db.Polls.FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
+            if (poll is null) return Result.Fail("Votação não encontrada.");
+
+            poll.Reopen();
+            await _db.SaveChangesAsync(ct);
+            return Result.Ok();
+        }
+        catch (Exception ex)
+        {
+            return Result.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result> DeletePollAsync(Guid groupId, Guid pollId, CancellationToken ct = default)
+    {
+        try
+        {
+            var poll = await _db.Polls.FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
+            if (poll is null) return Result.Ok(); // já excluído — idempotente
+            _db.Polls.Remove(poll);
+            await _db.SaveChangesAsync(ct);
+            return Result.Ok();
+        }
+        catch (Exception ex)
+        {
+            return Result.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<PollOptionDto>> AddOptionAsync(Guid groupId, Guid pollId, AddPollOptionDto dto, CancellationToken ct = default)
+    {
+        try
+        {
+            var poll = await _db.Polls.FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
+            if (poll is null) return Result<PollOptionDto>.Fail("Votação não encontrada.");
+
+            var nextOrder = await _db.PollOptions.Where(o => o.PollId == pollId).CountAsync(ct);
+            var option = new PollOptionEntity(poll.Id, dto.Text, dto.Description, dto.ImageUrl, nextOrder);
+            _db.PollOptions.Add(option);
+            await _db.SaveChangesAsync(ct);
+            return Result<PollOptionDto>.Ok(MapOption(option, 0));
+        }
+        catch (Exception ex)
+        {
+            return Result<PollOptionDto>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<PollOptionDto>> UpdateOptionAsync(Guid groupId, Guid pollId, Guid optionId, UpdatePollOptionDto dto, CancellationToken ct = default)
+    {
+        try
+        {
+            var pollExists = await _db.Polls.AnyAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
+            if (!pollExists) return Result<PollOptionDto>.Fail("Votação não encontrada.");
+
+            var option = await _db.PollOptions.FirstOrDefaultAsync(o => o.Id == optionId && o.PollId == pollId, ct);
+            if (option is null) return Result<PollOptionDto>.Fail("Opção não encontrada.");
+
+            option.Update(dto.Text, dto.Description, dto.ImageUrl);
+            await _db.SaveChangesAsync(ct);
+            var voteCount = await _db.PollVotes.CountAsync(v => v.OptionId == optionId, ct);
+            return Result<PollOptionDto>.Ok(MapOption(option, voteCount));
+        }
+        catch (Exception ex)
+        {
+            return Result<PollOptionDto>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result> DeleteOptionAsync(Guid groupId, Guid pollId, Guid optionId, CancellationToken ct = default)
+    {
+        try
+        {
+            var pollExists = await _db.Polls.AnyAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
+            if (!pollExists) return Result.Fail("Votação não encontrada.");
+
+            var option = await _db.PollOptions.FirstOrDefaultAsync(o => o.Id == optionId && o.PollId == pollId, ct);
+            if (option is null) return Result.Ok(); // já excluído — idempotente
+            _db.PollOptions.Remove(option);
+            await _db.SaveChangesAsync(ct);
+            return Result.Ok();
+        }
+        catch (Exception ex)
+        {
+            return Result.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<PollDto>> CastVoteAsync(Guid groupId, Guid pollId, Guid playerId, CastVoteDto dto, bool isAdmin = false, CancellationToken ct = default)
+    {
+        try
+        {
+            var poll = await _db.Polls.FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
+            if (poll is null) return Result<PollDto>.Fail("Votação não encontrada.");
+            if (poll.Status == "closed") return Result<PollDto>.Fail("Esta votação está encerrada.");
+
+            if (poll.DeadlineDate.HasValue)
+            {
+                var deadlineUtc = poll.DeadlineDate.Value.ToDateTime(poll.DeadlineTime ?? TimeOnly.MaxValue, DateTimeKind.Utc);
+                if (DateTime.UtcNow > deadlineUtc) return Result<PollDto>.Fail("O prazo desta votação já encerrou.");
+            }
+
+            if (!poll.AllowMultipleVotes && dto.OptionIds.Count > 1)
+                return Result<PollDto>.Fail("Esta votação permite apenas uma opção.");
+
+            var validOptionIds = await _db.PollOptions.Where(o => o.PollId == pollId).Select(o => o.Id).ToListAsync(ct);
+            if (dto.OptionIds.Any(id => !validOptionIds.Contains(id)))
+                return Result<PollDto>.Fail("Opção inválida.");
+
+            var existingVotes = await _db.PollVotes.Where(v => v.PollId == pollId && v.PlayerId == playerId).ToListAsync(ct);
+            _db.PollVotes.RemoveRange(existingVotes);
+
+            foreach (var optionId in dto.OptionIds.Distinct())
+                _db.PollVotes.Add(new PollVoteEntity(pollId, optionId, playerId));
+
+            await _db.SaveChangesAsync(ct);
+            return await GetPollAsync(groupId, pollId, playerId, isAdmin, ct);
+        }
+        catch (Exception ex)
+        {
+            return Result<PollDto>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<PollDto>> RemoveVoteAsync(Guid groupId, Guid pollId, Guid playerId, bool isAdmin = false, CancellationToken ct = default)
+    {
+        try
+        {
+            var poll = await _db.Polls.FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
+            if (poll is null) return Result<PollDto>.Fail("Votação não encontrada.");
+            if (poll.Status == "closed") return Result<PollDto>.Fail("Esta votação está encerrada.");
+
+            var votes = await _db.PollVotes.Where(v => v.PollId == pollId && v.PlayerId == playerId).ToListAsync(ct);
+            _db.PollVotes.RemoveRange(votes);
+            await _db.SaveChangesAsync(ct);
+            return await GetPollAsync(groupId, pollId, playerId, isAdmin, ct);
+        }
+        catch (Exception ex)
+        {
+            return Result<PollDto>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<Result<PollDto>> AdminCastVoteAsync(Guid groupId, Guid pollId, AdminCastVoteDto dto, CancellationToken ct = default)
+    {
+        try
+        {
+            var poll = await _db.Polls.FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
+            if (poll is null) return Result<PollDto>.Fail("Votação não encontrada.");
+
+            if (!poll.AllowMultipleVotes && dto.OptionIds.Count > 1)
+                return Result<PollDto>.Fail("Esta votação permite apenas uma opção.");
+
+            if (dto.OptionIds.Count > 0)
+            {
+                var validOptionIds = await _db.PollOptions.Where(o => o.PollId == pollId).Select(o => o.Id).ToListAsync(ct);
+                if (dto.OptionIds.Any(id => !validOptionIds.Contains(id)))
+                    return Result<PollDto>.Fail("Opção inválida.");
+            }
+
+            var existingVotes = await _db.PollVotes.Where(v => v.PollId == pollId && v.PlayerId == dto.PlayerId).ToListAsync(ct);
+            _db.PollVotes.RemoveRange(existingVotes);
+
+            foreach (var optionId in dto.OptionIds.Distinct())
+                _db.PollVotes.Add(new PollVoteEntity(pollId, optionId, dto.PlayerId));
+
+            await _db.SaveChangesAsync(ct);
+            return await GetPollAsync(groupId, pollId, Guid.Empty, true, ct);
+        }
+        catch (Exception ex)
+        {
+            return Result<PollDto>.Fail(ex.Message);
+        }
+    }
+
+    // ── Helpers ──
+    private static PollOptionDto MapOption(PollOptionEntity o, int voteCount) => new()
+    {
+        Id = o.Id,
+        Text = o.Text,
+        Description = o.Description,
+        ImageUrl = o.ImageUrl,
+        SortOrder = o.SortOrder,
+        VoteCount = voteCount
+    };
+}

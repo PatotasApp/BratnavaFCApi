@@ -53,4 +53,26 @@ public abstract class GroupAuthorizedController : BaseApiController
         return await db.GroupFinanceiros
             .AnyAsync(x => x.GroupId == groupId && x.UserId == userId.Value, ct);
     }
+
+    // ── Result pattern helpers ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Converte Result&lt;T&gt; em IActionResult:
+    /// sucesso → 200 OK com envelope { success, data };
+    /// falha   → 400 Bad Request com { error }.
+    /// </summary>
+    protected IActionResult ToResponse<T>(Result<T> result) =>
+        result.Success
+            ? Ok(result)
+            : BadRequest(new { error = result.Error });
+
+    /// <summary>
+    /// Converte Result (void) em IActionResult:
+    /// sucesso → 204 No Content;
+    /// falha   → 400 Bad Request com { error }.
+    /// </summary>
+    protected IActionResult ToResponse(Result result) =>
+        result.Success
+            ? NoContent()
+            : BadRequest(new { error = result.Error });
 }

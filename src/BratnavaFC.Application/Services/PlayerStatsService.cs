@@ -215,6 +215,241 @@ public sealed class PlayerStatsService : IPlayerStatsService
         };
     }
 
+    public async Task<PlayerSpotlightReport> GetSpotlightReportAsync(
+        Guid groupId,
+        CancellationToken cancellationToken = default)
+    {
+        var players = await _context.Players
+            .AsNoTracking()
+            .Where(p => p.GroupId == groupId && p.Status == Domain.Enums.Status.Active)
+            .ToListAsync(cancellationToken);
+
+        if (players.Count == 0)
+            return new PlayerSpotlightReport { GroupId = groupId };
+
+        var playerIds = players.Select(p => p.Id).ToHashSet();
+
+        var matches = await _context.Matches
+            .AsNoTracking()
+            .Where(m => m.GroupId == groupId && m.Status == MatchStatus.Finalized)
+            .Include(m => m.Players)
+            .Include(m => m.Goals)
+            .ToListAsync(cancellationToken);
+
+        // Accumulators
+        var perPlayer      = InitializePlayerAccumulators(playerIds);
+        var pairTotals     = new Dictionary<PairKey, PairAccumulator>();
+        var opponentTotals = new Dictionary<PairKey, SpotlightOpponentAccumulator>();
+        var assistPairs    = new Dictionary<(Guid scorer, Guid assister), int>();
+        var mvpCounts      = playerIds.ToDictionary(id => id, _ => 0);
+
+        foreach (var match in matches)
+        {
+            var (teamA, teamB) = GetTeams(match, groupId, playerIds);
+            if (teamA.Count == 0 && teamB.Count == 0) continue;
+
+            // ── MVP ──
+            foreach (var mp in teamA.Concat(teamB))
+                if (mp.IsMvp == true && mvpCounts.ContainsKey(mp.PlayerId))
+                    mvpCounts[mp.PlayerId]++;
+
+            var outcome = GetMatchOutcome(match);
+
+            // ── Per-player W/L/T ──
+            foreach (var mp in teamA.Concat(teamB).GroupBy(p => p.PlayerId).Select(g => g.First()))
+            {
+                var pid = mp.PlayerId;
+                if (!perPlayer.TryGetValue(pid, out var acc)) continue;
+                acc.MatchesPlayed++;
+                if (outcome.HasScore)
+                {
+                    if (outcome.IsTie) acc.Ties++;
+                    else
+                    {
+                        bool inA = teamA.Any(x => x.PlayerId == pid);
+                        if (inA && outcome.WinningTeam == MatchWinningTeam.TeamA) acc.Wins++;
+                        else if (!inA && teamB.Any(x => x.PlayerId == pid) && outcome.WinningTeam == MatchWinningTeam.TeamB) acc.Wins++;
+                        else acc.Losses++;
+                    }
+                }
+                perPlayer[pid] = acc;
+            }
+
+            // ── Synergy (same team) ──
+            bool isTie = outcome.HasScore && outcome.IsTie;
+            AddTeamSynergy(teamA, outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamA, isTie, pairTotals);
+            AddTeamSynergy(teamB, outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamB, isTie, pairTotals);
+
+            // ── Head-to-head (opposite teams) ──
+            if (outcome.HasScore && !outcome.IsTie)
+            {
+                var idsA = teamA.Select(p => p.PlayerId).Distinct().ToList();
+                var idsB = teamB.Select(p => p.PlayerId).Distinct().ToList();
+                bool aWon = outcome.WinningTeam == MatchWinningTeam.TeamA;
+
+                foreach (var pidA in idsA)
+                    foreach (var pidB in idsB)
+                    {
+                        var key = PairKey.Create(pidA, pidB);
+                        if (!opponentTotals.TryGetValue(key, out var oa))
+                            oa = new SpotlightOpponentAccumulator();
+                        oa.Matches++;
+                        // WinsForSmallerId = wins for the player whose GUID is "smaller" (key.A)
+                        if (aWon)
+                        {
+                            if (pidA == key.A) oa.WinsForA++; else oa.WinsForB++;
+                        }
+                        else
+                        {
+                            if (pidB == key.A) oa.WinsForA++; else oa.WinsForB++;
+                        }
+                        opponentTotals[key] = oa;
+                    }
+            }
+
+            // ── Goals / assists ──
+            var mpIdToPlayerId = match.Players
+                .Where(mp => playerIds.Contains(mp.PlayerId))
+                .ToDictionary(mp => mp.Id, mp => mp.PlayerId);
+
+            foreach (var goal in match.Goals ?? [])
+            {
+                if (goal.IsOwnGoal)
+                {
+                    if (mpIdToPlayerId.TryGetValue(goal.ScorerMatchPlayerId, out var pid)
+                        && perPlayer.TryGetValue(pid, out var acc))
+                    { acc.OwnGoals++; perPlayer[pid] = acc; }
+                    continue;
+                }
+
+                if (mpIdToPlayerId.TryGetValue(goal.ScorerMatchPlayerId, out var scorerPid)
+                    && perPlayer.TryGetValue(scorerPid, out var gAcc))
+                { gAcc.Goals++; perPlayer[scorerPid] = gAcc; }
+
+                if (goal.AssistMatchPlayerId.HasValue
+                    && mpIdToPlayerId.TryGetValue(goal.AssistMatchPlayerId.Value, out var assistPid)
+                    && perPlayer.TryGetValue(assistPid, out var aAcc))
+                {
+                    aAcc.Assists++; perPlayer[assistPid] = aAcc;
+
+                    // track per-pair assist
+                    if (mpIdToPlayerId.TryGetValue(goal.ScorerMatchPlayerId, out var sp))
+                    {
+                        var apKey = (scorer: sp, assister: assistPid);
+                        assistPairs[apKey] = assistPairs.TryGetValue(apKey, out var c) ? c + 1 : 1;
+                    }
+                }
+            }
+        }
+
+        var playerNameById = players.ToDictionary(p => p.Id, p => p.Name);
+        const int minTogether = 1;
+        const int minAgainst  = 1;
+
+        var items = new List<PlayerSpotlightItem>(players.Count);
+
+        foreach (var pl in players)
+        {
+            var acc = perPlayer.TryGetValue(pl.Id, out var a) ? a : PlayerAccumulator.Empty;
+            double winRate = acc.MatchesPlayed == 0 ? 0.0 : acc.Wins / (double)acc.MatchesPlayed;
+
+            // ── Partners (synergy) ──
+            var partnerList = new List<(Guid id, int matches, double wr)>();
+            foreach (var otherId in playerIds)
+            {
+                if (otherId == pl.Id) continue;
+                var key = PairKey.Create(pl.Id, otherId);
+                if (!pairTotals.TryGetValue(key, out var pa) || pa.MatchesTogether < minTogether) continue;
+                double wr = pa.WinsTogether / (double)pa.MatchesTogether;
+                partnerList.Add((otherId, pa.MatchesTogether, wr));
+            }
+
+            var bestPartners = partnerList
+                .OrderByDescending(x => x.wr).ThenByDescending(x => x.matches)
+                .Take(3)
+                .Select(x => new SpotlightRelation { PlayerId = x.id, Name = playerNameById.GetValueOrDefault(x.id, ""), Count = x.matches, Rate = x.wr })
+                .ToList();
+
+            var worstPartners = partnerList
+                .OrderBy(x => x.wr).ThenByDescending(x => x.matches)
+                .Take(3)
+                .Select(x => new SpotlightRelation { PlayerId = x.id, Name = playerNameById.GetValueOrDefault(x.id, ""), Count = x.matches, Rate = x.wr })
+                .ToList();
+
+            // ── Head-to-head (opponents) ──
+            var h2hList = new List<(Guid id, int matches, double myWinRate)>();
+            foreach (var otherId in playerIds)
+            {
+                if (otherId == pl.Id) continue;
+                var key = PairKey.Create(pl.Id, otherId);
+                if (!opponentTotals.TryGetValue(key, out var oa) || oa.Matches < minAgainst) continue;
+                int myWins = (pl.Id == key.A) ? oa.WinsForA : oa.WinsForB;
+                double myWR = myWins / (double)oa.Matches;
+                h2hList.Add((otherId, oa.Matches, myWR));
+            }
+
+            // Who beats me most = lowest myWinRate (= highest opponent win rate)
+            var mostBeatenBy = h2hList
+                .OrderBy(x => x.myWinRate).ThenByDescending(x => x.matches)
+                .Take(3)
+                .Select(x => new SpotlightRelation { PlayerId = x.id, Name = playerNameById.GetValueOrDefault(x.id, ""), Count = x.matches, Rate = 1.0 - x.myWinRate })
+                .ToList();
+
+            // Who I beat most = highest myWinRate
+            var leastBeatenBy = h2hList
+                .OrderByDescending(x => x.myWinRate).ThenByDescending(x => x.matches)
+                .Take(3)
+                .Select(x => new SpotlightRelation { PlayerId = x.id, Name = playerNameById.GetValueOrDefault(x.id, ""), Count = x.matches, Rate = x.myWinRate })
+                .ToList();
+
+            // ── Assist relationships ──
+            var mostAssistedBy = assistPairs
+                .Where(kv => kv.Key.scorer == pl.Id)
+                .OrderByDescending(kv => kv.Value)
+                .Take(3)
+                .Select(kv => new SpotlightRelation { PlayerId = kv.Key.assister, Name = playerNameById.GetValueOrDefault(kv.Key.assister, ""), Count = kv.Value, Rate = 0 })
+                .ToList();
+
+            var mostAssistedTo = assistPairs
+                .Where(kv => kv.Key.assister == pl.Id)
+                .OrderByDescending(kv => kv.Value)
+                .Take(3)
+                .Select(kv => new SpotlightRelation { PlayerId = kv.Key.scorer, Name = playerNameById.GetValueOrDefault(kv.Key.scorer, ""), Count = kv.Value, Rate = 0 })
+                .ToList();
+
+            items.Add(new PlayerSpotlightItem
+            {
+                PlayerId    = pl.Id,
+                Name        = pl.Name,
+                IsGoalkeeper = pl.IsGoalkeeper,
+                IsGuest      = pl.IsGuest,
+                GamesPlayed  = acc.MatchesPlayed,
+                Wins         = acc.Wins,
+                Losses       = acc.Losses,
+                Ties         = acc.Ties,
+                WinRate      = winRate,
+                Goals        = acc.Goals,
+                Assists      = acc.Assists,
+                Mvps         = mvpCounts.TryGetValue(pl.Id, out var m) ? m : 0,
+                BestPartners  = bestPartners,
+                WorstPartners = worstPartners,
+                MostBeatenBy  = mostBeatenBy,
+                LeastBeatenBy = leastBeatenBy,
+                MostAssistedBy = mostAssistedBy,
+                MostAssistedTo = mostAssistedTo,
+            });
+        }
+
+        // Sort: active players with most games first
+        items = items
+            .OrderByDescending(p => p.GamesPlayed)
+            .ThenByDescending(p => p.WinRate)
+            .ThenBy(p => p.Name)
+            .ToList();
+
+        return new PlayerSpotlightReport { GroupId = groupId, Players = items };
+    }
+
     // ----------------- internals -----------------
 
     private Task<List<MatchEntity>> LoadFinalizedMatchesAsync(HashSet<Guid> playerIds, CancellationToken cancellationToken)
@@ -634,6 +869,13 @@ public sealed class PlayerStatsService : IPlayerStatsService
         public int TiesTogether;
 
         public static PairAccumulator Empty => new PairAccumulator();
+    }
+
+    private sealed class SpotlightOpponentAccumulator
+    {
+        public int Matches;
+        public int WinsForA;
+        public int WinsForB;
     }
 
     private enum MatchWinningTeam : byte

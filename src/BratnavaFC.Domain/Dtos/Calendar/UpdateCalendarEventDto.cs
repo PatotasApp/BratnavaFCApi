@@ -8,4 +8,5 @@ public sealed class UpdateCalendarEventDto
     public string? Date { get; set; }               // "YYYY-MM-DD"
     public string? Time { get; set; }               // "HH:mm" ou null
     public bool? TimeTBD { get; set; }
+    public string? Icon { get; set; }              // "" = remover, emoji = setar, null = não alterar
 }

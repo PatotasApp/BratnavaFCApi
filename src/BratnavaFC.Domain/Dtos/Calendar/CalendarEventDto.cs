@@ -14,4 +14,5 @@ public sealed class CalendarEventDto
     public string? CategoryIcon { get; set; }
     public Guid? SourceId { get; set; }            // matchId ou playerId para eventos automáticos
     public string? Description { get; set; }
+    public string? Icon { get; set; }              // emoji direto do evento (sobrepõe categoryIcon)
 }

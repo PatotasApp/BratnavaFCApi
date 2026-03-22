@@ -41,4 +41,12 @@ public class TeamGenerationController : BaseApiController
         var report = await _playerStats.GetVisualReportAsync(groupId, cancellationToken);
         return ToResponse(Result<PlayerVisualStatsReport>.Ok(report));
     }
+
+    [HttpGet("spotlight/{groupId:guid}")]
+    [ProducesResponseType(typeof(ApiResponse<PlayerSpotlightReport>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetSpotlight([FromRoute] Guid groupId, CancellationToken cancellationToken)
+    {
+        var report = await _playerStats.GetSpotlightReportAsync(groupId, cancellationToken);
+        return ToResponse(Result<PlayerSpotlightReport>.Ok(report));
+    }
 }

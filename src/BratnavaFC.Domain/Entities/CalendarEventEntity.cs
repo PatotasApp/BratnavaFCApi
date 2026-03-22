@@ -11,6 +11,7 @@ public class CalendarEventEntity : BaseEntity
     public TimeOnly? EventTime { get; private set; }
     public bool TimeTBD { get; private set; }       // horário em aberto / a confirmar
     public Guid? CreatedByUserId { get; private set; }
+    public string? Icon { get; private set; }
 
     // EF
     private CalendarEventEntity() { }
@@ -18,7 +19,7 @@ public class CalendarEventEntity : BaseEntity
     public CalendarEventEntity(
         Guid groupId, string title, string? description,
         Guid? categoryId, DateOnly eventDate, TimeOnly? eventTime,
-        bool timeTbd, Guid? createdByUserId)
+        bool timeTbd, Guid? createdByUserId, string? icon = null)
     {
         SetGroup(groupId);
         SetTitle(title);
@@ -28,17 +29,20 @@ public class CalendarEventEntity : BaseEntity
         EventTime = timeTbd ? null : eventTime;
         TimeTBD = timeTbd;
         CreatedByUserId = createdByUserId;
+        Icon = icon?.Trim();
     }
 
     public void Update(
         string? title, string? description,
         Guid? categoryId, DateOnly? eventDate, TimeOnly? eventTime,
-        bool? timeTbd)
+        bool? timeTbd, string? icon = null)
     {
         if (title is not null) SetTitle(title);
         if (description is not null) Description = description.Trim();
         if (categoryId.HasValue) CategoryId = categoryId;
         if (eventDate.HasValue) EventDate = eventDate.Value;
+        // icon: null = não altera, "" = limpa, qualquer outro valor = seta
+        if (icon is not null) Icon = icon == "" ? null : icon.Trim();
 
         var newTimeTbd = timeTbd ?? TimeTBD;
         TimeTBD = newTimeTbd;

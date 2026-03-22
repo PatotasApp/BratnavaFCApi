@@ -114,4 +114,7 @@ internal sealed class FakeStatsService : IPlayerStatsService
             TotalMatchesWithScore = 0,
             Players = new List<PlayerVisualStatsItem>()
         });
+
+    public Task<PlayerSpotlightReport> GetSpotlightReportAsync(Guid groupId, CancellationToken cancellationToken = default)
+        => Task.FromResult(new PlayerSpotlightReport { GroupId = groupId });
 }

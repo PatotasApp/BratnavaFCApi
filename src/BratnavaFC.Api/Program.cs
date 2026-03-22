@@ -93,6 +93,7 @@ builder.Services.AddScoped<PasswordHasher<UserEntity>>();
 builder.Services.AddScoped<IGroupSettingsService, GroupSettingsService>();
 builder.Services.AddScoped<ICalendarService, CalendarService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<IPollService, PollService>();
 
 // =====================
 // HOLIDAY SERVICE (BrasilAPI)

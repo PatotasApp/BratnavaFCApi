@@ -6,4 +6,5 @@ public interface IPlayerStatsService
 {
     Task<Result<List<PlayerStats>>> EnrichPlayersAsync(List<PlayerRequestDto> players, CancellationToken cancellationToken = default);
     Task<PlayerVisualStatsReport> GetVisualReportAsync(Guid groupId, CancellationToken cancellationToken = default);
+    Task<PlayerSpotlightReport> GetSpotlightReportAsync(Guid groupId, CancellationToken cancellationToken = default);
 }

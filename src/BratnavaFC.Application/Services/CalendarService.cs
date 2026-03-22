@@ -74,6 +74,7 @@ public sealed class CalendarService : ICalendarService
                 CategoryName = e.Category != null ? e.Category.Name : null,
                 CategoryColor = e.Category != null ? e.Category.Color : null,
                 CategoryIcon = e.Category != null ? e.Category.Icon : null,
+                Icon = e.Icon,
                 Description = e.Description,
                 SourceId = null
             })
@@ -93,6 +94,26 @@ public sealed class CalendarService : ICalendarService
                 PlayerId = p.Id,
                 PlayerName = p.Name,
                 BirthDate = p.User!.BirthDate!.Value
+            })
+            .ToListAsync(ct);
+
+        var pollEvents = await _context.Polls
+            .AsNoTracking()
+            .Where(p =>
+                p.GroupId == groupId &&
+                p.Type == "event" &&
+                p.EventDate.HasValue &&
+                p.EventDate.Value >= start &&
+                p.EventDate.Value <= end)
+            .Select(p => new PollEventProjection
+            {
+                PollId        = p.Id,
+                Title         = p.Title,
+                Description   = p.Description,
+                EventDate     = p.EventDate!.Value,
+                EventTime     = p.EventTime,
+                EventLocation = p.EventLocation,
+                EventIcon     = p.EventIcon,
             })
             .ToListAsync(ct);
 
@@ -124,11 +145,13 @@ public sealed class CalendarService : ICalendarService
             manualEvents.Count +
             birthdays.Count +
             matches.Count +
+            pollEvents.Count +
             allHolidays.Length);
 
         result.AddRange(manualEvents);
         result.AddRange(BuildBirthdayEvents(birthdays, start, end));
         result.AddRange(BuildMatchEvents(matches, start, end));
+        result.AddRange(BuildPollEvents(pollEvents));
         result.AddRange(BuildHolidayEvents(allHolidays, start, end));
 
         result.Sort(EventComparer);
@@ -168,7 +191,8 @@ public sealed class CalendarService : ICalendarService
             eventDate,
             eventTime,
             timeTbd,
-            userId);
+            userId,
+            dto.Icon);
 
         _context.CalendarEvents.Add(ev);
         await _context.SaveChangesAsync(ct);
@@ -218,7 +242,8 @@ public sealed class CalendarService : ICalendarService
             newCategoryId,
             newDate,
             effectiveTime,
-            dto.TimeTBD);
+            dto.TimeTBD,
+            dto.Icon);
 
         await _context.SaveChangesAsync(ct);
 
@@ -487,6 +512,30 @@ public sealed class CalendarService : ICalendarService
         }
     }
 
+    private static IEnumerable<CalendarEventDto> BuildPollEvents(
+        IReadOnlyCollection<PollEventProjection> polls)
+    {
+        foreach (var p in polls)
+        {
+            yield return new CalendarEventDto
+            {
+                Id            = p.PollId,
+                Type          = CalendarEventTypes.Event,
+                Title         = p.Title,
+                Date          = p.EventDate.ToString("yyyy-MM-dd"),
+                Time          = p.EventTime?.ToString("HH:mm"),
+                TimeTBD       = false,
+                CategoryId    = null,
+                CategoryName  = "Evento",
+                CategoryColor = "#7c3aed",
+                CategoryIcon  = p.EventIcon ?? "🍖",
+                Icon          = p.EventIcon,
+                Description   = p.Description,
+                SourceId      = p.PollId,
+            };
+        }
+    }
+
     private static IEnumerable<CalendarEventDto> BuildHolidayEvents(
         IReadOnlyCollection<HolidayDto> holidays,
         DateOnly start,
@@ -542,6 +591,7 @@ public sealed class CalendarService : ICalendarService
             CategoryName = category?.Name,
             CategoryColor = category?.Color,
             CategoryIcon = category?.Icon,
+            Icon = ev.Icon,
             Description = ev.Description,
             SourceId = null
         };
@@ -565,6 +615,7 @@ public sealed class CalendarService : ICalendarService
         public const string Birthday = "birthday";
         public const string Match    = "match";
         public const string Holiday  = "holiday";
+        public const string Event    = "event";
     }
 
     private sealed class CalendarEventDtoComparer : IComparer<CalendarEventDto>
@@ -586,6 +637,17 @@ public sealed class CalendarService : ICalendarService
 
             return string.Compare(x.Title, y.Title, StringComparison.OrdinalIgnoreCase);
         }
+    }
+
+    private sealed class PollEventProjection
+    {
+        public Guid PollId { get; init; }
+        public string Title { get; init; } = string.Empty;
+        public string? Description { get; init; }
+        public DateOnly EventDate { get; init; }
+        public TimeOnly? EventTime { get; init; }
+        public string? EventLocation { get; init; }
+        public string? EventIcon { get; init; }
     }
 
     private sealed class BirthdayProjection

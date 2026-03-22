@@ -8,4 +8,5 @@ public sealed class CreateCalendarEventDto
     public string Date { get; set; } = "";          // "YYYY-MM-DD"
     public string? Time { get; set; }               // "HH:mm" ou null
     public bool TimeTBD { get; set; }
+    public string? Icon { get; set; }              // emoji do evento (opcional)
 }
