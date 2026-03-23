@@ -6,7 +6,7 @@ namespace BratnavaFC.Application.Abstractions;
 public interface IPollService
 {
     Task<Result<List<PollSummaryDto>>> GetPollsAsync(Guid groupId, Guid playerId, CancellationToken ct = default);
-    Task<Result<PollDto>> GetPollAsync(Guid groupId, Guid pollId, Guid playerId, bool isAdmin, CancellationToken ct = default);
+    Task<Result<PollDto>> GetPollAsync(Guid groupId, Guid pollId, Guid playerId, bool isAdmin, CancellationToken ct = default, bool skipImages = false);
     Task<Result<PollDto>> CreatePollAsync(Guid groupId, Guid userId, CreatePollDto dto, CancellationToken ct = default);
     Task<Result<PollDto>> CreateEventPollAsync(Guid groupId, Guid userId, CreateEventPollDto dto, CancellationToken ct = default);
     Task<Result> ClosePollAsync(Guid groupId, Guid pollId, Guid userId, ClosePollDto dto, CancellationToken ct = default);

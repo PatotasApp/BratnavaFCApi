@@ -64,20 +64,39 @@ public sealed class PollService : IPollService
         }
     }
 
-    public async Task<Result<PollDto>> GetPollAsync(Guid groupId, Guid pollId, Guid playerId, bool isAdmin, CancellationToken ct = default)
+    public async Task<Result<PollDto>> GetPollAsync(Guid groupId, Guid pollId, Guid playerId, bool isAdmin, CancellationToken ct = default, bool skipImages = false)
     {
         try
         {
+            // Poll header (never includes base64 images — those live in Options only)
             var poll = await _db.Polls
                 .AsNoTracking()
-                .Include(p => p.Options)
-                .Include(p => p.Votes)
-                    .ThenInclude(v => v.Option)
-                .FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
+                .Where(p => p.Id == pollId && p.GroupId == groupId)
+                .Select(p => new
+                {
+                    p.Id, p.Title, p.Description, p.AllowMultipleVotes, p.ShowVotes,
+                    p.Status, p.DeadlineDate, p.DeadlineTime, p.Type,
+                    p.EventDate, p.EventTime, p.EventLocation, p.EventIcon,
+                    p.CostType, p.CostAmount, p.CreateDate
+                })
+                .FirstOrDefaultAsync(ct);
 
             if (poll is null)
                 return Result<PollDto>.Fail("Votação não encontrada.");
 
+            // Options — project to DTO; skip heavy ImageUrl when not needed
+            var options = await _db.PollOptions
+                .AsNoTracking()
+                .Where(o => o.PollId == pollId)
+                .OrderBy(o => o.SortOrder).ThenBy(o => o.CreateDate)
+                .Select(o => new
+                {
+                    o.Id, o.Text, o.Description, o.SortOrder,
+                    ImageUrl = skipImages ? null : o.ImageUrl
+                })
+                .ToListAsync(ct);
+
+            // Votes + player names in one query
             var votesWithPlayer = await _db.PollVotes
                 .AsNoTracking()
                 .Where(v => v.PollId == pollId)
@@ -136,8 +155,15 @@ public sealed class PollService : IPollService
                 MyVotedOptionIds = myVotes,
                 TotalVoters = totalVoters,
                 Votes = (poll.ShowVotes || isAdmin) ? votesWithPlayer : null,
-                Options = poll.Options.OrderBy(o => o.SortOrder).ThenBy(o => o.CreateDate)
-                    .Select(o => MapOption(o, optionVoteCounts.GetValueOrDefault(o.Id, 0))).ToList(),
+                Options = options.Select(o => new PollOptionDto
+                {
+                    Id = o.Id,
+                    Text = o.Text,
+                    Description = o.Description,
+                    ImageUrl = o.ImageUrl,
+                    SortOrder = o.SortOrder,
+                    VoteCount = optionVoteCounts.GetValueOrDefault(o.Id, 0)
+                }).ToList(),
                 Members = members
             };
 
@@ -177,7 +203,7 @@ public sealed class PollService : IPollService
             }
 
             await _db.SaveChangesAsync(ct);
-            return await GetPollAsync(groupId, poll.Id, Guid.Empty, true, ct);
+            return await GetPollAsync(groupId, poll.Id, Guid.Empty, true, ct, skipImages: true);
         }
         catch (Exception ex)
         {
@@ -212,7 +238,7 @@ public sealed class PollService : IPollService
             _db.PollOptions.Add(new PollOptionEntity(poll.Id, "Talvez", null, null, 1));
             _db.PollOptions.Add(new PollOptionEntity(poll.Id, "Não", null, null, 2));
             await _db.SaveChangesAsync(ct);
-            return await GetPollAsync(groupId, poll.Id, Guid.Empty, true, ct);
+            return await GetPollAsync(groupId, poll.Id, Guid.Empty, true, ct, skipImages: true);
         }
         catch (Exception ex)
         {
@@ -369,7 +395,7 @@ public sealed class PollService : IPollService
                 _db.PollVotes.Add(new PollVoteEntity(pollId, optionId, playerId));
 
             await _db.SaveChangesAsync(ct);
-            return await GetPollAsync(groupId, pollId, playerId, isAdmin, ct);
+            return await GetPollAsync(groupId, pollId, playerId, isAdmin, ct, skipImages: true);
         }
         catch (Exception ex)
         {
@@ -385,10 +411,16 @@ public sealed class PollService : IPollService
             if (poll is null) return Result<PollDto>.Fail("Votação não encontrada.");
             if (poll.Status == "closed") return Result<PollDto>.Fail("Esta votação está encerrada.");
 
+            if (poll.DeadlineDate.HasValue)
+            {
+                var deadlineUtc = poll.DeadlineDate.Value.ToDateTime(poll.DeadlineTime ?? TimeOnly.MaxValue, DateTimeKind.Utc);
+                if (DateTime.UtcNow > deadlineUtc) return Result<PollDto>.Fail("O prazo desta votação já encerrou.");
+            }
+
             var votes = await _db.PollVotes.Where(v => v.PollId == pollId && v.PlayerId == playerId).ToListAsync(ct);
             _db.PollVotes.RemoveRange(votes);
             await _db.SaveChangesAsync(ct);
-            return await GetPollAsync(groupId, pollId, playerId, isAdmin, ct);
+            return await GetPollAsync(groupId, pollId, playerId, isAdmin, ct, skipImages: true);
         }
         catch (Exception ex)
         {
@@ -420,7 +452,7 @@ public sealed class PollService : IPollService
                 _db.PollVotes.Add(new PollVoteEntity(pollId, optionId, dto.PlayerId));
 
             await _db.SaveChangesAsync(ct);
-            return await GetPollAsync(groupId, pollId, Guid.Empty, true, ct);
+            return await GetPollAsync(groupId, pollId, Guid.Empty, true, ct, skipImages: true);
         }
         catch (Exception ex)
         {

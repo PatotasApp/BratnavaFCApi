@@ -25,6 +25,7 @@ public sealed class MatchService : IMatchService
         if (!groupCheck.Success) return Result<List<MatchDetailsDto>>.Fail(groupCheck.Error!, groupCheck.Status);
 
         var matches = await _context.Matches
+            .AsSplitQuery()
             .AsNoTrackingWithIdentityResolution()
             .Where(m => m.GroupId == groupId)
             .Include(m => m.Group)
