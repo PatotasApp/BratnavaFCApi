@@ -1,5 +1,6 @@
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos.Players;
+using BratnavaFC.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -8,13 +9,15 @@ namespace BratnavaFC.Api.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-public class PlayersController : BaseApiController
+public class PlayersController : GroupAuthorizedController
 {
     private readonly IPlayerService _playerService;
+    private readonly AppDbContext _db;
 
-    public PlayersController(IPlayerService playerService)
+    public PlayersController(IPlayerService playerService, AppDbContext db)
     {
         _playerService = playerService;
+        _db = db;
     }
 
     [HttpPost]
@@ -86,6 +89,16 @@ public class PlayersController : BaseApiController
     public async Task<IActionResult> GetByUser(Guid userId, CancellationToken cancellationToken)
     {
         var result = await _playerService.GetByUserIdAsync(userId, cancellationToken);
+        return ToResponse(result);
+    }
+
+    // GET /api/Players/group/{groupId}/birthday-status
+    [HttpGet("group/{groupId:guid}/birthday-status")]
+    [Authorize(Roles = "User,Admin,GodMode")]
+    public async Task<IActionResult> GetBirthdayStatus(Guid groupId, CancellationToken cancellationToken)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
+        var result = await _playerService.GetBirthdayStatusAsync(groupId, cancellationToken);
         return ToResponse(result);
     }
 

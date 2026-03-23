@@ -228,6 +228,63 @@ public class PlayerService : IPlayerService
         return Result.Ok("Jogador atualizado com sucesso.");
     }
 
+    public async Task<Result<IReadOnlyList<BirthdayStatusDto>>> GetBirthdayStatusAsync(
+        Guid groupId, CancellationToken cancellationToken)
+    {
+        var players = await _context.Players
+            .AsNoTracking()
+            .Where(p => p.GroupId == groupId
+                     && !p.IsGuest
+                     && p.Status == Status.Active
+                     && p.UserId != null)
+            .Select(p => new
+            {
+                PlayerId  = p.Id,
+                Name      = p.Name,
+                // User.BirthDate is DateTimeOffset? — keep as-is, convert after materialisation
+                BirthDate = p.User != null ? p.User.BirthDate : (DateTimeOffset?)null,
+            })
+            .ToListAsync(cancellationToken);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var result = players
+            .Select(p =>
+            {
+                // Convert to DateOnly for day/month arithmetic (use UTC date)
+                DateOnly? bd = p.BirthDate.HasValue
+                    ? DateOnly.FromDateTime(p.BirthDate.Value.UtcDateTime)
+                    : null;
+
+                int? daysUntil = null;
+                if (bd.HasValue)
+                {
+                    // Next occurrence of this birthday from today
+                    var thisYear = new DateOnly(today.Year, bd.Value.Month, bd.Value.Day);
+                    daysUntil = thisYear >= today
+                        ? thisYear.DayNumber - today.DayNumber
+                        : new DateOnly(today.Year + 1, bd.Value.Month, bd.Value.Day).DayNumber - today.DayNumber;
+                }
+
+                return new { p.PlayerId, p.Name, BirthDate = bd, DaysUntil = daysUntil };
+            })
+            // Sorted by proximity; players without birthday alphabetically at end
+            .OrderBy(p => p.DaysUntil.HasValue ? 0 : 1)
+            .ThenBy(p => p.DaysUntil)
+            .ThenBy(p => p.Name)
+            .Select(p => new BirthdayStatusDto(
+                p.PlayerId,
+                p.Name,
+                p.BirthDate.HasValue,
+                p.BirthDate.HasValue ? p.BirthDate.Value.ToString("dd/MM/yyyy") : null,
+                p.BirthDate?.Month,
+                p.BirthDate?.Day
+            ))
+            .ToList();
+
+        return Result<IReadOnlyList<BirthdayStatusDto>>.Ok(result);
+    }
+
     private static PlayerDto MapToDto(PlayerEntity player) => new(
         player.Id,
         player.Name,

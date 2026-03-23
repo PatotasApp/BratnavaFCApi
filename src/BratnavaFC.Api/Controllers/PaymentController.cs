@@ -192,21 +192,10 @@ public sealed class PaymentController : GroupAuthorizedController
     public async Task<IActionResult> GetSummary(
         Guid groupId, Guid playerId, CancellationToken ct)
     {
-        var userId = GetCurrentUserId();
+        var userId  = GetCurrentUserId();
         if (userId is null) return Unauthorized();
-
         var isAdmin = await IsFinanceiroForGroupAsync(groupId, _db, ct);
-
-        if (!isAdmin)
-        {
-            // Verifica se o playerId pertence ao usuário logado
-            var owns = _db.Players.Any(p => p.Id == playerId
-                                         && p.GroupId == groupId
-                                         && p.UserId  == userId.Value);
-            if (!owns) return Forbid();
-        }
-
-        var result = await _payments.GetPaymentSummaryAsync(groupId, playerId, ct);
+        var result  = await _payments.GetPaymentSummaryAsync(groupId, playerId, userId, isAdmin, ct);
         return ToResponse(result);
     }
 
@@ -216,18 +205,7 @@ public sealed class PaymentController : GroupAuthorizedController
     {
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
-
-        var player = await _db.Players
-            .Where(p => p.GroupId == groupId
-                     && p.UserId  == userId.Value
-                     && !p.IsGuest)
-            .Select(p => new { p.Id })
-            .FirstOrDefaultAsync(ct);
-
-        if (player is null)
-            return Ok(new PaymentSummaryDto()); // sem player na patota → sem pendências
-
-        var result = await _payments.GetPaymentSummaryAsync(groupId, player.Id, ct);
+        var result = await _payments.GetMySummaryAsync(groupId, userId.Value, ct);
         return ToResponse(result);
     }
 
@@ -239,17 +217,8 @@ public sealed class PaymentController : GroupAuthorizedController
     {
         var userId  = GetCurrentUserId();
         if (userId is null) return Unauthorized();
-
         var isAdmin = await IsFinanceiroForGroupAsync(groupId, _db, ct);
-        if (!isAdmin)
-        {
-            var owns = _db.Players.Any(p => p.Id == playerId
-                                          && p.GroupId == groupId
-                                          && p.UserId  == userId.Value);
-            if (!owns) return Forbid();
-        }
-
-        var result = await _payments.GetMonthlyProofAsync(groupId, playerId, year, month, ct);
+        var result  = await _payments.GetMonthlyProofAsync(groupId, playerId, year, month, userId, isAdmin, ct);
         return ToResponse(result);
     }
 
@@ -259,17 +228,8 @@ public sealed class PaymentController : GroupAuthorizedController
     {
         var userId  = GetCurrentUserId();
         if (userId is null) return Unauthorized();
-
         var isAdmin = await IsFinanceiroForGroupAsync(groupId, _db, ct);
-        if (!isAdmin)
-        {
-            var owns = _db.Players.Any(p => p.Id == playerId
-                                          && p.GroupId == groupId
-                                          && p.UserId  == userId.Value);
-            if (!owns) return Forbid();
-        }
-
-        var result = await _payments.GetExtraChargeProofAsync(groupId, chargeId, playerId, ct);
+        var result  = await _payments.GetExtraChargeProofAsync(groupId, chargeId, playerId, userId, isAdmin, ct);
         return ToResponse(result);
     }
 }

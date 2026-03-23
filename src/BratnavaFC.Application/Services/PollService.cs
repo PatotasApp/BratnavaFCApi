@@ -314,6 +314,7 @@ public sealed class PollService : IPollService
         {
             var poll = await _db.Polls.FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
             if (poll is null) return Result<PollOptionDto>.Fail("Votação não encontrada.");
+            if (poll.IsEventType()) return Result<PollOptionDto>.Fail("As opções de eventos não podem ser modificadas.");
 
             var nextOrder = await _db.PollOptions.Where(o => o.PollId == pollId).CountAsync(ct);
             var option = new PollOptionEntity(poll.Id, dto.Text, dto.Description, dto.ImageUrl, nextOrder);
@@ -331,8 +332,9 @@ public sealed class PollService : IPollService
     {
         try
         {
-            var pollExists = await _db.Polls.AnyAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
-            if (!pollExists) return Result<PollOptionDto>.Fail("Votação não encontrada.");
+            var poll = await _db.Polls.AsNoTracking().FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
+            if (poll is null) return Result<PollOptionDto>.Fail("Votação não encontrada.");
+            if (poll.IsEventType()) return Result<PollOptionDto>.Fail("As opções de eventos não podem ser modificadas.");
 
             var option = await _db.PollOptions.FirstOrDefaultAsync(o => o.Id == optionId && o.PollId == pollId, ct);
             if (option is null) return Result<PollOptionDto>.Fail("Opção não encontrada.");
@@ -352,8 +354,9 @@ public sealed class PollService : IPollService
     {
         try
         {
-            var pollExists = await _db.Polls.AnyAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
-            if (!pollExists) return Result.Fail("Votação não encontrada.");
+            var poll = await _db.Polls.AsNoTracking().FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
+            if (poll is null) return Result.Fail("Votação não encontrada.");
+            if (poll.IsEventType()) return Result.Fail("As opções de eventos não podem ser modificadas.");
 
             var option = await _db.PollOptions.FirstOrDefaultAsync(o => o.Id == optionId && o.PollId == pollId, ct);
             if (option is null) return Result.Ok(); // já excluído — idempotente
@@ -373,16 +376,9 @@ public sealed class PollService : IPollService
         {
             var poll = await _db.Polls.FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
             if (poll is null) return Result<PollDto>.Fail("Votação não encontrada.");
-            if (poll.Status == "closed") return Result<PollDto>.Fail("Esta votação está encerrada.");
 
-            if (poll.DeadlineDate.HasValue)
-            {
-                var deadlineUtc = poll.DeadlineDate.Value.ToDateTime(poll.DeadlineTime ?? TimeOnly.MaxValue, DateTimeKind.Utc);
-                if (DateTime.UtcNow > deadlineUtc) return Result<PollDto>.Fail("O prazo desta votação já encerrou.");
-            }
-
-            if (!poll.AllowMultipleVotes && dto.OptionIds.Count > 1)
-                return Result<PollDto>.Fail("Esta votação permite apenas uma opção.");
+            var voteError = poll.ValidateVote(dto.OptionIds.Count);
+            if (voteError is not null) return Result<PollDto>.Fail(voteError);
 
             var validOptionIds = await _db.PollOptions.Where(o => o.PollId == pollId).Select(o => o.Id).ToListAsync(ct);
             if (dto.OptionIds.Any(id => !validOptionIds.Contains(id)))
@@ -409,13 +405,9 @@ public sealed class PollService : IPollService
         {
             var poll = await _db.Polls.FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
             if (poll is null) return Result<PollDto>.Fail("Votação não encontrada.");
-            if (poll.Status == "closed") return Result<PollDto>.Fail("Esta votação está encerrada.");
 
-            if (poll.DeadlineDate.HasValue)
-            {
-                var deadlineUtc = poll.DeadlineDate.Value.ToDateTime(poll.DeadlineTime ?? TimeOnly.MaxValue, DateTimeKind.Utc);
-                if (DateTime.UtcNow > deadlineUtc) return Result<PollDto>.Fail("O prazo desta votação já encerrou.");
-            }
+            var changeError = poll.ValidateVoteChange();
+            if (changeError is not null) return Result<PollDto>.Fail(changeError);
 
             var votes = await _db.PollVotes.Where(v => v.PollId == pollId && v.PlayerId == playerId).ToListAsync(ct);
             _db.PollVotes.RemoveRange(votes);

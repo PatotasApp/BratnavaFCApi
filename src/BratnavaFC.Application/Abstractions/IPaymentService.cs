@@ -62,9 +62,14 @@ public interface IPaymentService
     Task<Result<IReadOnlyList<ExtraChargeDto>>> GetMyExtraChargesAsync(Guid groupId, Guid userId, CancellationToken ct = default);
 
     // ── Resumo de pendências (usado no Dashboard e tela de usuários) ──────────
-    Task<Result<PaymentSummaryDto>> GetPaymentSummaryAsync(Guid groupId, Guid playerId, CancellationToken ct = default);
+
+    /// <summary>Resumo de pagamentos de um jogador. Verifica propriedade quando requestingUserId != null e isAdmin == false.</summary>
+    Task<Result<PaymentSummaryDto>> GetPaymentSummaryAsync(Guid groupId, Guid playerId, Guid? requestingUserId = null, bool isAdmin = true, CancellationToken ct = default);
+
+    /// <summary>Resumo do próprio usuário autenticado — resolve o player vinculado ao userId.</summary>
+    Task<Result<PaymentSummaryDto>> GetMySummaryAsync(Guid groupId, Guid userId, CancellationToken ct = default);
 
     // ── Comprovantes ──────────────────────────────────────────────────────────
-    Task<Result<ProofResponseDto>> GetMonthlyProofAsync(Guid groupId, Guid playerId, int year, int month, CancellationToken ct = default);
-    Task<Result<ProofResponseDto>> GetExtraChargeProofAsync(Guid groupId, Guid chargeId, Guid playerId, CancellationToken ct = default);
+    Task<Result<ProofResponseDto>> GetMonthlyProofAsync(Guid groupId, Guid playerId, int year, int month, Guid? requestingUserId = null, bool isAdmin = true, CancellationToken ct = default);
+    Task<Result<ProofResponseDto>> GetExtraChargeProofAsync(Guid groupId, Guid chargeId, Guid playerId, Guid? requestingUserId = null, bool isAdmin = true, CancellationToken ct = default);
 }

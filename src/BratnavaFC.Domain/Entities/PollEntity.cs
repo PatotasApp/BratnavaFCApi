@@ -56,4 +56,40 @@ public class PollEntity : BaseEntity
 
     public void Close() { Status = "closed"; UpdateDate = DateTime.UtcNow; }
     public void Reopen() { Status = "open"; UpdateDate = DateTime.UtcNow; }
+
+    // ── Domain rules ──────────────────────────────────────────────────────────
+
+    /// <summary>Returns true when this poll was created as an event poll (Type == "event").</summary>
+    public bool IsEventType() => Type == "event";
+
+    /// <summary>Returns true when the voting deadline has already passed.</summary>
+    public bool HasExpiredDeadline()
+    {
+        if (!DeadlineDate.HasValue) return false;
+        var deadlineUtc = DeadlineDate.Value.ToDateTime(DeadlineTime ?? TimeOnly.MaxValue, DateTimeKind.Utc);
+        return DateTime.UtcNow > deadlineUtc;
+    }
+
+    /// <summary>
+    /// Validates whether a vote change (cast or remove) is currently allowed.
+    /// Returns an error message, or null when the operation is valid.
+    /// </summary>
+    public string? ValidateVoteChange()
+    {
+        if (Status == "closed") return "Esta votação está encerrada.";
+        if (HasExpiredDeadline()) return "O prazo desta votação já encerrou.";
+        return null;
+    }
+
+    /// <summary>
+    /// Validates a full vote submission (includes single/multiple-vote rule).
+    /// Returns an error message, or null when the submission is valid.
+    /// </summary>
+    public string? ValidateVote(int optionCount)
+    {
+        var baseError = ValidateVoteChange();
+        if (baseError is not null) return baseError;
+        if (!AllowMultipleVotes && optionCount > 1) return "Esta votação permite apenas uma opção.";
+        return null;
+    }
 }

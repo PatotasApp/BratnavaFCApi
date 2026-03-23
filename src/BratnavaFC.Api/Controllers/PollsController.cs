@@ -96,10 +96,6 @@ public sealed class PollsController : GroupAuthorizedController
     public async Task<IActionResult> AddOption(Guid groupId, Guid pollId, [FromBody] AddPollOptionDto dto, CancellationToken ct)
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
-        var pollCheck = await _db.Polls.AsNoTracking()
-            .Select(p => new { p.Id, p.GroupId, p.Type })
-            .FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
-        if (pollCheck?.Type == "event") return BadRequest(new { error = "As opções de eventos não podem ser modificadas." });
         var result = await _polls.AddOptionAsync(groupId, pollId, dto, ct);
         return ToResponse(result);
     }
@@ -109,10 +105,6 @@ public sealed class PollsController : GroupAuthorizedController
     public async Task<IActionResult> UpdateOption(Guid groupId, Guid pollId, Guid optionId, [FromBody] UpdatePollOptionDto dto, CancellationToken ct)
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
-        var pollCheck = await _db.Polls.AsNoTracking()
-            .Select(p => new { p.Id, p.GroupId, p.Type })
-            .FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
-        if (pollCheck?.Type == "event") return BadRequest(new { error = "As opções de eventos não podem ser modificadas." });
         var result = await _polls.UpdateOptionAsync(groupId, pollId, optionId, dto, ct);
         return ToResponse(result);
     }
@@ -122,10 +114,6 @@ public sealed class PollsController : GroupAuthorizedController
     public async Task<IActionResult> DeleteOption(Guid groupId, Guid pollId, Guid optionId, CancellationToken ct)
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
-        var pollCheck = await _db.Polls.AsNoTracking()
-            .Select(p => new { p.Id, p.GroupId, p.Type })
-            .FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
-        if (pollCheck?.Type == "event") return BadRequest(new { error = "As opções de eventos não podem ser modificadas." });
         var result = await _polls.DeleteOptionAsync(groupId, pollId, optionId, ct);
         return ToResponse(result);
     }

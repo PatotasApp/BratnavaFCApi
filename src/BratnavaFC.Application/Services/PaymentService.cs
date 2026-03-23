@@ -544,11 +544,33 @@ public sealed class PaymentService : IPaymentService
 
     // ── Resumo ────────────────────────────────────────────────────────────────
 
+    public async Task<Result<PaymentSummaryDto>> GetMySummaryAsync(
+        Guid groupId, Guid userId, CancellationToken ct = default)
+    {
+        var player = await _context.Players
+            .Where(p => p.GroupId == groupId && p.UserId == userId && !p.IsGuest)
+            .Select(p => new { p.Id })
+            .FirstOrDefaultAsync(ct);
+
+        if (player is null)
+            return Result<PaymentSummaryDto>.Ok(new PaymentSummaryDto()); // sem player na patota → sem pendências
+
+        return await GetPaymentSummaryAsync(groupId, player.Id, ct: ct);
+    }
+
     public async Task<Result<PaymentSummaryDto>> GetPaymentSummaryAsync(
         Guid groupId,
         Guid playerId,
+        Guid? requestingUserId = null,
+        bool isAdmin = true,
         CancellationToken ct = default)
     {
+        if (!isAdmin && requestingUserId.HasValue)
+        {
+            var owns = await _context.Players.AnyAsync(
+                p => p.Id == playerId && p.GroupId == groupId && p.UserId == requestingUserId.Value, ct);
+            if (!owns) return Result<PaymentSummaryDto>.Fail("Acesso negado.", ResultStatus.Forbidden);
+        }
         var year = DateTime.UtcNow.Year;
 
         var settings = await _context.GroupSettings
@@ -603,8 +625,16 @@ public sealed class PaymentService : IPaymentService
     // ── Comprovantes ──────────────────────────────────────────────────────────
 
     public async Task<Result<ProofResponseDto>> GetMonthlyProofAsync(
-        Guid groupId, Guid playerId, int year, int month, CancellationToken ct = default)
+        Guid groupId, Guid playerId, int year, int month,
+        Guid? requestingUserId = null, bool isAdmin = true,
+        CancellationToken ct = default)
     {
+        if (!isAdmin && requestingUserId.HasValue)
+        {
+            var owns = await _context.Players.AnyAsync(
+                p => p.Id == playerId && p.GroupId == groupId && p.UserId == requestingUserId.Value, ct);
+            if (!owns) return Result<ProofResponseDto>.Fail("Acesso negado.", ResultStatus.Forbidden);
+        }
         var record = await _context.MonthlyPayments
             .AsNoTracking()
             .FirstOrDefaultAsync(m => m.GroupId  == groupId
@@ -624,8 +654,16 @@ public sealed class PaymentService : IPaymentService
     }
 
     public async Task<Result<ProofResponseDto>> GetExtraChargeProofAsync(
-        Guid groupId, Guid chargeId, Guid playerId, CancellationToken ct = default)
+        Guid groupId, Guid chargeId, Guid playerId,
+        Guid? requestingUserId = null, bool isAdmin = true,
+        CancellationToken ct = default)
     {
+        if (!isAdmin && requestingUserId.HasValue)
+        {
+            var owns = await _context.Players.AnyAsync(
+                p => p.Id == playerId && p.GroupId == groupId && p.UserId == requestingUserId.Value, ct);
+            if (!owns) return Result<ProofResponseDto>.Fail("Acesso negado.", ResultStatus.Forbidden);
+        }
         var record = await _context.ExtraChargePayments
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.GroupId      == groupId
