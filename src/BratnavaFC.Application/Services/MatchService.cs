@@ -116,16 +116,14 @@ public sealed class MatchService : IMatchService
     public async Task<Result<MatchDetailsDto>> GetDetailsAsync(Guid matchId, CancellationToken ct)
     {
         var match = await _context.Matches
-            .AsNoTrackingWithIdentityResolution()
+            .AsNoTracking()
+            .AsSplitQuery()
             .Include(m => m.Group)
             .Include(m => m.TeamAColor)
             .Include(m => m.TeamBColor)
             .Include(m => m.Goals)
             .Include(m => m.Players).ThenInclude(mp => mp.Player)
-            .Include(m => m.Players).ThenInclude(mp => mp.GoalsScored)
-            .Include(m => m.Players).ThenInclude(mp => mp.GoalsAssisted)
-            .Include(m => m.Votes).ThenInclude(v => v.Voter)
-            .Include(m => m.Votes).ThenInclude(v => v.VotedFor)
+            .Include(m => m.Votes)
             .FirstOrDefaultAsync(m => m.Id == matchId, ct);
 
         if (match is null)
