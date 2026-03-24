@@ -13,10 +13,14 @@ using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Common;
 using Microsoft.OpenApi.Models;
 using System.IdentityModel.Tokens.Jwt;
+using BratnavaFC.Api;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(opts =>
+        opts.JsonSerializerOptions.Converters.Add(new UtcDateTimeConverter()));
+
 builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerGen(c =>
