@@ -219,7 +219,9 @@ public class MatchEntity : BaseEntity
     /// Deve ser chamado após salvar o voto. Retorna true se o MVP foi definido.
     /// Requer que a navegação Players.Player esteja carregada.
     /// </summary>
-    public bool AutoSetMvpIfAllVoted()
+    public bool AutoSetMvpIfAllVoted(
+        Domain.Enums.MvpTieRule tieRule = Domain.Enums.MvpTieRule.AllMvp,
+        int tieMaxPlayers = 2)
     {
         var eligible = Players.Where(p => p.Player?.IsGuest != true && (p.Team == 1 || p.Team == 2)).ToList();
         if (eligible.Count == 0) return false;
@@ -231,24 +233,14 @@ public class MatchEntity : BaseEntity
         foreach (var p in Players)
             p.RevokeMvp();
 
-        var voteGroups = Votes
-            .Where(v => v.VotedForId != Guid.Empty)
-            .GroupBy(v => v.VotedForId)
-            .Select(g => new { Id = g.Key, Count = g.Count() })
-            .ToList();
-
-        if (voteGroups.Count > 0)
-        {
-            var maxCount = voteGroups.Max(x => x.Count);
-            var winnerIds = voteGroups.Where(x => x.Count == maxCount).Select(x => x.Id).ToHashSet();
-            foreach (var p in Players.Where(p => winnerIds.Contains(p.Id)))
-                p.SetMvp();
-        }
+        ApplyMvpTieRule(tieRule, tieMaxPlayers);
 
         return true;
     }
 
-    public void FinalizeByVotes()
+    public void FinalizeByVotes(
+        Domain.Enums.MvpTieRule tieRule = Domain.Enums.MvpTieRule.AllMvp,
+        int tieMaxPlayers = 2)
     {
         EnsureStatus(MatchStatus.PostGame, "A partida so pode ser finalizada se estiver em PostGame.");
 
@@ -261,21 +253,60 @@ public class MatchEntity : BaseEntity
         foreach (var p in Players)
             p.RevokeMvp();
 
+        ApplyMvpTieRule(tieRule, tieMaxPlayers);
+
+        Status = MatchStatus.Finalized;
+    }
+
+    /// <summary>
+    /// Calcula os MVPs a partir dos votos aplicando a regra de empate configurada.
+    /// Assume que RevokeMvp() já foi chamado antes desta operação.
+    /// </summary>
+    private void ApplyMvpTieRule(Domain.Enums.MvpTieRule tieRule, int tieMaxPlayers)
+    {
         var voteGroups = Votes
             .Where(v => v.VotedForId != Guid.Empty)
             .GroupBy(v => v.VotedForId)
             .Select(g => new { Id = g.Key, Count = g.Count() })
             .ToList();
 
-        if (voteGroups.Count > 0)
+        if (voteGroups.Count == 0) return;
+
+        var maxCount  = voteGroups.Max(x => x.Count);
+        var tied      = voteGroups.Where(x => x.Count == maxCount).ToList();
+        var tiedCount = tied.Count;
+
+        // Sem empate — um único líder sempre recebe MVP independente da regra
+        if (tiedCount == 1)
         {
-            var maxCount = voteGroups.Max(x => x.Count);
-            var winnerIds = voteGroups.Where(x => x.Count == maxCount).Select(x => x.Id).ToHashSet();
-            foreach (var p in Players.Where(p => winnerIds.Contains(p.Id)))
-                p.SetMvp();
+            Players.FirstOrDefault(p => p.Id == tied[0].Id)?.SetMvp();
+            return;
         }
 
-        Status = MatchStatus.Finalized;
+        // Há empate — aplica a regra configurada
+        switch (tieRule)
+        {
+            case Domain.Enums.MvpTieRule.NoMvp:
+                // Ninguém recebe MVP
+                break;
+
+            case Domain.Enums.MvpTieRule.AllMvp:
+                // Todos os empatados recebem MVP
+                var allIds = tied.Select(t => t.Id).ToHashSet();
+                foreach (var p in Players.Where(p => allIds.Contains(p.Id)))
+                    p.SetMvp();
+                break;
+
+            case Domain.Enums.MvpTieRule.AllMvpUpToMax:
+                // Todos recebem MVP apenas se o número de empatados <= máximo configurado
+                if (tiedCount <= tieMaxPlayers)
+                {
+                    var upToMaxIds = tied.Select(t => t.Id).ToHashSet();
+                    foreach (var p in Players.Where(p => upToMaxIds.Contains(p.Id)))
+                        p.SetMvp();
+                }
+                break;
+        }
     }
 
     public void AddPlayer(MatchPlayerEntity matchPlayer, PlayerEntity playerEntity)

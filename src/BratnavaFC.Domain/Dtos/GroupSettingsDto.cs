@@ -28,4 +28,9 @@ public sealed class GroupSettingsDto
     /// <summary>0 = Monthly, 1 = PerGame</summary>
     public int      PaymentMode { get; init; }
     public decimal? MonthlyFee  { get; init; }
+
+    // ── Regra de empate no MVP ────────────────────────────────────────────────
+    /// <summary>0 = NoMvp, 1 = AllMvp, 2 = AllMvpUpToMax</summary>
+    public int MvpTieRule       { get; init; }
+    public int MvpTieMaxPlayers { get; init; }
 }

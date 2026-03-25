@@ -7,6 +7,7 @@ public sealed class GroupSettingsEntity : BaseEntity
 {
     private GroupSettingsEntity() { } // EF
 
+
     public GroupSettingsEntity(
         Guid groupId,
         int minPlayers,
@@ -48,6 +49,21 @@ public sealed class GroupSettingsEntity : BaseEntity
     public decimal?    MonthlyFee  { get; private set; }
 
     public void SetPaymentMode(PaymentMode mode) => PaymentMode = mode;
+
+    // ── Regra de empate no MVP ────────────────────────────────────────────────
+    public MvpTieRule MvpTieRule        { get; private set; } = MvpTieRule.AllMvp;
+    public int        MvpTieMaxPlayers  { get; private set; } = 2;
+
+    public void SetMvpTieRule(MvpTieRule rule, int? maxPlayers = null)
+    {
+        if (rule == MvpTieRule.AllMvpUpToMax)
+        {
+            if (!maxPlayers.HasValue || maxPlayers.Value < 2)
+                throw new InvalidOperationException("MvpTieMaxPlayers deve ser pelo menos 2 quando a regra for AllMvpUpToMax.");
+            MvpTieMaxPlayers = maxPlayers.Value;
+        }
+        MvpTieRule = rule;
+    }
 
     public void Update(
         int minPlayers,

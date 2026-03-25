@@ -47,6 +47,8 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 MvpIcon        = null,
                 PlayerIcon     = null,
                 MonthlyFee     = null,
+                MvpTieRule       = (int)MvpTieRule.AllMvp,
+                MvpTieMaxPlayers = 2,
             });
         }
 
@@ -77,6 +79,8 @@ public sealed class GroupSettingsService : IGroupSettingsService
             entity.SetMonthlyFee(dto.MonthlyFee);
             if (dto.PaymentMode.HasValue)
                 entity.SetPaymentMode((PaymentMode)dto.PaymentMode.Value);
+            if (dto.MvpTieRule.HasValue)
+                entity.SetMvpTieRule((MvpTieRule)dto.MvpTieRule.Value, dto.MvpTieMaxPlayers);
             await _context.GroupSettings.AddAsync(entity, ct);
         }
         else
@@ -91,6 +95,8 @@ public sealed class GroupSettingsService : IGroupSettingsService
             entity.SetMonthlyFee(dto.MonthlyFee);
             if (dto.PaymentMode.HasValue)
                 entity.SetPaymentMode((PaymentMode)dto.PaymentMode.Value);
+            if (dto.MvpTieRule.HasValue)
+                entity.SetMvpTieRule((MvpTieRule)dto.MvpTieRule.Value, dto.MvpTieMaxPlayers);
         }
 
         try
@@ -114,6 +120,8 @@ public sealed class GroupSettingsService : IGroupSettingsService
             existing.SetMonthlyFee(dto.MonthlyFee);
             if (dto.PaymentMode.HasValue)
                 existing.SetPaymentMode((PaymentMode)dto.PaymentMode.Value);
+            if (dto.MvpTieRule.HasValue)
+                existing.SetMvpTieRule((MvpTieRule)dto.MvpTieRule.Value, dto.MvpTieMaxPlayers);
 
             await _context.SaveChangesAsync(ct);
             entity = existing;
@@ -138,8 +146,10 @@ public sealed class GroupSettingsService : IGroupSettingsService
         OwnGoalIcon    = e.OwnGoalIcon,
         MvpIcon        = e.MvpIcon,
         PlayerIcon     = e.PlayerIcon,
-        PaymentMode    = (int)e.PaymentMode,
-        MonthlyFee     = e.MonthlyFee,
+        PaymentMode      = (int)e.PaymentMode,
+        MonthlyFee       = e.MonthlyFee,
+        MvpTieRule       = (int)e.MvpTieRule,
+        MvpTieMaxPlayers = e.MvpTieMaxPlayers,
     };
 
     private async Task<Result> EnsureGroupExistsAsync(Guid groupId, CancellationToken ct)

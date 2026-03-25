@@ -22,4 +22,9 @@ public sealed class UpsertGroupSettingsDto
     /// <summary>0 = Monthly, 1 = PerGame. Null = não alterar.</summary>
     public int?     PaymentMode { get; set; }
     public decimal? MonthlyFee  { get; set; }
+
+    // ── Regra de empate no MVP ────────────────────────────────────────────────
+    /// <summary>0 = NoMvp, 1 = AllMvp, 2 = AllMvpUpToMax. Null = não alterar.</summary>
+    public int? MvpTieRule       { get; set; }
+    public int? MvpTieMaxPlayers { get; set; }
 }

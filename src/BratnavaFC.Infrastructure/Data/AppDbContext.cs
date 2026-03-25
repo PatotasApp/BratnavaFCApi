@@ -314,6 +314,13 @@ public class AppDbContext : DbContext
                 .HasConversion<short>()
                 .HasDefaultValue(Domain.Enums.PaymentMode.Monthly);
 
+            builder.Property(x => x.MvpTieRule)
+                .HasConversion<short>()
+                .HasDefaultValue(Domain.Enums.MvpTieRule.AllMvp);
+
+            builder.Property(x => x.MvpTieMaxPlayers)
+                .HasDefaultValue(2);
+
             builder.HasIndex(x => x.GroupId).IsUnique();
         });
 

@@ -436,7 +436,8 @@ public sealed class MatchService : IMatchService
         await _context.SaveChangesAsync(ct);
 
         // Se todos os jogadores não-convidados já votaram, persiste o MVP automaticamente
-        if (match.AutoSetMvpIfAllVoted())
+        var (tieRule, tieMax) = await LoadMvpTieRuleAsync(groupId, ct);
+        if (match.AutoSetMvpIfAllVoted(tieRule, tieMax))
             await _context.SaveChangesAsync(ct);
 
         return Result.Ok("Partida atualizada com sucesso.");
@@ -512,7 +513,8 @@ public sealed class MatchService : IMatchService
         if (match is null)
             return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
-        match.FinalizeByVotes();
+        var (tieRule, tieMax) = await LoadMvpTieRuleAsync(groupId, ct);
+        match.FinalizeByVotes(tieRule, tieMax);
 
         await _context.SaveChangesAsync(ct);
         return Result.Ok("Partida atualizada com sucesso.");
@@ -694,6 +696,17 @@ public sealed class MatchService : IMatchService
             return Result.Fail("MatchId é obrigatório.");
 
         return Result.Ok();
+    }
+
+    private async Task<(MvpTieRule rule, int maxPlayers)> LoadMvpTieRuleAsync(Guid groupId, CancellationToken ct)
+    {
+        var settings = await _context.GroupSettings
+            .AsNoTracking()
+            .Where(s => s.GroupId == groupId)
+            .Select(s => new { s.MvpTieRule, s.MvpTieMaxPlayers })
+            .FirstOrDefaultAsync(ct);
+
+        return (settings?.MvpTieRule ?? MvpTieRule.AllMvp, settings?.MvpTieMaxPlayers ?? 2);
     }
 
     public async Task<Result> AddGoalAsync(Guid groupId, Guid matchId, AddGoalRequestDto dto, CancellationToken ct)
