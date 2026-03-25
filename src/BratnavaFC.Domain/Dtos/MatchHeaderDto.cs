@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System;
 
 namespace BratnavaFC.Domain.Dtos
 {
@@ -15,6 +11,12 @@ namespace BratnavaFC.Domain.Dtos
 
         public short Status { get; init; }
         public string StatusName { get; init; } = string.Empty;
+
+        /// <summary>Chave de etapa para o frontend: create | accept | teams | playing | ended | post | done</summary>
+        public string StepKey { get; init; } = "create";
+
+        /// <summary>Verdadeiro quando é possível voltar uma etapa (status > Created).</summary>
+        public bool CanRewind { get; init; }
 
         public int? TeamAGoals { get; init; }
         public int? TeamBGoals { get; init; }

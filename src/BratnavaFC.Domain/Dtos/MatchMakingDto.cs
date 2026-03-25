@@ -1,8 +1,5 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace BratnavaFC.Domain.Dtos
 {
@@ -14,8 +11,13 @@ namespace BratnavaFC.Domain.Dtos
         public TeamColorDto? TeamAColor { get; init; }
         public TeamColorDto? TeamBColor { get; init; }
 
+        public bool ColorsLocked { get; init; }
+
         public List<PlayerInMatchDto> TeamAPlayers { get; init; } = new();
         public List<PlayerInMatchDto> TeamBPlayers { get; init; } = new();
         public List<PlayerInMatchDto> UnassignedPlayers { get; init; } = new();
+
+        /// <summary>Union of TeamA + TeamB — jogadores que participam da partida.</summary>
+        public List<PlayerInMatchDto> Participants { get; init; } = new();
     }
 }

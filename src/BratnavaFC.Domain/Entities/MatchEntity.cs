@@ -180,6 +180,9 @@ public class MatchEntity : BaseEntity
         var voter = Players.FirstOrDefault(p => p.Id == voterMatchPlayerId)
             ?? throw new InvalidOperationException("Apenas jogadores da partida podem votar.");
 
+        if (voter.Player?.IsGuest == true)
+            throw new InvalidOperationException("Convidados não podem votar no MVP.");
+
         if (Votes.Any(v => v.VoterId == voterMatchPlayerId))
             throw new InvalidOperationException("Esse jogador ja votou.");
 
@@ -206,6 +209,39 @@ public class MatchEntity : BaseEntity
         if (top == null || top.PlayerId == Guid.Empty) return null;
 
         return Players.FirstOrDefault(p => p.Id == top.PlayerId);
+    }
+
+    /// <summary>
+    /// Se todos os jogadores não-convidados já votaram, persiste o MVP automaticamente.
+    /// Deve ser chamado após salvar o voto. Retorna true se o MVP foi definido.
+    /// Requer que a navegação Players.Player esteja carregada.
+    /// </summary>
+    public bool AutoSetMvpIfAllVoted()
+    {
+        var eligible = Players.Where(p => p.Player?.IsGuest != true && (p.Team == 1 || p.Team == 2)).ToList();
+        if (eligible.Count == 0) return false;
+
+        var voterIds = Votes.Select(v => v.VoterId).ToHashSet();
+        if (!eligible.All(p => voterIds.Contains(p.Id))) return false;
+
+        // Revoga MVP anterior antes de definir o novo
+        foreach (var p in Players)
+            p.RevokeMvp();
+
+        var winnerId = Votes
+            .Where(v => v.VotedForId != Guid.Empty)
+            .GroupBy(v => v.VotedForId)
+            .OrderByDescending(g => g.Count())
+            .Select(g => g.Key)
+            .FirstOrDefault();
+
+        if (winnerId != Guid.Empty)
+        {
+            var winner = Players.FirstOrDefault(p => p.Id == winnerId);
+            winner?.SetMvp();
+        }
+
+        return true;
     }
 
     public void FinalizeByVotes()

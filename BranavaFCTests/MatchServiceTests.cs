@@ -1531,4 +1531,395 @@ public sealed class MatchServiceTests
         foreach (var p in players)
             playerIds.Should().Contain(p.Id, $"jogador {p.Name} deve estar em PlayerIds");
     }
+
+    // =========================
+    // GET HEADER — StepKey + CanRewind
+    // =========================
+
+    [Fact]
+    public async Task GetHeaderAsync_WhenCreated_ShouldReturn_StepKey_Create_And_CanRewind_False()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetHeaderAsync_WhenCreated_ShouldReturn_StepKey_Create_And_CanRewind_False));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+        var (match, _) = await SeedMatchAsync(db, group.Id, playersCount: 2, targetStatus: MatchStatus.Created);
+
+        var result = await sut.GetHeaderAsync(group.Id, match.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Data!.StepKey.Should().Be("create");
+        result.Data!.CanRewind.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetHeaderAsync_WhenPostGame_ShouldReturn_StepKey_Post_And_CanRewind_True()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetHeaderAsync_WhenPostGame_ShouldReturn_StepKey_Post_And_CanRewind_True));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+        var (match, _) = await SeedMatchAsync(db, group.Id, playersCount: 2,
+            targetStatus: MatchStatus.PostGame, acceptAllInvites: true, defineTeamsIfPossible: true);
+
+        var result = await sut.GetHeaderAsync(group.Id, match.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Data!.StepKey.Should().Be("post");
+        result.Data!.CanRewind.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetHeaderAsync_ShouldReturn_CorrectStepKey_ForEachStatus()
+    {
+        // Verifica os mapeamentos status → stepKey para Acceptation, MatchMaking, Started, Ended, Finalized
+        var statusToStepKey = new Dictionary<MatchStatus, string>
+        {
+            { MatchStatus.Acceptation, "accept"  },
+            { MatchStatus.MatchMaking, "teams"   },
+            { MatchStatus.Started,     "playing" },
+            { MatchStatus.Ended,       "ended"   },
+        };
+
+        foreach (var (status, expectedKey) in statusToStepKey)
+        {
+            var dbName = $"GetHeaderAsync_StepKey_{status}";
+            await using var db = DbContextFactory.Create(dbName);
+            var repo = BuildRepoMock(db);
+            var sut = CreateSut(db, repo);
+
+            var group = await SeedGroupAsync(db);
+            var (match, _) = await SeedMatchAsync(db, group.Id, playersCount: 2,
+                targetStatus: status, acceptAllInvites: true, defineTeamsIfPossible: true);
+
+            var result = await sut.GetHeaderAsync(group.Id, match.Id, CancellationToken.None);
+
+            result.Data!.StepKey.Should().Be(expectedKey, $"status {status} deve mapear para stepKey '{expectedKey}'");
+            result.Data!.CanRewind.Should().BeTrue($"status {status} > Created → CanRewind deve ser true");
+        }
+    }
+
+    // =========================
+    // GET ACCEPTATION
+    // =========================
+
+    [Fact]
+    public async Task GetAcceptationAsync_ShouldReturn_ThreeFilteredLists_ByInviteResponse()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetAcceptationAsync_ShouldReturn_ThreeFilteredLists_ByInviteResponse));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+        var (match, players) = await SeedMatchAsync(db, group.Id, playersCount: 3,
+            targetStatus: MatchStatus.Acceptation, acceptAllInvites: false);
+
+        // p1 aceita, p2 rejeita, p3 fica pendente
+        await sut.AcceptInviteAsync(group.Id, match.Id, players[0].Id, CancellationToken.None);
+        await sut.RejectInviteAsync(group.Id, match.Id, players[1].Id, CancellationToken.None);
+
+        var result = await sut.GetAcceptationAsync(group.Id, match.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Data!.AcceptedPlayers.Should().HaveCount(1);
+        result.Data!.RejectedPlayers.Should().HaveCount(1);
+        result.Data!.PendingPlayers.Should().HaveCount(1);
+        result.Data!.AcceptedPlayers.Single().PlayerId.Should().Be(players[0].Id);
+        result.Data!.RejectedPlayers.Single().PlayerId.Should().Be(players[1].Id);
+        result.Data!.PendingPlayers.Single().PlayerId.Should().Be(players[2].Id);
+    }
+
+    [Fact]
+    public async Task GetAcceptationAsync_ShouldReturn_MaxPlayersFromGroupSettings()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetAcceptationAsync_ShouldReturn_MaxPlayersFromGroupSettings));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+        db.GroupSettings.Add(new GroupSettingsEntity(group.Id, 6, 14, null, null, null));
+        await db.SaveChangesAsync();
+
+        var (match, _) = await SeedMatchAsync(db, group.Id, playersCount: 2,
+            targetStatus: MatchStatus.Acceptation, acceptAllInvites: false);
+
+        var result = await sut.GetAcceptationAsync(group.Id, match.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Data!.MaxPlayers.Should().Be(14);
+    }
+
+    [Fact]
+    public async Task GetAcceptationAsync_ShouldReturn_AcceptedOverLimit_WhenAcceptedCountExceedsMaxPlayers()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetAcceptationAsync_ShouldReturn_AcceptedOverLimit_WhenAcceptedCountExceedsMaxPlayers));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+        // MaxPlayers = 2; 3 jogadores aceitarão → over limit
+        db.GroupSettings.Add(new GroupSettingsEntity(group.Id, 1, 2, null, null, null));
+        await db.SaveChangesAsync();
+
+        var (match, _) = await SeedMatchAsync(db, group.Id, playersCount: 3,
+            targetStatus: MatchStatus.Acceptation, acceptAllInvites: true);
+
+        var result = await sut.GetAcceptationAsync(group.Id, match.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Data!.AcceptedOverLimit.Should().BeTrue("3 aceitos > MaxPlayers=2");
+        result.Data!.AcceptedPlayers.Should().HaveCount(3);
+        result.Data!.MaxPlayers.Should().Be(2);
+    }
+
+    // =========================
+    // GET MATCHMAKING — Participants + ColorsLocked
+    // =========================
+
+    [Fact]
+    public async Task GetMatchMakingAsync_ShouldReturn_ParticipantsFromBothTeams_Only()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetMatchMakingAsync_ShouldReturn_ParticipantsFromBothTeams_Only));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+        var (match, _) = await SeedMatchAsync(db, group.Id, playersCount: 4,
+            targetStatus: MatchStatus.MatchMaking, acceptAllInvites: true, defineTeamsIfPossible: true);
+
+        var result = await sut.GetMatchMakingAsync(group.Id, match.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Data!.Participants.Should().HaveCount(4);
+        result.Data!.Participants.Should().OnlyContain(p => p.Team == 1 || p.Team == 2,
+            "Participants só deve incluir jogadores atribuídos a um time");
+    }
+
+    [Fact]
+    public async Task GetMatchMakingAsync_ColorsLocked_ShouldBeFalse_WhenNoColorsSet()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetMatchMakingAsync_ColorsLocked_ShouldBeFalse_WhenNoColorsSet));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+        var (match, _) = await SeedMatchAsync(db, group.Id, playersCount: 2,
+            targetStatus: MatchStatus.MatchMaking, acceptAllInvites: true, defineTeamsIfPossible: true);
+
+        var result = await sut.GetMatchMakingAsync(group.Id, match.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Data!.ColorsLocked.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetMatchMakingAsync_ColorsLocked_ShouldBeTrue_WhenColorsAreSet()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetMatchMakingAsync_ColorsLocked_ShouldBeTrue_WhenColorsAreSet));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        var colorA = new TeamColorEntity(group.Id, "Azul",     "#0000FF");
+        var colorB = new TeamColorEntity(group.Id, "Vermelho", "#FF0000");
+        db.TeamColors.AddRange(colorA, colorB);
+
+        var (match, _) = await SeedMatchAsync(db, group.Id, playersCount: 2,
+            targetStatus: MatchStatus.MatchMaking, acceptAllInvites: true, defineTeamsIfPossible: true);
+
+        var trackedMatch = await db.Matches.FirstAsync(m => m.Id == match.Id);
+        trackedMatch.SetTeamColors(colorA.Id, colorB.Id);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var result = await sut.GetMatchMakingAsync(group.Id, match.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Data!.ColorsLocked.Should().BeTrue();
+    }
+
+    // =========================
+    // GET POSTGAME — Participants + EligibleVoters + ComputedMvp
+    // =========================
+
+    [Fact]
+    public async Task GetPostGameAsync_ShouldReturn_Participants_OnlyFromTeams()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetPostGameAsync_ShouldReturn_Participants_OnlyFromTeams));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+        var (match, _) = await SeedMatchAsync(db, group.Id, playersCount: 4,
+            targetStatus: MatchStatus.PostGame, acceptAllInvites: true, defineTeamsIfPossible: true);
+
+        var result = await sut.GetPostGameAsync(group.Id, match.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Data!.Participants.Should().HaveCount(4);
+        result.Data!.Participants.Should().OnlyContain(p => p.Team == 1 || p.Team == 2,
+            "Participants só deve incluir jogadores em times");
+    }
+
+    [Fact]
+    public async Task GetPostGameAsync_EligibleVoters_ShouldNotInclude_UnassignedPlayers()
+    {
+        // Cenário: 3 jogadores; 2 têm times, 1 ficou sem time (team=0).
+        // O sem-time NÃO deve aparecer em EligibleVoters.
+        await using var db = DbContextFactory.Create(nameof(GetPostGameAsync_EligibleVoters_ShouldNotInclude_UnassignedPlayers));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+        var players = await SeedPlayersAsync(db, group.Id, 3);
+        var p1 = players[0]; var p2 = players[1]; var p3 = players[2];
+
+        var match = new MatchEntity(group.Id, DateTime.UtcNow, "Arena");
+        match.AddPlayer(new MatchPlayerEntity(p1.Id), p1);
+        match.AddPlayer(new MatchPlayerEntity(p2.Id), p2);
+        match.AddPlayer(new MatchPlayerEntity(p3.Id), p3);
+
+        match.OpenAcceptation();
+        match.AcceptInvite(p1.Id);
+        match.AcceptInvite(p2.Id);
+        match.AcceptInvite(p3.Id);
+        match.GoToMatchMaking();
+        match.AssignTeams(new[] { p1.Id }, new[] { p2.Id }); // p3 fica team=0
+        match.Start();
+        match.End();
+        match.GoToPostGame();
+
+        db.Matches.Add(match);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var result = await sut.GetPostGameAsync(group.Id, match.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Data!.EligibleVoters.Should().HaveCount(2,
+            "apenas os 2 jogadores com time devem estar em EligibleVoters");
+        result.Data!.EligibleVoters.Should().NotContain(ev => ev.PlayerId == p3.Id,
+            "jogador sem time (team=0) não deve aparecer em EligibleVoters");
+    }
+
+    [Fact]
+    public async Task GetPostGameAsync_ComputedMvp_ShouldBeNull_WhenNobodyVotedYet()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetPostGameAsync_ComputedMvp_ShouldBeNull_WhenNobodyVotedYet));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+        var (match, _) = await SeedMatchAsync(db, group.Id, playersCount: 2,
+            targetStatus: MatchStatus.PostGame, acceptAllInvites: true, defineTeamsIfPossible: true);
+
+        var result = await sut.GetPostGameAsync(group.Id, match.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Data!.ComputedMvp.Should().BeNull("nenhum voto ainda → MVP não definido");
+    }
+
+    [Fact]
+    public async Task GetPostGameAsync_ComputedMvp_ShouldBeSet_AfterAllParticipantsVote()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetPostGameAsync_ComputedMvp_ShouldBeSet_AfterAllParticipantsVote));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+        var (match, players) = await SeedMatchAsync(db, group.Id, playersCount: 2,
+            targetStatus: MatchStatus.PostGame, acceptAllInvites: true, defineTeamsIfPossible: true);
+
+        db.ChangeTracker.Clear();
+        var tracked = await db.Matches
+            .Include(m => m.Players)
+            .Include(m => m.Votes)
+            .FirstAsync(m => m.Id == match.Id);
+
+        var mp1 = tracked.Players.First(p => p.PlayerId == players[0].Id);
+        var mp2 = tracked.Players.First(p => p.PlayerId == players[1].Id);
+
+        await sut.VoteAsync(group.Id, match.Id, mp1.Id, mp2.Id, CancellationToken.None);
+        await sut.VoteAsync(group.Id, match.Id, mp2.Id, mp1.Id, CancellationToken.None);
+
+        var result = await sut.GetPostGameAsync(group.Id, match.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Data!.ComputedMvp.Should().NotBeNull("MVP deve estar definido após todos votarem");
+    }
+
+    // =========================
+    // VOTE — Auto-MVP persistence
+    // =========================
+
+    [Fact]
+    public async Task VoteAsync_WhenAllParticipantsVote_ShouldPersistIsMvp_InDatabase()
+    {
+        await using var db = DbContextFactory.Create(nameof(VoteAsync_WhenAllParticipantsVote_ShouldPersistIsMvp_InDatabase));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+        var (match, players) = await SeedMatchAsync(db, group.Id, playersCount: 2,
+            targetStatus: MatchStatus.PostGame, acceptAllInvites: true, defineTeamsIfPossible: true);
+
+        db.ChangeTracker.Clear();
+        var tracked = await db.Matches
+            .Include(m => m.Players)
+            .Include(m => m.Votes)
+            .FirstAsync(m => m.Id == match.Id);
+
+        var mp1 = tracked.Players.First(p => p.PlayerId == players[0].Id);
+        var mp2 = tracked.Players.First(p => p.PlayerId == players[1].Id);
+
+        await sut.VoteAsync(group.Id, match.Id, mp1.Id, mp2.Id, CancellationToken.None);
+        await sut.VoteAsync(group.Id, match.Id, mp2.Id, mp1.Id, CancellationToken.None);
+
+        db.ChangeTracker.Clear();
+        var reloaded = await db.MatchPlayers
+            .AsNoTracking()
+            .Where(mp => mp.MatchId == match.Id)
+            .ToListAsync();
+
+        reloaded.Should().Contain(mp => mp.IsMvp == true,
+            "exatamente um jogador deve ter IsMvp=true após todos votarem");
+        reloaded.Count(mp => mp.IsMvp == true).Should().Be(1,
+            "apenas um MVP pode ser definido por partida");
+    }
+
+    [Fact]
+    public async Task VoteAsync_WhenNotAllParticipantsVoted_ShouldNotSetIsMvp()
+    {
+        await using var db = DbContextFactory.Create(nameof(VoteAsync_WhenNotAllParticipantsVoted_ShouldNotSetIsMvp));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+        var (match, players) = await SeedMatchAsync(db, group.Id, playersCount: 3,
+            targetStatus: MatchStatus.PostGame, acceptAllInvites: true, defineTeamsIfPossible: true);
+
+        db.ChangeTracker.Clear();
+        var tracked = await db.Matches
+            .Include(m => m.Players)
+            .Include(m => m.Votes)
+            .FirstAsync(m => m.Id == match.Id);
+
+        var mp1 = tracked.Players.First(p => p.PlayerId == players[0].Id);
+        var mp2 = tracked.Players.First(p => p.PlayerId == players[1].Id);
+
+        // Apenas 1 de 3 vota — MVP não deve ser definido ainda
+        await sut.VoteAsync(group.Id, match.Id, mp1.Id, mp2.Id, CancellationToken.None);
+
+        db.ChangeTracker.Clear();
+        var reloaded = await db.MatchPlayers
+            .AsNoTracking()
+            .Where(mp => mp.MatchId == match.Id)
+            .ToListAsync();
+
+        reloaded.Should().NotContain(mp => mp.IsMvp == true,
+            "IsMvp não deve ser persistido enquanto nem todos os participantes votaram");
+    }
 }

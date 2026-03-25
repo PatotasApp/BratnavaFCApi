@@ -434,6 +434,11 @@ public sealed class MatchService : IMatchService
 
         await _context.Votes.AddAsync(vote, ct);
         await _context.SaveChangesAsync(ct);
+
+        // Se todos os jogadores não-convidados já votaram, persiste o MVP automaticamente
+        if (match.AutoSetMvpIfAllVoted())
+            await _context.SaveChangesAsync(ct);
+
         return Result.Ok("Partida atualizada com sucesso.");
     }
 
@@ -614,7 +619,7 @@ public sealed class MatchService : IMatchService
 
         return await _context.Matches
             .Where(m => m.GroupId == groupId && m.Id == matchId)
-            .Include(m => m.Players)
+            .Include(m => m.Players).ThenInclude(mp => mp.Player)
             .Include(m => m.Votes)
             .FirstOrDefaultAsync(ct);
     }
@@ -960,6 +965,14 @@ public sealed class MatchService : IMatchService
                 PlaceName = m.PlaceName,
                 Status = (short)m.Status,
                 StatusName = m.Status.ToString(),
+                StepKey = m.Status == MatchStatus.Created    ? "create"  :
+                          m.Status == MatchStatus.Acceptation ? "accept"  :
+                          m.Status == MatchStatus.MatchMaking  ? "teams"   :
+                          m.Status == MatchStatus.Started      ? "playing" :
+                          m.Status == MatchStatus.Ended        ? "ended"   :
+                          m.Status == MatchStatus.PostGame     ? "post"    :
+                          m.Status == MatchStatus.Finalized    ? "done"    : "create",
+                CanRewind = m.Status > MatchStatus.Created,
                 TeamAGoals = m.TeamAGoals,
                 TeamBGoals = m.TeamBGoals
             })
@@ -979,12 +992,12 @@ public sealed class MatchService : IMatchService
         var matchIdCheck = EnsureMatchId(matchId);
         if (!matchIdCheck.Success) return Result<MatchAcceptationDto>.Fail(matchIdCheck.Error!, matchIdCheck.Status);
 
-        var dto = await _context.Matches
+        var matchData = await _context.Matches
             .AsNoTracking()
             .Where(m => m.GroupId == groupId && m.Id == matchId)
-            .Select(m => new MatchAcceptationDto
+            .Select(m => new
             {
-                MatchId = m.Id,
+                m.Id,
                 Status = (short)m.Status,
                 Players = m.Players
                     .Where(mp => mp.Player!.Status == Status.Active)
@@ -1003,8 +1016,30 @@ public sealed class MatchService : IMatchService
             })
             .FirstOrDefaultAsync(ct);
 
-        if (dto is null)
+        if (matchData is null)
             return Result<MatchAcceptationDto>.Fail("Partida não encontrada.", ResultStatus.NotFound);
+
+        var settings = await _context.GroupSettings
+            .AsNoTracking()
+            .Where(s => s.GroupId == groupId)
+            .Select(s => new { s.MaxPlayers })
+            .FirstOrDefaultAsync(ct);
+
+        var maxPlayers = settings?.MaxPlayers ?? 0;
+        var accepted = matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.Accepted).ToList();
+        var rejected = matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.Rejected).ToList();
+        var pending  = matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.None).ToList();
+
+        var dto = new MatchAcceptationDto
+        {
+            MatchId = matchData.Id,
+            Status  = matchData.Status,
+            MaxPlayers       = maxPlayers,
+            AcceptedOverLimit = maxPlayers > 0 && accepted.Count > maxPlayers,
+            AcceptedPlayers  = accepted,
+            RejectedPlayers  = rejected,
+            PendingPlayers   = pending,
+        };
 
         return Result<MatchAcceptationDto>.Ok(dto);
     }
@@ -1085,6 +1120,24 @@ public sealed class MatchService : IMatchService
                         InviteResponse = (short)mp.InviteResponse
                     })
                     .ToList(),
+
+                ColorsLocked = m.TeamAColorId != null || m.TeamBColorId != null,
+
+                Participants = m.Players
+                    .Where(p => (p.Team == 1 || p.Team == 2) && p.Player!.Status == Status.Active)
+                    .OrderByDescending(p => p.IsGoalkeeper)
+                    .ThenBy(p => p.Player!.Name)
+                    .Select(mp => new PlayerInMatchDto
+                    {
+                        MatchPlayerId = mp.Id,
+                        PlayerId = mp.PlayerId,
+                        PlayerName = mp.Player!.Name,
+                        IsGoalkeeper = mp.IsGoalkeeper,
+                        IsGuest = mp.Player!.IsGuest,
+                        Team = mp.Team,
+                        InviteResponse = (short)mp.InviteResponse
+                    })
+                    .ToList(),
             })
             .FirstOrDefaultAsync(ct);
 
@@ -1117,11 +1170,15 @@ public sealed class MatchService : IMatchService
                     p.Id,
                     p.PlayerId,
                     PlayerName = p.Player!.Name,
-                    p.Team
+                    p.Team,
+                    p.IsGoalkeeper,
+                    IsGuest = p.Player!.IsGuest,
+                    p.IsMvp
                 }).ToList(),
 
                 Votes = m.Votes.Select(v => new
                 {
+                    v.Id,
                     v.VoterId,
                     v.VotedForId
                 }).ToList(),
@@ -1141,9 +1198,39 @@ public sealed class MatchService : IMatchService
         if (baseData is null)
             return Result<MatchPostGameDto>.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
-        var nameByMpId = baseData.Players.ToDictionary(x => x.Id, x => x.PlayerName);
+        var nameByMpId     = baseData.Players.ToDictionary(x => x.Id, x => x.PlayerName);
         var playerIdByMpId = baseData.Players.ToDictionary(x => x.Id, x => x.PlayerId);
-        var teamByMpId = baseData.Players.ToDictionary(x => x.Id, x => x.Team);
+        var teamByMpId     = baseData.Players.ToDictionary(x => x.Id, x => x.Team);
+
+        // Elegíveis = não-convidados que ainda não votaram
+        var voterIds = new HashSet<Guid>(baseData.Votes.Select(v => v.VoterId));
+        var eligibleVoters = baseData.Players
+            .Where(p => !p.IsGuest && !voterIds.Contains(p.Id) && (p.Team == 1 || p.Team == 2))
+            .Select(p => new PlayerInMatchDto
+            {
+                MatchPlayerId = p.Id,
+                PlayerId      = p.PlayerId,
+                PlayerName    = p.PlayerName,
+                IsGoalkeeper  = p.IsGoalkeeper,
+                IsGuest       = p.IsGuest,
+                Team          = p.Team
+            })
+            .OrderBy(p => p.PlayerName)
+            .ToList();
+
+        var allVoted = eligibleVoters.Count == 0 && baseData.Players.Any(p => !p.IsGuest && (p.Team == 1 || p.Team == 2));
+
+        // Votos individuais com nomes
+        var individualVotes = baseData.Votes
+            .Select(v => new VoteDto
+            {
+                VoteId                 = v.Id,
+                VoterMatchPlayerId     = v.VoterId,
+                VotedForMatchPlayerId  = v.VotedForId,
+                VoterName              = nameByMpId.TryGetValue(v.VoterId,     out var vn)  ? vn  : string.Empty,
+                VotedForName           = nameByMpId.TryGetValue(v.VotedForId,  out var vfn) ? vfn : string.Empty
+            })
+            .ToList();
 
         // voteCounts
         var voteCounts = baseData.Votes
@@ -1159,17 +1246,17 @@ public sealed class MatchService : IMatchService
             .ThenBy(x => x.VotedForName)
             .ToList();
 
+        // MVP vem do flag persistido (definido quando todos votaram)
+        var mvpPlayer = baseData.Players.FirstOrDefault(p => p.IsMvp == true);
         MatchMvpDto? computedMvp = null;
-        var top = voteCounts.FirstOrDefault();
-        if (top is not null && top.VotedForMatchPlayerId != Guid.Empty)
+        if (mvpPlayer is not null)
         {
-            var mpId = top.VotedForMatchPlayerId;
             computedMvp = new MatchMvpDto
             {
-                MatchPlayerId = mpId,
-                PlayerId = playerIdByMpId.TryGetValue(mpId, out var pid) ? pid : Guid.Empty,
-                PlayerName = nameByMpId.TryGetValue(mpId, out var pn) ? pn : string.Empty,
-                Team = teamByMpId.TryGetValue(mpId, out var t) ? t : (short)0
+                MatchPlayerId = mvpPlayer.Id,
+                PlayerId      = mvpPlayer.PlayerId,
+                PlayerName    = mvpPlayer.PlayerName,
+                Team          = mvpPlayer.Team
             };
         }
 
@@ -1206,15 +1293,34 @@ public sealed class MatchService : IMatchService
             })
             .ToList();
 
+        var participants = baseData.Players
+            .Where(p => p.Team == 1 || p.Team == 2)
+            .OrderByDescending(p => p.IsGoalkeeper)
+            .ThenBy(p => p.PlayerName)
+            .Select(p => new PlayerInMatchDto
+            {
+                MatchPlayerId = p.Id,
+                PlayerId      = p.PlayerId,
+                PlayerName    = p.PlayerName,
+                IsGoalkeeper  = p.IsGoalkeeper,
+                IsGuest       = p.IsGuest,
+                Team          = p.Team
+            })
+            .ToList();
+
         return Result<MatchPostGameDto>.Ok(new MatchPostGameDto
         {
-            MatchId = baseData.Id,
-            Status = baseData.Status,
-            TeamAGoals = baseData.TeamAGoals,
-            TeamBGoals = baseData.TeamBGoals,
-            ComputedMvp = computedMvp,
-            VoteCounts = voteCounts,
-            Goals = goals
+            MatchId        = baseData.Id,
+            Status         = baseData.Status,
+            TeamAGoals     = baseData.TeamAGoals,
+            TeamBGoals     = baseData.TeamBGoals,
+            ComputedMvp    = computedMvp,
+            VoteCounts     = voteCounts,
+            Votes          = individualVotes,
+            Goals          = goals,
+            AllVoted       = allVoted,
+            EligibleVoters = eligibleVoters,
+            Participants   = participants
         });
     }
 

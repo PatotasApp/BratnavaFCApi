@@ -1,8 +1,5 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace BratnavaFC.Domain.Dtos
 {
@@ -10,6 +7,12 @@ namespace BratnavaFC.Domain.Dtos
     {
         public Guid MatchId { get; init; }
         public short Status { get; init; }
-        public List<PlayerInMatchDto> Players { get; init; } = new();
+
+        public int MaxPlayers { get; init; }
+        public bool AcceptedOverLimit { get; init; }
+
+        public List<PlayerInMatchDto> AcceptedPlayers { get; init; } = new();
+        public List<PlayerInMatchDto> RejectedPlayers { get; init; } = new();
+        public List<PlayerInMatchDto> PendingPlayers { get; init; } = new();
     }
 }

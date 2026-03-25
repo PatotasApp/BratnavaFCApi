@@ -568,4 +568,166 @@ public sealed class MatchEntityTests
         var ex = Assert.Throws<InvalidOperationException>(() => match.RewindOneStep());
         Assert.Equal("Partida finalizada. Nao e possivel voltar status.", ex.Message);
     }
+
+    // =========================
+    // AUTO SET MVP IF ALL VOTED
+    // =========================
+
+    private static (MatchEntity match, PlayerEntity p1, PlayerEntity p2, PlayerEntity p3,
+        MatchPlayerEntity mp1, MatchPlayerEntity mp2, MatchPlayerEntity mp3)
+        CreateMatchWithThreePlayers_PostGame()
+    {
+        var (match, p1, p2, p3) = CreateMatchWithThreePlayers_Created();
+        match.OpenAcceptation();
+        match.AcceptInvite(p1.Id);
+        match.AcceptInvite(p2.Id);
+        match.AcceptInvite(p3.Id);
+        match.GoToMatchMaking();
+        // p1 → time 1; p2 + p3 → time 2
+        match.AssignTeams(new[] { p1.Id }, new[] { p2.Id, p3.Id });
+        match.Start();
+        match.End();
+        match.GoToPostGame();
+
+        var mp1 = match.Players.First(x => x.PlayerId == p1.Id);
+        var mp2 = match.Players.First(x => x.PlayerId == p2.Id);
+        var mp3 = match.Players.First(x => x.PlayerId == p3.Id);
+
+        return (match, p1, p2, p3, mp1, mp2, mp3);
+    }
+
+    [Fact]
+    public void AutoSetMvpIfAllVoted_WhenNoVotes_ShouldReturnFalse()
+    {
+        var (match, _, _, _, _, _, _) = CreateMatchWithThreePlayers_PostGame();
+
+        var result = match.AutoSetMvpIfAllVoted();
+
+        Assert.False(result);
+        Assert.DoesNotContain(match.Players, p => p.IsMvp == true);
+    }
+
+    [Fact]
+    public void AutoSetMvpIfAllVoted_WhenOnlyOneOfThreeVoted_ShouldReturnFalse()
+    {
+        var (match, _, _, _, mp1, mp2, _) = CreateMatchWithThreePlayers_PostGame();
+
+        var v = match.CreateVote(mp1.Id, mp2.Id);
+        match.Votes.Add(v);
+
+        var result = match.AutoSetMvpIfAllVoted();
+
+        Assert.False(result);
+        Assert.DoesNotContain(match.Players, p => p.IsMvp == true);
+    }
+
+    [Fact]
+    public void AutoSetMvpIfAllVoted_WhenAllParticipantsVoted_ShouldReturnTrue_AndSetMvpOnWinner()
+    {
+        // votos: mp1→mp2 (1), mp2→mp3 (1), mp3→mp2 (2) → mp2 vence
+        var (match, _, _, _, mp1, mp2, mp3) = CreateMatchWithThreePlayers_PostGame();
+
+        match.Votes.Add(match.CreateVote(mp1.Id, mp2.Id));
+        match.Votes.Add(match.CreateVote(mp2.Id, mp3.Id));
+        match.Votes.Add(match.CreateVote(mp3.Id, mp2.Id));
+
+        var result = match.AutoSetMvpIfAllVoted();
+
+        Assert.True(result);
+        Assert.True(mp2.IsMvp);
+        Assert.NotEqual(true, mp1.IsMvp);
+        Assert.NotEqual(true, mp3.IsMvp);
+    }
+
+    [Fact]
+    public void AutoSetMvpIfAllVoted_ShouldNotRequireGuestParticipantToVote()
+    {
+        var groupId = Guid.NewGuid();
+        var match = new MatchEntity(groupId, DateTime.UtcNow, "Local");
+
+        var p1    = new PlayerEntity("P1",    Guid.NewGuid(), groupId, 0, false, false, Status.Active);
+        var p2    = new PlayerEntity("P2",    Guid.NewGuid(), groupId, 0, false, false, Status.Active);
+        var guest = new PlayerEntity("Guest", null,           groupId, 0, false, true,  Status.Active);
+
+        var mp1 = new MatchPlayerEntity(p1.Id);
+        var mp2 = new MatchPlayerEntity(p2.Id);
+        var mpG = new MatchPlayerEntity(guest.Id);
+
+        match.AddPlayer(mp1, p1);
+        match.AddPlayer(mp2, p2);
+        match.AddPlayer(mpG, guest);
+
+        match.OpenAcceptation();
+        match.AcceptInvite(p1.Id);
+        match.AcceptInvite(p2.Id);
+        match.AcceptInvite(guest.Id);
+        match.GoToMatchMaking();
+        // convidado não é atribuído a nenhum time (team = 0)
+        match.AssignTeams(new[] { p1.Id }, new[] { p2.Id });
+        match.Start();
+        match.End();
+        match.GoToPostGame();
+
+        match.Votes.Add(match.CreateVote(mp1.Id, mp2.Id));
+        match.Votes.Add(match.CreateVote(mp2.Id, mp1.Id));
+
+        // retorna true mesmo sem o convidado votar
+        var result = match.AutoSetMvpIfAllVoted();
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void AutoSetMvpIfAllVoted_ShouldNotRequireUnassignedNonGuestToVote()
+    {
+        // p3 aceitou mas ficou sem time (team = 0) → não entra em eligible
+        var (match, p1, p2, p3) = CreateMatchWithThreePlayers_Created();
+
+        match.OpenAcceptation();
+        match.AcceptInvite(p1.Id);
+        match.AcceptInvite(p2.Id);
+        match.AcceptInvite(p3.Id);
+        match.GoToMatchMaking();
+        match.AssignTeams(new[] { p1.Id }, new[] { p2.Id }); // p3 fica team = 0
+        match.Start();
+        match.End();
+        match.GoToPostGame();
+
+        var mp1 = match.Players.First(x => x.PlayerId == p1.Id);
+        var mp2 = match.Players.First(x => x.PlayerId == p2.Id);
+
+        match.Votes.Add(match.CreateVote(mp1.Id, mp2.Id));
+        match.Votes.Add(match.CreateVote(mp2.Id, mp1.Id));
+
+        var result = match.AutoSetMvpIfAllVoted();
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void AutoSetMvpIfAllVoted_WhenAllParticipantsAreGuests_ShouldReturnFalse()
+    {
+        var groupId = Guid.NewGuid();
+        var match = new MatchEntity(groupId, DateTime.UtcNow, "Local");
+
+        var g1 = new PlayerEntity("G1", null, groupId, 0, false, true, Status.Active);
+        var g2 = new PlayerEntity("G2", null, groupId, 0, false, true, Status.Active);
+
+        match.AddPlayer(new MatchPlayerEntity(g1.Id), g1);
+        match.AddPlayer(new MatchPlayerEntity(g2.Id), g2);
+
+        match.OpenAcceptation();
+        match.AcceptInvite(g1.Id);
+        match.AcceptInvite(g2.Id);
+        match.GoToMatchMaking();
+        match.AssignTeams(new[] { g1.Id }, new[] { g2.Id });
+        match.Start();
+        match.End();
+        match.GoToPostGame();
+
+        // eligible = [] → retorna false imediatamente
+        var result = match.AutoSetMvpIfAllVoted();
+
+        Assert.False(result);
+    }
 }
