@@ -130,7 +130,15 @@ public sealed class MatchService : IMatchService
         if (match is null)
             return Result<MatchDetailsDto>.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
-        var computedMvp = match.GetComputedMvp();
+        var computedMvps = match.GetComputedMvps()
+            .Select(p => new MatchMvpDto
+            {
+                MatchPlayerId = p.Id,
+                PlayerId      = p.PlayerId,
+                PlayerName    = p.Player?.Name ?? string.Empty,
+                Team          = p.Team
+            })
+            .ToList();
 
         var mpNameById = match.Players.ToDictionary(
             p => p.Id,
@@ -224,15 +232,7 @@ public sealed class MatchService : IMatchService
                     HexValue = match.TeamBColor.HexValue
                 },
 
-            ComputedMvp = computedMvp is null
-                ? null
-                : new MatchMvpDto
-                {
-                    MatchPlayerId = computedMvp.Id,
-                    PlayerId = computedMvp.PlayerId,
-                    PlayerName = computedMvp.Player?.Name ?? string.Empty,
-                    Team = computedMvp.Team
-                },
+            ComputedMvps = computedMvps,
 
             TeamAPlayers = teamAPlayers.Select(ToPlayerDto).OrderBy(x => x.PlayerName).ToList(),
             TeamBPlayers = teamBPlayers.Select(ToPlayerDto).OrderBy(x => x.PlayerName).ToList(),
@@ -1246,19 +1246,17 @@ public sealed class MatchService : IMatchService
             .ThenBy(x => x.VotedForName)
             .ToList();
 
-        // MVP vem do flag persistido (definido quando todos votaram)
-        var mvpPlayer = baseData.Players.FirstOrDefault(p => p.IsMvp == true);
-        MatchMvpDto? computedMvp = null;
-        if (mvpPlayer is not null)
-        {
-            computedMvp = new MatchMvpDto
+        // MVPs vêm do flag persistido (definido quando todos votaram — pode haver empate)
+        var computedMvps = baseData.Players
+            .Where(p => p.IsMvp == true)
+            .Select(p => new MatchMvpDto
             {
-                MatchPlayerId = mvpPlayer.Id,
-                PlayerId      = mvpPlayer.PlayerId,
-                PlayerName    = mvpPlayer.PlayerName,
-                Team          = mvpPlayer.Team
-            };
-        }
+                MatchPlayerId = p.Id,
+                PlayerId      = p.PlayerId,
+                PlayerName    = p.PlayerName,
+                Team          = p.Team
+            })
+            .ToList();
 
         var goals = baseData.Goals
             .OrderBy(g => g.TimeSeconds ?? int.MaxValue)
@@ -1314,7 +1312,7 @@ public sealed class MatchService : IMatchService
             Status         = baseData.Status,
             TeamAGoals     = baseData.TeamAGoals,
             TeamBGoals     = baseData.TeamBGoals,
-            ComputedMvp    = computedMvp,
+            ComputedMvps   = computedMvps,
             VoteCounts     = voteCounts,
             Votes          = individualVotes,
             Goals          = goals,
@@ -1472,7 +1470,15 @@ public sealed class MatchService : IMatchService
 
     private static MatchDetailsDto MapToDetailsDto(MatchEntity match)
     {
-        var computedMvp = match.GetComputedMvp();
+        var computedMvps = match.GetComputedMvps()
+            .Select(p => new MatchMvpDto
+            {
+                MatchPlayerId = p.Id,
+                PlayerId      = p.PlayerId,
+                PlayerName    = p.Player?.Name ?? string.Empty,
+                Team          = p.Team
+            })
+            .ToList();
 
         var mpNameById = match.Players.ToDictionary(
             p => p.Id,
@@ -1561,15 +1567,7 @@ public sealed class MatchService : IMatchService
                     HexValue = match.TeamBColor.HexValue
                 },
 
-            ComputedMvp = computedMvp is null
-                ? null
-                : new MatchMvpDto
-                {
-                    MatchPlayerId = computedMvp.Id,
-                    PlayerId = computedMvp.PlayerId,
-                    PlayerName = computedMvp.Player?.Name ?? string.Empty,
-                    Team = computedMvp.Team
-                },
+            ComputedMvps = computedMvps,
 
             TeamAPlayers = teamAPlayers.Select(ToPlayerDto).OrderBy(x => x.PlayerName).ToList(),
             TeamBPlayers = teamBPlayers.Select(ToPlayerDto).OrderBy(x => x.PlayerName).ToList(),

@@ -17,7 +17,7 @@ public sealed class MatchDetailsDto
     public TeamColorDto? TeamAColor { get; set; }
     public TeamColorDto? TeamBColor { get; set; }
 
-    public MatchMvpDto? ComputedMvp { get; set; }
+    public List<MatchMvpDto> ComputedMvps { get; set; } = [];
 
     public List<PlayerInMatchDto> TeamAPlayers { get; set; } = [];
     public List<PlayerInMatchDto> TeamBPlayers { get; set; } = [];

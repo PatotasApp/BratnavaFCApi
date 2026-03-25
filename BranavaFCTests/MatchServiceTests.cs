@@ -1819,7 +1819,7 @@ public sealed class MatchServiceTests
         var result = await sut.GetPostGameAsync(group.Id, match.Id, CancellationToken.None);
 
         result.Success.Should().BeTrue();
-        result.Data!.ComputedMvp.Should().BeNull("nenhum voto ainda → MVP não definido");
+        result.Data!.ComputedMvps.Should().BeEmpty("nenhum voto ainda → MVP não definido");
     }
 
     [Fact]
@@ -1848,7 +1848,7 @@ public sealed class MatchServiceTests
         var result = await sut.GetPostGameAsync(group.Id, match.Id, CancellationToken.None);
 
         result.Success.Should().BeTrue();
-        result.Data!.ComputedMvp.Should().NotBeNull("MVP deve estar definido após todos votarem");
+        result.Data!.ComputedMvps.Should().NotBeEmpty("MVP deve estar definido após todos votarem");
     }
 
     // =========================
@@ -1885,9 +1885,9 @@ public sealed class MatchServiceTests
             .ToListAsync();
 
         reloaded.Should().Contain(mp => mp.IsMvp == true,
-            "exatamente um jogador deve ter IsMvp=true após todos votarem");
-        reloaded.Count(mp => mp.IsMvp == true).Should().Be(1,
-            "apenas um MVP pode ser definido por partida");
+            "ao menos um jogador deve ter IsMvp=true após todos votarem");
+        reloaded.Count(mp => mp.IsMvp == true).Should().Be(2,
+            "com empate (1 voto cada), ambos os jogadores devem ser MVP");
     }
 
     [Fact]

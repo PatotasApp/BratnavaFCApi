@@ -197,19 +197,22 @@ public class MatchEntity : BaseEntity
         return vote;
     }
 
-    public MatchPlayerEntity? GetComputedMvp()
+    public IReadOnlyList<MatchPlayerEntity> GetComputedMvps()
     {
-        var top = Votes
+        var groups = Votes
             .Where(v => v.VotedForId != Guid.Empty)
             .GroupBy(v => v.VotedForId)
-            .Select(g => new { PlayerId = g.Key, Count = g.Count() })
-            .OrderByDescending(x => x.Count)
-            .FirstOrDefault();
+            .Select(g => new { Id = g.Key, Count = g.Count() })
+            .ToList();
 
-        if (top == null || top.PlayerId == Guid.Empty) return null;
+        if (groups.Count == 0) return Array.Empty<MatchPlayerEntity>();
 
-        return Players.FirstOrDefault(p => p.Id == top.PlayerId);
+        var maxCount = groups.Max(x => x.Count);
+        var winnerIds = groups.Where(x => x.Count == maxCount).Select(x => x.Id).ToHashSet();
+        return Players.Where(p => winnerIds.Contains(p.Id)).ToList();
     }
+
+    public MatchPlayerEntity? GetComputedMvp() => GetComputedMvps().FirstOrDefault();
 
     /// <summary>
     /// Se todos os jogadores não-convidados já votaram, persiste o MVP automaticamente.
@@ -224,21 +227,22 @@ public class MatchEntity : BaseEntity
         var voterIds = Votes.Select(v => v.VoterId).ToHashSet();
         if (!eligible.All(p => voterIds.Contains(p.Id))) return false;
 
-        // Revoga MVP anterior antes de definir o novo
+        // Revoga MVP anterior antes de definir o(s) novo(s)
         foreach (var p in Players)
             p.RevokeMvp();
 
-        var winnerId = Votes
+        var voteGroups = Votes
             .Where(v => v.VotedForId != Guid.Empty)
             .GroupBy(v => v.VotedForId)
-            .OrderByDescending(g => g.Count())
-            .Select(g => g.Key)
-            .FirstOrDefault();
+            .Select(g => new { Id = g.Key, Count = g.Count() })
+            .ToList();
 
-        if (winnerId != Guid.Empty)
+        if (voteGroups.Count > 0)
         {
-            var winner = Players.FirstOrDefault(p => p.Id == winnerId);
-            winner?.SetMvp();
+            var maxCount = voteGroups.Max(x => x.Count);
+            var winnerIds = voteGroups.Where(x => x.Count == maxCount).Select(x => x.Id).ToHashSet();
+            foreach (var p in Players.Where(p => winnerIds.Contains(p.Id)))
+                p.SetMvp();
         }
 
         return true;
@@ -257,17 +261,18 @@ public class MatchEntity : BaseEntity
         foreach (var p in Players)
             p.RevokeMvp();
 
-        var winnerMatchPlayerId = Votes
+        var voteGroups = Votes
             .Where(v => v.VotedForId != Guid.Empty)
             .GroupBy(v => v.VotedForId)
-            .OrderByDescending(g => g.Count())
-            .Select(g => g.Key)
-            .FirstOrDefault();
+            .Select(g => new { Id = g.Key, Count = g.Count() })
+            .ToList();
 
-        if (winnerMatchPlayerId != Guid.Empty)
+        if (voteGroups.Count > 0)
         {
-            var winner = Players.FirstOrDefault(p => p.Id == winnerMatchPlayerId);
-            winner?.SetMvp();
+            var maxCount = voteGroups.Max(x => x.Count);
+            var winnerIds = voteGroups.Where(x => x.Count == maxCount).Select(x => x.Id).ToHashSet();
+            foreach (var p in Players.Where(p => winnerIds.Contains(p.Id)))
+                p.SetMvp();
         }
 
         Status = MatchStatus.Finalized;

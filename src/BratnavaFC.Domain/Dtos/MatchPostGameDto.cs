@@ -11,7 +11,7 @@ namespace BratnavaFC.Domain.Dtos
         public int? TeamAGoals { get; init; }
         public int? TeamBGoals { get; init; }
 
-        public MatchMvpDto? ComputedMvp { get; init; }
+        public List<MatchMvpDto> ComputedMvps { get; init; } = new();
 
         public List<VoteCountDto> VoteCounts { get; init; } = new();
         public List<VoteDto> Votes { get; init; } = new();
