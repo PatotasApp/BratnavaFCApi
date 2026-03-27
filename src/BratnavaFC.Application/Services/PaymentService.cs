@@ -269,7 +269,7 @@ public sealed class PaymentService : IPaymentService
             if (userId is not null)
             {
                 var monthName = _monthNames[dto.Month - 1];
-                _ = _push.SendToUserAsync(
+                await _push.SendToUserAsync(
                     userId.Value,
                     "Pendência financeira",
                     $"Sua mensalidade de {monthName}/{dto.Year} foi marcada como pendente.",
@@ -277,11 +277,8 @@ public sealed class PaymentService : IPaymentService
                     {
                         ["type"]    = "payment_pending",
                         ["groupId"] = groupId.ToString()
-                    }).ContinueWith(t =>
-                    {
-                        if (t.IsFaulted)
-                            _logger.LogError(t.Exception, "[Payment] Falha ao enviar push mensal.");
-                    }, TaskContinuationOptions.OnlyOnFaulted);
+                    },
+                    ct);
             }
         }
 
@@ -470,7 +467,7 @@ public sealed class PaymentService : IPaymentService
 
             if (playerUserId is not null)
             {
-                _ = _push.SendToUserAsync(
+                await _push.SendToUserAsync(
                     playerUserId.Value,
                     "Pendência financeira",
                     $"Sua cobrança \"{chargeName ?? "extra"}\" foi marcada como pendente.",
@@ -478,11 +475,8 @@ public sealed class PaymentService : IPaymentService
                     {
                         ["type"]    = "payment_pending",
                         ["groupId"] = groupId.ToString()
-                    }).ContinueWith(t =>
-                    {
-                        if (t.IsFaulted)
-                            _logger.LogError(t.Exception, "[Payment] Falha ao enviar push extra.");
-                    }, TaskContinuationOptions.OnlyOnFaulted);
+                    },
+                    ct);
             }
         }
 
