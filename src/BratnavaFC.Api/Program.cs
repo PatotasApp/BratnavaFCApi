@@ -112,38 +112,42 @@ var firebaseJson = Environment.GetEnvironmentVariable("FIREBASE_SERVICE_ACCOUNT_
                 ?? builder.Configuration["Firebase:ServiceAccountJson"];
 var firebasePath = builder.Configuration["Firebase:ServiceAccountPath"];
 
-if (!string.IsNullOrWhiteSpace(firebaseJson))
+var startupLogger = LoggerFactory.Create(l => l.AddConsole()).CreateLogger("Startup");
+
+try
 {
-    FirebaseApp.Create(new AppOptions
+    if (!string.IsNullOrWhiteSpace(firebaseJson))
     {
-        Credential = GoogleCredential.FromJson(firebaseJson),
-    });
-}
-else if (!string.IsNullOrWhiteSpace(firebasePath) && File.Exists(firebasePath))
-{
-    FirebaseApp.Create(new AppOptions
+        FirebaseApp.Create(new AppOptions
+        {
+            Credential = GoogleCredential.FromJson(firebaseJson),
+        });
+        startupLogger.LogInformation("[Firebase] Inicializado via ServiceAccountJson.");
+    }
+    else if (!string.IsNullOrWhiteSpace(firebasePath) && File.Exists(firebasePath))
     {
-        Credential = GoogleCredential.FromFile(firebasePath),
-    });
-}
-else
-{
-    // Application Default Credentials (funciona no GCP / Cloud Run automaticamente)
-    try
+        FirebaseApp.Create(new AppOptions
+        {
+            Credential = GoogleCredential.FromFile(firebasePath),
+        });
+        startupLogger.LogInformation("[Firebase] Inicializado via ServiceAccountPath.");
+    }
+    else
     {
+        // Application Default Credentials (funciona no GCP / Cloud Run automaticamente)
         FirebaseApp.Create(new AppOptions
         {
             Credential = GoogleCredential.GetApplicationDefault(),
         });
+        startupLogger.LogInformation("[Firebase] Inicializado via Application Default Credentials.");
     }
-    catch (Exception ex)
-    {
-        // Firebase não inicializado — notificações push estarão indisponíveis
-        var startupLogger = LoggerFactory.Create(l => l.AddConsole()).CreateLogger("Startup");
-        startupLogger.LogWarning(ex,
-            "Firebase não pôde ser inicializado. Push notifications estarão indisponíveis. " +
-            "Configure FIREBASE_SERVICE_ACCOUNT_JSON ou Firebase:ServiceAccountPath.");
-    }
+}
+catch (Exception ex)
+{
+    // Firebase não inicializado — notificações push estarão indisponíveis mas o app continua
+    startupLogger.LogWarning(ex,
+        "[Firebase] Não pôde ser inicializado. Push notifications estarão indisponíveis. " +
+        "Verifique FIREBASE_SERVICE_ACCOUNT_JSON ou Firebase:ServiceAccountPath.");
 }
 
 // =====================
