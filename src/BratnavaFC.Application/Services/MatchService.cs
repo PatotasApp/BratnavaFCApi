@@ -12,11 +12,16 @@ public sealed class MatchService : IMatchService
 {
     private readonly AppDbContext _context;
     private readonly IRepositoryBase<MatchEntity> _repository;
+    private readonly IPushService _push;
 
-    public MatchService(AppDbContext context, IRepositoryBase<MatchEntity> repository)
+    public MatchService(
+        AppDbContext context,
+        IRepositoryBase<MatchEntity> repository,
+        IPushService push)
     {
         _context = context;
         _repository = repository;
+        _push = push;
     }
 
     public async Task<Result<List<MatchDetailsDto>>> GetAllAsync(Guid groupId, CancellationToken ct = default)
@@ -274,6 +279,19 @@ public sealed class MatchService : IMatchService
 
         await _repository.SaveChangesAsync(ct);
 
+        // Notifica todos os jogadores do grupo sobre o convite para a partida
+        _ = _push.SendToGroupAsync(
+            groupId,
+            title: "Convite para partida",
+            body:  "Você foi convidado para uma partida. Confirme sua presença!",
+            data: new Dictionary<string, string>
+            {
+                ["type"]    = "match_invite",
+                ["groupId"] = groupId.ToString(),
+                ["matchId"] = match.Id.ToString(),
+            },
+            ct);
+
         return Result<MatchEntity>.Ok(match, "Partida criada com sucesso.", ResultStatus.Created);
     }
 
@@ -404,6 +422,20 @@ public sealed class MatchService : IMatchService
 
         match.Start();
         await _context.SaveChangesAsync(ct);
+
+        // Notifica jogadores que a partida começou
+        _ = _push.SendToGroupAsync(
+            groupId,
+            title: "Partida iniciada!",
+            body:  "A partida do seu grupo começou. Boa sorte!",
+            data: new Dictionary<string, string>
+            {
+                ["type"]    = "match_started",
+                ["groupId"] = groupId.ToString(),
+                ["matchId"] = matchId.ToString(),
+            },
+            ct);
+
         return Result.Ok("Partida atualizada com sucesso.");
     }
 
@@ -517,6 +549,20 @@ public sealed class MatchService : IMatchService
         match.FinalizeByVotes(tieRule, tieMax);
 
         await _context.SaveChangesAsync(ct);
+
+        // Notifica jogadores que a partida foi finalizada
+        _ = _push.SendToGroupAsync(
+            groupId,
+            title: "Partida finalizada!",
+            body:  "Confira os resultados e o MVP da partida.",
+            data: new Dictionary<string, string>
+            {
+                ["type"]    = "match_ended",
+                ["groupId"] = groupId.ToString(),
+                ["matchId"] = matchId.ToString(),
+            },
+            ct);
+
         return Result.Ok("Partida atualizada com sucesso.");
     }
 

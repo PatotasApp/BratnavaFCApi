@@ -14,6 +14,8 @@ using BratnavaFC.Domain.Common;
 using Microsoft.OpenApi.Models;
 using System.IdentityModel.Tokens.Jwt;
 using BratnavaFC.Api;
+using FirebaseAdmin;
+using Google.Apis.Auth.OAuth2;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -98,6 +100,51 @@ builder.Services.AddScoped<IGroupSettingsService, GroupSettingsService>();
 builder.Services.AddScoped<ICalendarService, CalendarService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IPollService, PollService>();
+builder.Services.AddScoped<IPushService, PushService>();
+
+// =====================
+// FIREBASE ADMIN
+// =====================
+// Prioridade 1: JSON completo via variável de ambiente FIREBASE_SERVICE_ACCOUNT_JSON
+// Prioridade 2: Caminho para arquivo via Firebase:ServiceAccountPath (config/env)
+// Prioridade 3: Google Application Default Credentials (ADC)
+var firebaseJson = Environment.GetEnvironmentVariable("FIREBASE_SERVICE_ACCOUNT_JSON")
+                ?? builder.Configuration["Firebase:ServiceAccountJson"];
+var firebasePath = builder.Configuration["Firebase:ServiceAccountPath"];
+
+if (!string.IsNullOrWhiteSpace(firebaseJson))
+{
+    FirebaseApp.Create(new AppOptions
+    {
+        Credential = GoogleCredential.FromJson(firebaseJson),
+    });
+}
+else if (!string.IsNullOrWhiteSpace(firebasePath) && File.Exists(firebasePath))
+{
+    FirebaseApp.Create(new AppOptions
+    {
+        Credential = GoogleCredential.FromFile(firebasePath),
+    });
+}
+else
+{
+    // Application Default Credentials (funciona no GCP / Cloud Run automaticamente)
+    try
+    {
+        FirebaseApp.Create(new AppOptions
+        {
+            Credential = GoogleCredential.GetApplicationDefault(),
+        });
+    }
+    catch (Exception ex)
+    {
+        // Firebase não inicializado — notificações push estarão indisponíveis
+        var startupLogger = LoggerFactory.Create(l => l.AddConsole()).CreateLogger("Startup");
+        startupLogger.LogWarning(ex,
+            "Firebase não pôde ser inicializado. Push notifications estarão indisponíveis. " +
+            "Configure FIREBASE_SERVICE_ACCOUNT_JSON ou Firebase:ServiceAccountPath.");
+    }
+}
 
 // =====================
 // HOLIDAY SERVICE (BrasilAPI)

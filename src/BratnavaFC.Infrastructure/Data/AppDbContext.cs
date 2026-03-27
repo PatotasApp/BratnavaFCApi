@@ -33,6 +33,7 @@ public class AppDbContext : DbContext
     public DbSet<PollEntity> Polls => Set<PollEntity>();
     public DbSet<PollOptionEntity> PollOptions => Set<PollOptionEntity>();
     public DbSet<PollVoteEntity> PollVotes => Set<PollVoteEntity>();
+    public DbSet<PushTokenEntity> PushTokens => Set<PushTokenEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -564,6 +565,37 @@ public class AppDbContext : DbContext
             // Um pagamento por jogador por cobrança
             builder.HasIndex(x => new { x.ExtraChargeId, x.PlayerId })
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<PushTokenEntity>(builder =>
+        {
+            builder.HasKey(x => x.Id);
+
+            builder.Property(x => x.Token)
+                .IsRequired()
+                .HasMaxLength(4096);
+
+            builder.Property(x => x.Platform)
+                .IsRequired()
+                .HasMaxLength(10);
+
+            builder.Property(x => x.IsActive)
+                .IsRequired()
+                .HasDefaultValue(true);
+
+            builder.Property(x => x.UpdatedAt)
+                .IsRequired();
+
+            builder.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Busca rápida de tokens ativos por usuário
+            builder.HasIndex(x => x.UserId);
+
+            // Token único globalmente (um mesmo dispositivo não pode ter dois registros)
+            builder.HasIndex(x => x.Token).IsUnique();
         });
     }
 

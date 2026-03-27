@@ -14,12 +14,18 @@ public class GroupService : IGroupService
     private readonly AppDbContext _context;
     private readonly ILogger<GroupService> _logger;
     private readonly IRepositoryBase<GroupEntity> _repository;
+    private readonly IPushService _push;
 
-    public GroupService(AppDbContext context, ILogger<GroupService> logger, IRepositoryBase<GroupEntity> repository)
+    public GroupService(
+        AppDbContext context,
+        ILogger<GroupService> logger,
+        IRepositoryBase<GroupEntity> repository,
+        IPushService push)
     {
         _context = context;
         _logger = logger;
         _repository = repository;
+        _push = push;
     }
 
     public async Task<Result<Guid>> CreateAsync(CreateGroupDto request, CancellationToken cancellationToken)
@@ -456,6 +462,18 @@ public class GroupService : IGroupService
             await _context.SaveChangesAsync(cancellationToken);
 
             var group = await _context.Groups.FindAsync([groupId], cancellationToken);
+
+            // Notifica o usuário convidado
+            _ = _push.SendToUserAsync(
+                request.TargetUserId,
+                title: "Convite para grupo",
+                body:  $"Você foi convidado para o grupo \"{group?.Name ?? "grupo"}\". Acesse o app para aceitar!",
+                data: new Dictionary<string, string>
+                {
+                    ["type"]    = "group_invite",
+                    ["groupId"] = groupId.ToString(),
+                },
+                cancellationToken);
 
             var dto = new GroupInviteDto(
                 invite.Id,

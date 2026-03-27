@@ -11,11 +11,20 @@ namespace BratnavaFC.Application.Services;
 public sealed class PaymentService : IPaymentService
 {
     private readonly AppDbContext _context;
+    private readonly IPushService _push;
 
-    public PaymentService(AppDbContext context)
+    public PaymentService(AppDbContext context, IPushService push)
     {
         _context = context;
+        _push    = push;
     }
+
+    private static readonly string[] _monthNames =
+    [
+        "Janeiro", "Fevereiro", "Março",    "Abril",
+        "Maio",    "Junho",     "Julho",    "Agosto",
+        "Setembro","Outubro",   "Novembro", "Dezembro"
+    ];
 
     // ── Grade mensal ──────────────────────────────────────────────────────────
 
@@ -224,6 +233,8 @@ public sealed class PaymentService : IPaymentService
             record.ApplyDiscount(dto.Discount.Value, dto.DiscountReason, actingUserId);
         }
 
+        var wasAlreadyPending = record.Status == PaymentStatus.Pending;
+
         if (dto.Status == PaymentStatus.Paid)
         {
             record.MarkAsPaid(
@@ -238,6 +249,30 @@ public sealed class PaymentService : IPaymentService
         }
 
         await _context.SaveChangesAsync(ct);
+
+        // Notifica o jogador apenas quando a transição é Pago → Pendente
+        if (dto.Status == PaymentStatus.Pending && !wasAlreadyPending)
+        {
+            var userId = await _context.Players
+                .AsNoTracking()
+                .Where(p => p.Id == dto.PlayerId)
+                .Select(p => p.UserId)
+                .FirstOrDefaultAsync(ct);
+
+            if (userId is not null)
+            {
+                var monthName = _monthNames[dto.Month - 1];
+                _ = _push.SendToUserAsync(
+                    userId.Value,
+                    "Pendência financeira",
+                    $"Sua mensalidade de {monthName}/{dto.Year} foi marcada como pendente.",
+                    new Dictionary<string, string>
+                    {
+                        ["type"]    = "payment_pending",
+                        ["groupId"] = groupId.ToString()
+                    });
+            }
+        }
 
         return Result.Ok("Pagamento atualizado com sucesso.");
     }
@@ -386,6 +421,8 @@ public sealed class PaymentService : IPaymentService
         if (dto.Discount.HasValue && isAdmin)
             payment.ApplyDiscount(dto.Discount.Value, dto.DiscountReason, actingUserId);
 
+        var wasAlreadyPendingExtra = payment.Status == PaymentStatus.Pending;
+
         if (dto.Status == PaymentStatus.Paid)
         {
             payment.MarkAsPaid(
@@ -400,6 +437,35 @@ public sealed class PaymentService : IPaymentService
         }
 
         await _context.SaveChangesAsync(ct);
+
+        // Notifica o jogador apenas quando a transição é Pago → Pendente
+        if (dto.Status == PaymentStatus.Pending && !wasAlreadyPendingExtra)
+        {
+            var playerData = await _context.Players
+                .AsNoTracking()
+                .Where(p => p.Id == playerId)
+                .Select(p => p.UserId)
+                .FirstOrDefaultAsync(ct);
+
+            var chargeName = await _context.ExtraCharges
+                .AsNoTracking()
+                .Where(c => c.Id == chargeId)
+                .Select(c => c.Name)
+                .FirstOrDefaultAsync(ct);
+
+            if (playerData is not null)
+            {
+                _ = _push.SendToUserAsync(
+                    playerData.Value,
+                    "Pendência financeira",
+                    $"Sua cobrança \"{chargeName ?? "extra"}\" foi marcada como pendente.",
+                    new Dictionary<string, string>
+                    {
+                        ["type"]    = "payment_pending",
+                        ["groupId"] = groupId.ToString()
+                    });
+            }
+        }
 
         return Result.Ok("Pagamento atualizado com sucesso.");
     }
