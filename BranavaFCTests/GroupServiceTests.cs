@@ -1,3 +1,4 @@
+using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Groups;
@@ -19,8 +20,9 @@ public class GroupServiceTests
     private static GroupService CreateSut(BratnavaFC.Infrastructure.Data.AppDbContext db)
     {
         var logger = new Mock<ILogger<GroupService>>();
-        var repo = new RepositoryBase<GroupEntity>(db);
-        return new GroupService(db, logger.Object, repo);
+        var repo   = new RepositoryBase<GroupEntity>(db);
+        var push   = Mock.Of<IPushService>();
+        return new GroupService(db, logger.Object, repo, push);
     }
 
     // ─── CreateAsync ──────────────────────────────────────────────────────────

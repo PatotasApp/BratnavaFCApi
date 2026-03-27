@@ -25,7 +25,8 @@ file static class Builders
     {
         var logger = Mock.Of<ILogger<GroupService>>();
         var repo   = new Mock<IRepositoryBase<GroupEntity>>().Object;
-        return new GroupService(db, logger, repo);
+        var push   = Mock.Of<IPushService>();
+        return new GroupService(db, logger, repo, push);
     }
 }
 
