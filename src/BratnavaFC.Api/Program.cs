@@ -105,14 +105,25 @@ builder.Services.AddScoped<IPushService, PushService>();
 // =====================
 // FIREBASE ADMIN
 // =====================
-// Prioridade 1: JSON completo via variável de ambiente FIREBASE_SERVICE_ACCOUNT_JSON
-// Prioridade 2: Caminho para arquivo via Firebase:ServiceAccountPath (config/env)
-// Prioridade 3: Google Application Default Credentials (ADC)
-var firebaseJson = Environment.GetEnvironmentVariable("FIREBASE_SERVICE_ACCOUNT_JSON")
-                ?? builder.Configuration["Firebase:ServiceAccountJson"];
-var firebasePath = builder.Configuration["Firebase:ServiceAccountPath"];
-
+// Prioridade 1: Base64 via FIREBASE_SERVICE_ACCOUNT_B64  (recomendado — sem problemas de quoting)
+// Prioridade 2: JSON via FIREBASE_SERVICE_ACCOUNT_JSON ou Firebase:ServiceAccountJson
+// Prioridade 3: Arquivo via Firebase:ServiceAccountPath
+// Prioridade 4: Application Default Credentials (GCP/Cloud Run)
 var startupLogger = LoggerFactory.Create(l => l.AddConsole()).CreateLogger("Startup");
+
+static string? DecodeB64(string? b64)
+{
+    if (string.IsNullOrWhiteSpace(b64)) return null;
+    try   { return System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(b64)); }
+    catch { return null; }
+}
+
+var firebaseJson =
+    DecodeB64(Environment.GetEnvironmentVariable("FIREBASE_SERVICE_ACCOUNT_B64"))
+    ?? Environment.GetEnvironmentVariable("FIREBASE_SERVICE_ACCOUNT_JSON")
+    ?? builder.Configuration["Firebase:ServiceAccountJson"];
+
+var firebasePath = builder.Configuration["Firebase:ServiceAccountPath"];
 
 try
 {
@@ -134,7 +145,6 @@ try
     }
     else
     {
-        // Application Default Credentials (funciona no GCP / Cloud Run automaticamente)
         FirebaseApp.Create(new AppOptions
         {
             Credential = GoogleCredential.GetApplicationDefault(),
@@ -144,10 +154,9 @@ try
 }
 catch (Exception ex)
 {
-    // Firebase não inicializado — notificações push estarão indisponíveis mas o app continua
     startupLogger.LogWarning(ex,
         "[Firebase] Não pôde ser inicializado. Push notifications estarão indisponíveis. " +
-        "Verifique FIREBASE_SERVICE_ACCOUNT_JSON ou Firebase:ServiceAccountPath.");
+        "Verifique FIREBASE_SERVICE_ACCOUNT_B64, FIREBASE_SERVICE_ACCOUNT_JSON ou Firebase:ServiceAccountPath.");
 }
 
 // =====================
