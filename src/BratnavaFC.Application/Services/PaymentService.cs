@@ -5,6 +5,7 @@ using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace BratnavaFC.Application.Services;
 
@@ -12,11 +13,13 @@ public sealed class PaymentService : IPaymentService
 {
     private readonly AppDbContext _context;
     private readonly IPushService _push;
+    private readonly ILogger<PaymentService> _logger;
 
-    public PaymentService(AppDbContext context, IPushService push)
+    public PaymentService(AppDbContext context, IPushService push, ILogger<PaymentService> logger)
     {
         _context = context;
         _push    = push;
+        _logger  = logger;
     }
 
     private static readonly string[] _monthNames =
@@ -259,6 +262,10 @@ public sealed class PaymentService : IPaymentService
                 .Select(p => p.UserId)
                 .FirstOrDefaultAsync(ct);
 
+            _logger.LogInformation(
+                "[Payment] Transição Pago→Pendente: playerId={PlayerId} userId={UserId} month={Month}/{Year}",
+                dto.PlayerId, userId, dto.Month, dto.Year);
+
             if (userId is not null)
             {
                 var monthName = _monthNames[dto.Month - 1];
@@ -270,7 +277,11 @@ public sealed class PaymentService : IPaymentService
                     {
                         ["type"]    = "payment_pending",
                         ["groupId"] = groupId.ToString()
-                    });
+                    }).ContinueWith(t =>
+                    {
+                        if (t.IsFaulted)
+                            _logger.LogError(t.Exception, "[Payment] Falha ao enviar push mensal.");
+                    }, TaskContinuationOptions.OnlyOnFaulted);
             }
         }
 
@@ -441,7 +452,7 @@ public sealed class PaymentService : IPaymentService
         // Notifica o jogador apenas quando a transição é Pago → Pendente
         if (dto.Status == PaymentStatus.Pending && !wasAlreadyPendingExtra)
         {
-            var playerData = await _context.Players
+            var playerUserId = await _context.Players
                 .AsNoTracking()
                 .Where(p => p.Id == playerId)
                 .Select(p => p.UserId)
@@ -453,17 +464,25 @@ public sealed class PaymentService : IPaymentService
                 .Select(c => c.Name)
                 .FirstOrDefaultAsync(ct);
 
-            if (playerData is not null)
+            _logger.LogInformation(
+                "[Payment] Transição Pago→Pendente (extra): playerId={PlayerId} userId={UserId} charge={ChargeName}",
+                playerId, playerUserId, chargeName);
+
+            if (playerUserId is not null)
             {
                 _ = _push.SendToUserAsync(
-                    playerData.Value,
+                    playerUserId.Value,
                     "Pendência financeira",
                     $"Sua cobrança \"{chargeName ?? "extra"}\" foi marcada como pendente.",
                     new Dictionary<string, string>
                     {
                         ["type"]    = "payment_pending",
                         ["groupId"] = groupId.ToString()
-                    });
+                    }).ContinueWith(t =>
+                    {
+                        if (t.IsFaulted)
+                            _logger.LogError(t.Exception, "[Payment] Falha ao enviar push extra.");
+                    }, TaskContinuationOptions.OnlyOnFaulted);
             }
         }
 

@@ -70,9 +70,13 @@ public class PushService : IPushService
             .Select(t => t.Token)
             .ToListAsync(cancellationToken);
 
+        _logger.LogInformation(
+            "[Push] SendToUser userId={UserId} | tokens={Count} | title={Title}",
+            userId, tokens.Count, title);
+
         if (tokens.Count == 0)
         {
-            _logger.LogDebug("Nenhum token ativo para usuário {UserId}. Notificação ignorada.", userId);
+            _logger.LogWarning("[Push] Nenhum token ativo para usuário {UserId}. Notificação ignorada.", userId);
             return;
         }
 
