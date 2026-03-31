@@ -637,7 +637,8 @@ public class GroupService : IGroupService
             title: "Você agora é administrador!",
             body:  $"Você foi promovido a administrador do grupo \"{groupName}\".",
             data:  new Dictionary<string, string> { ["type"] = "promoted_admin", ["groupId"] = groupId.ToString() },
-            ct);
+            ct,
+            groupId: groupId);
 
     private Task NotifyUserPromotedFinanceiroAsync(Guid userId, string groupName, Guid groupId, CancellationToken ct) =>
         _push.SendToUserAsync(
@@ -645,7 +646,8 @@ public class GroupService : IGroupService
             title: "Você agora é financeiro!",
             body:  $"Você foi promovido a financeiro do grupo \"{groupName}\".",
             data:  new Dictionary<string, string> { ["type"] = "promoted_financeiro", ["groupId"] = groupId.ToString() },
-            ct);
+            ct,
+            groupId: groupId);
 
     private Task NotifyGroupInviteSentAsync(Guid targetUserId, string groupName, Guid groupId, CancellationToken ct) =>
         _push.SendToUserAsync(
@@ -653,7 +655,8 @@ public class GroupService : IGroupService
             title: "Convite para grupo",
             body:  $"Você foi convidado para o grupo \"{groupName}\". Acesse o app para aceitar!",
             data:  new Dictionary<string, string> { ["type"] = "group_invite", ["groupId"] = groupId.ToString() },
-            ct);
+            ct,
+            groupId: groupId);
 
     public async Task<Result> CreatorLeaveGroupAsync(Guid groupId, Guid requestingUserId, CreatorLeaveGroupDto dto, CancellationToken cancellationToken)
     {

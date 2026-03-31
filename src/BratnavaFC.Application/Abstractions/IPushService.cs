@@ -7,13 +7,21 @@ public interface IPushService
     /// <summary>Registra ou atualiza o token FCM de um dispositivo para o usuário autenticado.</summary>
     Task<Result> RegisterTokenAsync(Guid userId, string token, string platform, CancellationToken cancellationToken);
 
-    /// <summary>Envia notificação para todos os dispositivos ativos de um usuário.</summary>
+    /// <summary>
+    /// Envia notificação para todos os dispositivos ativos de um usuário.
+    /// Se groupId for fornecido, o nome do grupo é prefixado no título automaticamente.
+    /// </summary>
     Task SendToUserAsync(Guid userId, string title, string body,
-        Dictionary<string, string>? data = null, CancellationToken cancellationToken = default);
+        Dictionary<string, string>? data = null, CancellationToken cancellationToken = default,
+        Guid? groupId = null);
 
-    /// <summary>Envia notificação para uma lista de tokens FCM específica.</summary>
+    /// <summary>
+    /// Envia notificação para uma lista de tokens FCM específica.
+    /// Se groupId for fornecido, o nome do grupo é prefixado no título automaticamente.
+    /// </summary>
     Task SendToTokensAsync(IEnumerable<string> tokens, string title, string body,
-        Dictionary<string, string>? data = null, CancellationToken cancellationToken = default);
+        Dictionary<string, string>? data = null, CancellationToken cancellationToken = default,
+        Guid? groupId = null);
 
     /// <summary>Envia notificação para todos os jogadores de um grupo (via tokens ativos).</summary>
     Task SendToGroupAsync(Guid groupId, string title, string body,

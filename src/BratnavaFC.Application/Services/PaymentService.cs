@@ -750,7 +750,8 @@ public sealed class PaymentService : IPaymentService
             title: "Nova cobrança",
             body:  $"Você tem uma nova cobrança: \"{chargeName}\" — R$ {amount:N2}.",
             data:  new Dictionary<string, string> { ["type"] = "payment_pending", ["groupId"] = groupId.ToString() },
-            ct);
+            ct,
+            groupId: groupId);
     }
 
     private async Task NotifyFinanceirosExtraChargePaidAsync(
@@ -796,7 +797,8 @@ public sealed class PaymentService : IPaymentService
             title: "Pendência financeira",
             body:  $"Sua mensalidade de {_monthNames[month - 1]}/{year} foi marcada como pendente.",
             data:  new Dictionary<string, string> { ["type"] = "payment_pending", ["groupId"] = groupId.ToString() },
-            ct);
+            ct,
+            groupId: groupId);
     }
 
     private async Task NotifyPlayerExtraChargePendingAsync(
@@ -825,7 +827,8 @@ public sealed class PaymentService : IPaymentService
             title: "Pendência financeira",
             body:  $"Sua cobrança \"{chargeName ?? "extra"}\" foi marcada como pendente.",
             data:  new Dictionary<string, string> { ["type"] = "payment_pending", ["groupId"] = groupId.ToString() },
-            ct);
+            ct,
+            groupId: groupId);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

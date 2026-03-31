@@ -63,7 +63,8 @@ public class PushService : IPushService
     public async Task SendToUserAsync(
         Guid userId, string title, string body,
         Dictionary<string, string>? data = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Guid? groupId = null)
     {
         var tokens = await _context.PushTokens
             .Where(t => t.UserId == userId && t.IsActive)
@@ -80,13 +81,24 @@ public class PushService : IPushService
             return;
         }
 
-        await SendToTokensAsync(tokens, title, body, data, cancellationToken);
+        var prefixedTitle = groupId.HasValue
+            ? await PrefixWithGroupNameAsync(title, groupId.Value, cancellationToken)
+            : title;
+
+        await SendToTokensAsync(tokens, prefixedTitle, body, data, cancellationToken);
     }
 
     public async Task SendDataOnlyToGroupAsync(
         Guid groupId, Dictionary<string, string> data,
         CancellationToken cancellationToken = default)
     {
+        // Prefixa o title dentro do data dict com o nome do grupo
+        if (data.TryGetValue("title", out var rawTitle))
+        {
+            var groupName = await GetGroupNameAsync(groupId, cancellationToken);
+            data["title"] = $"{groupName} · {rawTitle}";
+        }
+
         var userIds = await _context.Players
             .Where(p => p.GroupId == groupId && p.UserId != null)
             .Select(p => p.UserId!.Value)
@@ -155,13 +167,14 @@ public class PushService : IPushService
         Dictionary<string, string>? data = null,
         CancellationToken cancellationToken = default)
     {
+        var groupName = await GetGroupNameAsync(groupId, cancellationToken);
         var userIds = await _context.Players
             .Where(p => p.GroupId == groupId && p.UserId != null)
             .Select(p => p.UserId!.Value)
             .Distinct()
             .ToListAsync(cancellationToken);
 
-        await SendToUserListAsync(userIds, title, body, data, cancellationToken);
+        await SendToUserListAsync(userIds, $"{groupName} · {title}", body, data, cancellationToken);
     }
 
     public async Task SendToGroupAdminsAsync(
@@ -169,12 +182,13 @@ public class PushService : IPushService
         Dictionary<string, string>? data = null,
         CancellationToken cancellationToken = default)
     {
+        var groupName = await GetGroupNameAsync(groupId, cancellationToken);
         var userIds = await _context.GroupAdmins
             .Where(ga => ga.GroupId == groupId)
             .Select(ga => ga.UserId)
             .ToListAsync(cancellationToken);
 
-        await SendToUserListAsync(userIds, title, body, data, cancellationToken);
+        await SendToUserListAsync(userIds, $"{groupName} · {title}", body, data, cancellationToken);
     }
 
     public async Task SendToGroupFinanceirosAsync(
@@ -182,12 +196,13 @@ public class PushService : IPushService
         Dictionary<string, string>? data = null,
         CancellationToken cancellationToken = default)
     {
+        var groupName = await GetGroupNameAsync(groupId, cancellationToken);
         var userIds = await _context.GroupFinanceiros
             .Where(gf => gf.GroupId == groupId)
             .Select(gf => gf.UserId)
             .ToListAsync(cancellationToken);
 
-        await SendToUserListAsync(userIds, title, body, data, cancellationToken);
+        await SendToUserListAsync(userIds, $"{groupName} · {title}", body, data, cancellationToken);
     }
 
     private async Task SendToUserListAsync(
@@ -210,10 +225,15 @@ public class PushService : IPushService
     public async Task SendToTokensAsync(
         IEnumerable<string> tokens, string title, string body,
         Dictionary<string, string>? data = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Guid? groupId = null)
     {
         var tokenList = tokens.Distinct().ToList();
         if (tokenList.Count == 0) return;
+
+        var prefixedTitle = groupId.HasValue
+            ? await PrefixWithGroupNameAsync(title, groupId.Value, cancellationToken)
+            : title;
 
         // Firebase aceita no máximo 500 tokens por lote
         const int batchSize = 500;
@@ -224,11 +244,26 @@ public class PushService : IPushService
 
         foreach (var batch in batches)
         {
-            await SendBatchAsync(batch, title, body, data, cancellationToken);
+            await SendBatchAsync(batch, prefixedTitle, body, data, cancellationToken);
         }
     }
 
     // ── Helpers privados ──────────────────────────────────────────────────────
+
+    /// <summary>Retorna o nome do grupo ou string vazia se não encontrado.</summary>
+    private async Task<string> GetGroupNameAsync(Guid groupId, CancellationToken ct)
+    {
+        return await _context.Groups
+            .Where(g => g.Id == groupId)
+            .Select(g => g.Name)
+            .FirstOrDefaultAsync(ct) ?? string.Empty;
+    }
+
+    private async Task<string> PrefixWithGroupNameAsync(string title, Guid groupId, CancellationToken ct)
+    {
+        var name = await GetGroupNameAsync(groupId, ct);
+        return string.IsNullOrEmpty(name) ? title : $"{name} · {title}";
+    }
 
     private async Task SendBatchAsync(
         List<string> tokens, string title, string body,
