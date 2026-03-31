@@ -307,6 +307,8 @@ public class GroupService : IGroupService
             _context.Groups.Update(group);
             await _context.SaveChangesAsync(cancellationToken);
 
+            await NotifyUserPromotedAdminAsync(request.UserId, group.Name, groupId, cancellationToken);
+
             return Result.Ok("Admin adicionado com sucesso.");
         }
         catch (Exception ex)
@@ -384,6 +386,8 @@ public class GroupService : IGroupService
 
             _context.Groups.Update(group);
             await _context.SaveChangesAsync(cancellationToken);
+
+            await NotifyUserPromotedFinanceiroAsync(userId, group.Name, groupId, cancellationToken);
 
             return Result.Ok("Financeiro adicionado com sucesso.");
         }
@@ -463,17 +467,7 @@ public class GroupService : IGroupService
 
             var group = await _context.Groups.FindAsync([groupId], cancellationToken);
 
-            // Notifica o usuário convidado
-            _ = _push.SendToUserAsync(
-                request.TargetUserId,
-                title: "Convite para grupo",
-                body:  $"Você foi convidado para o grupo \"{group?.Name ?? "grupo"}\". Acesse o app para aceitar!",
-                data: new Dictionary<string, string>
-                {
-                    ["type"]    = "group_invite",
-                    ["groupId"] = groupId.ToString(),
-                },
-                cancellationToken);
+            await NotifyGroupInviteSentAsync(request.TargetUserId, group?.Name ?? "grupo", groupId, cancellationToken);
 
             var dto = new GroupInviteDto(
                 invite.Id,
@@ -634,6 +628,32 @@ public class GroupService : IGroupService
             throw;
         }
     }
+
+    // ── Notificações ──────────────────────────────────────────────────────────
+
+    private Task NotifyUserPromotedAdminAsync(Guid userId, string groupName, Guid groupId, CancellationToken ct) =>
+        _push.SendToUserAsync(
+            userId,
+            title: "Você agora é administrador!",
+            body:  $"Você foi promovido a administrador do grupo \"{groupName}\".",
+            data:  new Dictionary<string, string> { ["type"] = "promoted_admin", ["groupId"] = groupId.ToString() },
+            ct);
+
+    private Task NotifyUserPromotedFinanceiroAsync(Guid userId, string groupName, Guid groupId, CancellationToken ct) =>
+        _push.SendToUserAsync(
+            userId,
+            title: "Você agora é financeiro!",
+            body:  $"Você foi promovido a financeiro do grupo \"{groupName}\".",
+            data:  new Dictionary<string, string> { ["type"] = "promoted_financeiro", ["groupId"] = groupId.ToString() },
+            ct);
+
+    private Task NotifyGroupInviteSentAsync(Guid targetUserId, string groupName, Guid groupId, CancellationToken ct) =>
+        _push.SendToUserAsync(
+            targetUserId,
+            title: "Convite para grupo",
+            body:  $"Você foi convidado para o grupo \"{groupName}\". Acesse o app para aceitar!",
+            data:  new Dictionary<string, string> { ["type"] = "group_invite", ["groupId"] = groupId.ToString() },
+            ct);
 
     public async Task<Result> CreatorLeaveGroupAsync(Guid groupId, Guid requestingUserId, CreatorLeaveGroupDto dto, CancellationToken cancellationToken)
     {

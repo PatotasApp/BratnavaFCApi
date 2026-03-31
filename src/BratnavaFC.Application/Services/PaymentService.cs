@@ -237,6 +237,7 @@ public sealed class PaymentService : IPaymentService
         }
 
         var wasAlreadyPending = record.Status == PaymentStatus.Pending;
+        var wasAlreadyPaid    = record.Status == PaymentStatus.Paid;
 
         if (dto.Status == PaymentStatus.Paid)
         {
@@ -253,34 +254,11 @@ public sealed class PaymentService : IPaymentService
 
         await _context.SaveChangesAsync(ct);
 
-        // Notifica o jogador apenas quando a transição é Pago → Pendente
+        if (dto.Status == PaymentStatus.Paid && !wasAlreadyPaid)
+            await NotifyFinanceirosMonthlyPaidAsync(groupId, dto.PlayerId, dto.Month, dto.Year, ct);
+
         if (dto.Status == PaymentStatus.Pending && !wasAlreadyPending)
-        {
-            var userId = await _context.Players
-                .AsNoTracking()
-                .Where(p => p.Id == dto.PlayerId)
-                .Select(p => p.UserId)
-                .FirstOrDefaultAsync(ct);
-
-            _logger.LogInformation(
-                "[Payment] Transição Pago→Pendente: playerId={PlayerId} userId={UserId} month={Month}/{Year}",
-                dto.PlayerId, userId, dto.Month, dto.Year);
-
-            if (userId is not null)
-            {
-                var monthName = _monthNames[dto.Month - 1];
-                await _push.SendToUserAsync(
-                    userId.Value,
-                    "Pendência financeira",
-                    $"Sua mensalidade de {monthName}/{dto.Year} foi marcada como pendente.",
-                    new Dictionary<string, string>
-                    {
-                        ["type"]    = "payment_pending",
-                        ["groupId"] = groupId.ToString()
-                    },
-                    ct);
-            }
-        }
+            await NotifyPlayerMonthlyPendingAsync(groupId, dto.PlayerId, dto.Month, dto.Year, ct);
 
         return Result.Ok("Pagamento atualizado com sucesso.");
     }
@@ -326,7 +304,7 @@ public sealed class PaymentService : IPaymentService
         var validPlayers = await _context.Players
             .AsNoTracking()
             .Where(p => dto.PlayerIds.Contains(p.Id) && p.GroupId == groupId)
-            .Select(p => new { p.Id, p.Name })
+            .Select(p => new { p.Id, p.Name, p.UserId })
             .ToListAsync(ct);
 
         if (validPlayers.Count == 0)
@@ -347,6 +325,8 @@ public sealed class PaymentService : IPaymentService
 
         await _context.ExtraChargePayments.AddRangeAsync(payments, ct);
         await _context.SaveChangesAsync(ct);
+
+        await NotifyPlayersExtraChargeCreatedAsync(validPlayers.Select(p => p.UserId), charge.Name, dto.Amount, groupId, ct);
 
         // Recarrega com navs para retornar DTO completo
         var playerNames = validPlayers.ToDictionary(p => p.Id, p => p.Name);
@@ -430,6 +410,7 @@ public sealed class PaymentService : IPaymentService
             payment.ApplyDiscount(dto.Discount.Value, dto.DiscountReason, actingUserId);
 
         var wasAlreadyPendingExtra = payment.Status == PaymentStatus.Pending;
+        var wasAlreadyPaidExtra    = payment.Status == PaymentStatus.Paid;
 
         if (dto.Status == PaymentStatus.Paid)
         {
@@ -446,39 +427,11 @@ public sealed class PaymentService : IPaymentService
 
         await _context.SaveChangesAsync(ct);
 
-        // Notifica o jogador apenas quando a transição é Pago → Pendente
+        if (dto.Status == PaymentStatus.Paid && !wasAlreadyPaidExtra)
+            await NotifyFinanceirosExtraChargePaidAsync(groupId, playerId, chargeId, ct);
+
         if (dto.Status == PaymentStatus.Pending && !wasAlreadyPendingExtra)
-        {
-            var playerUserId = await _context.Players
-                .AsNoTracking()
-                .Where(p => p.Id == playerId)
-                .Select(p => p.UserId)
-                .FirstOrDefaultAsync(ct);
-
-            var chargeName = await _context.ExtraCharges
-                .AsNoTracking()
-                .Where(c => c.Id == chargeId)
-                .Select(c => c.Name)
-                .FirstOrDefaultAsync(ct);
-
-            _logger.LogInformation(
-                "[Payment] Transição Pago→Pendente (extra): playerId={PlayerId} userId={UserId} charge={ChargeName}",
-                playerId, playerUserId, chargeName);
-
-            if (playerUserId is not null)
-            {
-                await _push.SendToUserAsync(
-                    playerUserId.Value,
-                    "Pendência financeira",
-                    $"Sua cobrança \"{chargeName ?? "extra"}\" foi marcada como pendente.",
-                    new Dictionary<string, string>
-                    {
-                        ["type"]    = "payment_pending",
-                        ["groupId"] = groupId.ToString()
-                    },
-                    ct);
-            }
-        }
+            await NotifyPlayerExtraChargePendingAsync(groupId, playerId, chargeId, ct);
 
         return Result.Ok("Pagamento atualizado com sucesso.");
     }
@@ -758,6 +711,121 @@ public sealed class PaymentService : IPaymentService
             FileName = record.ProofFileName ?? "comprovante",
             MimeType = record.ProofMimeType ?? "application/octet-stream",
         });
+    }
+
+    // ── Notificações ──────────────────────────────────────────────────────────
+
+    private async Task NotifyFinanceirosMonthlyPaidAsync(
+        Guid groupId, Guid playerId, int month, int year, CancellationToken ct)
+    {
+        var playerName = await _context.Players
+            .AsNoTracking()
+            .Where(p => p.Id == playerId)
+            .Select(p => p.Name)
+            .FirstOrDefaultAsync(ct);
+
+        await _push.SendToGroupFinanceirosAsync(
+            groupId,
+            title: "Pagamento confirmado",
+            body:  $"{playerName ?? "Jogador"} confirmou a mensalidade de {_monthNames[month - 1]}/{year}.",
+            data:  new Dictionary<string, string> { ["type"] = "payment_confirmed", ["groupId"] = groupId.ToString() },
+            ct);
+    }
+
+    private async Task NotifyPlayersExtraChargeCreatedAsync(
+        IEnumerable<Guid?> playerUserIds, string chargeName, decimal amount, Guid groupId, CancellationToken ct)
+    {
+        var userIds = playerUserIds.Where(id => id.HasValue).Select(id => id!.Value).ToList();
+        if (userIds.Count == 0) return;
+
+        var tokens = await _context.PushTokens
+            .Where(t => userIds.Contains(t.UserId) && t.IsActive)
+            .Select(t => t.Token)
+            .ToListAsync(ct);
+
+        if (tokens.Count == 0) return;
+
+        await _push.SendToTokensAsync(
+            tokens,
+            title: "Nova cobrança",
+            body:  $"Você tem uma nova cobrança: \"{chargeName}\" — R$ {amount:N2}.",
+            data:  new Dictionary<string, string> { ["type"] = "payment_pending", ["groupId"] = groupId.ToString() },
+            ct);
+    }
+
+    private async Task NotifyFinanceirosExtraChargePaidAsync(
+        Guid groupId, Guid playerId, Guid chargeId, CancellationToken ct)
+    {
+        var playerName = await _context.Players
+            .AsNoTracking()
+            .Where(p => p.Id == playerId)
+            .Select(p => p.Name)
+            .FirstOrDefaultAsync(ct);
+
+        var chargeName = await _context.ExtraCharges
+            .AsNoTracking()
+            .Where(c => c.Id == chargeId)
+            .Select(c => c.Name)
+            .FirstOrDefaultAsync(ct);
+
+        await _push.SendToGroupFinanceirosAsync(
+            groupId,
+            title: "Pagamento confirmado",
+            body:  $"{playerName ?? "Jogador"} confirmou o pagamento de \"{chargeName ?? "cobrança extra"}\".",
+            data:  new Dictionary<string, string> { ["type"] = "payment_confirmed", ["groupId"] = groupId.ToString() },
+            ct);
+    }
+
+    private async Task NotifyPlayerMonthlyPendingAsync(
+        Guid groupId, Guid playerId, int month, int year, CancellationToken ct)
+    {
+        var userId = await _context.Players
+            .AsNoTracking()
+            .Where(p => p.Id == playerId)
+            .Select(p => p.UserId)
+            .FirstOrDefaultAsync(ct);
+
+        if (userId is null) return;
+
+        _logger.LogInformation(
+            "[Payment] Transição Pago→Pendente: playerId={PlayerId} userId={UserId} month={Month}/{Year}",
+            playerId, userId, month, year);
+
+        await _push.SendToUserAsync(
+            userId.Value,
+            title: "Pendência financeira",
+            body:  $"Sua mensalidade de {_monthNames[month - 1]}/{year} foi marcada como pendente.",
+            data:  new Dictionary<string, string> { ["type"] = "payment_pending", ["groupId"] = groupId.ToString() },
+            ct);
+    }
+
+    private async Task NotifyPlayerExtraChargePendingAsync(
+        Guid groupId, Guid playerId, Guid chargeId, CancellationToken ct)
+    {
+        var userId = await _context.Players
+            .AsNoTracking()
+            .Where(p => p.Id == playerId)
+            .Select(p => p.UserId)
+            .FirstOrDefaultAsync(ct);
+
+        var chargeName = await _context.ExtraCharges
+            .AsNoTracking()
+            .Where(c => c.Id == chargeId)
+            .Select(c => c.Name)
+            .FirstOrDefaultAsync(ct);
+
+        if (userId is null) return;
+
+        _logger.LogInformation(
+            "[Payment] Transição Pago→Pendente (extra): playerId={PlayerId} userId={UserId} charge={ChargeName}",
+            playerId, userId, chargeName);
+
+        await _push.SendToUserAsync(
+            userId.Value,
+            title: "Pendência financeira",
+            body:  $"Sua cobrança \"{chargeName ?? "extra"}\" foi marcada como pendente.",
+            data:  new Dictionary<string, string> { ["type"] = "payment_pending", ["groupId"] = groupId.ToString() },
+            ct);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

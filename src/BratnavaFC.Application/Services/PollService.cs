@@ -11,8 +11,13 @@ namespace BratnavaFC.Application.Services;
 public sealed class PollService : IPollService
 {
     private readonly AppDbContext _db;
+    private readonly IPushService _push;
 
-    public PollService(AppDbContext db) => _db = db;
+    public PollService(AppDbContext db, IPushService push)
+    {
+        _db   = db;
+        _push = push;
+    }
 
     public async Task<Result<List<PollSummaryDto>>> GetPollsAsync(Guid groupId, Guid playerId, CancellationToken ct = default)
     {
@@ -203,6 +208,9 @@ public sealed class PollService : IPollService
             }
 
             await _db.SaveChangesAsync(ct);
+
+            await NotifyPollCreatedAsync(groupId, poll.Id, dto.Title, ct);
+
             return await GetPollAsync(groupId, poll.Id, Guid.Empty, true, ct, skipImages: true);
         }
         catch (Exception ex)
@@ -238,6 +246,9 @@ public sealed class PollService : IPollService
             _db.PollOptions.Add(new PollOptionEntity(poll.Id, "Talvez", null, null, 1));
             _db.PollOptions.Add(new PollOptionEntity(poll.Id, "Não", null, null, 2));
             await _db.SaveChangesAsync(ct);
+
+            await NotifyEventPollCreatedAsync(groupId, poll.Id, dto.Title, ct);
+
             return await GetPollAsync(groupId, poll.Id, Guid.Empty, true, ct, skipImages: true);
         }
         catch (Exception ex)
@@ -255,18 +266,30 @@ public sealed class PollService : IPollService
 
             poll.Close();
 
+            string? createdEventTitle = null;
+            DateOnly? createdEventDate = null;
+            TimeOnly? createdEventTime = null;
+
             if (dto.CreateEvent && !string.IsNullOrWhiteSpace(dto.EventTitle) && !string.IsNullOrWhiteSpace(dto.EventDate)
                 && DateOnly.TryParse(dto.EventDate, out var eventDate))
             {
-                TimeOnly? eventTime = dto.EventTime is not null && TimeOnly.TryParse(dto.EventTime, out var et) ? et : null;
+                createdEventTime = dto.EventTime is not null && TimeOnly.TryParse(dto.EventTime, out var et) ? et : null;
                 Guid? categoryId = dto.CategoryId is not null && Guid.TryParse(dto.CategoryId, out var cid) ? cid : null;
                 var calendarEvent = new CalendarEventEntity(
                     groupId, dto.EventTitle, dto.EventDescription, categoryId,
-                    eventDate, eventTime, false, userId, dto.EventIcon);
+                    eventDate, createdEventTime, false, userId, dto.EventIcon);
                 _db.CalendarEvents.Add(calendarEvent);
+                createdEventTitle = dto.EventTitle;
+                createdEventDate  = eventDate;
             }
 
             await _db.SaveChangesAsync(ct);
+
+            await NotifyPollClosedAsync(groupId, pollId, poll.Title, ct);
+
+            if (createdEventTitle is not null && createdEventDate.HasValue)
+                await NotifyEventCreatedFromPollAsync(groupId, createdEventTitle, createdEventDate.Value, createdEventTime, ct);
+
             return Result.Ok();
         }
         catch (Exception ex)
@@ -452,7 +475,46 @@ public sealed class PollService : IPollService
         }
     }
 
-    // ── Helpers ──
+    // ── Notificações ──────────────────────────────────────────────────────────
+
+    private Task NotifyPollCreatedAsync(Guid groupId, Guid pollId, string title, CancellationToken ct) =>
+        _push.SendToGroupAsync(
+            groupId,
+            title: $"Nova votação: {title}",
+            body:  "Uma nova votação foi criada. Vote agora!",
+            data:  new Dictionary<string, string> { ["type"] = "poll_created", ["groupId"] = groupId.ToString(), ["pollId"] = pollId.ToString() },
+            ct);
+
+    private Task NotifyEventPollCreatedAsync(Guid groupId, Guid pollId, string title, CancellationToken ct) =>
+        _push.SendToGroupAsync(
+            groupId,
+            title: $"Novo evento para votar: {title}",
+            body:  "Vote se você vai participar do evento!",
+            data:  new Dictionary<string, string> { ["type"] = "poll_created", ["groupId"] = groupId.ToString(), ["pollId"] = pollId.ToString() },
+            ct);
+
+    private Task NotifyPollClosedAsync(Guid groupId, Guid pollId, string pollTitle, CancellationToken ct) =>
+        _push.SendToGroupAsync(
+            groupId,
+            title: "Votação encerrada!",
+            body:  $"A votação \"{pollTitle}\" foi encerrada. Confira os resultados.",
+            data:  new Dictionary<string, string> { ["type"] = "poll_closed", ["groupId"] = groupId.ToString(), ["pollId"] = pollId.ToString() },
+            ct);
+
+    private Task NotifyEventCreatedFromPollAsync(
+        Guid groupId, string eventTitle, DateOnly date, TimeOnly? time, CancellationToken ct)
+    {
+        var timeStr = time.HasValue ? $" às {time.Value:HH:mm}" : string.Empty;
+        return _push.SendToGroupAsync(
+            groupId,
+            title: $"Novo evento: {eventTitle}",
+            body:  $"Evento confirmado para {date:dd/MM/yyyy}{timeStr}.",
+            data:  new Dictionary<string, string> { ["type"] = "event_created", ["groupId"] = groupId.ToString() },
+            ct);
+    }
+
+    // ── Mapeamento ────────────────────────────────────────────────────────────
+
     private static PollOptionDto MapOption(PollOptionEntity o, int voteCount) => new()
     {
         Id = o.Id,

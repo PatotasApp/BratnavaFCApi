@@ -18,4 +18,19 @@ public interface IPushService
     /// <summary>Envia notificação para todos os jogadores de um grupo (via tokens ativos).</summary>
     Task SendToGroupAsync(Guid groupId, string title, string body,
         Dictionary<string, string>? data = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Envia notificação para todos os admins de um grupo.</summary>
+    Task SendToGroupAdminsAsync(Guid groupId, string title, string body,
+        Dictionary<string, string>? data = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Envia notificação para todos os financeiros de um grupo.</summary>
+    Task SendToGroupFinanceirosAsync(Guid groupId, string title, string body,
+        Dictionary<string, string>? data = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Envia mensagem data-only (sem campo Notification) para todos os jogadores de um grupo.
+    /// Usado quando o Flutter deve exibir a notificação local com botões de ação.
+    /// </summary>
+    Task SendDataOnlyToGroupAsync(Guid groupId, Dictionary<string, string> data,
+        CancellationToken cancellationToken = default);
 }

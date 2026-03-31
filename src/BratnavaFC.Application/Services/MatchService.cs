@@ -279,18 +279,7 @@ public sealed class MatchService : IMatchService
 
         await _repository.SaveChangesAsync(ct);
 
-        // Notifica todos os jogadores do grupo sobre o convite para a partida
-        _ = _push.SendToGroupAsync(
-            groupId,
-            title: "Convite para partida",
-            body:  "Você foi convidado para uma partida. Confirme sua presença!",
-            data: new Dictionary<string, string>
-            {
-                ["type"]    = "match_invite",
-                ["groupId"] = groupId.ToString(),
-                ["matchId"] = match.Id.ToString(),
-            },
-            ct);
+        await NotifyMatchInviteAsync(groupId, match.Id, ct);
 
         return Result<MatchEntity>.Ok(match, "Partida criada com sucesso.", ResultStatus.Created);
     }
@@ -411,6 +400,52 @@ public sealed class MatchService : IMatchService
         return Result.Ok("Partida atualizada com sucesso.");
     }
 
+    /// <summary>Aceita convite usando o userId do JWT — sem precisar do playerId.</summary>
+    public async Task<Result> AcceptMyInviteAsync(Guid groupId, Guid matchId, Guid userId, CancellationToken ct)
+    {
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
+
+        var playerId = await _context.Players
+            .Where(p => p.GroupId == groupId && p.UserId == userId && !p.IsGuest)
+            .Select(p => p.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (playerId == Guid.Empty)
+            return Result.Fail("Jogador não encontrado no grupo.", ResultStatus.NotFound);
+
+        var match = await LoadMatchForDomainActionsAsync(groupId, matchId, ct);
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
+
+        match.AcceptInvite(playerId);
+        await _context.SaveChangesAsync(ct);
+        return Result.Ok("Presença confirmada.");
+    }
+
+    /// <summary>Rejeita convite usando o userId do JWT — sem precisar do playerId.</summary>
+    public async Task<Result> RejectMyInviteAsync(Guid groupId, Guid matchId, Guid userId, CancellationToken ct)
+    {
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
+
+        var playerId = await _context.Players
+            .Where(p => p.GroupId == groupId && p.UserId == userId && !p.IsGuest)
+            .Select(p => p.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (playerId == Guid.Empty)
+            return Result.Fail("Jogador não encontrado no grupo.", ResultStatus.NotFound);
+
+        var match = await LoadMatchForDomainActionsAsync(groupId, matchId, ct);
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
+
+        match.RejectInvite(playerId);
+        await _context.SaveChangesAsync(ct);
+        return Result.Ok("Presença recusada.");
+    }
+
     public async Task<Result> StartMatchAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
         var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
@@ -423,18 +458,7 @@ public sealed class MatchService : IMatchService
         match.Start();
         await _context.SaveChangesAsync(ct);
 
-        // Notifica jogadores que a partida começou
-        _ = _push.SendToGroupAsync(
-            groupId,
-            title: "Partida iniciada!",
-            body:  "A partida do seu grupo começou. Boa sorte!",
-            data: new Dictionary<string, string>
-            {
-                ["type"]    = "match_started",
-                ["groupId"] = groupId.ToString(),
-                ["matchId"] = matchId.ToString(),
-            },
-            ct);
+        await NotifyMatchStartedAsync(groupId, matchId, ct);
 
         return Result.Ok("Partida atualizada com sucesso.");
     }
@@ -450,6 +474,9 @@ public sealed class MatchService : IMatchService
 
         match.End();
         await _context.SaveChangesAsync(ct);
+
+        await NotifyMatchEndedAsync(groupId, matchId, ct);
+
         return Result.Ok("Partida atualizada com sucesso.");
     }
 
@@ -550,18 +577,7 @@ public sealed class MatchService : IMatchService
 
         await _context.SaveChangesAsync(ct);
 
-        // Notifica jogadores que a partida foi finalizada
-        _ = _push.SendToGroupAsync(
-            groupId,
-            title: "Partida finalizada!",
-            body:  "Confira os resultados e o MVP da partida.",
-            data: new Dictionary<string, string>
-            {
-                ["type"]    = "match_ended",
-                ["groupId"] = groupId.ToString(),
-                ["matchId"] = matchId.ToString(),
-            },
-            ct);
+        await NotifyMatchFinalizedAsync(groupId, matchId, ct);
 
         return Result.Ok("Partida atualizada com sucesso.");
     }
@@ -584,6 +600,9 @@ public sealed class MatchService : IMatchService
         match.AssignTeams(dto.TeamAMatchPlayerIds, dto.TeamBMatchPlayerIds);
 
         await _context.SaveChangesAsync(ct);
+
+        await NotifyTeamsAssignedAsync(groupId, matchId, ct);
+
         return Result.Ok("Partida atualizada com sucesso.");
     }
 
@@ -1683,4 +1702,51 @@ public sealed class MatchService : IMatchService
         await _context.SaveChangesAsync(ct);
         return Result.Ok("Convidado adicionado com sucesso.");
     }
+
+    // ── Notificações ──────────────────────────────────────────────────────────
+
+    private Task NotifyMatchInviteAsync(Guid groupId, Guid matchId, CancellationToken ct) =>
+        _push.SendDataOnlyToGroupAsync(
+            groupId,
+            new Dictionary<string, string>
+            {
+                ["type"]    = "match_invite",
+                ["groupId"] = groupId.ToString(),
+                ["matchId"] = matchId.ToString(),
+                ["title"]   = "Convite para partida",
+                ["body"]    = "Você foi convidado para uma partida. Confirme sua presença!",
+            },
+            ct);
+
+    private Task NotifyMatchStartedAsync(Guid groupId, Guid matchId, CancellationToken ct) =>
+        _push.SendToGroupAsync(
+            groupId,
+            title: "Partida iniciada!",
+            body:  "A partida do seu grupo começou. Boa sorte!",
+            data:  new Dictionary<string, string> { ["type"] = "match_started", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
+            ct);
+
+    private Task NotifyMatchEndedAsync(Guid groupId, Guid matchId, CancellationToken ct) =>
+        _push.SendToGroupAsync(
+            groupId,
+            title: "Partida encerrada!",
+            body:  "A partida acabou! Vote no MVP antes que a votação feche.",
+            data:  new Dictionary<string, string> { ["type"] = "match_ended", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
+            ct);
+
+    private Task NotifyMatchFinalizedAsync(Guid groupId, Guid matchId, CancellationToken ct) =>
+        _push.SendToGroupAsync(
+            groupId,
+            title: "Partida finalizada!",
+            body:  "Confira os resultados e o MVP da partida.",
+            data:  new Dictionary<string, string> { ["type"] = "match_finalized", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
+            ct);
+
+    private Task NotifyTeamsAssignedAsync(Guid groupId, Guid matchId, CancellationToken ct) =>
+        _push.SendToGroupAsync(
+            groupId,
+            title: "Times definidos!",
+            body:  "Os times da partida foram sorteados. Confira o seu time!",
+            data:  new Dictionary<string, string> { ["type"] = "teams_assigned", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
+            ct);
 }

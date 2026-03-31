@@ -32,11 +32,13 @@ public sealed class CalendarService : ICalendarService
 
     private readonly AppDbContext _context;
     private readonly IHolidayService _holidays;
+    private readonly IPushService _push;
 
-    public CalendarService(AppDbContext context, IHolidayService holidays)
+    public CalendarService(AppDbContext context, IHolidayService holidays, IPushService push)
     {
-        _context = context;
+        _context  = context;
         _holidays = holidays;
+        _push     = push;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -197,6 +199,8 @@ public sealed class CalendarService : ICalendarService
         _context.CalendarEvents.Add(ev);
         await _context.SaveChangesAsync(ct);
 
+        await NotifyEventCreatedAsync(groupId, ev.Id, dto.Title, eventDate, eventTime, ct);
+
         return Result<CalendarEventDto>.Ok(MapEventToDto(ev, category), "Evento criado com sucesso.", ResultStatus.Created);
     }
 
@@ -261,8 +265,11 @@ public sealed class CalendarService : ICalendarService
         if (ev is null)
             return Result.Ok("Evento removido com sucesso.");
 
+        var title = ev.Title;
         _context.CalendarEvents.Remove(ev);
         await _context.SaveChangesAsync(ct);
+
+        await NotifyEventDeletedAsync(groupId, title, ct);
 
         return Result.Ok("Evento removido com sucesso.");
     }
@@ -660,6 +667,28 @@ public sealed class CalendarService : ICalendarService
         /// </summary>
         public DateTimeOffset BirthDate { get; init; }
     }
+
+    // ── Notificações ──────────────────────────────────────────────────────────
+
+    private Task NotifyEventCreatedAsync(
+        Guid groupId, Guid eventId, string title, DateOnly date, TimeOnly? time, CancellationToken ct)
+    {
+        var timeStr = time.HasValue ? $" às {time.Value:HH:mm}" : string.Empty;
+        return _push.SendToGroupAsync(
+            groupId,
+            title: $"Novo evento: {title}",
+            body:  $"Evento em {date:dd/MM/yyyy}{timeStr}.",
+            data:  new Dictionary<string, string> { ["type"] = "event_created", ["groupId"] = groupId.ToString(), ["eventId"] = eventId.ToString() },
+            ct);
+    }
+
+    private Task NotifyEventDeletedAsync(Guid groupId, string title, CancellationToken ct) =>
+        _push.SendToGroupAsync(
+            groupId,
+            title: "Evento cancelado",
+            body:  $"O evento \"{title}\" foi cancelado.",
+            data:  new Dictionary<string, string> { ["type"] = "event_deleted", ["groupId"] = groupId.ToString() },
+            ct);
 
     private sealed class MatchProjection
     {

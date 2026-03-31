@@ -83,18 +83,118 @@ public class PushService : IPushService
         await SendToTokensAsync(tokens, title, body, data, cancellationToken);
     }
 
-    public async Task SendToGroupAsync(
-        Guid groupId, string title, string body,
-        Dictionary<string, string>? data = null,
+    public async Task SendDataOnlyToGroupAsync(
+        Guid groupId, Dictionary<string, string> data,
         CancellationToken cancellationToken = default)
     {
-        // Busca userId de todos os jogadores ativos do grupo que têm tokens
         var userIds = await _context.Players
             .Where(p => p.GroupId == groupId && p.UserId != null)
             .Select(p => p.UserId!.Value)
             .Distinct()
             .ToListAsync(cancellationToken);
 
+        if (userIds.Count == 0) return;
+
+        var tokens = await _context.PushTokens
+            .Where(t => userIds.Contains(t.UserId) && t.IsActive)
+            .Select(t => t.Token)
+            .ToListAsync(cancellationToken);
+
+        if (tokens.Count == 0) return;
+
+        // Envia sem campo Notification — o Flutter exibe a notificação local com botões
+        var tokenList = tokens.Distinct().ToList();
+        const int batchSize = 500;
+        var batches = tokenList
+            .Select((t, i) => (t, i))
+            .GroupBy(x => x.i / batchSize)
+            .Select(g => g.Select(x => x.t).ToList());
+
+        foreach (var batch in batches)
+        {
+            var message = new MulticastMessage
+            {
+                Tokens      = batch,
+                Notification = null,   // data-only: sem banner automático do sistema
+                Data        = data,
+                Android     = new AndroidConfig { Priority = Priority.High },
+                Apns        = new ApnsConfig
+                {
+                    Aps = new Aps { ContentAvailable = true }, // acorda o handler no iOS
+                },
+            };
+
+            try
+            {
+                var response = await FirebaseMessaging.DefaultInstance
+                    .SendEachForMulticastAsync(message, cancellationToken);
+                _logger.LogInformation(
+                    "[Push DataOnly] FCM batch: {S} enviados, {F} falhas.",
+                    response.SuccessCount, response.FailureCount);
+
+                var invalid = new List<string>();
+                for (int i = 0; i < response.Responses.Count; i++)
+                {
+                    if (response.Responses[i].IsSuccess) continue;
+                    var code = response.Responses[i].Exception?.MessagingErrorCode;
+                    if (code is MessagingErrorCode.Unregistered or MessagingErrorCode.InvalidArgument)
+                        invalid.Add(batch[i]);
+                }
+                if (invalid.Count > 0)
+                    await DeactivateTokensAsync(invalid, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao enviar batch data-only via FCM.");
+            }
+        }
+    }
+
+    public async Task SendToGroupAsync(
+        Guid groupId, string title, string body,
+        Dictionary<string, string>? data = null,
+        CancellationToken cancellationToken = default)
+    {
+        var userIds = await _context.Players
+            .Where(p => p.GroupId == groupId && p.UserId != null)
+            .Select(p => p.UserId!.Value)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        await SendToUserListAsync(userIds, title, body, data, cancellationToken);
+    }
+
+    public async Task SendToGroupAdminsAsync(
+        Guid groupId, string title, string body,
+        Dictionary<string, string>? data = null,
+        CancellationToken cancellationToken = default)
+    {
+        var userIds = await _context.GroupAdmins
+            .Where(ga => ga.GroupId == groupId)
+            .Select(ga => ga.UserId)
+            .ToListAsync(cancellationToken);
+
+        await SendToUserListAsync(userIds, title, body, data, cancellationToken);
+    }
+
+    public async Task SendToGroupFinanceirosAsync(
+        Guid groupId, string title, string body,
+        Dictionary<string, string>? data = null,
+        CancellationToken cancellationToken = default)
+    {
+        var userIds = await _context.GroupFinanceiros
+            .Where(gf => gf.GroupId == groupId)
+            .Select(gf => gf.UserId)
+            .ToListAsync(cancellationToken);
+
+        await SendToUserListAsync(userIds, title, body, data, cancellationToken);
+    }
+
+    private async Task SendToUserListAsync(
+        List<Guid> userIds, string title, string body,
+        Dictionary<string, string>? data,
+        CancellationToken cancellationToken)
+    {
         if (userIds.Count == 0) return;
 
         var tokens = await _context.PushTokens

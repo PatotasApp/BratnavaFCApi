@@ -15,12 +15,14 @@ public class PlayerService : IPlayerService
     private readonly IRepositoryBase<PlayerEntity> _repository;
     private readonly ILogger<PlayerService> _logger;
     private readonly AppDbContext _context;
+    private readonly IPushService _push;
 
-    public PlayerService(IRepositoryBase<PlayerEntity> repository, ILogger<PlayerService> logger, AppDbContext context)
+    public PlayerService(IRepositoryBase<PlayerEntity> repository, ILogger<PlayerService> logger, AppDbContext context, IPushService push)
     {
         _repository = repository;
-        _logger = logger;
-        _context = context;
+        _logger     = logger;
+        _context    = context;
+        _push       = push;
     }
 
     public async Task<Result<PlayerDto>> CreateAsync(CreatePlayerDto request, CancellationToken cancellationToken)
@@ -220,10 +222,15 @@ public class PlayerService : IPlayerService
         if (player.UserId != requestingUserId)
             return Result.Fail("Sem permissão para esta operação.", ResultStatus.Forbidden);
 
+        var playerName = player.Name;
+        var groupId    = player.GroupId;
+
         player.SetIsGuest(true);
 
         _repository.Update(player);
         await _repository.SaveChangesAsync(cancellationToken);
+
+        await NotifyAdminsPlayerLeftAsync(groupId, playerName, cancellationToken);
 
         return Result.Ok("Jogador atualizado com sucesso.");
     }
@@ -284,6 +291,18 @@ public class PlayerService : IPlayerService
 
         return Result<IReadOnlyList<BirthdayStatusDto>>.Ok(result);
     }
+
+    // ── Notificações ──────────────────────────────────────────────────────────
+
+    private Task NotifyAdminsPlayerLeftAsync(Guid groupId, string playerName, CancellationToken ct) =>
+        _push.SendToGroupAdminsAsync(
+            groupId,
+            title: "Jogador saiu do grupo",
+            body:  $"{playerName} saiu do grupo.",
+            data:  new Dictionary<string, string> { ["type"] = "player_left", ["groupId"] = groupId.ToString() },
+            ct);
+
+    // ── Mapeamento ────────────────────────────────────────────────────────────
 
     private static PlayerDto MapToDto(PlayerEntity player) => new(
         player.Id,

@@ -140,6 +140,32 @@ public class MatchesController : GroupAuthorizedController
         }
     }
 
+    [HttpPatch("group/{groupId:guid}/{matchId:guid}/my-invite/accept")]
+    public async Task<IActionResult> AcceptMyInviteAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+        try
+        {
+            var result = await _service.AcceptMyInviteAsync(groupId, matchId, userId.Value, cancellationToken);
+            return ToResponse(result);
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpPatch("group/{groupId:guid}/{matchId:guid}/my-invite/reject")]
+    public async Task<IActionResult> RejectMyInviteAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+        try
+        {
+            var result = await _service.RejectMyInviteAsync(groupId, matchId, userId.Value, cancellationToken);
+            return ToResponse(result);
+        }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
     [HttpPatch("group/{groupId:guid}/{matchId:guid}/invite/accept")]
     public async Task<IActionResult> AcceptInviteAsync(Guid groupId, Guid matchId, [FromBody] InviteActionDto dto, CancellationToken cancellationToken)
     {
