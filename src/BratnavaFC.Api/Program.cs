@@ -1,8 +1,10 @@
 ﻿using System.Text;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using System.Threading.RateLimiting;
 using BratnavaFC.Infrastructure.Data;
 using BratnavaFC.Infrastructure.Repositories;
 using BratnavaFC.Application.Services;
@@ -14,6 +16,7 @@ using BratnavaFC.Domain.Common;
 using Microsoft.OpenApi.Models;
 using System.IdentityModel.Tokens.Jwt;
 using BratnavaFC.Api;
+using BratnavaFC.Api.Middleware;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 
@@ -71,6 +74,58 @@ builder.Services.AddCors(options =>
             .AllowAnyOrigin()
             .AllowAnyMethod()
             .AllowAnyHeader();
+    });
+});
+
+
+// =====================
+// RATE LIMITING
+// Protege contra scraping automatizado de dados via API.
+// Limite por usuário autenticado (sub do JWT); fallback por IP para anônimos.
+// =====================
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.OnRejected = async (context, ct) =>
+    {
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsync(
+            "{\"success\":false,\"message\":\"Muitas requisições. Tente novamente em instantes.\",\"errors\":[]}", ct);
+    };
+
+    // Autenticados: 120 req / 60 s (janela deslizante, 6 segmentos de 10 s)
+    // Equivale a ~2 req/s em média — suficiente para uso normal,
+    // inviável para varredura automática.
+    options.AddPolicy("PerUser", context =>
+    {
+        var userId = context.User?.FindFirstValue("sub");
+        if (!string.IsNullOrEmpty(userId))
+        {
+            return RateLimitPartition.GetSlidingWindowLimiter(
+                partitionKey: $"user:{userId}",
+                factory: _ => new SlidingWindowRateLimiterOptions
+                {
+                    PermitLimit          = 120,
+                    Window               = TimeSpan.FromSeconds(60),
+                    SegmentsPerWindow    = 6,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit           = 0,
+                });
+        }
+
+        // Anônimos: limite mais restrito por IP
+        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetSlidingWindowLimiter(
+            partitionKey: $"ip:{ip}",
+            factory: _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit          = 30,
+                Window               = TimeSpan.FromSeconds(60),
+                SegmentsPerWindow    = 6,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit           = 0,
+            });
     });
 });
 
@@ -242,9 +297,16 @@ app.UseHttpsRedirection();
 // 🔥 CORS TEM QUE VIR ANTES DO AUTH
 app.UseCors("AllowAll");
 
+// Rate limiting (antes do auth para bloquear IPs suspeitos cedo)
+app.UseRateLimiter();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapControllers();
+// Audit trail — registra todas as chamadas autenticadas com userId + IP
+// Deve vir APÓS UseAuthentication para que User.FindFirstValue("sub") funcione
+app.UseMiddleware<AuditMiddleware>();
+
+app.MapControllers().RequireRateLimiting("PerUser");
 
 app.Run();
