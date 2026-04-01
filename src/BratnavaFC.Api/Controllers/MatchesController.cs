@@ -5,6 +5,7 @@ using BratnavaFC.Domain.Entities;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace BratnavaFC.Api.Controllers;
 
@@ -292,6 +293,7 @@ public class MatchesController : GroupAuthorizedController
         }
     }
 
+    [EnableRateLimiting("PerUser")]
     [HttpGet("group/{groupId:guid}/{matchId:guid}/details")]
     public async Task<ActionResult<MatchDetailsDto>> GetDetails(
         [FromRoute] Guid groupId,
@@ -304,6 +306,7 @@ public class MatchesController : GroupAuthorizedController
         return Ok(details);
     }
 
+    [EnableRateLimiting("PerUser")]
     [HttpGet("group/{groupId:guid}/{matchId:guid}/goals")]
     public async Task<IActionResult> GetGoals(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {

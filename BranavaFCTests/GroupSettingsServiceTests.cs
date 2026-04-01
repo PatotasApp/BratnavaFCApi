@@ -121,4 +121,150 @@ public class GroupSettingsServiceTests
         saved.MinPlayers.Should().Be(7);
         saved.MaxPlayers.Should().Be(10);
     }
+
+    // ── ShowPlayerStats ───────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetAsync_WhenNoSettings_ShouldReturnShowPlayerStats_False()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(GetAsync_WhenNoSettings_ShouldReturnShowPlayerStats_False));
+
+        var group = new GroupEntity("G", null, Guid.NewGuid());
+        db.Groups.Add(group);
+        await db.SaveChangesAsync();
+
+        var sut = new GroupSettingsService(db);
+
+        // Act
+        var result = await sut.GetAsync(group.Id, CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Data!.ShowPlayerStats.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task UpsertAsync_WhenNew_WithShowPlayerStatsTrue_ShouldPersistTrue()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(UpsertAsync_WhenNew_WithShowPlayerStatsTrue_ShouldPersistTrue));
+
+        var group = new GroupEntity("G", null, Guid.NewGuid());
+        db.Groups.Add(group);
+        await db.SaveChangesAsync();
+
+        var sut = new GroupSettingsService(db);
+
+        var req = new UpsertGroupSettingsDto
+        {
+            MinPlayers = 5,
+            MaxPlayers = 10,
+            ShowPlayerStats = true,
+        };
+
+        // Act
+        var result = await sut.UpsertAsync(group.Id, req, CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Data!.ShowPlayerStats.Should().BeTrue();
+
+        var saved = await db.GroupSettings.FirstAsync(x => x.GroupId == group.Id);
+        saved.ShowPlayerStats.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task UpsertAsync_WhenExists_WithShowPlayerStatsTrue_ShouldUpdateToTrue()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(UpsertAsync_WhenExists_WithShowPlayerStatsTrue_ShouldUpdateToTrue));
+
+        var group = new GroupEntity("G", null, Guid.NewGuid());
+        db.Groups.Add(group);
+
+        var settings = new GroupSettingsEntity(group.Id, 5, 10, null, null, null);
+        // ShowPlayerStats começa false por padrão
+        db.GroupSettings.Add(settings);
+        await db.SaveChangesAsync();
+
+        var sut = new GroupSettingsService(db);
+
+        var req = new UpsertGroupSettingsDto
+        {
+            MinPlayers = 5,
+            MaxPlayers = 10,
+            ShowPlayerStats = true,
+        };
+
+        // Act
+        var result = await sut.UpsertAsync(group.Id, req, CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Data!.ShowPlayerStats.Should().BeTrue();
+
+        var saved = await db.GroupSettings.FirstAsync(x => x.GroupId == group.Id);
+        saved.ShowPlayerStats.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task UpsertAsync_WhenShowPlayerStats_IsNull_ShouldNotChangeExistingValue()
+    {
+        // Arrange — cria settings com ShowPlayerStats = true
+        await using var db = DbContextFactory.Create(nameof(UpsertAsync_WhenShowPlayerStats_IsNull_ShouldNotChangeExistingValue));
+
+        var group = new GroupEntity("G", null, Guid.NewGuid());
+        db.Groups.Add(group);
+
+        var settings = new GroupSettingsEntity(group.Id, 5, 10, null, null, null);
+        settings.SetShowPlayerStats(true);
+        db.GroupSettings.Add(settings);
+        await db.SaveChangesAsync();
+
+        var sut = new GroupSettingsService(db);
+
+        // DTO sem ShowPlayerStats (null = não alterar)
+        var req = new UpsertGroupSettingsDto
+        {
+            MinPlayers = 5,
+            MaxPlayers = 10,
+            ShowPlayerStats = null,
+        };
+
+        // Act
+        var result = await sut.UpsertAsync(group.Id, req, CancellationToken.None);
+
+        // Assert — valor anterior (true) deve ser mantido
+        result.Success.Should().BeTrue();
+        result.Data!.ShowPlayerStats.Should().BeTrue();
+
+        var saved = await db.GroupSettings.FirstAsync(x => x.GroupId == group.Id);
+        saved.ShowPlayerStats.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetAsync_WhenSettingsPersisted_ShouldReturnShowPlayerStats()
+    {
+        // Arrange — salva settings com ShowPlayerStats = true e depois lê via GET
+        await using var db = DbContextFactory.Create(nameof(GetAsync_WhenSettingsPersisted_ShouldReturnShowPlayerStats));
+
+        var group = new GroupEntity("G", null, Guid.NewGuid());
+        db.Groups.Add(group);
+
+        var settings = new GroupSettingsEntity(group.Id, 5, 10, null, null, null);
+        settings.SetShowPlayerStats(true);
+        db.GroupSettings.Add(settings);
+        await db.SaveChangesAsync();
+
+        var sut = new GroupSettingsService(db);
+
+        // Act
+        var result = await sut.GetAsync(group.Id, CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Data!.ShowPlayerStats.Should().BeTrue();
+        result.Data.IsPersisted.Should().BeTrue();
+    }
 }
