@@ -307,6 +307,6 @@ app.UseAuthorization();
 // Deve vir APÓS UseAuthentication para que User.FindFirstValue("sub") funcione
 app.UseMiddleware<AuditMiddleware>();
 
-app.MapControllers().RequireRateLimiting("PerUser");
+app.MapControllers();
 
 app.Run();

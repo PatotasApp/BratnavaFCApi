@@ -49,6 +49,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 MonthlyFee     = null,
                 MvpTieRule       = (int)MvpTieRule.AllMvp,
                 MvpTieMaxPlayers = 2,
+                ShowPlayerStats  = false,
             });
         }
 
@@ -81,6 +82,8 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 entity.SetPaymentMode((PaymentMode)dto.PaymentMode.Value);
             if (dto.MvpTieRule.HasValue)
                 entity.SetMvpTieRule((MvpTieRule)dto.MvpTieRule.Value, dto.MvpTieMaxPlayers);
+            if (dto.ShowPlayerStats.HasValue)
+                entity.SetShowPlayerStats(dto.ShowPlayerStats.Value);
             await _context.GroupSettings.AddAsync(entity, ct);
         }
         else
@@ -97,6 +100,8 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 entity.SetPaymentMode((PaymentMode)dto.PaymentMode.Value);
             if (dto.MvpTieRule.HasValue)
                 entity.SetMvpTieRule((MvpTieRule)dto.MvpTieRule.Value, dto.MvpTieMaxPlayers);
+            if (dto.ShowPlayerStats.HasValue)
+                entity.SetShowPlayerStats(dto.ShowPlayerStats.Value);
         }
 
         try
@@ -122,6 +127,8 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 existing.SetPaymentMode((PaymentMode)dto.PaymentMode.Value);
             if (dto.MvpTieRule.HasValue)
                 existing.SetMvpTieRule((MvpTieRule)dto.MvpTieRule.Value, dto.MvpTieMaxPlayers);
+            if (dto.ShowPlayerStats.HasValue)
+                existing.SetShowPlayerStats(dto.ShowPlayerStats.Value);
 
             await _context.SaveChangesAsync(ct);
             entity = existing;
@@ -150,6 +157,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
         MonthlyFee       = e.MonthlyFee,
         MvpTieRule       = (int)e.MvpTieRule,
         MvpTieMaxPlayers = e.MvpTieMaxPlayers,
+        ShowPlayerStats  = e.ShowPlayerStats,
     };
 
     private async Task<Result> EnsureGroupExistsAsync(Guid groupId, CancellationToken ct)

@@ -27,4 +27,8 @@ public sealed class UpsertGroupSettingsDto
     /// <summary>0 = NoMvp, 1 = AllMvp, 2 = AllMvpUpToMax. Null = não alterar.</summary>
     public int? MvpTieRule       { get; set; }
     public int? MvpTieMaxPlayers { get; set; }
+
+    // ── Visibilidade de estatísticas ──────────────────────────────────────────
+    /// <summary>null = não alterar</summary>
+    public bool? ShowPlayerStats { get; set; }
 }

@@ -65,6 +65,11 @@ public sealed class GroupSettingsEntity : BaseEntity
         MvpTieRule = rule;
     }
 
+    // ── Visibilidade de estatísticas para jogadores ───────────────────────────
+    public bool ShowPlayerStats { get; private set; } = false;
+
+    public void SetShowPlayerStats(bool value) => ShowPlayerStats = value;
+
     public void Update(
         int minPlayers,
         int maxPlayers,

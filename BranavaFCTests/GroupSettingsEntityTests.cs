@@ -79,4 +79,43 @@ public class GroupSettingsEntityTests
 
         Assert.Equal("DefaultKickoffTime invalido.", ex.Message);
     }
+
+    // ── ShowPlayerStats ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void ShowPlayerStats_DefaultShouldBeFalse()
+    {
+        // Arrange + Act
+        var s = new GroupSettingsEntity(Guid.NewGuid(), 5, 10, null, null, null);
+
+        // Assert
+        Assert.False(s.ShowPlayerStats);
+    }
+
+    [Fact]
+    public void SetShowPlayerStats_ShouldSetToTrue()
+    {
+        // Arrange
+        var s = new GroupSettingsEntity(Guid.NewGuid(), 5, 10, null, null, null);
+
+        // Act
+        s.SetShowPlayerStats(true);
+
+        // Assert
+        Assert.True(s.ShowPlayerStats);
+    }
+
+    [Fact]
+    public void SetShowPlayerStats_ShouldSetBackToFalse()
+    {
+        // Arrange
+        var s = new GroupSettingsEntity(Guid.NewGuid(), 5, 10, null, null, null);
+        s.SetShowPlayerStats(true);
+
+        // Act
+        s.SetShowPlayerStats(false);
+
+        // Assert
+        Assert.False(s.ShowPlayerStats);
+    }
 }
