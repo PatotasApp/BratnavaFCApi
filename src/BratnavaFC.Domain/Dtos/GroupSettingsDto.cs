@@ -33,4 +33,7 @@ public sealed class GroupSettingsDto
     /// <summary>0 = NoMvp, 1 = AllMvp, 2 = AllMvpUpToMax</summary>
     public int MvpTieRule       { get; init; }
     public int MvpTieMaxPlayers { get; init; }
+
+    // ── Visibilidade de estatísticas ──────────────────────────────────────────
+    public bool ShowPlayerStats { get; init; }
 }
