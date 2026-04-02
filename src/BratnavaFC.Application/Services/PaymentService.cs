@@ -609,22 +609,47 @@ public sealed class PaymentService : IPaymentService
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.GroupId == groupId, ct);
 
-        // Mensalidade só é contabilizada se a patota tiver fee configurado
+        // Pendências de mensalidade — mesma lógica do grid (getMyMonthlyRow):
+        // • Usa JoinDate para não cobrar meses anteriores à entrada do jogador
+        // • Conta meses sem registro Paid como Pending (independente do MonthlyFee)
+        //   desde que a patota use cobrança mensal (MonthlyFee > 0) OU já existam
+        //   registros mensais para esse jogador (fee pode ter sido zerado depois)
         int pendingMonths = 0;
-        if (settings?.MonthlyFee > 0)
-        {
-            var paidMonths = await _context.MonthlyPayments
-                .AsNoTracking()
-                .Where(m => m.GroupId  == groupId
-                         && m.PlayerId == playerId
-                         && m.Year     == year
-                         && m.Status   == PaymentStatus.Paid)
-                .Select(m => m.Month)
-                .ToListAsync(ct);
 
-            var currentMonth = DateTime.UtcNow.Month;
-            pendingMonths = Enumerable.Range(1, currentMonth)
-                .Count(m => !paidMonths.Contains(m));
+        var playerInfo = await _context.Players
+            .AsNoTracking()
+            .Where(p => p.Id == playerId && p.GroupId == groupId)
+            .Select(p => new { JoinDate = p.JoinedAt ?? p.CreateDate })
+            .FirstOrDefaultAsync(ct);
+
+        if (playerInfo is not null)
+        {
+            var today      = DateTime.UtcNow;
+            var maxMonth   = year == today.Year ? today.Month : 12;
+            var joinYear   = playerInfo.JoinDate.Year;
+            var joinMonth  = playerInfo.JoinDate.Month;
+            var firstMonth = joinYear == year ? joinMonth
+                           : joinYear >  year ? maxMonth + 1   // ainda não era membro
+                           : 1;
+
+            var hasRecordsOrFee = settings?.MonthlyFee > 0
+                || await _context.MonthlyPayments
+                    .AnyAsync(m => m.GroupId == groupId && m.PlayerId == playerId && m.Year == year, ct);
+
+            if (firstMonth <= maxMonth && hasRecordsOrFee)
+            {
+                var paidMonths = await _context.MonthlyPayments
+                    .AsNoTracking()
+                    .Where(m => m.GroupId  == groupId
+                             && m.PlayerId == playerId
+                             && m.Year     == year
+                             && m.Status   == PaymentStatus.Paid)
+                    .Select(m => m.Month)
+                    .ToListAsync(ct);
+
+                pendingMonths = Enumerable.Range(firstMonth, maxMonth - firstMonth + 1)
+                    .Count(m => !paidMonths.Contains(m));
+            }
         }
 
         // Cobranças extras pendentes (não canceladas)
