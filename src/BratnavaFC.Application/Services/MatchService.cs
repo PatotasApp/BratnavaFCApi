@@ -13,15 +13,18 @@ public sealed class MatchService : IMatchService
     private readonly AppDbContext _context;
     private readonly IRepositoryBase<MatchEntity> _repository;
     private readonly IPushService _push;
+    private readonly IReplayUrlService _replayUrls;
 
     public MatchService(
         AppDbContext context,
         IRepositoryBase<MatchEntity> repository,
-        IPushService push)
+        IPushService push,
+        IReplayUrlService replayUrls)
     {
         _context = context;
         _repository = repository;
         _push = push;
+        _replayUrls = replayUrls;
     }
 
     public async Task<Result<List<MatchDetailsDto>>> GetAllAsync(Guid groupId, CancellationToken ct = default)
@@ -139,9 +142,9 @@ public sealed class MatchService : IMatchService
             .Select(p => new MatchMvpDto
             {
                 MatchPlayerId = p.Id,
-                PlayerId      = p.PlayerId,
-                PlayerName    = p.Player?.Name ?? string.Empty,
-                Team          = p.Team
+                PlayerId = p.PlayerId,
+                PlayerName = p.Player?.Name ?? string.Empty,
+                Team = p.Team
             })
             .ToList();
 
@@ -1043,13 +1046,13 @@ public sealed class MatchService : IMatchService
                 PlaceName = m.PlaceName,
                 Status = (short)m.Status,
                 StatusName = m.Status.ToString(),
-                StepKey = m.Status == MatchStatus.Created    ? "create"  :
-                          m.Status == MatchStatus.Acceptation ? "accept"  :
-                          m.Status == MatchStatus.MatchMaking  ? "teams"   :
-                          m.Status == MatchStatus.Started      ? "playing" :
-                          m.Status == MatchStatus.Ended        ? "ended"   :
-                          m.Status == MatchStatus.PostGame     ? "post"    :
-                          m.Status == MatchStatus.Finalized    ? "done"    : "create",
+                StepKey = m.Status == MatchStatus.Created ? "create" :
+                          m.Status == MatchStatus.Acceptation ? "accept" :
+                          m.Status == MatchStatus.MatchMaking ? "teams" :
+                          m.Status == MatchStatus.Started ? "playing" :
+                          m.Status == MatchStatus.Ended ? "ended" :
+                          m.Status == MatchStatus.PostGame ? "post" :
+                          m.Status == MatchStatus.Finalized ? "done" : "create",
                 CanRewind = m.Status > MatchStatus.Created,
                 TeamAGoals = m.TeamAGoals,
                 TeamBGoals = m.TeamBGoals
@@ -1106,17 +1109,17 @@ public sealed class MatchService : IMatchService
         var maxPlayers = settings?.MaxPlayers ?? 0;
         var accepted = matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.Accepted).ToList();
         var rejected = matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.Rejected).ToList();
-        var pending  = matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.None).ToList();
+        var pending = matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.None).ToList();
 
         var dto = new MatchAcceptationDto
         {
             MatchId = matchData.Id,
-            Status  = matchData.Status,
-            MaxPlayers       = maxPlayers,
+            Status = matchData.Status,
+            MaxPlayers = maxPlayers,
             AcceptedOverLimit = maxPlayers > 0 && accepted.Count > maxPlayers,
-            AcceptedPlayers  = accepted,
-            RejectedPlayers  = rejected,
-            PendingPlayers   = pending,
+            AcceptedPlayers = accepted,
+            RejectedPlayers = rejected,
+            PendingPlayers = pending,
         };
 
         return Result<MatchAcceptationDto>.Ok(dto);
@@ -1276,9 +1279,9 @@ public sealed class MatchService : IMatchService
         if (baseData is null)
             return Result<MatchPostGameDto>.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
-        var nameByMpId     = baseData.Players.ToDictionary(x => x.Id, x => x.PlayerName);
+        var nameByMpId = baseData.Players.ToDictionary(x => x.Id, x => x.PlayerName);
         var playerIdByMpId = baseData.Players.ToDictionary(x => x.Id, x => x.PlayerId);
-        var teamByMpId     = baseData.Players.ToDictionary(x => x.Id, x => x.Team);
+        var teamByMpId = baseData.Players.ToDictionary(x => x.Id, x => x.Team);
 
         // Elegíveis = não-convidados que ainda não votaram
         var voterIds = new HashSet<Guid>(baseData.Votes.Select(v => v.VoterId));
@@ -1287,11 +1290,11 @@ public sealed class MatchService : IMatchService
             .Select(p => new PlayerInMatchDto
             {
                 MatchPlayerId = p.Id,
-                PlayerId      = p.PlayerId,
-                PlayerName    = p.PlayerName,
-                IsGoalkeeper  = p.IsGoalkeeper,
-                IsGuest       = p.IsGuest,
-                Team          = p.Team
+                PlayerId = p.PlayerId,
+                PlayerName = p.PlayerName,
+                IsGoalkeeper = p.IsGoalkeeper,
+                IsGuest = p.IsGuest,
+                Team = p.Team
             })
             .OrderBy(p => p.PlayerName)
             .ToList();
@@ -1302,11 +1305,11 @@ public sealed class MatchService : IMatchService
         var individualVotes = baseData.Votes
             .Select(v => new VoteDto
             {
-                VoteId                 = v.Id,
-                VoterMatchPlayerId     = v.VoterId,
-                VotedForMatchPlayerId  = v.VotedForId,
-                VoterName              = nameByMpId.TryGetValue(v.VoterId,     out var vn)  ? vn  : string.Empty,
-                VotedForName           = nameByMpId.TryGetValue(v.VotedForId,  out var vfn) ? vfn : string.Empty
+                VoteId = v.Id,
+                VoterMatchPlayerId = v.VoterId,
+                VotedForMatchPlayerId = v.VotedForId,
+                VoterName = nameByMpId.TryGetValue(v.VoterId, out var vn) ? vn : string.Empty,
+                VotedForName = nameByMpId.TryGetValue(v.VotedForId, out var vfn) ? vfn : string.Empty
             })
             .ToList();
 
@@ -1330,9 +1333,9 @@ public sealed class MatchService : IMatchService
             .Select(p => new MatchMvpDto
             {
                 MatchPlayerId = p.Id,
-                PlayerId      = p.PlayerId,
-                PlayerName    = p.PlayerName,
-                Team          = p.Team
+                PlayerId = p.PlayerId,
+                PlayerName = p.PlayerName,
+                Team = p.Team
             })
             .ToList();
 
@@ -1376,27 +1379,27 @@ public sealed class MatchService : IMatchService
             .Select(p => new PlayerInMatchDto
             {
                 MatchPlayerId = p.Id,
-                PlayerId      = p.PlayerId,
-                PlayerName    = p.PlayerName,
-                IsGoalkeeper  = p.IsGoalkeeper,
-                IsGuest       = p.IsGuest,
-                Team          = p.Team
+                PlayerId = p.PlayerId,
+                PlayerName = p.PlayerName,
+                IsGoalkeeper = p.IsGoalkeeper,
+                IsGuest = p.IsGuest,
+                Team = p.Team
             })
             .ToList();
 
         return Result<MatchPostGameDto>.Ok(new MatchPostGameDto
         {
-            MatchId        = baseData.Id,
-            Status         = baseData.Status,
-            TeamAGoals     = baseData.TeamAGoals,
-            TeamBGoals     = baseData.TeamBGoals,
-            ComputedMvps   = computedMvps,
-            VoteCounts     = voteCounts,
-            Votes          = individualVotes,
-            Goals          = goals,
-            AllVoted       = allVoted,
+            MatchId = baseData.Id,
+            Status = baseData.Status,
+            TeamAGoals = baseData.TeamAGoals,
+            TeamBGoals = baseData.TeamBGoals,
+            ComputedMvps = computedMvps,
+            VoteCounts = voteCounts,
+            Votes = individualVotes,
+            Goals = goals,
+            AllVoted = allVoted,
             EligibleVoters = eligibleVoters,
-            Participants   = participants
+            Participants = participants
         });
     }
 
@@ -1472,10 +1475,10 @@ public sealed class MatchService : IMatchService
                 m.PlaceName,
                 StatusName = m.Status.ToString(),
 
-                TeamAColorHex  = m.TeamAColor != null ? m.TeamAColor.HexValue : null,
-                TeamAColorName = m.TeamAColor != null ? m.TeamAColor.Name     : null,
-                TeamBColorHex  = m.TeamBColor != null ? m.TeamBColor.HexValue : null,
-                TeamBColorName = m.TeamBColor != null ? m.TeamBColor.Name     : null,
+                TeamAColorHex = m.TeamAColor != null ? m.TeamAColor.HexValue : null,
+                TeamAColorName = m.TeamAColor != null ? m.TeamAColor.Name : null,
+                TeamBColorHex = m.TeamBColor != null ? m.TeamBColor.HexValue : null,
+                TeamBColorName = m.TeamBColor != null ? m.TeamBColor.Name : null,
 
                 // Time do jogador (1=A / 2=B)
                 PlayerTeam = m.Players
@@ -1514,20 +1517,20 @@ public sealed class MatchService : IMatchService
                 .FirstOrDefault();
 
             return new PlayerRecentMatchDto(
-                MatchId:        m.Id,
-                PlayedAt:       m.PlayedAt,
-                TeamAGoals:     m.TeamAGoals ?? 0,
-                TeamBGoals:     m.TeamBGoals ?? 0,
-                StatusName:     m.StatusName,
-                PlaceName:      m.PlaceName,
-                TeamAColorHex:  m.TeamAColorHex,
+                MatchId: m.Id,
+                PlayedAt: m.PlayedAt,
+                TeamAGoals: m.TeamAGoals ?? 0,
+                TeamBGoals: m.TeamBGoals ?? 0,
+                StatusName: m.StatusName,
+                PlaceName: m.PlaceName,
+                TeamAColorHex: m.TeamAColorHex,
                 TeamAColorName: m.TeamAColorName,
-                TeamBColorHex:  m.TeamBColorHex,
+                TeamBColorHex: m.TeamBColorHex,
                 TeamBColorName: m.TeamBColorName,
-                PlayerTeam:     m.PlayerTeam,
-                PlayerGoals:    m.PlayerGoals,
-                PlayerAssists:  m.PlayerAssists,
-                IsPlayerMvp:    mvpMatchPlayerId.HasValue && mvpMatchPlayerId == m.PlayerMatchPlayerId
+                PlayerTeam: m.PlayerTeam,
+                PlayerGoals: m.PlayerGoals,
+                PlayerAssists: m.PlayerAssists,
+                IsPlayerMvp: mvpMatchPlayerId.HasValue && mvpMatchPlayerId == m.PlayerMatchPlayerId
             );
         }).ToList();
 
@@ -1552,9 +1555,9 @@ public sealed class MatchService : IMatchService
             .Select(p => new MatchMvpDto
             {
                 MatchPlayerId = p.Id,
-                PlayerId      = p.PlayerId,
-                PlayerName    = p.Player?.Name ?? string.Empty,
-                Team          = p.Team
+                PlayerId = p.PlayerId,
+                PlayerName = p.Player?.Name ?? string.Empty,
+                Team = p.Team
             })
             .ToList();
 
@@ -1710,11 +1713,11 @@ public sealed class MatchService : IMatchService
             groupId,
             new Dictionary<string, string>
             {
-                ["type"]    = "match_invite",
+                ["type"] = "match_invite",
                 ["groupId"] = groupId.ToString(),
                 ["matchId"] = matchId.ToString(),
-                ["title"]   = "Convite para partida",
-                ["body"]    = "Você foi convidado para uma partida. Confirme sua presença!",
+                ["title"] = "Convite para partida",
+                ["body"] = "Você foi convidado para uma partida. Confirme sua presença!",
             },
             ct);
 
@@ -1722,31 +1725,50 @@ public sealed class MatchService : IMatchService
         _push.SendToGroupAsync(
             groupId,
             title: "Partida iniciada!",
-            body:  "A partida do seu grupo começou. Boa sorte!",
-            data:  new Dictionary<string, string> { ["type"] = "match_started", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
+            body: "A partida do seu grupo começou. Boa sorte!",
+            data: new Dictionary<string, string> { ["type"] = "match_started", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
             ct);
 
     private Task NotifyMatchEndedAsync(Guid groupId, Guid matchId, CancellationToken ct) =>
         _push.SendToGroupAsync(
             groupId,
             title: "Partida encerrada!",
-            body:  "A partida acabou! Vote no MVP antes que a votação feche.",
-            data:  new Dictionary<string, string> { ["type"] = "match_ended", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
+            body: "A partida acabou! Vote no MVP antes que a votação feche.",
+            data: new Dictionary<string, string> { ["type"] = "match_ended", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
             ct);
 
     private Task NotifyMatchFinalizedAsync(Guid groupId, Guid matchId, CancellationToken ct) =>
         _push.SendToGroupAsync(
             groupId,
             title: "Partida finalizada!",
-            body:  "Confira os resultados e o MVP da partida.",
-            data:  new Dictionary<string, string> { ["type"] = "match_finalized", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
+            body: "Confira os resultados e o MVP da partida.",
+            data: new Dictionary<string, string> { ["type"] = "match_finalized", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
             ct);
 
     private Task NotifyTeamsAssignedAsync(Guid groupId, Guid matchId, CancellationToken ct) =>
         _push.SendToGroupAsync(
             groupId,
             title: "Times definidos!",
-            body:  "Os times da partida foram sorteados. Confira o seu time!",
-            data:  new Dictionary<string, string> { ["type"] = "teams_assigned", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
+            body: "Os times da partida foram sorteados. Confira o seu time!",
+            data: new Dictionary<string, string> { ["type"] = "teams_assigned", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
             ct);
+
+    public async Task<Result<List<ReplayClipDto>>> GetReplaysAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        var clips = await _context.ReplayClips
+            .AsNoTracking()
+            .Where(r => r.GroupId == groupId && r.MatchId == matchId)
+            .OrderBy(r => r.UploadedAt)
+            .ToListAsync(ct);
+
+        var dtos = clips.Select(c => new ReplayClipDto(
+            c.Id,
+            c.ObjectKey,
+            _replayUrls.GeneratePresignedUrl(c.ObjectKey),
+            c.EventType.ToString(),
+            c.UploadedAt
+        )).ToList();
+
+        return Result<List<ReplayClipDto>>.Ok(dtos);
+    }
 }

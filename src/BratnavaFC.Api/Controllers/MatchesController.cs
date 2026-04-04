@@ -309,6 +309,18 @@ public class MatchesController : GroupAuthorizedController
     }
 
     [EnableRateLimiting("PerUser")]
+    [HttpGet("group/{groupId:guid}/{matchId:guid}/replays")]
+    public async Task<IActionResult> GetReplays(
+        [FromRoute] Guid groupId,
+        [FromRoute] Guid matchId,
+        CancellationToken ct)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        var result = await _service.GetReplaysAsync(groupId, matchId, ct);
+        return ToResponse(result);
+    }
+
+    [EnableRateLimiting("PerUser")]
     [HttpGet("group/{groupId:guid}/{matchId:guid}/goals")]
     public async Task<IActionResult> GetGoals(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {

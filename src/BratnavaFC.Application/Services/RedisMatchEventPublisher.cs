@@ -31,7 +31,7 @@ public class RedisMatchEventPublisher : IMatchEventPublisher
             durationSeconds,
         }, _jsonOpts);
 
-        var db = _redis.GetDatabase();
-        await db.ListRightPushAsync("replay_queue", payload);
+        var sub = _redis.GetSubscriber();
+        await sub.PublishAsync(RedisChannel.Literal("replay_events"), payload);
     }
 }

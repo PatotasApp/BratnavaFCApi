@@ -67,4 +67,6 @@ public interface IMatchService
         Guid playerId,
         int take,
         CancellationToken ct);
+
+    Task<Result<List<ReplayClipDto>>> GetReplaysAsync(Guid groupId, Guid matchId, CancellationToken ct);
 }

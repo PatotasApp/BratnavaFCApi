@@ -34,6 +34,7 @@ public class AppDbContext : DbContext
     public DbSet<PollOptionEntity> PollOptions => Set<PollOptionEntity>();
     public DbSet<PollVoteEntity> PollVotes => Set<PollVoteEntity>();
     public DbSet<PushTokenEntity> PushTokens => Set<PushTokenEntity>();
+    public DbSet<ReplayClipEntity> ReplayClips => Set<ReplayClipEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -298,7 +299,7 @@ public class AppDbContext : DbContext
                 .IsRequired();
 
             builder.HasOne<GroupEntity>()
-                .WithOne()  
+                .WithOne()
                 .HasForeignKey<GroupSettingsEntity>(x => x.GroupId)
                 .OnDelete(DeleteBehavior.Restrict);
 
@@ -597,6 +598,43 @@ public class AppDbContext : DbContext
             // Token único globalmente (um mesmo dispositivo não pode ter dois registros)
             builder.HasIndex(x => x.Token).IsUnique();
         });
+
+        modelBuilder.Entity<ReplayClipEntity>(builder =>
+        {
+            builder.HasKey(x => x.Id);
+
+            builder.Property(x => x.GroupId).IsRequired();
+            builder.Property(x => x.MatchId).IsRequired();
+
+            builder.Property(x => x.BucketName)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            builder.Property(x => x.ObjectKey)
+                .IsRequired()
+                .HasMaxLength(1000);
+
+            builder.Property(x => x.ContentType)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            builder.Property(x => x.ETag)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            builder.Property(x => x.UploadedAt).IsRequired();
+
+            builder.Property(x => x.EventType)
+                .HasConversion<short>()
+                .IsRequired();
+
+            // Um mesmo arquivo não pode ser registrado duas vezes
+            builder.HasIndex(x => x.ObjectKey).IsUnique();
+
+            // Busca de clips por partida
+            builder.HasIndex(x => new { x.MatchId, x.EventType });
+        });
+
     }
 
     public override int SaveChanges()

@@ -228,6 +228,8 @@ var redisConnectionString =
 builder.Services.AddSingleton<IConnectionMultiplexer>(
     ConnectionMultiplexer.Connect(redisConnectionString));
 builder.Services.AddScoped<IMatchEventPublisher, RedisMatchEventPublisher>();
+builder.Services.AddSingleton<IReplayUrlService, R2ReplayUrlService>();
+builder.Services.AddHostedService<ReplayStreamConsumerService>();
 
 
 // =====================
