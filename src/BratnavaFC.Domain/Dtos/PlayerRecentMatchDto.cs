@@ -25,5 +25,6 @@ public sealed record PlayerRecentMatchDto(
     int  PlayerTeam,     // 1 = Time A, 2 = Time B
     int  PlayerGoals,
     int  PlayerAssists,
+    int  PlayerOwnGoals,
     bool IsPlayerMvp
 );

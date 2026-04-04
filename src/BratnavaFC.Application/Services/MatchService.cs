@@ -1499,6 +1499,11 @@ public sealed class MatchService : IMatchService
                     g.AssistMatchPlayerId.HasValue &&
                     m.Players.Any(mp => mp.Id == g.AssistMatchPlayerId.Value && mp.PlayerId == playerId)),
 
+                // Gols contra: IsOwnGoal=true e scorer é o jogador
+                PlayerOwnGoals = m.Goals.Count(g =>
+                    g.IsOwnGoal &&
+                    m.Players.Any(mp => mp.Id == g.ScorerMatchPlayerId && mp.PlayerId == playerId)),
+
                 // Votos recebidos por cada MatchPlayer — MVP calculado em memória
                 VotedForIds = m.Votes.Select(v => v.VotedForId).ToList(),
             })
@@ -1525,9 +1530,10 @@ public sealed class MatchService : IMatchService
                 TeamBColorHex:  m.TeamBColorHex,
                 TeamBColorName: m.TeamBColorName,
                 PlayerTeam:     m.PlayerTeam,
-                PlayerGoals:    m.PlayerGoals,
-                PlayerAssists:  m.PlayerAssists,
-                IsPlayerMvp:    mvpMatchPlayerId.HasValue && mvpMatchPlayerId == m.PlayerMatchPlayerId
+                PlayerGoals:     m.PlayerGoals,
+                PlayerAssists:   m.PlayerAssists,
+                PlayerOwnGoals:  m.PlayerOwnGoals,
+                IsPlayerMvp:     mvpMatchPlayerId.HasValue && mvpMatchPlayerId == m.PlayerMatchPlayerId
             );
         }).ToList();
 
