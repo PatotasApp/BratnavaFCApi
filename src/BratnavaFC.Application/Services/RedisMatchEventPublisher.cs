@@ -21,8 +21,13 @@ public class RedisMatchEventPublisher : IMatchEventPublisher
         _redis = redis;
     }
 
-    public async Task PublishAsync(Guid groupId, Guid matchId, MatchEventType type, DateTime eventTime, int secondsBeforeStart, int durationSeconds, CancellationToken ct = default)
+    private static readonly TimeZoneInfo _saoPauloTz =
+        TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
+
+    public async Task PublishAsync(Guid groupId, Guid matchId, MatchEventType type, int secondsBeforeStart, int durationSeconds, CancellationToken ct = default)
     {
+        var eventTime = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, _saoPauloTz);
+
         var payload = JsonSerializer.Serialize(new
         {
             groupId,
