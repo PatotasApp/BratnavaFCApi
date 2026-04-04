@@ -545,7 +545,7 @@ public class MatchesController : GroupAuthorizedController
         CancellationToken ct)
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
-        await _eventPublisher.PublishAsync(groupId, matchId, dto.Type, dto.DurationSeconds, ct);
+        await _eventPublisher.PublishAsync(groupId, matchId, dto.Type, dto.EventTime, dto.SecondsBeforeStart, dto.DurationSeconds, ct);
         return NoContent();
     }
 

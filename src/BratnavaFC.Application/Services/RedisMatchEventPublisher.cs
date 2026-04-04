@@ -21,13 +21,15 @@ public class RedisMatchEventPublisher : IMatchEventPublisher
         _redis = redis;
     }
 
-    public async Task PublishAsync(Guid groupId, Guid matchId, MatchEventType type, int durationSeconds, CancellationToken ct = default)
+    public async Task PublishAsync(Guid groupId, Guid matchId, MatchEventType type, DateTime eventTime, int secondsBeforeStart, int durationSeconds, CancellationToken ct = default)
     {
         var payload = JsonSerializer.Serialize(new
         {
             groupId,
             matchId,
             type,
+            eventTime,
+            secondsBeforeStart,
             durationSeconds,
         }, _jsonOpts);
 
