@@ -17,8 +17,11 @@ using Microsoft.OpenApi.Models;
 using System.IdentityModel.Tokens.Jwt;
 using BratnavaFC.Api;
 using BratnavaFC.Api.Middleware;
+using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Services;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -213,6 +216,19 @@ catch (Exception ex)
         "[Firebase] Não pôde ser inicializado. Push notifications estarão indisponíveis. " +
         "Verifique FIREBASE_SERVICE_ACCOUNT_B64, FIREBASE_SERVICE_ACCOUNT_JSON ou Firebase:ServiceAccountPath.");
 }
+
+// =====================
+// REDIS
+// =====================
+var redisConnectionString =
+    Environment.GetEnvironmentVariable("REDIS_URL")
+    ?? builder.Configuration["Redis:ConnectionString"]
+    ?? "localhost:6379";
+
+builder.Services.AddSingleton<IConnectionMultiplexer>(
+    ConnectionMultiplexer.Connect(redisConnectionString));
+builder.Services.AddScoped<IMatchEventPublisher, RedisMatchEventPublisher>();
+
 
 // =====================
 // HOLIDAY SERVICE (BrasilAPI)

@@ -16,11 +16,13 @@ public class MatchesController : GroupAuthorizedController
 {
     private readonly IMatchService _service;
     private readonly AppDbContext _db;
+    private readonly IMatchEventPublisher _eventPublisher;
 
-    public MatchesController(IMatchService service, AppDbContext db)
+    public MatchesController(IMatchService service, AppDbContext db, IMatchEventPublisher eventPublisher)
     {
-        _service = service;
-        _db = db;
+        _service         = service;
+        _db              = db;
+        _eventPublisher  = eventPublisher;
     }
 
     [HttpGet("group/{groupId:guid}")]
@@ -521,6 +523,18 @@ public class MatchesController : GroupAuthorizedController
         {
             return BadRequest(new { error = ex.Message });
         }
+    }
+
+    [HttpPost("group/{groupId:guid}/{matchId:guid}/events")]
+    public async Task<IActionResult> PublishMatchEvent(
+        Guid groupId,
+        Guid matchId,
+        [FromBody] PublishMatchEventRequest dto,
+        CancellationToken ct)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        await _eventPublisher.PublishAsync(groupId, matchId, dto.Type, dto.DurationSeconds, ct);
+        return NoContent();
     }
 
     private static MatchDto ToDto(MatchEntity e) =>
