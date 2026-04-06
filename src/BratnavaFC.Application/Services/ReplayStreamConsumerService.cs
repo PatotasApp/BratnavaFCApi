@@ -16,7 +16,7 @@ public sealed class ReplayStreamConsumerService : BackgroundService
     private const string StreamKey = "replays:uploaded";
     private const string GroupName = "bratnava-api";
     private const int BatchSize = 10;
-    private const int PollDelayMs = 5_000;
+    private const int BlockMs = 30_000; // espera até 30s por novas mensagens
     private const int MaxAttempts = 3;
 
     private readonly IConnectionMultiplexer _redis;
@@ -44,17 +44,15 @@ public sealed class ReplayStreamConsumerService : BackgroundService
             "[ReplayStream] Consumidor iniciado. Stream={Stream} Group={Group} Consumer={Consumer}",
             StreamKey, GroupName, _consumerName);
 
+        // Pendentes processados UMA VEZ só no startup (ex: restart da app)
+        await DrainPendingAsync(stoppingToken);
+
+        // Loop principal com BLOCK — só acorda quando chega mensagem nova
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                // Processar pendentes primeiro (entregues mas não ackados — ex: restart)
-                await ProcessBatchAsync("0", stoppingToken);
-
-                // Ler novas mensagens
-                await ProcessBatchAsync(">", stoppingToken);
-
-                await Task.Delay(PollDelayMs, stoppingToken);
+                await ProcessNewMessagesBlockingAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -70,24 +68,75 @@ public sealed class ReplayStreamConsumerService : BackgroundService
         _logger.LogInformation("[ReplayStream] Consumidor encerrado.");
     }
 
-    // Lê um batch de mensagens até esgotar entradas na posição dada
-    private async Task ProcessBatchAsync(string position, CancellationToken ct)
+    // Drena mensagens pendentes (PEL) apenas no startup
+    private async Task DrainPendingAsync(CancellationToken ct)
     {
         var db = _redis.GetDatabase();
         StreamEntry[] entries;
+        int total = 0;
 
         do
         {
             entries = await db.StreamReadGroupAsync(
                 StreamKey, GroupName, _consumerName,
-                position: position,
+                position: "0",
                 count: BatchSize,
                 noAck: false);
 
             foreach (var entry in entries)
                 await HandleEntryAsync(db, entry, ct);
+
+            total += entries.Length;
         }
         while (entries.Length == BatchSize);
+
+        if (total > 0)
+            _logger.LogInformation("[ReplayStream] {Count} mensagens pendentes reprocessadas.", total);
+    }
+
+    // Usa XREADGROUP BLOCK — não polica, apenas acorda quando há mensagem nova
+    private async Task ProcessNewMessagesBlockingAsync(CancellationToken ct)
+    {
+        var db = _redis.GetDatabase();
+
+        // XREADGROUP GROUP <group> <consumer> COUNT <n> BLOCK <ms> STREAMS <key> >
+        var result = await db.ExecuteAsync(
+            "XREADGROUP",
+            "GROUP", GroupName, _consumerName,
+            "COUNT", BatchSize,
+            "BLOCK", BlockMs,
+            "STREAMS", StreamKey, ">");
+
+        ct.ThrowIfCancellationRequested();
+
+        // BLOCK retorna nil se expirou o timeout sem mensagens — normal, só volta ao loop
+        if (result.IsNull) return;
+
+        var entries = ParseBlockResult(result);
+        foreach (var entry in entries)
+            await HandleEntryAsync(db, entry, ct);
+    }
+
+    // Parseia o resultado raw do XREADGROUP BLOCK
+    private static IEnumerable<StreamEntry> ParseBlockResult(RedisResult result)
+    {
+        // Formato: [ [streamKey, [ [id, [field, value, ...]], ... ]] ]
+        var streams = (RedisResult[])result!;
+        var streamData = (RedisResult[])streams[0];
+        var messages = (RedisResult[])streamData[1];
+
+        foreach (var msg in messages)
+        {
+            var msgParts = (RedisResult[])msg;
+            var id = (string)msgParts[0]!;
+            var fields = (RedisResult[])msgParts[1];
+
+            var values = new List<NameValueEntry>();
+            for (int i = 0; i < fields.Length; i += 2)
+                values.Add(new NameValueEntry((string)fields[i]!, (string)fields[i + 1]!));
+
+            yield return new StreamEntry(id, values.ToArray());
+        }
     }
 
     internal async Task HandleEntryAsync(IDatabase db, StreamEntry entry, CancellationToken ct)
@@ -119,10 +168,7 @@ public sealed class ReplayStreamConsumerService : BackgroundService
             {
                 await db.StreamAcknowledgeAsync(StreamKey, GroupName, entry.Id);
                 _failureCounts.TryRemove(entryId, out _);
-
-                _logger.LogError(ex,
-                    "[ReplayStream] Entry {EntryId} falhou {Attempts}x — descartada.",
-                    entryId, attempts);
+                _logger.LogError(ex, "[ReplayStream] Entry {EntryId} falhou {Attempts}x — descartada.", entryId, attempts);
             }
             else
             {
@@ -167,7 +213,6 @@ public sealed class ReplayStreamConsumerService : BackgroundService
         }
         catch (RedisServerException ex) when (ex.Message.Contains("BUSYGROUP"))
         {
-            // Grupo já existe — normal em restarts
             _logger.LogInformation("[ReplayStream] Consumer group '{Group}' já existe.", GroupName);
         }
     }
