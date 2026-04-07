@@ -1753,7 +1753,7 @@ public sealed class MatchService : IMatchService
             data: new Dictionary<string, string> { ["type"] = "teams_assigned", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
             ct);
 
-    public async Task<Result<List<ReplayClipDto>>> GetReplaysAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    public async Task<Result<List<ReplayClipDto>>> GetReplaysAsync(Guid groupId, Guid matchId, Guid? userId, CancellationToken ct)
     {
         var clips = await _context.ReplayClips
             .AsNoTracking()
@@ -1761,14 +1761,245 @@ public sealed class MatchService : IMatchService
             .OrderBy(r => r.UploadedAt)
             .ToListAsync(ct);
 
+        var clipIds = clips.Select(c => c.Id).ToList();
+
+        var likeCounts = await _context.ReplayLikes
+            .AsNoTracking()
+            .Where(l => clipIds.Contains(l.ClipId))
+            .GroupBy(l => l.ClipId)
+            .Select(g => new { ClipId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.ClipId, g => g.Count, ct);
+
+        var myLikes     = new HashSet<Guid>();
+        var myFavorites = new HashSet<Guid>();
+
+        if (userId.HasValue)
+        {
+            myLikes = (await _context.ReplayLikes
+                .AsNoTracking()
+                .Where(l => clipIds.Contains(l.ClipId) && l.UserId == userId.Value)
+                .Select(l => l.ClipId)
+                .ToListAsync(ct)).ToHashSet();
+
+            myFavorites = (await _context.ReplayFavorites
+                .AsNoTracking()
+                .Where(f => clipIds.Contains(f.ClipId) && f.UserId == userId.Value)
+                .Select(f => f.ClipId)
+                .ToListAsync(ct)).ToHashSet();
+        }
+
         var dtos = clips.Select(c => new ReplayClipDto(
             c.Id,
             c.ObjectKey,
             _replayUrls.GeneratePresignedUrl(c.ObjectKey),
             c.EventType.ToString(),
-            c.UploadedAt
+            c.UploadedAt,
+            LikeCount:       likeCounts.GetValueOrDefault(c.Id, 0),
+            IsLikedByMe:     myLikes.Contains(c.Id),
+            IsFavoritedByMe: myFavorites.Contains(c.Id)
         )).ToList();
 
         return Result<List<ReplayClipDto>>.Ok(dtos);
+    }
+
+    public async Task<(bool IsLiked, int LikeCount)> ToggleLikeAsync(Guid clipId, Guid userId, CancellationToken ct)
+    {
+        var existing = await _context.ReplayLikes
+            .FirstOrDefaultAsync(l => l.ClipId == clipId && l.UserId == userId, ct);
+
+        if (existing is not null)
+            _context.ReplayLikes.Remove(existing);
+        else
+            _context.ReplayLikes.Add(new ReplayLikeEntity(clipId, userId));
+
+        await _context.SaveChangesAsync(ct);
+
+        var count = await _context.ReplayLikes.CountAsync(l => l.ClipId == clipId, ct);
+        return (existing is null, count); // true = now liked
+    }
+
+    public async Task<bool> ToggleFavoriteAsync(Guid clipId, Guid userId, CancellationToken ct)
+    {
+        var existing = await _context.ReplayFavorites
+            .FirstOrDefaultAsync(f => f.ClipId == clipId && f.UserId == userId, ct);
+
+        if (existing is not null)
+            _context.ReplayFavorites.Remove(existing);
+        else
+            _context.ReplayFavorites.Add(new ReplayFavoriteEntity(clipId, userId));
+
+        await _context.SaveChangesAsync(ct);
+        return existing is null; // true = now favorited
+    }
+
+    public async Task<Result<List<LikedReplayClipDto>>> GetLikedReplaysAsync(Guid groupId, Guid? userId, CancellationToken ct)
+    {
+        var groupClipIds = await _context.ReplayClips
+            .AsNoTracking()
+            .Where(c => c.GroupId == groupId)
+            .Select(c => c.Id)
+            .ToListAsync(ct);
+
+        if (groupClipIds.Count == 0)
+            return Result<List<LikedReplayClipDto>>.Ok([]);
+
+        var likeCounts = await _context.ReplayLikes
+            .AsNoTracking()
+            .Where(l => groupClipIds.Contains(l.ClipId))
+            .GroupBy(l => l.ClipId)
+            .Select(g => new { ClipId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.ClipId, g => g.Count, ct);
+
+        var likedClipIds = likeCounts.Keys.ToList();
+        if (likedClipIds.Count == 0)
+            return Result<List<LikedReplayClipDto>>.Ok([]);
+
+        var clips = await _context.ReplayClips
+            .AsNoTracking()
+            .Where(c => likedClipIds.Contains(c.Id))
+            .ToListAsync(ct);
+
+        var myLikes     = new HashSet<Guid>();
+        var myFavorites = new HashSet<Guid>();
+
+        if (userId.HasValue)
+        {
+            myLikes = (await _context.ReplayLikes
+                .AsNoTracking()
+                .Where(l => likedClipIds.Contains(l.ClipId) && l.UserId == userId.Value)
+                .Select(l => l.ClipId)
+                .ToListAsync(ct)).ToHashSet();
+
+            myFavorites = (await _context.ReplayFavorites
+                .AsNoTracking()
+                .Where(f => likedClipIds.Contains(f.ClipId) && f.UserId == userId.Value)
+                .Select(f => f.ClipId)
+                .ToListAsync(ct)).ToHashSet();
+        }
+
+        var dtos = clips
+            .OrderByDescending(c => likeCounts.GetValueOrDefault(c.Id, 0))
+            .Select(c => new LikedReplayClipDto(
+                c.Id,
+                c.MatchId,
+                c.ObjectKey,
+                _replayUrls.GeneratePresignedUrl(c.ObjectKey),
+                c.EventType.ToString(),
+                c.UploadedAt,
+                likeCounts.GetValueOrDefault(c.Id, 0),
+                myLikes.Contains(c.Id),
+                myFavorites.Contains(c.Id)
+            ))
+            .ToList();
+
+        return Result<List<LikedReplayClipDto>>.Ok(dtos);
+    }
+
+    public async Task<Result<List<LikedReplayClipDto>>> GetMyLikesAsync(Guid groupId, Guid userId, CancellationToken ct)
+    {
+        var groupClipIds = await _context.ReplayClips
+            .AsNoTracking()
+            .Where(c => c.GroupId == groupId)
+            .Select(c => c.Id)
+            .ToListAsync(ct);
+
+        if (groupClipIds.Count == 0)
+            return Result<List<LikedReplayClipDto>>.Ok([]);
+
+        var likedClipIds = await _context.ReplayLikes
+            .AsNoTracking()
+            .Where(l => groupClipIds.Contains(l.ClipId) && l.UserId == userId)
+            .Select(l => l.ClipId)
+            .ToListAsync(ct);
+
+        if (likedClipIds.Count == 0)
+            return Result<List<LikedReplayClipDto>>.Ok([]);
+
+        var clips = await _context.ReplayClips
+            .AsNoTracking()
+            .Where(c => likedClipIds.Contains(c.Id))
+            .OrderByDescending(c => c.UploadedAt)
+            .ToListAsync(ct);
+
+        var likeCounts = await _context.ReplayLikes
+            .AsNoTracking()
+            .Where(l => likedClipIds.Contains(l.ClipId))
+            .GroupBy(l => l.ClipId)
+            .Select(g => new { ClipId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.ClipId, g => g.Count, ct);
+
+        var myFavorites = (await _context.ReplayFavorites
+            .AsNoTracking()
+            .Where(f => likedClipIds.Contains(f.ClipId) && f.UserId == userId)
+            .Select(f => f.ClipId)
+            .ToListAsync(ct)).ToHashSet();
+
+        var dtos = clips.Select(c => new LikedReplayClipDto(
+            c.Id,
+            c.MatchId,
+            c.ObjectKey,
+            _replayUrls.GeneratePresignedUrl(c.ObjectKey),
+            c.EventType.ToString(),
+            c.UploadedAt,
+            likeCounts.GetValueOrDefault(c.Id, 0),
+            IsLikedByMe: true,
+            myFavorites.Contains(c.Id)
+        )).ToList();
+
+        return Result<List<LikedReplayClipDto>>.Ok(dtos);
+    }
+
+    public async Task<Result<List<LikedReplayClipDto>>> GetMyFavoritesAsync(Guid groupId, Guid userId, CancellationToken ct)
+    {
+        var groupClipIds = await _context.ReplayClips
+            .AsNoTracking()
+            .Where(c => c.GroupId == groupId)
+            .Select(c => c.Id)
+            .ToListAsync(ct);
+
+        if (groupClipIds.Count == 0)
+            return Result<List<LikedReplayClipDto>>.Ok([]);
+
+        var favClipIds = await _context.ReplayFavorites
+            .AsNoTracking()
+            .Where(f => groupClipIds.Contains(f.ClipId) && f.UserId == userId)
+            .Select(f => f.ClipId)
+            .ToListAsync(ct);
+
+        if (favClipIds.Count == 0)
+            return Result<List<LikedReplayClipDto>>.Ok([]);
+
+        var clips = await _context.ReplayClips
+            .AsNoTracking()
+            .Where(c => favClipIds.Contains(c.Id))
+            .OrderByDescending(c => c.UploadedAt)
+            .ToListAsync(ct);
+
+        var likeCounts = await _context.ReplayLikes
+            .AsNoTracking()
+            .Where(l => favClipIds.Contains(l.ClipId))
+            .GroupBy(l => l.ClipId)
+            .Select(g => new { ClipId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.ClipId, g => g.Count, ct);
+
+        var myLikes = (await _context.ReplayLikes
+            .AsNoTracking()
+            .Where(l => favClipIds.Contains(l.ClipId) && l.UserId == userId)
+            .Select(l => l.ClipId)
+            .ToListAsync(ct)).ToHashSet();
+
+        var dtos = clips.Select(c => new LikedReplayClipDto(
+            c.Id,
+            c.MatchId,
+            c.ObjectKey,
+            _replayUrls.GeneratePresignedUrl(c.ObjectKey),
+            c.EventType.ToString(),
+            c.UploadedAt,
+            likeCounts.GetValueOrDefault(c.Id, 0),
+            myLikes.Contains(c.Id),
+            IsFavoritedByMe: true
+        )).ToList();
+
+        return Result<List<LikedReplayClipDto>>.Ok(dtos);
     }
 }

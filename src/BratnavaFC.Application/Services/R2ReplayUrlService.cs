@@ -41,5 +41,16 @@ public sealed class R2ReplayUrlService : IReplayUrlService, IDisposable
             Verb = HttpVerb.GET,
         });
 
+    public async Task<(Stream Stream, string ContentType)> GetObjectStreamAsync(string objectKey, CancellationToken ct)
+    {
+        var response = await _client.GetObjectAsync(new GetObjectRequest
+        {
+            BucketName = _bucketName,
+            Key = objectKey,
+        }, ct);
+
+        return (response.ResponseStream, response.Headers.ContentType ?? "video/mp4");
+    }
+
     public void Dispose() => _client.Dispose();
 }

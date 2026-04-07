@@ -35,6 +35,8 @@ public class AppDbContext : DbContext
     public DbSet<PollVoteEntity> PollVotes => Set<PollVoteEntity>();
     public DbSet<PushTokenEntity> PushTokens => Set<PushTokenEntity>();
     public DbSet<ReplayClipEntity> ReplayClips => Set<ReplayClipEntity>();
+    public DbSet<ReplayLikeEntity> ReplayLikes => Set<ReplayLikeEntity>();
+    public DbSet<ReplayFavoriteEntity> ReplayFavorites => Set<ReplayFavoriteEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -633,6 +635,26 @@ public class AppDbContext : DbContext
 
             // Busca de clips por partida
             builder.HasIndex(x => new { x.MatchId, x.EventType });
+        });
+
+        modelBuilder.Entity<ReplayLikeEntity>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.ClipId).IsRequired();
+            b.Property(x => x.UserId).IsRequired();
+            b.Property(x => x.CreatedAt).IsRequired();
+            // Um usuário só pode dar like uma vez por clip
+            b.HasIndex(x => new { x.ClipId, x.UserId }).IsUnique();
+        });
+
+        modelBuilder.Entity<ReplayFavoriteEntity>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.ClipId).IsRequired();
+            b.Property(x => x.UserId).IsRequired();
+            b.Property(x => x.CreatedAt).IsRequired();
+            // Um usuário só pode favoritar uma vez por clip
+            b.HasIndex(x => new { x.ClipId, x.UserId }).IsUnique();
         });
 
     }

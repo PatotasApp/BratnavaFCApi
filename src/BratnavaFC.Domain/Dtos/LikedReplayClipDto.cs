@@ -1,7 +1,8 @@
 namespace BratnavaFC.Domain.Dtos;
 
-public record ReplayClipDto(
+public record LikedReplayClipDto(
     Guid Id,
+    Guid MatchId,
     string ObjectKey,
     string VideoUrl,
     string EventType,

@@ -6,6 +6,7 @@ using BratnavaFC.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 
 namespace BratnavaFC.Api.Controllers;
 
@@ -17,12 +18,14 @@ public class MatchesController : GroupAuthorizedController
     private readonly IMatchService _service;
     private readonly AppDbContext _db;
     private readonly IMatchEventPublisher _eventPublisher;
+    private readonly IReplayUrlService _replayUrl;
 
-    public MatchesController(IMatchService service, AppDbContext db, IMatchEventPublisher eventPublisher)
+    public MatchesController(IMatchService service, AppDbContext db, IMatchEventPublisher eventPublisher, IReplayUrlService replayUrl)
     {
         _service         = service;
         _db              = db;
         _eventPublisher  = eventPublisher;
+        _replayUrl       = replayUrl;
     }
 
     [HttpGet("group/{groupId:guid}")]
@@ -315,9 +318,93 @@ public class MatchesController : GroupAuthorizedController
         [FromRoute] Guid matchId,
         CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
-        var result = await _service.GetReplaysAsync(groupId, matchId, ct);
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
+        var userId = GetCurrentUserId();
+        var result = await _service.GetReplaysAsync(groupId, matchId, userId, ct);
         return ToResponse(result);
+    }
+
+    [HttpPost("group/{groupId:guid}/replays/{clipId:guid}/like")]
+    public async Task<IActionResult> ToggleLike(
+        [FromRoute] Guid groupId,
+        [FromRoute] Guid clipId,
+        CancellationToken ct)
+    {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        var (isLiked, likeCount) = await _service.ToggleLikeAsync(clipId, userId.Value, ct);
+        return Ok(new { isLiked, likeCount });
+    }
+
+    [HttpPost("group/{groupId:guid}/replays/{clipId:guid}/favorite")]
+    public async Task<IActionResult> ToggleFavorite(
+        [FromRoute] Guid groupId,
+        [FromRoute] Guid clipId,
+        CancellationToken ct)
+    {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        var isFavorited = await _service.ToggleFavoriteAsync(clipId, userId.Value, ct);
+        return Ok(new { isFavorited });
+    }
+
+    [HttpGet("group/{groupId:guid}/replays/liked")]
+    public async Task<IActionResult> GetLikedReplays(
+        [FromRoute] Guid groupId,
+        CancellationToken ct)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        var userId = GetCurrentUserId();
+        var result = await _service.GetLikedReplaysAsync(groupId, userId, ct);
+        return ToResponse(result);
+    }
+
+    [HttpGet("group/{groupId:guid}/replays/my-likes")]
+    public async Task<IActionResult> GetMyLikes(
+        [FromRoute] Guid groupId,
+        CancellationToken ct)
+    {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+        var result = await _service.GetMyLikesAsync(groupId, userId.Value, ct);
+        return ToResponse(result);
+    }
+
+    [HttpGet("group/{groupId:guid}/replays/my-favorites")]
+    public async Task<IActionResult> GetMyFavorites(
+        [FromRoute] Guid groupId,
+        CancellationToken ct)
+    {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+        var result = await _service.GetMyFavoritesAsync(groupId, userId.Value, ct);
+        return ToResponse(result);
+    }
+
+    [HttpGet("group/{groupId:guid}/replays/{clipId:guid}/download")]
+    public async Task<IActionResult> DownloadReplay(
+        [FromRoute] Guid groupId,
+        [FromRoute] Guid clipId,
+        CancellationToken ct)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+
+        var clip = await _db.Set<ReplayClipEntity>()
+            .FirstOrDefaultAsync(c => c.Id == clipId && c.GroupId == groupId, ct);
+
+        if (clip is null) return NotFound();
+
+        var (stream, contentType) = await _replayUrl.GetObjectStreamAsync(clip.ObjectKey, ct);
+
+        var filename = $"{clip.EventType}_{clip.UploadedAt:HH-mm-ss}.mp4";
+
+        return File(stream, contentType, filename);
     }
 
     [EnableRateLimiting("PerUser")]
