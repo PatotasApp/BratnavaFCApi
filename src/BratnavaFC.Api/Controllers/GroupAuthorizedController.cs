@@ -40,6 +40,27 @@ public abstract class GroupAuthorizedController : BaseApiController
     }
 
     /// <summary>
+    /// Returns true if the caller has a global Admin/GodMode role,
+    /// is a group admin, OR is a regular member (has a player in the group).
+    /// Use for endpoints accessible to all group participants.
+    /// </summary>
+    protected async Task<bool> IsGroupMemberAsync(Guid groupId, AppDbContext db, CancellationToken ct)
+    {
+        if (HasGlobalAdminRole()) return true;
+
+        var userId = GetCurrentUserId();
+        if (userId == null) return false;
+
+        // group admin check
+        if (await db.GroupAdmins.AnyAsync(x => x.GroupId == groupId && x.UserId == userId.Value, ct))
+            return true;
+
+        // regular member (player linked to a user account in this group)
+        return await db.Players
+            .AnyAsync(x => x.GroupId == groupId && x.UserId == userId.Value, ct);
+    }
+
+    /// <summary>
     /// Returns true if the caller is GodMode OR is registered as a financeiro of the specific group.
     /// Admins are NOT automatically financeiros — they must be explicitly added.
     /// </summary>

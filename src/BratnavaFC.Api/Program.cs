@@ -226,9 +226,15 @@ var redisConnectionString =
     ?? builder.Configuration["Redis:ConnectionString"]
     ?? "localhost:6379";
 
+var redisOptions = ConfigurationOptions.Parse(redisConnectionString);
+redisOptions.ConnectTimeout = 10_000;  // 10s para estabelecer conexão
+redisOptions.SyncTimeout    = 40_000;  // 40s — comporta o BLOCK de 30s + margem de 10s
+
 builder.Services.AddSingleton<IConnectionMultiplexer>(
-    ConnectionMultiplexer.Connect(redisConnectionString));
+    ConnectionMultiplexer.Connect(redisOptions));
 builder.Services.AddScoped<IMatchEventPublisher, RedisMatchEventPublisher>();
+builder.Services.AddSingleton<IReplayUrlService, R2ReplayUrlService>();
+builder.Services.AddHostedService<ReplayStreamConsumerService>();
 
 
 // =====================

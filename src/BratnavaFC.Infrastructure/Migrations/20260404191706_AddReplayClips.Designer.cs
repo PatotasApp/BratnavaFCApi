@@ -3,6 +3,7 @@ using System;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BratnavaFC.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260404191706_AddReplayClips")]
+    partial class AddReplayClips
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -508,9 +511,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("AutoRejectedByAbsenceId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTime>("CreateDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -546,8 +546,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("AutoRejectedByAbsenceId");
 
                     b.HasIndex("GroupId");
 
@@ -953,64 +951,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.ToTable("ReplayClips");
                 });
 
-            modelBuilder.Entity("BratnavaFC.Domain.Entities.ReplayFavoriteEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ClipId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClipId", "UserId")
-                        .IsUnique();
-
-                    b.ToTable("ReplayFavorites");
-                });
-
-            modelBuilder.Entity("BratnavaFC.Domain.Entities.ReplayLikeEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ClipId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClipId", "UserId")
-                        .IsUnique();
-
-                    b.ToTable("ReplayLikes");
-                });
-
             modelBuilder.Entity("BratnavaFC.Domain.Entities.TeamColorEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1046,41 +986,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.HasIndex("GroupId", "Name");
 
                     b.ToTable("TeamColors");
-                });
-
-            modelBuilder.Entity("BratnavaFC.Domain.Entities.UserAbsenceEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<short>("AbsenceType")
-                        .HasColumnType("smallint");
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<DateOnly>("EndDate")
-                        .HasColumnType("date");
-
-                    b.Property<DateOnly>("StartDate")
-                        .HasColumnType("date");
-
-                    b.Property<DateTime?>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "StartDate", "EndDate");
-
-                    b.ToTable("UserAbsences");
                 });
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.UserEntity", b =>
@@ -1367,11 +1272,6 @@ namespace BratnavaFC.Infrastructure.Migrations
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.MatchPlayerEntity", b =>
                 {
-                    b.HasOne("BratnavaFC.Domain.Entities.UserAbsenceEntity", "AutoRejectedByAbsence")
-                        .WithMany()
-                        .HasForeignKey("AutoRejectedByAbsenceId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("BratnavaFC.Domain.Entities.GroupEntity", "Group")
                         .WithMany()
                         .HasForeignKey("GroupId")
@@ -1389,8 +1289,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .HasForeignKey("PlayerId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.Navigation("AutoRejectedByAbsence");
 
                     b.Navigation("Group");
 
@@ -1502,17 +1400,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("BratnavaFC.Domain.Entities.UserAbsenceEntity", b =>
-                {
-                    b.HasOne("BratnavaFC.Domain.Entities.UserEntity", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.VoteEntity", b =>

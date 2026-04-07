@@ -35,6 +35,9 @@ public class AppDbContext : DbContext
     public DbSet<PollVoteEntity> PollVotes => Set<PollVoteEntity>();
     public DbSet<PushTokenEntity> PushTokens => Set<PushTokenEntity>();
     public DbSet<UserAbsenceEntity> UserAbsences => Set<UserAbsenceEntity>();
+    public DbSet<ReplayClipEntity> ReplayClips => Set<ReplayClipEntity>();
+    public DbSet<ReplayLikeEntity> ReplayLikes => Set<ReplayLikeEntity>();
+    public DbSet<ReplayFavoriteEntity> ReplayFavorites => Set<ReplayFavoriteEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -307,7 +310,7 @@ public class AppDbContext : DbContext
                 .IsRequired();
 
             builder.HasOne<GroupEntity>()
-                .WithOne()  
+                .WithOne()
                 .HasForeignKey<GroupSettingsEntity>(x => x.GroupId)
                 .OnDelete(DeleteBehavior.Restrict);
 
@@ -626,6 +629,63 @@ public class AppDbContext : DbContext
 
             builder.HasIndex(x => new { x.UserId, x.StartDate, x.EndDate });
         });
+
+        modelBuilder.Entity<ReplayClipEntity>(builder =>
+        {
+            builder.HasKey(x => x.Id);
+
+            builder.Property(x => x.GroupId).IsRequired();
+            builder.Property(x => x.MatchId).IsRequired();
+
+            builder.Property(x => x.BucketName)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            builder.Property(x => x.ObjectKey)
+                .IsRequired()
+                .HasMaxLength(1000);
+
+            builder.Property(x => x.ContentType)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            builder.Property(x => x.ETag)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            builder.Property(x => x.UploadedAt).IsRequired();
+
+            builder.Property(x => x.EventType)
+                .HasConversion<short>()
+                .IsRequired();
+
+            // Um mesmo arquivo não pode ser registrado duas vezes
+            builder.HasIndex(x => x.ObjectKey).IsUnique();
+
+            // Busca de clips por partida
+            builder.HasIndex(x => new { x.MatchId, x.EventType });
+        });
+
+        modelBuilder.Entity<ReplayLikeEntity>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.ClipId).IsRequired();
+            b.Property(x => x.UserId).IsRequired();
+            b.Property(x => x.CreatedAt).IsRequired();
+            // Um usuário só pode dar like uma vez por clip
+            b.HasIndex(x => new { x.ClipId, x.UserId }).IsUnique();
+        });
+
+        modelBuilder.Entity<ReplayFavoriteEntity>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.ClipId).IsRequired();
+            b.Property(x => x.UserId).IsRequired();
+            b.Property(x => x.CreatedAt).IsRequired();
+            // Um usuário só pode favoritar uma vez por clip
+            b.HasIndex(x => new { x.ClipId, x.UserId }).IsUnique();
+        });
+
     }
 
     public override int SaveChanges()

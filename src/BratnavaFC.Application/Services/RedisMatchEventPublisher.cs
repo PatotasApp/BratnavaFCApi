@@ -21,17 +21,24 @@ public class RedisMatchEventPublisher : IMatchEventPublisher
         _redis = redis;
     }
 
-    public async Task PublishAsync(Guid groupId, Guid matchId, MatchEventType type, int durationSeconds, CancellationToken ct = default)
+    private static readonly TimeZoneInfo _saoPauloTz =
+        TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
+
+    public async Task PublishAsync(Guid groupId, Guid matchId, MatchEventType type, int secondsBeforeStart, int durationSeconds, CancellationToken ct = default)
     {
+        var eventTime = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, _saoPauloTz);
+
         var payload = JsonSerializer.Serialize(new
         {
             groupId,
             matchId,
             type,
+            eventTime,
+            secondsBeforeStart,
             durationSeconds,
         }, _jsonOpts);
 
-        var db = _redis.GetDatabase();
-        await db.ListRightPushAsync("replay_queue", payload);
+        var sub = _redis.GetSubscriber();
+        await sub.PublishAsync(RedisChannel.Literal("replay_events"), payload);
     }
 }

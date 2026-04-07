@@ -6,5 +6,6 @@ namespace BratnavaFC.Domain.Dtos;
 public record PublishMatchEventRequest(
     [property: JsonConverter(typeof(JsonStringEnumConverter))]
     MatchEventType Type,
-    int DurationSeconds = 20
+    int SecondsBeforeStart = 15,
+    int DurationSeconds = 15
 );

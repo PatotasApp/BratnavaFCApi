@@ -67,4 +67,11 @@ public interface IMatchService
         Guid playerId,
         int take,
         CancellationToken ct);
+
+    Task<Result<List<ReplayClipDto>>> GetReplaysAsync(Guid groupId, Guid matchId, Guid? userId, CancellationToken ct);
+    Task<(bool IsLiked, int LikeCount)> ToggleLikeAsync(Guid clipId, Guid userId, CancellationToken ct);
+    Task<bool> ToggleFavoriteAsync(Guid clipId, Guid userId, CancellationToken ct);
+    Task<Result<List<LikedReplayClipDto>>> GetLikedReplaysAsync(Guid groupId, Guid? userId, CancellationToken ct);
+    Task<Result<List<LikedReplayClipDto>>> GetMyLikesAsync(Guid groupId, Guid userId, CancellationToken ct);
+    Task<Result<List<LikedReplayClipDto>>> GetMyFavoritesAsync(Guid groupId, Guid userId, CancellationToken ct);
 }
