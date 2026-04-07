@@ -656,7 +656,7 @@ public class AppDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(100);
 
-            builder.Property(x => x.UploadedAt).IsRequired();
+            builder.Property(x => x.RecordedAt).IsRequired();
 
             builder.Property(x => x.EventType)
                 .HasConversion<short>()

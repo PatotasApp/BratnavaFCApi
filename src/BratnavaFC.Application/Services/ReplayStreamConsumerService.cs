@@ -185,6 +185,10 @@ public sealed class ReplayStreamConsumerService : BackgroundService
             kv => kv.Name.ToString(),
             kv => kv.Value.ToString());
 
+        var recordedAt = f.TryGetValue("event_time", out var et) && !string.IsNullOrEmpty(et)
+            ? DateTimeOffset.Parse(et)
+            : DateTimeOffset.Parse(f["created_at"]);
+
         return new ReplayClipEntity(
             groupId: Guid.Parse(f["group_id"]),
             matchId: Guid.Parse(f["match_id"]),
@@ -192,7 +196,7 @@ public sealed class ReplayStreamConsumerService : BackgroundService
             objectKey: f["object_key"],
             contentType: f["content_type"],
             etag: f["etag"],
-            uploadedAt: DateTimeOffset.Parse(f["created_at"]),
+            recordedAt: recordedAt,
             eventType: ParseEventType(f["tipo"]));
     }
 

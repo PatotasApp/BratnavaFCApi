@@ -10,7 +10,7 @@ public sealed class ReplayClipEntity : BaseEntity
     public string ObjectKey { get; private set; } = default!;
     public string ContentType { get; private set; } = default!;
     public string ETag { get; private set; } = default!;
-    public DateTimeOffset UploadedAt { get; private set; }
+    public DateTimeOffset RecordedAt { get; private set; }
     public MatchEventType EventType { get; private set; }
 
     // EF Core
@@ -23,7 +23,7 @@ public sealed class ReplayClipEntity : BaseEntity
         string objectKey,
         string contentType,
         string etag,
-        DateTimeOffset uploadedAt,
+        DateTimeOffset recordedAt,
         MatchEventType eventType)
     {
         GroupId = groupId;
@@ -32,7 +32,7 @@ public sealed class ReplayClipEntity : BaseEntity
         ObjectKey = objectKey;
         ContentType = contentType;
         ETag = etag;
-        UploadedAt = uploadedAt;
+        RecordedAt = recordedAt;
         EventType = eventType;
     }
 }

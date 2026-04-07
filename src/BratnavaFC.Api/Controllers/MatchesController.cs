@@ -404,7 +404,7 @@ public class MatchesController : GroupAuthorizedController
 
         var (stream, contentType) = await _replayUrl.GetObjectStreamAsync(clip.ObjectKey, ct);
 
-        var filename = $"{clip.EventType}_{clip.UploadedAt:HH-mm-ss}.mp4";
+        var filename = $"{clip.EventType}_{clip.RecordedAt:HH-mm-ss}.mp4";
 
         return File(stream, contentType, filename);
     }
