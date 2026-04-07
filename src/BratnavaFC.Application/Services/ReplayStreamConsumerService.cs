@@ -15,9 +15,10 @@ public sealed class ReplayStreamConsumerService : BackgroundService
 {
     private const string StreamKey = "replays:uploaded";
     private const string GroupName = "bratnava-api";
-    private const int BatchSize = 10;
-    private const int BlockMs = 30_000; // espera até 30s por novas mensagens
+    private const int BatchSize   = 10;
+    private const int BlockMs     = 30_000;
     private const int MaxAttempts = 3;
+    private const int TtlDays     = 7;
 
     private readonly IConnectionMultiplexer _redis;
     private readonly IServiceScopeFactory _scopeFactory;
@@ -155,6 +156,9 @@ public sealed class ReplayStreamConsumerService : BackgroundService
 
             await db.StreamAcknowledgeAsync(StreamKey, GroupName, entry.Id);
             _failureCounts.TryRemove(entryId, out _);
+
+            var minId = $"{DateTimeOffset.UtcNow.AddDays(-TtlDays).ToUnixTimeMilliseconds()}-0";
+            await db.ExecuteAsync("XTRIM", StreamKey, "MINID", "~", minId);
 
             _logger.LogInformation(
                 "[ReplayStream] Clip salvo. Id={Id} Match={Match} EventType={Type} Key={Key}",
