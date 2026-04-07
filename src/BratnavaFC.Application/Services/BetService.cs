@@ -53,7 +53,7 @@ public sealed class BetService : IBetService
             .AsNoTracking()
             .Include(mp => mp.Player)
             .Where(mp => mp.MatchId == match.Id &&
-                         mp.Player != null && !mp.Player.IsGuest)
+                         mp.InviteResponse == InviteResponse.Accepted)
             .ToListAsync(ct);
 
         var players = rawPlayers.Select(mp =>
@@ -62,7 +62,8 @@ public sealed class BetService : IBetService
             var fichas = hasBet && mp.Player?.UserId != null
                 ? wageredByUser.GetValueOrDefault(mp.Player.UserId.Value)
                 : null;
-            return new BetPlayerDto(mp.Id, mp.PlayerId, mp.Player!.Name, mp.Team, hasBet, fichas);
+            return new BetPlayerDto(mp.Id, mp.PlayerId, mp.Player!.Name, mp.Team,
+                mp.Player?.IsGuest ?? false, hasBet, fichas);
         }).ToList();
 
         var myBet = await GetMyBetDtoAsync(match.Id, userId, ct);
