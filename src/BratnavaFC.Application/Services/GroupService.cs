@@ -588,6 +588,19 @@ public class GroupService : IGroupService
                 var mp = new MatchPlayerEntity(thePlayer.Id);
                 mp.AssignToMatch(acceptationMatch);   // também chama AssignGroup internamente
                 _context.MatchPlayers.Add(mp);
+
+                if (thePlayer.UserId != null)
+                {
+                    var matchDate = DateOnly.FromDateTime(acceptationMatch.PlayedAt);
+                    var absence   = await _context.UserAbsences
+                        .Where(a => a.UserId == thePlayer.UserId.Value &&
+                                    a.StartDate <= matchDate &&
+                                    a.EndDate   >= matchDate)
+                        .FirstOrDefaultAsync(cancellationToken);
+
+                    if (absence != null)
+                        mp.AutoRejectByAbsence(absence.Id);
+                }
             }
 
             invite.Accept();

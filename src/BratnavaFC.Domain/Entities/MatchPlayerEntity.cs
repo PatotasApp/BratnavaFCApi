@@ -31,6 +31,16 @@ public class MatchPlayerEntity : BaseEntity
 
     public InviteResponse InviteResponse { get; set; } = InviteResponse.None;
 
+    public Guid? AutoRejectedByAbsenceId { get; private set; }
+    public UserAbsenceEntity? AutoRejectedByAbsence { get; private set; }
+
+    public void AutoRejectByAbsence(Guid absenceId)
+    {
+        if (absenceId == Guid.Empty) throw new InvalidOperationException("AbsenceId é obrigatório.");
+        InviteResponse = InviteResponse.Rejected;
+        AutoRejectedByAbsenceId = absenceId;
+    }
+
     public List<GoalEntity> GoalsScored { get; private set; } = new();
     public List<GoalEntity> GoalsAssisted { get; private set; } = new();
 

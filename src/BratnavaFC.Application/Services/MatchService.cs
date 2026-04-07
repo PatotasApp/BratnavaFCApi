@@ -710,6 +710,22 @@ public sealed class MatchService : IMatchService
             .Where(p => p.GroupId == groupId && p.Status == Status.Active)
             .ToListAsync(ct);
 
+        var matchDate = DateOnly.FromDateTime(match.PlayedAt);
+
+        var userIds = players
+            .Where(p => p.UserId != null)
+            .Select(p => p.UserId!.Value)
+            .Distinct()
+            .ToList();
+
+        var absenceByUser = userIds.Count > 0
+            ? await _context.UserAbsences
+                .Where(a => userIds.Contains(a.UserId) &&
+                            a.StartDate <= matchDate &&
+                            a.EndDate   >= matchDate)
+                .ToDictionaryAsync(a => a.UserId, ct)
+            : new Dictionary<Guid, UserAbsenceEntity>();
+
         foreach (var player in players)
         {
             var alreadyInMatch = match.Players.Any(mp => mp.PlayerId == player.Id);
@@ -717,6 +733,9 @@ public sealed class MatchService : IMatchService
 
             var mp = new MatchPlayerEntity(player.Id);
             match.AddPlayer(mp, player);
+
+            if (player.UserId != null && absenceByUser.TryGetValue(player.UserId.Value, out var absence))
+                mp.AutoRejectByAbsence(absence.Id);
         }
     }
 
@@ -996,7 +1015,7 @@ public sealed class MatchService : IMatchService
                 .ToListAsync(ct);
 
             var savedResponses = existingMps
-                .ToDictionary(mp => mp.PlayerId, mp => mp.InviteResponse);
+                .ToDictionary(mp => mp.PlayerId, mp => (mp.InviteResponse, mp.AutoRejectedByAbsenceId));
 
             _context.MatchPlayers.RemoveRange(existingMps);
 
@@ -1011,8 +1030,12 @@ public sealed class MatchService : IMatchService
                 newMp.AssignGroup(groupId);
                 newMp.SetIsGoalkeeper(player.IsGoalkeeper);
 
-                if (savedResponses.TryGetValue(player.Id, out var previousResponse))
-                    newMp.InviteResponse = previousResponse;
+                if (savedResponses.TryGetValue(player.Id, out var saved))
+                {
+                    newMp.InviteResponse = saved.InviteResponse;
+                    if (saved.AutoRejectedByAbsenceId.HasValue)
+                        newMp.AutoRejectByAbsence(saved.AutoRejectedByAbsenceId.Value);
+                }
 
                 _context.MatchPlayers.Add(newMp);
                 // MatchId tem private set; usa Entry API para definir sem nav prop
@@ -1088,7 +1111,13 @@ public sealed class MatchService : IMatchService
                         IsGoalkeeper = mp.IsGoalkeeper,
                         IsGuest = mp.Player!.IsGuest,
                         Team = mp.Team,
-                        InviteResponse = (short)mp.InviteResponse
+                        InviteResponse = (short)mp.InviteResponse,
+                        AbsenceType = mp.AutoRejectedByAbsenceId != null ? (int?)mp.AutoRejectedByAbsence!.AbsenceType : null,
+                        AbsenceDescription = mp.AutoRejectedByAbsenceId != null
+                            ? (mp.AutoRejectedByAbsence!.Description == null
+                                ? AbsenceService.GetTypeName(mp.AutoRejectedByAbsence!.AbsenceType)
+                                : AbsenceService.GetTypeName(mp.AutoRejectedByAbsence!.AbsenceType) + " - " + mp.AutoRejectedByAbsence!.Description)
+                            : null,
                     })
                     .ToList()
             })
@@ -1159,12 +1188,12 @@ public sealed class MatchService : IMatchService
                     .Select(mp => new PlayerInMatchDto
                     {
                         MatchPlayerId = mp.Id,
-                        PlayerId = mp.PlayerId,
-                        PlayerName = mp.Player!.Name,
-                        IsGoalkeeper = mp.IsGoalkeeper,
-                        IsGuest = mp.Player!.IsGuest,
-                        Team = mp.Team,
-                        InviteResponse = (short)mp.InviteResponse
+                        PlayerId      = mp.PlayerId,
+                        PlayerName    = mp.Player!.Name,
+                        IsGoalkeeper  = mp.IsGoalkeeper,
+                        IsGuest       = mp.Player!.IsGuest,
+                        Team          = mp.Team,
+                        InviteResponse = (short)mp.InviteResponse,
                     })
                     .ToList(),
 
@@ -1175,12 +1204,12 @@ public sealed class MatchService : IMatchService
                     .Select(mp => new PlayerInMatchDto
                     {
                         MatchPlayerId = mp.Id,
-                        PlayerId = mp.PlayerId,
-                        PlayerName = mp.Player!.Name,
-                        IsGoalkeeper = mp.IsGoalkeeper,
-                        IsGuest = mp.Player!.IsGuest,
-                        Team = mp.Team,
-                        InviteResponse = (short)mp.InviteResponse
+                        PlayerId      = mp.PlayerId,
+                        PlayerName    = mp.Player!.Name,
+                        IsGoalkeeper  = mp.IsGoalkeeper,
+                        IsGuest       = mp.Player!.IsGuest,
+                        Team          = mp.Team,
+                        InviteResponse = (short)mp.InviteResponse,
                     })
                     .ToList(),
 
@@ -1190,12 +1219,12 @@ public sealed class MatchService : IMatchService
                     .Select(mp => new PlayerInMatchDto
                     {
                         MatchPlayerId = mp.Id,
-                        PlayerId = mp.PlayerId,
-                        PlayerName = mp.Player!.Name,
-                        IsGoalkeeper = mp.IsGoalkeeper,
-                        IsGuest = mp.Player!.IsGuest,
-                        Team = mp.Team,
-                        InviteResponse = (short)mp.InviteResponse
+                        PlayerId      = mp.PlayerId,
+                        PlayerName    = mp.Player!.Name,
+                        IsGoalkeeper  = mp.IsGoalkeeper,
+                        IsGuest       = mp.Player!.IsGuest,
+                        Team          = mp.Team,
+                        InviteResponse = (short)mp.InviteResponse,
                     })
                     .ToList(),
 
@@ -1208,12 +1237,12 @@ public sealed class MatchService : IMatchService
                     .Select(mp => new PlayerInMatchDto
                     {
                         MatchPlayerId = mp.Id,
-                        PlayerId = mp.PlayerId,
-                        PlayerName = mp.Player!.Name,
-                        IsGoalkeeper = mp.IsGoalkeeper,
-                        IsGuest = mp.Player!.IsGuest,
-                        Team = mp.Team,
-                        InviteResponse = (short)mp.InviteResponse
+                        PlayerId      = mp.PlayerId,
+                        PlayerName    = mp.Player!.Name,
+                        IsGoalkeeper  = mp.IsGoalkeeper,
+                        IsGuest       = mp.Player!.IsGuest,
+                        Team          = mp.Team,
+                        InviteResponse = (short)mp.InviteResponse,
                     })
                     .ToList(),
             })
@@ -1542,15 +1571,28 @@ public sealed class MatchService : IMatchService
 
     private static PlayerInMatchDto ToPlayerDto(MatchPlayerEntity mp) => new()
     {
-        MatchPlayerId = mp.Id,
-        PlayerId = mp.PlayerId,
-        PlayerName = mp.Player?.Name ?? string.Empty,
-        IsGoalkeeper = mp.IsGoalkeeper,
-        IsGuest = mp.Player?.IsGuest ?? false,
-        Team = mp.Team,
-        InviteResponse = (short)mp.InviteResponse,
-        IsMvp = mp.IsMvp ?? false
+        MatchPlayerId      = mp.Id,
+        PlayerId           = mp.PlayerId,
+        PlayerName         = mp.Player?.Name ?? string.Empty,
+        IsGoalkeeper       = mp.IsGoalkeeper,
+        IsGuest            = mp.Player?.IsGuest ?? false,
+        Team               = mp.Team,
+        InviteResponse     = (short)mp.InviteResponse,
+        IsMvp              = mp.IsMvp ?? false,
+        AbsenceType        = mp.AutoRejectedByAbsenceId != null ? (int?)mp.AutoRejectedByAbsence?.AbsenceType : null,
+        AbsenceDescription = BuildAbsenceDescription(
+            mp.AutoRejectedByAbsenceId != null ? (int?)mp.AutoRejectedByAbsence?.AbsenceType : null,
+            mp.AutoRejectedByAbsence?.Description),
     };
+
+    internal static string? BuildAbsenceDescription(int? absenceType, string? rawDescription)
+    {
+        if (absenceType is null) return null;
+        var typeName = AbsenceService.GetTypeName((BratnavaFC.Domain.Enums.AbsenceType)absenceType);
+        return string.IsNullOrWhiteSpace(rawDescription)
+            ? typeName
+            : $"{typeName} - {rawDescription}";
+    }
 
     private static MatchDetailsDto MapToDetailsDto(MatchEntity match)
     {

@@ -1298,6 +1298,57 @@ public sealed class MatchServiceTests
     }
 
     [Fact]
+    public async Task RewindOneStepAsync_WhenMatchMaking_ShouldPreserveAutoRejectedByAbsenceId()
+    {
+        await using var db = DbContextFactory.Create(nameof(RewindOneStepAsync_WhenMatchMaking_ShouldPreserveAutoRejectedByAbsenceId));
+        var repo = BuildRepoMock(db);
+        var sut  = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+
+        // 2 jogadores para atingir MatchMaking
+        var (match, players) = await SeedMatchAsync(
+            db, group.Id,
+            playersCount: 2,
+            targetStatus: MatchStatus.MatchMaking,
+            acceptAllInvites: true,
+            defineTeamsIfPossible: true);
+
+        // 3º jogador com ausência cobrindo a data da partida
+        var user3   = new UserEntity("u3", "U3", "X", "u3@test.com", "hash3", null, null);
+        var player3 = new PlayerEntity("P3", user3.Id, group.Id, 5m, false);
+        db.Users.Add(user3);
+        db.Players.Add(player3);
+        await db.SaveChangesAsync();
+
+        var matchOnly = DateOnly.FromDateTime(match.PlayedAt);
+        var absence   = new UserAbsenceEntity(user3.Id, matchOnly, matchOnly, AbsenceType.Travel, null);
+        db.UserAbsences.Add(absence);
+        await db.SaveChangesAsync();
+
+        // Cria o MatchPlayer para player3 já como auto-rejeitado (simula o que o sync faria)
+        var mp3 = new MatchPlayerEntity(player3.Id);
+        mp3.AutoRejectByAbsence(absence.Id);
+        db.MatchPlayers.Add(mp3);
+        db.Entry(mp3).Property(x => x.MatchId).CurrentValue = match.Id;
+        db.Entry(mp3).Property(x => x.GroupId).CurrentValue = group.Id;
+        await db.SaveChangesAsync();
+
+        db.ChangeTracker.Clear();
+
+        await sut.RewindOneStepAsync(group.Id, match.Id, CancellationToken.None);
+
+        var savedMp3 = await db.MatchPlayers
+            .AsNoTracking()
+            .FirstAsync(mp => mp.PlayerId == player3.Id);
+
+        savedMp3.InviteResponse.Should().Be(InviteResponse.Rejected,
+            "auto-rejeição por ausência deve ser preservada após rewind");
+        savedMp3.AutoRejectedByAbsenceId.Should().Be(absence.Id,
+            "FK da ausência deve ser preservada após rewind");
+    }
+
+    [Fact]
     public async Task RewindOneStepAsync_WhenStarted_ShouldPreserveTeamAssignments()
     {
         await using var db = DbContextFactory.Create(nameof(RewindOneStepAsync_WhenStarted_ShouldPreserveTeamAssignments));

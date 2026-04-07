@@ -34,6 +34,7 @@ public class AppDbContext : DbContext
     public DbSet<PollOptionEntity> PollOptions => Set<PollOptionEntity>();
     public DbSet<PollVoteEntity> PollVotes => Set<PollVoteEntity>();
     public DbSet<PushTokenEntity> PushTokens => Set<PushTokenEntity>();
+    public DbSet<UserAbsenceEntity> UserAbsences => Set<UserAbsenceEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -134,6 +135,14 @@ public class AppDbContext : DbContext
 
             builder.HasIndex(x => new { x.MatchId, x.PlayerId, x.GroupId })
                 .IsUnique();
+
+            builder.Property(x => x.AutoRejectedByAbsenceId).IsRequired(false);
+
+            builder.HasOne(x => x.AutoRejectedByAbsence)
+                .WithMany()
+                .HasForeignKey(x => x.AutoRejectedByAbsenceId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<VoteEntity>(builder =>
@@ -596,6 +605,26 @@ public class AppDbContext : DbContext
 
             // Token único globalmente (um mesmo dispositivo não pode ter dois registros)
             builder.HasIndex(x => x.Token).IsUnique();
+        });
+
+        modelBuilder.Entity<UserAbsenceEntity>(builder =>
+        {
+            builder.HasKey(x => x.Id);
+
+            builder.Property(x => x.UserId).IsRequired();
+            builder.Property(x => x.StartDate).IsRequired().HasColumnType("date");
+            builder.Property(x => x.EndDate).IsRequired().HasColumnType("date");
+            builder.Property(x => x.AbsenceType)
+                .HasConversion<short>()
+                .IsRequired();
+            builder.Property(x => x.Description).HasMaxLength(500);
+
+            builder.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasIndex(x => new { x.UserId, x.StartDate, x.EndDate });
         });
     }
 

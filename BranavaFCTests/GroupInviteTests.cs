@@ -616,6 +616,40 @@ public class GroupService_AcceptInviteTests
         updatedMatch.Players.Should().HaveCount(1);
         updatedMatch.Players.Should().Contain(mp => mp.PlayerId == guest.Id);
     }
+
+    [Fact]
+    public async Task WhenMatchInAcceptation_AndNewPlayerHasAbsence_ShouldAutoRejectMatchPlayer()
+    {
+        await using var db  = DbContextFactory.Create(nameof(WhenMatchInAcceptation_AndNewPlayerHasAbsence_ShouldAutoRejectMatchPlayer));
+        var sut = Builders.MakeSut(db);
+
+        var user  = Builders.MakeUser();
+        var group = Builders.MakeGroup();
+        db.Users.Add(user);
+        db.Groups.Add(group);
+
+        var matchDate = DateTime.UtcNow.AddDays(5);
+        var match = new MatchEntity(group.Id, matchDate, "Arena");
+        match.OpenAcceptation();
+        db.Matches.Add(match);
+
+        var matchOnly = DateOnly.FromDateTime(matchDate);
+        var absence   = new UserAbsenceEntity(user.Id, matchOnly, matchOnly, AbsenceType.Travel, null);
+        db.UserAbsences.Add(absence);
+
+        var invite = new GroupInviteEntity(group.Id, user.Id, null);
+        db.GroupInvites.Add(invite);
+        await db.SaveChangesAsync();
+
+        await sut.AcceptInviteAsync(invite.Id, user.Id, CancellationToken.None);
+
+        var newPlayer    = db.Players.First(p => p.UserId == user.Id && p.GroupId == group.Id);
+        var updatedMatch = db.Matches.Include(m => m.Players).First(m => m.Id == match.Id);
+        var mp = updatedMatch.Players.First(p => p.PlayerId == newPlayer.Id);
+
+        mp.InviteResponse.Should().Be(InviteResponse.Rejected);
+        mp.AutoRejectedByAbsenceId.Should().Be(absence.Id);
+    }
 }
 
 // ─── GroupService — RejectInviteAsync ────────────────────────────────────────

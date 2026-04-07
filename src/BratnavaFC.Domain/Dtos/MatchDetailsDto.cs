@@ -59,6 +59,11 @@ public sealed class PlayerInMatchDto
     public short Team { get; set; }
     public short InviteResponse { get; set; } // enum convertido (Accepted/Rejected/None)
     public bool IsMvp { get; set; }
+
+    /// <summary>Preenchido apenas quando a rejeição foi automática (BackgroundService). Null = rejeição manual.</summary>
+    public int? AbsenceType { get; set; }
+    /// <summary>Ex: "Viagem - Férias em SP" ou "Viagem". Null quando rejeição manual.</summary>
+    public string? AbsenceDescription { get; set; }
 }
 
 public sealed class VoteDto
