@@ -76,7 +76,8 @@ builder.Services.AddCors(options =>
         policy
             .AllowAnyOrigin()
             .AllowAnyMethod()
-            .AllowAnyHeader();
+            .AllowAnyHeader()
+            .WithExposedHeaders("Content-Range", "Accept-Ranges", "Content-Length", "Content-Type");
     });
 });
 
