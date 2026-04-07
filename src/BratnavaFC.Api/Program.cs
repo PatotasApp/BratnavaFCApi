@@ -282,6 +282,21 @@ builder.Services
             RoleClaimType = "role",
             NameClaimType = "name"
         };
+
+        // Permite que <video src="...?t=TOKEN"> autentique sem header Authorization
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                if (context.Request.Path.Value?.Contains("/stream", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    var token = context.Request.Query["t"].FirstOrDefault();
+                    if (!string.IsNullOrEmpty(token))
+                        context.Token = token;
+                }
+                return Task.CompletedTask;
+            }
+        };
     });
 
 builder.Services.AddAuthorization();

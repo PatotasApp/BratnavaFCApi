@@ -19,13 +19,15 @@ public class MatchesController : GroupAuthorizedController
     private readonly AppDbContext _db;
     private readonly IMatchEventPublisher _eventPublisher;
     private readonly IReplayUrlService _replayUrl;
+    private readonly IHttpClientFactory _httpClientFactory;
 
-    public MatchesController(IMatchService service, AppDbContext db, IMatchEventPublisher eventPublisher, IReplayUrlService replayUrl)
+    public MatchesController(IMatchService service, AppDbContext db, IMatchEventPublisher eventPublisher, IReplayUrlService replayUrl, IHttpClientFactory httpClientFactory)
     {
-        _service         = service;
-        _db              = db;
-        _eventPublisher  = eventPublisher;
-        _replayUrl       = replayUrl;
+        _service            = service;
+        _db                 = db;
+        _eventPublisher     = eventPublisher;
+        _replayUrl          = replayUrl;
+        _httpClientFactory  = httpClientFactory;
     }
 
     [HttpGet("group/{groupId:guid}")]
@@ -405,6 +407,56 @@ public class MatchesController : GroupAuthorizedController
         var filename = $"{clip.EventType}_{clip.UploadedAt:HH-mm-ss}.mp4";
 
         return File(stream, contentType, filename);
+    }
+
+    /// <summary>
+    /// Proxy de streaming que encaminha Range requests ao R2 — necessário para iOS Safari.
+    /// Aceita o JWT via query string "t" para uso em elementos &lt;video src&gt;.
+    /// </summary>
+    [HttpGet("group/{groupId:guid}/replays/{clipId:guid}/stream")]
+    public async Task StreamReplay(
+        [FromRoute] Guid groupId,
+        [FromRoute] Guid clipId,
+        CancellationToken ct)
+    {
+        if (!await IsGroupMemberAsync(groupId, _db, ct))
+        {
+            Response.StatusCode = 403;
+            return;
+        }
+
+        var clip = await _db.Set<ReplayClipEntity>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == clipId && c.GroupId == groupId, ct);
+
+        if (clip is null)
+        {
+            Response.StatusCode = 404;
+            return;
+        }
+
+        var presignedUrl = _replayUrl.GeneratePresignedUrl(clip.ObjectKey);
+
+        using var httpClient = _httpClientFactory.CreateClient();
+        var r2Request = new HttpRequestMessage(HttpMethod.Get, presignedUrl);
+
+        // Encaminha o Range header do cliente para o R2 (suporte a streaming no iOS)
+        if (Request.Headers.TryGetValue("Range", out var rangeValues))
+            r2Request.Headers.TryAddWithoutValidation("Range", rangeValues.ToArray());
+
+        var r2Response = await httpClient.SendAsync(
+            r2Request, HttpCompletionOption.ResponseHeadersRead, ct);
+
+        Response.StatusCode    = (int)r2Response.StatusCode;
+        Response.ContentType   = r2Response.Content.Headers.ContentType?.ToString() ?? "video/mp4";
+        Response.Headers["Accept-Ranges"] = "bytes";
+
+        if (r2Response.Content.Headers.TryGetValues("Content-Length", out var cl))
+            Response.Headers["Content-Length"] = cl.First();
+        if (r2Response.Content.Headers.TryGetValues("Content-Range", out var cr))
+            Response.Headers["Content-Range"] = cr.First();
+
+        await r2Response.Content.CopyToAsync(Response.Body, ct);
     }
 
     [EnableRateLimiting("PerUser")]
