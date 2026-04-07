@@ -52,8 +52,7 @@ public sealed class BetService : IBetService
         var rawPlayers = await _db.MatchPlayers
             .AsNoTracking()
             .Include(mp => mp.Player)
-            .Where(mp => mp.MatchId == match.Id &&
-                         mp.InviteResponse != InviteResponse.Rejected)
+            .Where(mp => mp.MatchId == match.Id)
             .ToListAsync(ct);
 
         var players = rawPlayers.Select(mp =>
