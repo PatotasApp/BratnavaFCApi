@@ -53,7 +53,7 @@ public sealed class BetService : IBetService
             .AsNoTracking()
             .Include(mp => mp.Player)
             .Where(mp => mp.MatchId == match.Id &&
-                         mp.InviteResponse == InviteResponse.Accepted)
+                         mp.InviteResponse != InviteResponse.Rejected)
             .ToListAsync(ct);
 
         var players = rawPlayers.Select(mp =>
