@@ -12,9 +12,11 @@ public class RedisMatchEventPublisher : IMatchEventPublisher
 
     private static readonly JsonSerializerOptions _jsonOpts = new()
     {
-        Converters          = { new JsonStringEnumConverter() },
+        Converters = { new JsonStringEnumConverter() },
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
+
+    private static readonly TimeZoneInfo _saoPauloTz = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
 
     public RedisMatchEventPublisher(IConnectionMultiplexer redis)
     {
@@ -23,7 +25,8 @@ public class RedisMatchEventPublisher : IMatchEventPublisher
 
     public async Task PublishAsync(Guid groupId, Guid matchId, MatchEventType type, int secondsBeforeStart, int durationSeconds, CancellationToken ct = default)
     {
-        var eventTime = DateTimeOffset.UtcNow;
+        var eventTime = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, _saoPauloTz);
+        //var eventTime = DateTimeOffset.UtcNow;
 
         var payload = JsonSerializer.Serialize(new
         {
