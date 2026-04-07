@@ -38,6 +38,9 @@ public class AppDbContext : DbContext
     public DbSet<ReplayClipEntity> ReplayClips => Set<ReplayClipEntity>();
     public DbSet<ReplayLikeEntity> ReplayLikes => Set<ReplayLikeEntity>();
     public DbSet<ReplayFavoriteEntity> ReplayFavorites => Set<ReplayFavoriteEntity>();
+    public DbSet<MatchBetEntity> MatchBets => Set<MatchBetEntity>();
+    public DbSet<MatchBetSelectionEntity> MatchBetSelections => Set<MatchBetSelectionEntity>();
+    public DbSet<UserBetBalanceEntity> UserBetBalances => Set<UserBetBalanceEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -684,6 +687,54 @@ public class AppDbContext : DbContext
             b.Property(x => x.CreatedAt).IsRequired();
             // Um usuário só pode favoritar uma vez por clip
             b.HasIndex(x => new { x.ClipId, x.UserId }).IsUnique();
+        });
+
+        // ── Bet ──────────────────────────────────────────────────────────────
+
+        modelBuilder.Entity<MatchBetEntity>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.GroupId).IsRequired();
+            b.Property(x => x.MatchId).IsRequired();
+            b.Property(x => x.UserId).IsRequired();
+            b.Property(x => x.IsResolved).IsRequired().HasDefaultValue(false);
+
+            b.HasMany(x => x.Selections)
+             .WithOne(x => x.Bet)
+             .HasForeignKey(x => x.BetId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            // Um usuário faz no máximo uma aposta por partida
+            b.HasIndex(x => new { x.MatchId, x.UserId }).IsUnique();
+            b.HasIndex(x => new { x.GroupId, x.MatchId });
+        });
+
+        modelBuilder.Entity<MatchBetSelectionEntity>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.BetId).IsRequired();
+            b.Property(x => x.Category).HasConversion<short>().IsRequired();
+            b.Property(x => x.PredictedValue).IsRequired().HasMaxLength(200);
+            b.Property(x => x.FichasWagered).IsRequired();
+            b.Property(x => x.FichasEarned).IsRequired(false);
+            b.Property(x => x.IsCorrect).IsRequired(false);
+            b.Property(x => x.IsPartialCredit).IsRequired(false);
+            b.Property(x => x.ActualValue).IsRequired(false).HasMaxLength(200);
+
+            b.HasIndex(x => x.BetId);
+        });
+
+        modelBuilder.Entity<UserBetBalanceEntity>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.GroupId).IsRequired();
+            b.Property(x => x.UserId).IsRequired();
+            b.Property(x => x.Balance).IsRequired().HasDefaultValue(0);
+            b.Property(x => x.TotalBets).IsRequired().HasDefaultValue(0);
+            b.Property(x => x.TotalCorrect).IsRequired().HasDefaultValue(0);
+
+            // Um saldo por usuário por grupo
+            b.HasIndex(x => new { x.GroupId, x.UserId }).IsUnique();
         });
 
     }

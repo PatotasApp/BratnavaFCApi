@@ -459,6 +459,17 @@ public class MatchesController : GroupAuthorizedController
         await r2Response.Content.CopyToAsync(Response.Body, ct);
     }
 
+    [HttpDelete("group/{groupId:guid}/replays/{clipId:guid}")]
+    public async Task<IActionResult> DeleteReplay(
+        [FromRoute] Guid groupId,
+        [FromRoute] Guid clipId,
+        CancellationToken ct)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        await _service.DeleteReplayAsync(groupId, clipId, ct);
+        return NoContent();
+    }
+
     [EnableRateLimiting("PerUser")]
     [HttpGet("group/{groupId:guid}/{matchId:guid}/goals")]
     public async Task<IActionResult> GetGoals(Guid groupId, Guid matchId, CancellationToken cancellationToken)

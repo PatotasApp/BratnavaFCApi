@@ -161,6 +161,7 @@ builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IPollService, PollService>();
 builder.Services.AddScoped<IPushService, PushService>();
 builder.Services.AddScoped<IAbsenceService, AbsenceService>();
+builder.Services.AddScoped<IBetService, BetService>();
 
 // =====================
 // FIREBASE ADMIN

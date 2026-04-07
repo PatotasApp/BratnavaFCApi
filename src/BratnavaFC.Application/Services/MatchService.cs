@@ -2050,4 +2050,26 @@ public sealed class MatchService : IMatchService
 
         return Result<List<LikedReplayClipDto>>.Ok(dtos);
     }
+
+    public async Task DeleteReplayAsync(Guid groupId, Guid clipId, CancellationToken ct)
+    {
+        var clip = await _context.ReplayClips
+            .FirstOrDefaultAsync(c => c.Id == clipId && c.GroupId == groupId, ct);
+
+        if (clip is null)
+            return;
+
+        _context.ReplayLikes.RemoveRange(
+            _context.ReplayLikes.Where(l => l.ClipId == clipId));
+
+        _context.ReplayFavorites.RemoveRange(
+            _context.ReplayFavorites.Where(f => f.ClipId == clipId));
+
+        _context.ReplayClips.Remove(clip);
+        await _context.SaveChangesAsync(ct);
+
+        // Remove do R2 — best-effort (falha silenciosa, registro já foi removido do banco)
+        try { await _replayUrls.DeleteObjectAsync(clip.ObjectKey, ct); }
+        catch { /* ignorar falha de R2 */ }
+    }
 }

@@ -74,4 +74,5 @@ public interface IMatchService
     Task<Result<List<LikedReplayClipDto>>> GetLikedReplaysAsync(Guid groupId, Guid? userId, CancellationToken ct);
     Task<Result<List<LikedReplayClipDto>>> GetMyLikesAsync(Guid groupId, Guid userId, CancellationToken ct);
     Task<Result<List<LikedReplayClipDto>>> GetMyFavoritesAsync(Guid groupId, Guid userId, CancellationToken ct);
+    Task DeleteReplayAsync(Guid groupId, Guid clipId, CancellationToken ct);
 }
