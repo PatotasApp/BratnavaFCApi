@@ -41,7 +41,7 @@ public class MatchServiceReplayTests
         var sut = CreateSut(db);
 
         // Act
-        var result = await sut.GetReplaysAsync(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None);
+        var result = await sut.GetReplaysAsync(Guid.NewGuid(), Guid.NewGuid(), null, CancellationToken.None);
 
         // Assert
         result.Success.Should().BeTrue();
@@ -68,7 +68,7 @@ public class MatchServiceReplayTests
         var sut = CreateSut(db, urlService.Object);
 
         // Act
-        var result = await sut.GetReplaysAsync(groupId, matchId, CancellationToken.None);
+        var result = await sut.GetReplaysAsync(groupId, matchId, null, CancellationToken.None);
 
         // Assert
         result.Success.Should().BeTrue();
@@ -99,7 +99,7 @@ public class MatchServiceReplayTests
         var sut = CreateSut(db);
 
         // Act
-        var result = await sut.GetReplaysAsync(groupId, matchId, CancellationToken.None);
+        var result = await sut.GetReplaysAsync(groupId, matchId, null, CancellationToken.None);
 
         // Assert
         result.Success.Should().BeTrue();
@@ -127,7 +127,7 @@ public class MatchServiceReplayTests
         var sut = CreateSut(db);
 
         // Act
-        var result = await sut.GetReplaysAsync(groupId, matchId, CancellationToken.None);
+        var result = await sut.GetReplaysAsync(groupId, matchId, null, CancellationToken.None);
 
         // Assert
         result.Success.Should().BeTrue();
@@ -154,7 +154,7 @@ public class MatchServiceReplayTests
         var sut = CreateSut(db);
 
         // Act
-        var result = await sut.GetReplaysAsync(groupId, matchId, CancellationToken.None);
+        var result = await sut.GetReplaysAsync(groupId, matchId, null, CancellationToken.None);
 
         // Assert
         result.Data![0].EventType.Should().Be("Gol");
@@ -182,7 +182,7 @@ public class MatchServiceReplayTests
         var sut = CreateSut(db, urlService.Object);
 
         // Act
-        await sut.GetReplaysAsync(groupId, matchId, CancellationToken.None);
+        await sut.GetReplaysAsync(groupId, matchId, null, CancellationToken.None);
 
         // Assert
         urlService.Verify(s => s.GeneratePresignedUrl("clip1.mp4"), Times.Once);
