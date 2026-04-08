@@ -1948,7 +1948,7 @@ public sealed class MatchService : IMatchService
         var clips = await _context.ReplayClips
             .AsNoTracking()
             .Where(r => r.GroupId == groupId)
-            .OrderBy(r => r.UploadedAt)
+            .OrderBy(r => r.UpdateDate)
             .ToListAsync(ct);
 
         if (clips.Count == 0)
