@@ -1948,7 +1948,7 @@ public sealed class MatchService : IMatchService
         var clips = await _context.ReplayClips
             .AsNoTracking()
             .Where(r => r.GroupId == groupId)
-            .OrderBy(r => r.UpdateDate)
+            .OrderBy(r => r.RecordedAt)
             .ToListAsync(ct);
 
         if (clips.Count == 0)
@@ -1981,7 +1981,7 @@ public sealed class MatchService : IMatchService
             c.ObjectKey,
             _replayUrls.GeneratePresignedUrl(c.ObjectKey),
             c.EventType.ToString(),
-            c.UploadedAt,
+            c.RecordedAt,
             likeCounts.GetValueOrDefault(c.Id, 0),
             myLikes.Contains(c.Id),
             myFavorites.Contains(c.Id)
