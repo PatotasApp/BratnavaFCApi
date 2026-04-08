@@ -34,7 +34,7 @@ public sealed class ReplayStreamConsumerService : BackgroundService
         _redis = redis;
         _scopeFactory = scopeFactory;
         _logger = logger;
-        _consumerName = $"bratnava-api-{Guid.NewGuid():N}";
+        _consumerName = "bratnava-api-worker";
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
