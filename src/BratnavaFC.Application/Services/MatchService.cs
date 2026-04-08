@@ -1943,6 +1943,53 @@ public sealed class MatchService : IMatchService
         return Result<List<LikedReplayClipDto>>.Ok(dtos);
     }
 
+    public async Task<Result<List<LikedReplayClipDto>>> GetAllGroupReplaysAsync(Guid groupId, Guid userId, CancellationToken ct)
+    {
+        var clips = await _context.ReplayClips
+            .AsNoTracking()
+            .Where(r => r.GroupId == groupId)
+            .OrderBy(r => r.UploadedAt)
+            .ToListAsync(ct);
+
+        if (clips.Count == 0)
+            return Result<List<LikedReplayClipDto>>.Ok([]);
+
+        var clipIds = clips.Select(c => c.Id).ToList();
+
+        var likeCounts = await _context.ReplayLikes
+            .AsNoTracking()
+            .Where(l => clipIds.Contains(l.ClipId))
+            .GroupBy(l => l.ClipId)
+            .Select(g => new { ClipId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.ClipId, g => g.Count, ct);
+
+        var myLikes = (await _context.ReplayLikes
+            .AsNoTracking()
+            .Where(l => clipIds.Contains(l.ClipId) && l.UserId == userId)
+            .Select(l => l.ClipId)
+            .ToListAsync(ct)).ToHashSet();
+
+        var myFavorites = (await _context.ReplayFavorites
+            .AsNoTracking()
+            .Where(f => clipIds.Contains(f.ClipId) && f.UserId == userId)
+            .Select(f => f.ClipId)
+            .ToListAsync(ct)).ToHashSet();
+
+        var dtos = clips.Select(c => new LikedReplayClipDto(
+            c.Id,
+            c.MatchId,
+            c.ObjectKey,
+            _replayUrls.GeneratePresignedUrl(c.ObjectKey),
+            c.EventType.ToString(),
+            c.UploadedAt,
+            likeCounts.GetValueOrDefault(c.Id, 0),
+            myLikes.Contains(c.Id),
+            myFavorites.Contains(c.Id)
+        )).ToList();
+
+        return Result<List<LikedReplayClipDto>>.Ok(dtos);
+    }
+
     public async Task<Result<List<LikedReplayClipDto>>> GetMyLikesAsync(Guid groupId, Guid userId, CancellationToken ct)
     {
         var groupClipIds = await _context.ReplayClips

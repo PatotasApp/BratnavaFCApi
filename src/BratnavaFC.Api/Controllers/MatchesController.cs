@@ -354,6 +354,18 @@ public class MatchesController : GroupAuthorizedController
         return Ok(new { isFavorited });
     }
 
+    [HttpGet("group/{groupId:guid}/replays/all")]
+    public async Task<IActionResult> GetAllGroupReplays(
+        [FromRoute] Guid groupId,
+        CancellationToken ct)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+        var result = await _service.GetAllGroupReplaysAsync(groupId, userId.Value, ct);
+        return ToResponse(result);
+    }
+
     [HttpGet("group/{groupId:guid}/replays/liked")]
     public async Task<IActionResult> GetLikedReplays(
         [FromRoute] Guid groupId,
