@@ -1806,7 +1806,7 @@ public sealed class MatchService : IMatchService
         var clips = await _context.ReplayClips
             .AsNoTracking()
             .Where(r => r.GroupId == groupId && r.MatchId == matchId)
-            .OrderBy(r => r.UploadedAt)
+            .OrderBy(r => r.RecordedAt)
             .ToListAsync(ct);
 
         var clipIds = clips.Select(c => c.Id).ToList();
@@ -1841,7 +1841,7 @@ public sealed class MatchService : IMatchService
             c.ObjectKey,
             _replayUrls.GeneratePresignedUrl(c.ObjectKey),
             c.EventType.ToString(),
-            c.UploadedAt,
+            c.RecordedAt,
             LikeCount:       likeCounts.GetValueOrDefault(c.Id, 0),
             IsLikedByMe:     myLikes.Contains(c.Id),
             IsFavoritedByMe: myFavorites.Contains(c.Id)
@@ -1933,7 +1933,7 @@ public sealed class MatchService : IMatchService
                 c.ObjectKey,
                 _replayUrls.GeneratePresignedUrl(c.ObjectKey),
                 c.EventType.ToString(),
-                c.UploadedAt,
+                c.RecordedAt,
                 likeCounts.GetValueOrDefault(c.Id, 0),
                 myLikes.Contains(c.Id),
                 myFavorites.Contains(c.Id)
@@ -2013,7 +2013,7 @@ public sealed class MatchService : IMatchService
         var clips = await _context.ReplayClips
             .AsNoTracking()
             .Where(c => likedClipIds.Contains(c.Id))
-            .OrderByDescending(c => c.UploadedAt)
+            .OrderByDescending(c => c.RecordedAt)
             .ToListAsync(ct);
 
         var likeCounts = await _context.ReplayLikes
@@ -2035,7 +2035,7 @@ public sealed class MatchService : IMatchService
             c.ObjectKey,
             _replayUrls.GeneratePresignedUrl(c.ObjectKey),
             c.EventType.ToString(),
-            c.UploadedAt,
+            c.RecordedAt,
             likeCounts.GetValueOrDefault(c.Id, 0),
             IsLikedByMe: true,
             myFavorites.Contains(c.Id)
@@ -2067,7 +2067,7 @@ public sealed class MatchService : IMatchService
         var clips = await _context.ReplayClips
             .AsNoTracking()
             .Where(c => favClipIds.Contains(c.Id))
-            .OrderByDescending(c => c.UploadedAt)
+            .OrderByDescending(c => c.RecordedAt)
             .ToListAsync(ct);
 
         var likeCounts = await _context.ReplayLikes
@@ -2089,7 +2089,7 @@ public sealed class MatchService : IMatchService
             c.ObjectKey,
             _replayUrls.GeneratePresignedUrl(c.ObjectKey),
             c.EventType.ToString(),
-            c.UploadedAt,
+            c.RecordedAt,
             likeCounts.GetValueOrDefault(c.Id, 0),
             myLikes.Contains(c.Id),
             IsFavoritedByMe: true

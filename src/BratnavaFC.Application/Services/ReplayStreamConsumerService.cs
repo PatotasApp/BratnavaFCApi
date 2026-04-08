@@ -15,9 +15,10 @@ public sealed class ReplayStreamConsumerService : BackgroundService
 {
     private const string StreamKey = "replays:uploaded";
     private const string GroupName = "bratnava-api";
-    private const int BatchSize = 10;
-    private const int BlockMs = 30_000; // espera até 30s por novas mensagens
+    private const int BatchSize   = 10;
+    private const int BlockMs     = 30_000;
     private const int MaxAttempts = 3;
+    private const int TtlDays     = 7;
 
     private readonly IConnectionMultiplexer _redis;
     private readonly IServiceScopeFactory _scopeFactory;
@@ -33,7 +34,7 @@ public sealed class ReplayStreamConsumerService : BackgroundService
         _redis = redis;
         _scopeFactory = scopeFactory;
         _logger = logger;
-        _consumerName = $"bratnava-api-{Guid.NewGuid():N}";
+        _consumerName = "bratnava-api-worker";
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -156,6 +157,9 @@ public sealed class ReplayStreamConsumerService : BackgroundService
             await db.StreamAcknowledgeAsync(StreamKey, GroupName, entry.Id);
             _failureCounts.TryRemove(entryId, out _);
 
+            var minId = $"{DateTimeOffset.UtcNow.AddDays(-TtlDays).ToUnixTimeMilliseconds()}-0";
+            await db.ExecuteAsync("XTRIM", StreamKey, "MINID", "~", minId);
+
             _logger.LogInformation(
                 "[ReplayStream] Clip salvo. Id={Id} Match={Match} EventType={Type} Key={Key}",
                 clip.Id, clip.MatchId, clip.EventType, clip.ObjectKey);
@@ -185,6 +189,10 @@ public sealed class ReplayStreamConsumerService : BackgroundService
             kv => kv.Name.ToString(),
             kv => kv.Value.ToString());
 
+        var recordedAt = f.TryGetValue("event_time", out var et) && !string.IsNullOrEmpty(et)
+            ? DateTimeOffset.Parse(et)
+            : DateTimeOffset.Parse(f["created_at"]);
+
         return new ReplayClipEntity(
             groupId: Guid.Parse(f["group_id"]),
             matchId: Guid.Parse(f["match_id"]),
@@ -192,7 +200,7 @@ public sealed class ReplayStreamConsumerService : BackgroundService
             objectKey: f["object_key"],
             contentType: f["content_type"],
             etag: f["etag"],
-            uploadedAt: DateTimeOffset.Parse(f["created_at"]),
+            recordedAt: recordedAt,
             eventType: ParseEventType(f["tipo"]));
     }
 

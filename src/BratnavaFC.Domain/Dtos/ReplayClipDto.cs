@@ -5,7 +5,7 @@ public record ReplayClipDto(
     string ObjectKey,
     string VideoUrl,
     string EventType,
-    DateTimeOffset UploadedAt,
+    DateTimeOffset RecordedAt,
     int LikeCount,
     bool IsLikedByMe,
     bool IsFavoritedByMe
