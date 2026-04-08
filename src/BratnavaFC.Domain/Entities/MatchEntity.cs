@@ -193,6 +193,7 @@ public class MatchEntity : BaseEntity
 
         voter.SetVotedFor(votedFor.Id);
         votedFor.AddReceivedVote(vote);
+        Votes.Add(vote); // mantém a coleção em memória atualizada para AutoSetMvpIfAllVoted
 
         return vote;
     }
@@ -256,6 +257,18 @@ public class MatchEntity : BaseEntity
         ApplyMvpTieRule(tieRule, tieMaxPlayers);
 
         Status = MatchStatus.Finalized;
+    }
+
+    /// <summary>
+    /// Recalcula e persiste os MVPs a partir dos votos, aplicando a regra de empate configurada.
+    /// Pode ser chamado em partidas PostGame ou Finalized (por exemplo, para corrigir um MVP não atribuído).
+    /// </summary>
+    public void ReapplyMvpTieRule(Domain.Enums.MvpTieRule tieRule, int tieMaxPlayers)
+    {
+        foreach (var p in Players)
+            p.RevokeMvp();
+
+        ApplyMvpTieRule(tieRule, tieMaxPlayers);
     }
 
     /// <summary>

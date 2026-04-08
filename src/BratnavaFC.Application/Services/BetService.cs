@@ -347,7 +347,109 @@ public sealed class BetService : IBetService
         return balance?.Balance ?? 0;
     }
 
+    // ── Preview parcial (sem persistência) ───────────────────────────────────
+
+    public async Task<BetPreviewDto?> GetBetPreviewAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        var match = await _db.Matches
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.GroupId == groupId && m.Id == matchId, ct);
+
+        if (match is null) return null;
+
+        var bets = await _db.Set<MatchBetEntity>()
+            .AsNoTracking()
+            .Include(b => b.Selections)
+            .Where(b => b.MatchId == matchId && !b.IsResolved)
+            .ToListAsync(ct);
+
+        var scoreA = match.TeamAGoals ?? 0;
+        var scoreB = match.TeamBGoals ?? 0;
+
+        if (bets.Count == 0)
+            return new BetPreviewDto(matchId, scoreA, scoreB, []);
+
+        var actualWinner = scoreA > scoreB ? "TeamA"
+                         : scoreB > scoreA ? "TeamB"
+                         : "Draw";
+        var actualScore  = $"{scoreA}:{scoreB}";
+
+        var goals = await _db.Goals
+            .AsNoTracking()
+            .Where(g => g.MatchId == matchId && !g.IsOwnGoal)
+            .ToListAsync(ct);
+
+        var goalsByPlayer   = goals
+            .GroupBy(g => g.ScorerMatchPlayerId)
+            .ToDictionary(g => g.Key, g => g.Count());
+        var assistsByPlayer = goals
+            .Where(g => g.AssistMatchPlayerId.HasValue)
+            .GroupBy(g => g.AssistMatchPlayerId!.Value)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var userIds   = bets.Select(b => b.UserId).Distinct().ToList();
+        var userNames = await _db.Users.AsNoTracking()
+            .Where(u => userIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => $"{u.FirstName} {u.LastName}".Trim(), ct);
+
+        var userBets = bets.Select(bet =>
+        {
+            var simSels = bet.Selections.Select(sel =>
+            {
+                string actualValue = sel.Category switch
+                {
+                    BetCategory.WinningTeam => actualWinner,
+                    BetCategory.FinalScore  => actualScore,
+                    BetCategory.PlayerGoals or BetCategory.PlayerAssists => BuildPlayerActualValue(
+                        sel.PredictedValue,
+                        sel.Category == BetCategory.PlayerGoals ? goalsByPlayer : assistsByPlayer),
+                    _ => ""
+                };
+
+                var (fichasEarned, isCorrect, isPartial) =
+                    CalculateEarnings(sel.Category, sel.PredictedValue, actualValue, sel.FichasWagered);
+
+                return new BetSelectionDto(sel.Id, sel.Category.ToString(), sel.PredictedValue,
+                    actualValue, sel.FichasWagered, fichasEarned, isCorrect, isPartial);
+            }).ToList();
+
+            var betEarnings = simSels.Sum(s => s.FichasEarned ?? 0);
+            return new BetPreviewUserDto(
+                bet.UserId,
+                userNames.GetValueOrDefault(bet.UserId, "Usuário"),
+                simSels,
+                betEarnings,
+                MatchBaseReward + betEarnings);
+
+        }).OrderByDescending(u => u.SimulatedTotal).ToList();
+
+        return new BetPreviewDto(matchId, scoreA, scoreB, userBets);
+    }
+
+    private static string BuildPlayerActualValue(string predictedValue, Dictionary<Guid, int> countByPlayer)
+    {
+        var parts = predictedValue.Split('|');
+        if (parts.Length < 1 || !Guid.TryParse(parts[0], out var mpId))
+            return predictedValue;
+        return $"{parts[0]}|{countByPlayer.GetValueOrDefault(mpId, 0)}";
+    }
+
     // ── Resolução ─────────────────────────────────────────────────────────────
+
+    public async Task ResolveMatchBetsAsync(Guid matchId, CancellationToken ct)
+    {
+        var match = await _db.Matches
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.Id == matchId, ct);
+
+        if (match is null) return;
+
+        var hasUnresolved = await _db.Set<MatchBetEntity>()
+            .AnyAsync(b => b.MatchId == matchId && !b.IsResolved, ct);
+
+        if (hasUnresolved)
+            await ResolveBetsForMatchAsync(match, ct);
+    }
 
     private async Task ResolveBetsForMatchAsync(MatchEntity match, CancellationToken ct)
     {

@@ -118,6 +118,24 @@ public class BetController : GroupAuthorizedController
         return result.Success ? Ok() : BadRequest(new { error = result.Error });
     }
 
+    /// <summary>
+    /// Parcial das apostas: simula o resultado como se a partida encerrasse agora.
+    /// Usa placar e gols atuais sem persistir nada. Exclusivo para admins do grupo.
+    /// </summary>
+    [HttpGet("group/{groupId:guid}/match/{matchId:guid}/preview")]
+    public async Task<IActionResult> GetBetPreview(
+        [FromRoute] Guid groupId,
+        [FromRoute] Guid matchId,
+        CancellationToken ct)
+    {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
+
+        var preview = await _bets.GetBetPreviewAsync(groupId, matchId, ct);
+        if (preview is null) return NotFound();
+
+        return Ok(preview);
+    }
+
     /// <summary>Histórico de apostas de todas as partidas resolvidas do grupo.</summary>
     [HttpGet("group/{groupId:guid}/history")]
     public async Task<IActionResult> GetHistory(

@@ -37,6 +37,7 @@ public interface IMatchService
     Task<Result> SetTeamColorsAsync(Guid groupId, Guid matchId, Guid? teamAColorId, Guid? teamBColorId, bool randomize, CancellationToken cancellationToken);
 
     Task<Result> FinalizeMatchAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken);
+    Task<Result> ReapplyMvpTieRuleAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken);
 
     Task<Result<MatchDetailsDto>> GetDetailsAsync(Guid matchId, CancellationToken ct);
     Task<Result> AssignTeamsAsync(Guid groupId, Guid matchId, AssignTeamsDto dto, CancellationToken ct);

@@ -42,7 +42,7 @@ public sealed class MatchAbsenceAutoRejectTests
     }
 
     private static MatchService CreateSut(AppDbContext db, Mock<IRepositoryBase<MatchEntity>> repo)
-        => new(db, repo.Object, Mock.Of<IPushService>(), Mock.Of<IReplayUrlService>());
+        => new(db, repo.Object, Mock.Of<IPushService>(), Mock.Of<IReplayUrlService>(), Mock.Of<IBetService>());
 
     private static async Task<GroupEntity> SeedGroupAsync(AppDbContext db)
     {

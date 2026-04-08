@@ -14,17 +14,20 @@ public sealed class MatchService : IMatchService
     private readonly IRepositoryBase<MatchEntity> _repository;
     private readonly IPushService _push;
     private readonly IReplayUrlService _replayUrls;
+    private readonly IBetService _bets;
 
     public MatchService(
         AppDbContext context,
         IRepositoryBase<MatchEntity> repository,
         IPushService push,
-        IReplayUrlService replayUrls)
+        IReplayUrlService replayUrls,
+        IBetService bets)
     {
         _context = context;
         _repository = repository;
         _push = push;
         _replayUrls = replayUrls;
+        _bets = bets;
     }
 
     public async Task<Result<List<MatchDetailsDto>>> GetAllAsync(Guid groupId, CancellationToken ct = default)
@@ -580,9 +583,31 @@ public sealed class MatchService : IMatchService
 
         await _context.SaveChangesAsync(ct);
 
+        // Resolve apostas imediatamente após finalização (evita resolução lazy com race condition)
+        await _bets.ResolveMatchBetsAsync(matchId, ct);
+
         await NotifyMatchFinalizedAsync(groupId, matchId, ct);
 
         return Result.Ok("Partida atualizada com sucesso.");
+    }
+
+    public async Task<Result> ReapplyMvpTieRuleAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
+
+        var match = await LoadMatchForDomainActionsAsync(groupId, matchId, ct);
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
+
+        if (match.Status != Domain.Enums.MatchStatus.PostGame && match.Status != Domain.Enums.MatchStatus.Finalized)
+            return Result.Fail("A partida precisa estar em PostGame ou Finalizada para recalcular o MVP.", ResultStatus.BadRequest);
+
+        var (tieRule, tieMax) = await LoadMvpTieRuleAsync(groupId, ct);
+        match.ReapplyMvpTieRule(tieRule, tieMax);
+        await _context.SaveChangesAsync(ct);
+
+        return Result.Ok("MVP recalculado com sucesso.");
     }
 
     public async Task<Result> AssignTeamsAsync(Guid groupId, Guid matchId, AssignTeamsDto dto, CancellationToken ct)

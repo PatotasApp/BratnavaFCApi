@@ -92,6 +92,24 @@ public record MatchBetHistoryDto(
     List<UserBetInHistoryDto>  UserBets
 );
 
+// ── Preview / parcial (sem persistência) ─────────────────────────────────────
+
+/// <summary>Resultado simulado de um usuário se a partida encerrasse agora.</summary>
+public record BetPreviewUserDto(
+    Guid                  UserId,
+    string                UserName,
+    List<BetSelectionDto> Selections,           // FichasEarned / IsCorrect simulados
+    int                   SimulatedBetEarnings, // soma dos FichasEarned (pode ser negativo)
+    int                   SimulatedTotal        // +200 base + SimulatedBetEarnings
+);
+
+public record BetPreviewDto(
+    Guid                    MatchId,
+    int                     CurrentScoreA,
+    int                     CurrentScoreB,
+    List<BetPreviewUserDto> UserBets            // ordenado por SimulatedTotal desc
+);
+
 // ── Leaderboard ───────────────────────────────────────────────────────────────
 
 public record BetLeaderboardEntryDto(

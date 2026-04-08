@@ -124,8 +124,8 @@ public class MatchesController : GroupAuthorizedController
         if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
-            await _service.UpdateAsync(groupId, matchId, dto, cancellationToken);
-            return NoContent();
+            var result = await _service.UpdateAsync(groupId, matchId, dto, cancellationToken);
+            return ToResponse(result);
         }
         catch (InvalidOperationException ex)
         {
@@ -139,8 +139,8 @@ public class MatchesController : GroupAuthorizedController
         if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
-            await _service.DeleteAsync(groupId, matchId, cancellationToken);
-            return NoContent();
+            var result = await _service.DeleteAsync(groupId, matchId, cancellationToken);
+            return ToResponse(result);
         }
         catch (InvalidOperationException ex)
         {
@@ -298,6 +298,14 @@ public class MatchesController : GroupAuthorizedController
         {
             return BadRequest(new { error = ex.Message });
         }
+    }
+
+    [HttpPost("group/{groupId:guid}/{matchId:guid}/reapply-mvp")]
+    public async Task<IActionResult> ReapplyMvpAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
+        var result = await _service.ReapplyMvpTieRuleAsync(groupId, matchId, cancellationToken);
+        return ToResponse(result);
     }
 
     [EnableRateLimiting("PerUser")]
