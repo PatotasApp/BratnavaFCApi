@@ -73,6 +73,15 @@ public sealed class PollsController : GroupAuthorizedController
         return ToResponse(result);
     }
 
+    // PATCH /api/Polls/group/{groupId}/{pollId}/show-votes
+    [HttpPatch("group/{groupId:guid}/{pollId:guid}/show-votes")]
+    public async Task<IActionResult> SetShowVotes(Guid groupId, Guid pollId, [FromBody] SetShowVotesDto dto, CancellationToken ct)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        var result = await _polls.SetShowVotesAsync(groupId, pollId, dto.ShowVotes, ct);
+        return ToResponse(result);
+    }
+
     // PUT /api/Polls/group/{groupId}/{pollId}/reopen
     [HttpPut("group/{groupId:guid}/{pollId:guid}/reopen")]
     public async Task<IActionResult> ReopenPoll(Guid groupId, Guid pollId, CancellationToken ct)
@@ -160,4 +169,9 @@ public sealed class PollsController : GroupAuthorizedController
             .FirstOrDefaultAsync(ct);
         return player?.Id ?? Guid.Empty;
     }
+}
+
+public class SetShowVotesDto
+{
+    public bool ShowVotes { get; set; }
 }

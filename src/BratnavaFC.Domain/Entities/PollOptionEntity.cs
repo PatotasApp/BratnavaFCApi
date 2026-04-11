@@ -1,12 +1,14 @@
 namespace BratnavaFC.Domain.Entities;
+
 public class PollOptionEntity : BaseEntity
 {
     public Guid PollId { get; private set; }
     public PollEntity? Poll { get; private set; }
     public string Text { get; private set; } = null!;
     public string? Description { get; private set; }
-    public string? ImageUrl { get; private set; }
     public int SortOrder { get; private set; }
+
+    public ICollection<PollOptionImageEntity> Images { get; private set; } = new List<PollOptionImageEntity>();
 
     private PollOptionEntity() { }
 
@@ -17,15 +19,14 @@ public class PollOptionEntity : BaseEntity
         PollId = pollId;
         Text = text.Trim();
         Description = description?.Trim();
-        ImageUrl = imageUrl?.Trim();
         SortOrder = sortOrder;
+        // imageUrl kept in constructor signature for call-site compat, stored via child entity externally
     }
 
-    public void Update(string? text, string? description, string? imageUrl)
+    public void Update(string? text, string? description)
     {
         if (text is not null) Text = text.Trim();
         if (description is not null) Description = description.Trim();
-        if (imageUrl is not null) ImageUrl = imageUrl.Trim() == "" ? null : imageUrl.Trim();
         UpdateDate = DateTime.UtcNow;
     }
 }

@@ -89,7 +89,7 @@ public sealed class PollService : IPollService
             if (poll is null)
                 return Result<PollDto>.Fail("Votação não encontrada.");
 
-            // Options — project to DTO; skip heavy ImageUrl when not needed
+            // Options — project to DTO; load images
             var options = await _db.PollOptions
                 .AsNoTracking()
                 .Where(o => o.PollId == pollId)
@@ -97,7 +97,9 @@ public sealed class PollService : IPollService
                 .Select(o => new
                 {
                     o.Id, o.Text, o.Description, o.SortOrder,
-                    ImageUrl = skipImages ? null : o.ImageUrl
+                    Images = skipImages
+                        ? new List<string>()
+                        : o.Images.OrderBy(i => i.SortOrder).ThenBy(i => i.CreateDate).Select(i => i.ImageUrl).ToList()
                 })
                 .ToListAsync(ct);
 
@@ -165,7 +167,7 @@ public sealed class PollService : IPollService
                     Id = o.Id,
                     Text = o.Text,
                     Description = o.Description,
-                    ImageUrl = o.ImageUrl,
+                    Images = o.Images,
                     SortOrder = o.SortOrder,
                     VoteCount = optionVoteCounts.GetValueOrDefault(o.Id, 0)
                 }).ToList(),
@@ -315,6 +317,23 @@ public sealed class PollService : IPollService
         }
     }
 
+    public async Task<Result> SetShowVotesAsync(Guid groupId, Guid pollId, bool showVotes, CancellationToken ct = default)
+    {
+        try
+        {
+            var poll = await _db.Polls.FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
+            if (poll is null) return Result.Fail("Votação não encontrada.");
+
+            poll.Update(null, null, null, showVotes, null, null);
+            await _db.SaveChangesAsync(ct);
+            return Result.Ok();
+        }
+        catch (Exception ex)
+        {
+            return Result.Fail(ex.Message);
+        }
+    }
+
     public async Task<Result> DeletePollAsync(Guid groupId, Guid pollId, CancellationToken ct = default)
     {
         try
@@ -340,10 +359,16 @@ public sealed class PollService : IPollService
             if (poll.IsEventType()) return Result<PollOptionDto>.Fail("As opções de eventos não podem ser modificadas.");
 
             var nextOrder = await _db.PollOptions.Where(o => o.PollId == pollId).CountAsync(ct);
-            var option = new PollOptionEntity(poll.Id, dto.Text, dto.Description, dto.ImageUrl, nextOrder);
+            var option = new PollOptionEntity(poll.Id, dto.Text, dto.Description, null, nextOrder);
             _db.PollOptions.Add(option);
             await _db.SaveChangesAsync(ct);
-            return Result<PollOptionDto>.Ok(MapOption(option, 0));
+
+            for (int i = 0; i < dto.Images.Count; i++)
+                _db.PollOptionImages.Add(new PollOptionImageEntity(option.Id, dto.Images[i], i));
+            if (dto.Images.Count > 0)
+                await _db.SaveChangesAsync(ct);
+
+            return Result<PollOptionDto>.Ok(MapOption(option, 0, dto.Images));
         }
         catch (Exception ex)
         {
@@ -362,10 +387,30 @@ public sealed class PollService : IPollService
             var option = await _db.PollOptions.FirstOrDefaultAsync(o => o.Id == optionId && o.PollId == pollId, ct);
             if (option is null) return Result<PollOptionDto>.Fail("Opção não encontrada.");
 
-            option.Update(dto.Text, dto.Description, dto.ImageUrl);
+            option.Update(dto.Text, dto.Description);
+
+            List<string> finalImages;
+            if (dto.Images is not null)
+            {
+                // Replace images
+                var existing = await _db.PollOptionImages.Where(i => i.OptionId == optionId).ToListAsync(ct);
+                _db.PollOptionImages.RemoveRange(existing);
+                for (int i = 0; i < dto.Images.Count; i++)
+                    _db.PollOptionImages.Add(new PollOptionImageEntity(optionId, dto.Images[i], i));
+                finalImages = dto.Images;
+            }
+            else
+            {
+                finalImages = await _db.PollOptionImages
+                    .Where(i => i.OptionId == optionId)
+                    .OrderBy(i => i.SortOrder)
+                    .Select(i => i.ImageUrl)
+                    .ToListAsync(ct);
+            }
+
             await _db.SaveChangesAsync(ct);
             var voteCount = await _db.PollVotes.CountAsync(v => v.OptionId == optionId, ct);
-            return Result<PollOptionDto>.Ok(MapOption(option, voteCount));
+            return Result<PollOptionDto>.Ok(MapOption(option, voteCount, finalImages));
         }
         catch (Exception ex)
         {
@@ -515,13 +560,13 @@ public sealed class PollService : IPollService
 
     // ── Mapeamento ────────────────────────────────────────────────────────────
 
-    private static PollOptionDto MapOption(PollOptionEntity o, int voteCount) => new()
+    private static PollOptionDto MapOption(PollOptionEntity option, int voteCount, List<string>? images = null) => new()
     {
-        Id = o.Id,
-        Text = o.Text,
-        Description = o.Description,
-        ImageUrl = o.ImageUrl,
-        SortOrder = o.SortOrder,
-        VoteCount = voteCount
+        Id        = option.Id,
+        Text      = option.Text,
+        Description = option.Description,
+        Images    = images ?? new List<string>(),
+        SortOrder = option.SortOrder,
+        VoteCount = voteCount,
     };
 }

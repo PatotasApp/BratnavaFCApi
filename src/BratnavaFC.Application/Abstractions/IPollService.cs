@@ -11,6 +11,7 @@ public interface IPollService
     Task<Result<PollDto>> CreateEventPollAsync(Guid groupId, Guid userId, CreateEventPollDto dto, CancellationToken ct = default);
     Task<Result> ClosePollAsync(Guid groupId, Guid pollId, Guid userId, ClosePollDto dto, CancellationToken ct = default);
     Task<Result> ReopenPollAsync(Guid groupId, Guid pollId, CancellationToken ct = default);
+    Task<Result> SetShowVotesAsync(Guid groupId, Guid pollId, bool showVotes, CancellationToken ct = default);
     Task<Result> DeletePollAsync(Guid groupId, Guid pollId, CancellationToken ct = default);
     Task<Result<PollOptionDto>> AddOptionAsync(Guid groupId, Guid pollId, AddPollOptionDto dto, CancellationToken ct = default);
     Task<Result<PollOptionDto>> UpdateOptionAsync(Guid groupId, Guid pollId, Guid optionId, UpdatePollOptionDto dto, CancellationToken ct = default);

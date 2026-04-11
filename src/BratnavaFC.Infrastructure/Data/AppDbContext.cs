@@ -33,6 +33,7 @@ public class AppDbContext : DbContext
     public DbSet<PollEntity> Polls => Set<PollEntity>();
     public DbSet<PollOptionEntity> PollOptions => Set<PollOptionEntity>();
     public DbSet<PollVoteEntity> PollVotes => Set<PollVoteEntity>();
+    public DbSet<PollOptionImageEntity> PollOptionImages => Set<PollOptionImageEntity>();
     public DbSet<PushTokenEntity> PushTokens => Set<PushTokenEntity>();
     public DbSet<UserAbsenceEntity> UserAbsences => Set<UserAbsenceEntity>();
     public DbSet<ReplayClipEntity> ReplayClips => Set<ReplayClipEntity>();
@@ -480,8 +481,15 @@ public class AppDbContext : DbContext
             builder.Property(x => x.PollId).IsRequired();
             builder.Property(x => x.Text).IsRequired().HasMaxLength(300);
             builder.Property(x => x.Description).HasMaxLength(1000);
-            builder.Property(x => x.ImageUrl).HasColumnType("text");
             builder.HasIndex(x => x.PollId);
+            builder.HasMany(x => x.Images).WithOne(x => x.Option).HasForeignKey(x => x.OptionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PollOptionImageEntity>(builder =>
+        {
+            builder.HasKey(x => x.Id);
+            builder.Property(x => x.ImageUrl).IsRequired().HasColumnType("text");
+            builder.HasIndex(x => x.OptionId);
         });
 
         modelBuilder.Entity<PollVoteEntity>(builder =>
