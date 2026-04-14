@@ -162,6 +162,7 @@ builder.Services.AddScoped<IPollService, PollService>();
 builder.Services.AddScoped<IPushService, PushService>();
 builder.Services.AddScoped<IAbsenceService, AbsenceService>();
 builder.Services.AddScoped<IBetService, BetService>();
+builder.Services.AddScoped<IMatchCardService, MatchCardService>();
 
 // =====================
 // FIREBASE ADMIN
@@ -248,6 +249,12 @@ builder.Services.AddHttpClient("BrasilApi", c =>
     c.DefaultRequestHeaders.Add("Accept", "application/json");
     c.DefaultRequestHeaders.Add("User-Agent", "BratnavaFC/1.0");
     c.Timeout = TimeSpan.FromSeconds(10);
+});
+builder.Services.AddHttpClient("OpenAI", c =>
+{
+    c.BaseAddress = new Uri("https://api.openai.com/");
+    c.DefaultRequestHeaders.Add("Accept", "application/json");
+    c.Timeout = TimeSpan.FromSeconds(120); // Image generation can be slow
 });
 builder.Services.AddMemoryCache(o => o.SizeLimit = 10_000);
 builder.Services.AddSingleton<IHolidayService, HolidayService>();

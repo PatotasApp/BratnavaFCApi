@@ -27,4 +27,10 @@
     <ProjectReference Include="..\BratnavaFC.Application\BratnavaFC.Application.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Templates\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
