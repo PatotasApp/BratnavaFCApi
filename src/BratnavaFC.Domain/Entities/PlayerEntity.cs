@@ -93,4 +93,36 @@ public class PlayerEntity : InactivatableEntity
 
         GuestStarRating = stars;
     }
+
+    // ── Admin ratings (0–10) ─────────────────────────────────────────────────
+
+    /// <summary>Habilidade de ataque avaliada pelo admin (0–10).</summary>
+    public int? AttackRating { get; private set; }
+
+    /// <summary>Habilidade de defesa avaliada pelo admin (0–10).</summary>
+    public int? DefenseRating { get; private set; }
+
+    /// <summary>Avaliação geral avaliada pelo admin (0–10). Tem peso maior no W_base.</summary>
+    public int? OverallRating { get; private set; }
+
+    public void SetAttackRating(int? rating)
+    {
+        if (rating.HasValue && (rating.Value < 0 || rating.Value > 10))
+            throw new InvalidOperationException("AttackRating must be between 0 and 10.");
+        AttackRating = rating;
+    }
+
+    public void SetDefenseRating(int? rating)
+    {
+        if (rating.HasValue && (rating.Value < 0 || rating.Value > 10))
+            throw new InvalidOperationException("DefenseRating must be between 0 and 10.");
+        DefenseRating = rating;
+    }
+
+    public void SetOverallRating(int? rating)
+    {
+        if (rating.HasValue && (rating.Value < 0 || rating.Value > 10))
+            throw new InvalidOperationException("OverallRating must be between 0 and 10.");
+        OverallRating = rating;
+    }
 }

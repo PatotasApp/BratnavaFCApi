@@ -35,12 +35,12 @@ public sealed class PlayerStatsService : IPlayerStatsService
         // Only the last 20 finalized matches that include at least one of the players requested.
         var matches = await LoadRecentFinalizedMatchesAsync(playerIds, cancellationToken);
 
-        // Carrega GuestStarRating diretamente do banco para garantir o valor mais atualizado
-        var guestRatingMap = await _context.Players
+        // Carrega ratings diretamente do banco para garantir o valor mais atualizado
+        var playerRatingMap = await _context.Players
             .AsNoTracking()
             .Where(p => playerIds.Contains(p.Id))
-            .Select(p => new { p.Id, p.GuestStarRating })
-            .ToDictionaryAsync(p => p.Id, p => p.GuestStarRating, cancellationToken);
+            .Select(p => new { p.Id, p.GuestStarRating, p.AttackRating, p.DefenseRating, p.OverallRating })
+            .ToDictionaryAsync(p => p.Id, p => p, cancellationToken);
 
         var perPlayer = InitializePlayerAccumulators(playerIds);
         var pairTotals = new Dictionary<PairKey, PairAccumulator>();
@@ -66,32 +66,51 @@ public sealed class PlayerStatsService : IPlayerStatsService
         {
             var acc = perPlayer.TryGetValue(pl.Id, out var a) ? a : PlayerAccumulator.Empty;
 
-            // W_base = 0.70 × WinRate_adj (Bayesian) + 0.30 × GoalContrib_norm
             double winRateAdj     = winRateAdjById.TryGetValue(pl.Id, out var wra) ? wra : BayesianWinRate(0, 0, 0);
             double goalContribNorm = (acc.MatchesPlayed == 0 || !groupAvgGC.HasValue)
                 ? 0.5
                 : ComputeGoalContribNorm(acc, groupAvgGC.Value);
+
+            // ── Dimension ratings (ataque, defesa, físico) ───────────────────
+            // Os ratings não afetam o W_base. São usados pelo AlgorithmStrategy
+            // como restrições dimensionais: distribui atacantes, defensores e jogadores
+            // físicos de forma equilibrada entre os times.
+            var dbRow = playerRatingMap.TryGetValue(pl.Id, out var row) ? row : null;
+            double? attackRatingNorm   = dbRow?.AttackRating.HasValue  == true ? dbRow.AttackRating.Value  / 10.0 : (double?)null;
+            double? defenseRatingNorm  = dbRow?.DefenseRating.HasValue == true ? dbRow.DefenseRating.Value / 10.0 : (double?)null;
+            double? physicalRatingNorm = dbRow?.OverallRating.HasValue == true ? dbRow.OverallRating.Value / 10.0 : (double?)null;
+
+            // W_base: histórico de resultados + contribuição ofensiva
             double wBase = 0.70 * winRateAdj + 0.30 * goalContribNorm;
 
             var synergy = BuildSynergyMap(pl.Id, winRateAdjById, players, pairTotals);
 
+            // ── NeutralOverride (jogadores com < 3 partidas) ─────────────────
+            // Prioridade: OverallRating/10 > GuestStarRating > null
             double? neutralOverride = null;
-            var guestStarRating = guestRatingMap.TryGetValue(pl.Id, out var dbRating) ? dbRating : null;
-            if (acc.MatchesPlayed < minMatchesNonNeutral && guestStarRating.HasValue)
-                neutralOverride = (guestStarRating.Value - 1) * 0.25;
+            if (acc.MatchesPlayed < minMatchesNonNeutral)
+            {
+                if (dbRow?.OverallRating.HasValue == true)
+                    neutralOverride = dbRow.OverallRating.Value / 10.0;
+                else if (dbRow?.GuestStarRating.HasValue == true)
+                    neutralOverride = (dbRow.GuestStarRating.Value - 1) * 0.25;
+            }
 
             result.Add(new PlayerStats
             {
-                PlayerId       = pl.Id,
-                Name           = pl.Name,
-                Wins           = acc.Wins,
-                Ties           = acc.Ties,
-                Losses         = acc.Losses,
-                WinRate        = wBase,     // W_base ∈ [0, 1]
-                Goals          = acc.Goals,
-                Assists        = acc.Assists,
-                SynergyWith    = synergy,
-                NeutralOverride = neutralOverride
+                PlayerId        = pl.Id,
+                Name            = pl.Name,
+                Wins            = acc.Wins,
+                Ties            = acc.Ties,
+                Losses          = acc.Losses,
+                WinRate            = wBase,
+                Goals              = acc.Goals,
+                Assists            = acc.Assists,
+                SynergyWith        = synergy,
+                NeutralOverride    = neutralOverride,
+                AttackRatingNorm   = attackRatingNorm,
+                DefenseRatingNorm  = defenseRatingNorm,
+                PhysicalRatingNorm = physicalRatingNorm,
             });
         }
 

@@ -35,6 +35,19 @@ internal static class StrategyHelpers
     internal static double EffectiveWeight(PlayerStats s)
         => IsNeutral(s) ? (s.NeutralOverride ?? NeutralWinRate) : s.WinRate;
 
+    // ── Dimensional rating accessors ──────────────────────────────────────────
+    // These return 0.0 when no admin rating was set, so players without ratings
+    // contribute nothing to the dimensional balance penalty.
+
+    /// <summary>Normalized attack dimension [0, 1]. Returns 0.0 when not rated.</summary>
+    internal static double AttackOf(PlayerStats s)   => s.AttackRatingNorm   ?? 0.0;
+
+    /// <summary>Normalized defense dimension [0, 1]. Returns 0.0 when not rated.</summary>
+    internal static double DefenseOf(PlayerStats s)  => s.DefenseRatingNorm  ?? 0.0;
+
+    /// <summary>Normalized physical dimension [0, 1]. Returns 0.0 when not rated.</summary>
+    internal static double PhysicalOf(PlayerStats s) => s.PhysicalRatingNorm ?? 0.0;
+
     // ── Candidate filtering ───────────────────────────────────────────────────
 
     /// <summary>

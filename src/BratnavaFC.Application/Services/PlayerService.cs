@@ -62,6 +62,12 @@ public class PlayerService : IPlayerService
 
             if (request.GuestStarRating.HasValue)
                 player.SetGuestStarRating(request.GuestStarRating);
+            if (request.AttackRating.HasValue)
+                player.SetAttackRating(request.AttackRating);
+            if (request.DefenseRating.HasValue)
+                player.SetDefenseRating(request.DefenseRating);
+            if (request.OverallRating.HasValue)
+                player.SetOverallRating(request.OverallRating);
 
             _context.Players.Add(player);
             await _context.SaveChangesAsync(cancellationToken);
@@ -88,6 +94,9 @@ public class PlayerService : IPlayerService
             player.SetGoalkeeper(request.IsGoalkeeper);
             player.SetIsGuest(request.IsGuest);
             player.SetGuestStarRating(request.GuestStarRating);
+            player.SetAttackRating(request.AttackRating);
+            player.SetDefenseRating(request.DefenseRating);
+            player.SetOverallRating(request.OverallRating);
 
             if (request.Status == Status.Inactive && player.Status != Status.Inactive)
                 player.Inactivate();
@@ -313,6 +322,9 @@ public class PlayerService : IPlayerService
         player.IsGoalkeeper,
         player.IsGuest,
         player.Status,
-        player.GuestStarRating
+        player.GuestStarRating,
+        player.AttackRating,
+        player.DefenseRating,
+        player.OverallRating
     );
 }

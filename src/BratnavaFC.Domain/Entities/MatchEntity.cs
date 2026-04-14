@@ -138,7 +138,6 @@ public class MatchEntity : BaseEntity
 
     public void SetTeamColors(Guid? teamAColorId, Guid? teamBColorId)
     {
-        EnsureStatus(MatchStatus.MatchMaking, "So e possivel setar cores quando a partida esta em MatchMaking.");
 
         if (teamAColorId.HasValue && teamBColorId.HasValue && teamAColorId.Value == teamBColorId.Value)
             throw new InvalidOperationException("Os dois times nao podem possuir a mesma cor.");
@@ -149,7 +148,6 @@ public class MatchEntity : BaseEntity
 
     public void SetTeamColorsRandomly(IReadOnlyList<TeamColorEntity> colors)
     {
-        EnsureStatus(MatchStatus.MatchMaking, "So e possivel sortear cores quando a partida esta em MatchMaking.");
 
         if (colors == null || colors.Count == 0)
             throw new InvalidOperationException("Nao ha cores cadastradas para sortear.");

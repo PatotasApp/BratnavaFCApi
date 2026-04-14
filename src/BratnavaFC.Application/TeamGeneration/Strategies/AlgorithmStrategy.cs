@@ -35,11 +35,20 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
     // ── Scoring ───────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Score = BalanceDiff (W_base sum difference between teams).
-    /// Synergy is used only as an external tiebreaker via OrderBy; it does not enter the score.
-    /// Goalkeeper distribution is a structural constraint, not a score component.
+    /// Score = W_base sum difference between teams (BalanceDiff).
+    /// Dimensional balance (attack/defense/physical) is applied as a post-search tiebreaker
+    /// inside a tolerance window — keeping the search phase pure.
+    /// Synergy is a tertiary tiebreaker. Goalkeeper distribution is a hard constraint.
     /// </summary>
     private const double BalanceWeight = 1.00;
+
+    /// <summary>
+    /// Any outcome with BalanceDiff ≤ bestBalance + BalanceTolerance is considered
+    /// "equivalent in balance" and sorted by dimensional spread instead of raw diff.
+    /// Options outside the window fall back to pure BalanceDiff ordering.
+    /// Raise this value to widen the window; set to 0 to disable dimensional tiebreaking.
+    /// </summary>
+    private const double BalanceTolerance = 0.01;
 
     // ── Search tuning ─────────────────────────────────────────────────────────
 
@@ -123,10 +132,11 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
             _logger.LogInformation("[TeamGen] No seed pairs — running single unseeded exhaustive draft.");
             List<DraftOutcome> unseededOutcomes = SearchBestDraftExhaustive(
                 candidatesByStrength, perTeam, null, null, maxAssignable, eligibleGkCount,
-                pairSynergyFn, optionsCount, out int unseededScenarios);
+                pairSynergyFn, out int unseededScenarios);
             _logger.LogInformation("[TeamGen] Unseeded draft | scenarios={Scenarios}", unseededScenarios);
             return new TeamsOptionsResultDto(
-                unseededOutcomes.Select(o => BuildTeamOption(o, players, settings, considerSynergy)).ToList());
+                SelectBestOutcomes(unseededOutcomes, optionsCount)
+                    .Select(o => BuildTeamOption(o, players, settings, considerSynergy)).ToList());
         }
 
         List<(CandidatePlayer SeedA, CandidatePlayer SeedB)> selectedPairs =
@@ -138,14 +148,9 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
 
         List<DraftOutcome> uniqueOutcomes = EvaluateSeedPairs(
             candidatesByStrength, selectedPairs, perTeam, maxAssignable, eligibleGkCount,
-            pairSynergyFn, optionsCount);
+            pairSynergyFn);
 
-        // Balance is the primary criterion; synergy is the tiebreaker.
-        List<DraftOutcome> bestOutcomes = uniqueOutcomes
-            .OrderBy(o => o.BalanceDiff)
-            .ThenByDescending(o => o.SynergyTotal)
-            .Take(optionsCount)
-            .ToList();
+        List<DraftOutcome> bestOutcomes = SelectBestOutcomes(uniqueOutcomes, optionsCount);
 
         List<TeamOptionDto> teamOptions = bestOutcomes
             .Select(o => BuildTeamOption(o, players, settings, considerSynergy))
@@ -174,8 +179,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         int perTeam,
         int maxAssignable,
         int eligibleGkCount,
-        Func<PlayerStats, Guid, PlayerStats, double> pairSynergyFn,
-        int optionsCount)
+        Func<PlayerStats, Guid, PlayerStats, double> pairSynergyFn)
     {
         var evaluatedKeys  = new HashSet<string>();
         var uniqueOutcomes = new List<DraftOutcome>();
@@ -186,7 +190,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         {
             List<DraftOutcome> outcomes = SearchBestDraftExhaustive(
                 candidatesByStrength, perTeam, seedA, seedB, maxAssignable, eligibleGkCount,
-                pairSynergyFn, optionsCount, out int pairScenarios);
+                pairSynergyFn, out int pairScenarios);
 
             globalScenarios += pairScenarios;
 
@@ -222,7 +226,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         {
             List<DraftOutcome> unseeded = SearchBestDraftExhaustive(
                 candidatesByStrength, perTeam, null, null, maxAssignable, eligibleGkCount,
-                pairSynergyFn, optionsCount, out int unseededScenarios);
+                pairSynergyFn, out int unseededScenarios);
 
             _logger.LogInformation("[TeamGen] Safety net (unseeded) | scenarios={S}", unseededScenarios);
 
@@ -245,8 +249,18 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         TeamGenerationSettings settings,
         bool considerSynergy)
     {
-        List<PlayerWeightDto> teamA = draft.TeamA.Select(x => new PlayerWeightDto(x.Player.Id, EffectiveWeight(x.Stats))).ToList();
-        List<PlayerWeightDto> teamB = draft.TeamB.Select(x => new PlayerWeightDto(x.Player.Id, EffectiveWeight(x.Stats))).ToList();
+        List<PlayerWeightDto> teamA = draft.TeamA.Select(x => new PlayerWeightDto(x.Player.Id, EffectiveWeight(x.Stats))
+        {
+            AttackRatingNorm   = x.Stats.AttackRatingNorm,
+            DefenseRatingNorm  = x.Stats.DefenseRatingNorm,
+            PhysicalRatingNorm = x.Stats.PhysicalRatingNorm,
+        }).ToList();
+        List<PlayerWeightDto> teamB = draft.TeamB.Select(x => new PlayerWeightDto(x.Player.Id, EffectiveWeight(x.Stats))
+        {
+            AttackRatingNorm   = x.Stats.AttackRatingNorm,
+            DefenseRatingNorm  = x.Stats.DefenseRatingNorm,
+            PhysicalRatingNorm = x.Stats.PhysicalRatingNorm,
+        }).ToList();
 
         HashSet<Guid> unassignedPlayerIds = draft.Waiting.Select(x => x.Player.Id).ToHashSet();
         if (!settings.IncludeGoalkeepers)
@@ -259,9 +273,21 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         List<PlayerWeightDto> unassigned = unassignedPlayerIds
             .Select(id => statsByPlayerId.TryGetValue(id, out PlayerStats? s)
                 ? new PlayerWeightDto(id, EffectiveWeight(s))
+                  {
+                      AttackRatingNorm   = s.AttackRatingNorm,
+                      DefenseRatingNorm  = s.DefenseRatingNorm,
+                      PhysicalRatingNorm = s.PhysicalRatingNorm,
+                  }
                 : new PlayerWeightDto(id, NeutralWinRate))
             .DistinctBy(x => x.PlayerId)
             .ToList();
+
+        // Expose dimension diffs only when at least one player had a rating set
+        // (i.e., when the sums are non-trivially zero).
+        bool hasDimData = draft.TeamA.Concat(draft.TeamB)
+            .Any(x => x.Stats.AttackRatingNorm.HasValue
+                   || x.Stats.DefenseRatingNorm.HasValue
+                   || x.Stats.PhysicalRatingNorm.HasValue);
 
         return new TeamOptionDto(
             TeamA: teamA,
@@ -274,7 +300,10 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
             Score: draft.Score
         )
         {
-            Explanation = BuildExplanation(draft, considerSynergy)
+            Explanation  = BuildExplanation(draft, considerSynergy),
+            AttackDiff   = hasDimData ? draft.AttackDiff   : null,
+            DefenseDiff  = hasDimData ? draft.DefenseDiff  : null,
+            PhysicalDiff = hasDimData ? draft.PhysicalDiff : null,
         };
     }
 
@@ -351,18 +380,16 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
     // ── Exhaustive search ─────────────────────────────────────────────────────
 
     /// <summary>
-    /// Exhaustive draft: explores every valid branch of the assignment tree without pruning,
-    /// and returns the top <paramref name="topK"/> distinct outcomes ordered by ascending
-    /// <see cref="DraftState.FinalScore"/>, with descending SynergyTotal as a tiebreaker.
+    /// Exhaustive draft: explores every valid branch of the assignment tree without pruning
+    /// and returns <b>all</b> terminal compositions as <see cref="DraftOutcome"/> objects.
     ///
-    /// <para>Every valid terminal composition is scored and collected. Returning the top-K
-    /// (instead of a single best) allows <see cref="EvaluateSeedPairs"/> to build a richer
-    /// diversity pool across all seed pairs, ensuring that <c>optionsCount</c> truly different
-    /// team compositions can be surfaced even when most seed pairs converge to the same global
-    /// optimum.</para>
+    /// <para>No top-K cut is applied here. The full set of terminals is returned so that
+    /// <see cref="EvaluateSeedPairs"/> can build the largest possible diversity pool before
+    /// global deduplication, and <see cref="SelectBestOutcomes"/> can apply the tolerance-window
+    /// + dimensional-balance selection across the entire unique pool.</para>
     /// </summary>
     /// <param name="scenariosEvaluated">Number of terminal states reached during exploration.</param>
-    private List<DraftOutcome> SearchBestDraftExhaustive(
+    private static List<DraftOutcome> SearchBestDraftExhaustive(
         List<CandidatePlayer> candidatesByStrength,
         int perTeam,
         CandidatePlayer? seedA,
@@ -370,12 +397,11 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         int maxAssignable,
         int eligibleGkCount,
         Func<PlayerStats, Guid, PlayerStats, double> pairSynergyFn,
-        int topK,
         out int scenariosEvaluated)
     {
-        DraftState     initialState = CreateInitialState(candidatesByStrength, perTeam, seedA, seedB, maxAssignable, eligibleGkCount, pairSynergyFn);
-        var            terminals    = new List<DraftState>();
-        int            count        = 0;
+        DraftState initialState = CreateInitialState(candidatesByStrength, perTeam, seedA, seedB, maxAssignable, eligibleGkCount, pairSynergyFn);
+        var        terminals    = new List<DraftState>();
+        int        count        = 0;
 
         void Explore(DraftState state)
         {
@@ -395,9 +421,6 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         scenariosEvaluated = count;
 
         return terminals
-            .OrderBy(s => s.FinalScore)
-            .ThenByDescending(s => s.SynergySumA + s.SynergySumB)
-            .Take(topK)
             .Select(s => s.ToDraftOutcome())
             .ToList();
     }
@@ -440,11 +463,21 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         double synergySumA      = SumTeamPairSynergies(teamA, pairSynergyFn);
         double synergySumB      = SumTeamPairSynergies(teamB, pairSynergyFn);
 
+        double attackSumA   = teamA.Sum(p => AttackOf(p.Stats));
+        double attackSumB   = teamB.Sum(p => AttackOf(p.Stats));
+        double defenseSumA  = teamA.Sum(p => DefenseOf(p.Stats));
+        double defenseSumB  = teamB.Sum(p => DefenseOf(p.Stats));
+        double physicalSumA = teamA.Sum(p => PhysicalOf(p.Stats));
+        double physicalSumB = teamB.Sum(p => PhysicalOf(p.Stats));
+
         return new DraftState(
             teamA, teamB, waitingPlayers, perTeam, maxAssignable, eligibleGkCount,
-            weightSumA, weightSumB,
+            weightSumA,  weightSumB,
             goalkeeperCountA, goalkeeperCountB,
-            synergySumA, synergySumB);
+            synergySumA, synergySumB,
+            attackSumA,  attackSumB,
+            defenseSumA, defenseSumB,
+            physicalSumA, physicalSumB);
     }
 
     /// <summary>
@@ -460,6 +493,50 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
             for (int j = i + 1; j < team.Count; j++)
                 sum += pairSynergyFn(team[i].Stats, team[j].Player.Id, team[j].Stats);
         return sum;
+    }
+
+    // ── Final selection ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Two-stage selection of the best <paramref name="count"/> outcomes from <paramref name="pool"/>.
+    ///
+    /// <b>Stage 1 — tolerance window</b><br/>
+    /// Any outcome with <c>BalanceDiff ≤ bestBalance + <see cref="BalanceTolerance"/></c> is treated
+    /// as "equivalent in balance" and competes on dimensional spread.
+    ///
+    /// <b>Stage 2 — ordering within the window</b>
+    /// <list type="number">
+    ///   <item>Smallest worst-case dimensional diff: <c>max(AttackDiff, DefenseDiff, PhysicalDiff)</c></item>
+    ///   <item>Smallest total dimensional diff: <c>AttackDiff + DefenseDiff + PhysicalDiff</c></item>
+    ///   <item>Highest synergy</item>
+    ///   <item>Smallest BalanceDiff (raw final tiebreaker)</item>
+    /// </list>
+    ///
+    /// Outcomes outside the window follow the original ordering (BalanceDiff → Synergy) and are
+    /// appended after all in-window results, serving as fallback slots.
+    /// </summary>
+    private static List<DraftOutcome> SelectBestOutcomes(List<DraftOutcome> pool, int count)
+    {
+        if (pool.Count == 0) return pool;
+
+        double bestBalance = pool.Min(o => o.BalanceDiff);
+        double threshold   = bestBalance + BalanceTolerance;
+
+        // In-window: best balance ± tolerance → sorted by dimensional spread
+        IEnumerable<DraftOutcome> inWindow = pool
+            .Where(o => o.BalanceDiff <= threshold)
+            .OrderBy(o => Math.Max(o.AttackDiff, Math.Max(o.DefenseDiff, o.PhysicalDiff)))
+            .ThenBy(o => o.AttackDiff + o.DefenseDiff + o.PhysicalDiff)
+            .ThenByDescending(o => o.SynergyTotal)
+            .ThenBy(o => o.BalanceDiff);
+
+        // Out-of-window: worse balance → original ordering (fallback slots)
+        IEnumerable<DraftOutcome> outOfWindow = pool
+            .Where(o => o.BalanceDiff > threshold)
+            .OrderBy(o => o.BalanceDiff)
+            .ThenByDescending(o => o.SynergyTotal);
+
+        return inWindow.Concat(outOfWindow).Take(count).ToList();
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -710,6 +787,26 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         /// <summary>Σ PairSynergy over all distinct pairs within TeamB.</summary>
         public double SynergySumB   { get; }
 
+        // ── Dimensional rating sums (incremental, for balance constraint) ─────
+
+        /// <summary>Σ AttackRatingNorm for every player in TeamA. 0.0 for unrated players.</summary>
+        public double AttackSumA    { get; }
+
+        /// <summary>Σ AttackRatingNorm for every player in TeamB. 0.0 for unrated players.</summary>
+        public double AttackSumB    { get; }
+
+        /// <summary>Σ DefenseRatingNorm for every player in TeamA. 0.0 for unrated players.</summary>
+        public double DefenseSumA   { get; }
+
+        /// <summary>Σ DefenseRatingNorm for every player in TeamB. 0.0 for unrated players.</summary>
+        public double DefenseSumB   { get; }
+
+        /// <summary>Σ PhysicalRatingNorm for every player in TeamA. 0.0 for unrated players.</summary>
+        public double PhysicalSumA  { get; }
+
+        /// <summary>Σ PhysicalRatingNorm for every player in TeamB. 0.0 for unrated players.</summary>
+        public double PhysicalSumB  { get; }
+
         // ── Constructor ───────────────────────────────────────────────────────
 
         public DraftState(
@@ -717,15 +814,21 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
             List<CandidatePlayer> teamB,
             List<CandidatePlayer> waiting,
             int perTeam, int maxAssignable, int eligibleGkCount,
-            double weightSumA, double weightSumB,
+            double weightSumA,  double weightSumB,
             int goalkeeperCountA, int goalkeeperCountB,
-            double synergySumA, double synergySumB)
+            double synergySumA, double synergySumB,
+            double attackSumA,  double attackSumB,
+            double defenseSumA, double defenseSumB,
+            double physicalSumA, double physicalSumB)
         {
             TeamA = teamA; TeamB = teamB; Waiting = waiting;
             PerTeam = perTeam; MaxAssignable = maxAssignable; EligibleGkCount = eligibleGkCount;
             WeightSumA = weightSumA; WeightSumB = weightSumB;
             GoalkeeperCountA = goalkeeperCountA; GoalkeeperCountB = goalkeeperCountB;
             SynergySumA = synergySumA; SynergySumB = synergySumB;
+            AttackSumA  = attackSumA;  AttackSumB  = attackSumB;
+            DefenseSumA = defenseSumA; DefenseSumB = defenseSumB;
+            PhysicalSumA = physicalSumA; PhysicalSumB = physicalSumB;
         }
 
         // ── Termination ───────────────────────────────────────────────────────
@@ -736,11 +839,19 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         // ── Scoring ───────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Official score for terminal states: BalanceDiff only.
-        /// Synergy tiebreaking happens externally. Lower is better.
+        /// Official score used during the search phase: W_base sum difference only. Lower is better.
+        /// Dimensional balance is applied after the search as a pure tiebreaker (see callers).
         /// </summary>
-        public double FinalScore
-            => BalanceWeight * Math.Abs(WeightSumA - WeightSumB);
+        public double FinalScore => BalanceWeight * Math.Abs(WeightSumA - WeightSumB);
+
+        /// <summary>
+        /// Sum of all three dimensional diffs (attack + defense + physical).
+        /// Not part of the search score — used only as a post-search tiebreaker.
+        /// </summary>
+        public double DimensionalDiff =>
+            Math.Abs(AttackSumA  - AttackSumB)
+          + Math.Abs(DefenseSumA - DefenseSumB)
+          + Math.Abs(PhysicalSumA - PhysicalSumB);
 
         // ── Expansion ─────────────────────────────────────────────────────────
 
@@ -767,6 +878,11 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
             double weight       = WeightOf(candidate);
             bool   isGoalkeeper = candidate.Player.IsGoalkeeper;
 
+            // Dimensional increments for the candidate being placed.
+            double dimAtk = AttackOf(candidate.Stats);
+            double dimDef = DefenseOf(candidate.Stats);
+            double dimPhy = PhysicalOf(candidate.Stats);
+
             // When ≥2 eligible GKs exist, each team may receive at most one GK.
             bool gkConstraintActive = isGoalkeeper && EligibleGkCount >= 2;
 
@@ -786,7 +902,10 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
                     PerTeam, MaxAssignable, EligibleGkCount,
                     WeightSumA + weight,                        WeightSumB,
                     GoalkeeperCountA + (isGoalkeeper ? 1 : 0), GoalkeeperCountB,
-                    SynergySumA + synergyGain,                  SynergySumB);
+                    SynergySumA + synergyGain,                  SynergySumB,
+                    AttackSumA  + dimAtk,                       AttackSumB,
+                    DefenseSumA + dimDef,                       DefenseSumB,
+                    PhysicalSumA + dimPhy,                      PhysicalSumB);
             }
 
             // Child B: place candidate on TeamB
@@ -805,7 +924,10 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
                     PerTeam, MaxAssignable, EligibleGkCount,
                     WeightSumA,                                 WeightSumB + weight,
                     GoalkeeperCountA,                           GoalkeeperCountB + (isGoalkeeper ? 1 : 0),
-                    SynergySumA,                                SynergySumB + synergyGain);
+                    SynergySumA,                                SynergySumB + synergyGain,
+                    AttackSumA,                                 AttackSumB  + dimAtk,
+                    DefenseSumA,                                DefenseSumB + dimDef,
+                    PhysicalSumA,                               PhysicalSumB + dimPhy);
             }
         }
 
@@ -814,10 +936,14 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         /// <summary>Converts a terminal state to the <see cref="DraftOutcome"/> returned by the search loop.</summary>
         public DraftOutcome ToDraftOutcome()
         {
-            double balanceDiff  = Math.Abs(WeightSumA - WeightSumB);
+            double balanceDiff  = Math.Abs(WeightSumA  - WeightSumB);
             double synergyTotal = SynergySumA + SynergySumB;
+            double attackDiff   = Math.Abs(AttackSumA  - AttackSumB);
+            double defenseDiff  = Math.Abs(DefenseSumA - DefenseSumB);
+            double physicalDiff = Math.Abs(PhysicalSumA - PhysicalSumB);
             return new DraftOutcome(TeamA, TeamB, Waiting,
-                FinalScore, balanceDiff, synergyTotal);
+                FinalScore, balanceDiff, synergyTotal,
+                attackDiff, defenseDiff, physicalDiff);
         }
 
         // ── Local helper ──────────────────────────────────────────────────────
@@ -831,7 +957,10 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         List<CandidatePlayer> waiting,
         double score,
         double balanceDiff,
-        double synergyTotal)
+        double synergyTotal,
+        double attackDiff,
+        double defenseDiff,
+        double physicalDiff)
     {
         public List<CandidatePlayer> TeamA        { get; } = teamA;
         public List<CandidatePlayer> TeamB        { get; } = teamB;
@@ -839,5 +968,8 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         public double                Score        { get; } = score;
         public double                BalanceDiff  { get; } = balanceDiff;
         public double                SynergyTotal { get; } = synergyTotal;
+        public double                AttackDiff   { get; } = attackDiff;
+        public double                DefenseDiff  { get; } = defenseDiff;
+        public double                PhysicalDiff { get; } = physicalDiff;
     }
 }

@@ -197,7 +197,7 @@ public class GroupService : IGroupService
                 .Where(p => p.GroupId == groupId)
                 .ToListAsync(cancellationToken);
 
-            var players = allPlayers.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, p.User?.UserName, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating)).ToList();
+            var players = allPlayers.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, p.User?.UserName, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating, p.AttackRating, p.DefenseRating, p.OverallRating)).ToList();
 
             var dto = new GroupDto(
                 group.Id,
@@ -232,7 +232,7 @@ public class GroupService : IGroupService
                 g.Group.Admins.Select(x => x.UserId).ToArray(),
                 g.Group.Financeiros.Select(x => x.UserId).ToArray(),
                 g.Group.Status,
-                g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating)).ToList(),
+                g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating, p.AttackRating, p.DefenseRating, p.OverallRating)).ToList(),
                 g.Group.CreatedByUserId
             ))
             .ToListAsync(cancellationToken);
@@ -253,7 +253,7 @@ public class GroupService : IGroupService
                 g.Group.Admins.Select(x => x.UserId).ToArray(),
                 g.Group.Financeiros.Select(x => x.UserId).ToArray(),
                 g.Group.Status,
-                g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating)).ToList(),
+                g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating, p.AttackRating, p.DefenseRating, p.OverallRating)).ToList(),
                 g.Group.CreatedByUserId
             ))
             .ToListAsync(cancellationToken);
@@ -280,7 +280,8 @@ public class GroupService : IGroupService
             g.Status,
             g.Players.Select(p => new Domain.Dtos.Players.PlayerDto(
                 p.Id, p.Name, p.UserId, p.User?.UserName,
-                p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating)).ToList(),
+                p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating,
+                p.AttackRating, p.DefenseRating, p.OverallRating)).ToList(),
             g.CreatedByUserId
         )).ToList();
 
