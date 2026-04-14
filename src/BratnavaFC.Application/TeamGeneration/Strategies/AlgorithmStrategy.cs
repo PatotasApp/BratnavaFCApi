@@ -48,7 +48,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
     /// Options outside the window fall back to pure BalanceDiff ordering.
     /// Raise this value to widen the window; set to 0 to disable dimensional tiebreaking.
     /// </summary>
-    private const double BalanceTolerance = 0.01;
+    private const double BalanceTolerance = 0.05;
 
     // ── Search tuning ─────────────────────────────────────────────────────────
 
@@ -300,7 +300,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
             Score: draft.Score
         )
         {
-            Explanation  = BuildExplanation(draft, considerSynergy),
+            Explanation  = BuildExplanation(draft, considerSynergy, hasDimData),
             AttackDiff   = hasDimData ? draft.AttackDiff   : null,
             DefenseDiff  = hasDimData ? draft.DefenseDiff  : null,
             PhysicalDiff = hasDimData ? draft.PhysicalDiff : null,
@@ -608,16 +608,16 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
 
     // ── Explanation builder ───────────────────────────────────────────────────
 
-    private static TeamOptionExplanationDto BuildExplanation(DraftOutcome draft, bool considerSynergy)
+    private static TeamOptionExplanationDto BuildExplanation(DraftOutcome draft, bool considerSynergy, bool hasDimData)
         => new()
         {
-            Resumo       = BuildResumo(draft, considerSynergy),
+            Resumo       = BuildResumo(draft, considerSynergy, hasDimData),
             AnaliseTimeA = BuildTeamAnalysis("Time A", draft.TeamA, considerSynergy),
             AnaliseTimeB = BuildTeamAnalysis("Time B", draft.TeamB, considerSynergy),
-            Conclusao    = BuildConclusao(draft, considerSynergy)
+            Conclusao    = BuildConclusao(draft, considerSynergy, hasDimData)
         };
 
-    private static string BuildResumo(DraftOutcome draft, bool considerSynergy)
+    private static string BuildResumo(DraftOutcome draft, bool considerSynergy, bool hasDimData)
     {
         var sb = new StringBuilder();
 
@@ -636,6 +636,16 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
             sb.Append(gkA == gkB
                 ? ", com goleiros bem distribuídos"
                 : ", com goleiro em apenas um dos times");
+        }
+
+        // Dimensional balance — only when ratings exist
+        if (hasDimData)
+        {
+            double totalDimDiff = draft.AttackDiff + draft.DefenseDiff + draft.PhysicalDiff;
+            if (totalDimDiff < 0.30)
+                sb.Append(", com bom equilíbrio nas três dimensões técnicas (ataque, defesa e físico)");
+            else if (totalDimDiff < 0.70)
+                sb.Append(", com equilíbrio razoável nas dimensões técnicas");
         }
 
         // Synergy — only when active and meaningful
@@ -684,7 +694,7 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         return sb.ToString();
     }
 
-    private static string BuildConclusao(DraftOutcome draft, bool considerSynergy)
+    private static string BuildConclusao(DraftOutcome draft, bool considerSynergy, bool hasDimData)
     {
         bool goodSynergy = considerSynergy && draft.SynergyTotal > 0.1;
 
@@ -698,7 +708,26 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         else
             conclusion = "Essa formação ficou entre as melhores por manter um bom compromisso entre força total e distribuição geral do elenco.";
 
-        return $"{conclusion} Diferença de peso: {draft.BalanceDiff:0.000}.";
+        var sb = new StringBuilder($"{conclusion} Diferença de peso: {draft.BalanceDiff:0.000}.");
+
+        if (hasDimData)
+        {
+            // Identify worst dimension
+            (string Label, double Diff) worst = ("Ataque", draft.AttackDiff);
+            if (draft.DefenseDiff  > worst.Diff) worst = ("Defesa",  draft.DefenseDiff);
+            if (draft.PhysicalDiff > worst.Diff) worst = ("Físico",  draft.PhysicalDiff);
+
+            string dimRemark = worst.Diff < 0.20
+                ? "Todas as dimensões estão bem equilibradas."
+                : worst.Diff < 0.50
+                ? $"{worst.Label} é a dimensão com maior diferença entre os times."
+                : $"{worst.Label} apresenta diferença expressiva entre os times.";
+
+            sb.Append($" {dimRemark}");
+            sb.Append($" Dimensões — Ataque: Δ{draft.AttackDiff:0.00} | Defesa: Δ{draft.DefenseDiff:0.00} | Físico: Δ{draft.PhysicalDiff:0.00}.");
+        }
+
+        return sb.ToString();
     }
 
     // ── Explanation helpers ────────────────────────────────────────────────────
