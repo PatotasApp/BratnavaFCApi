@@ -662,8 +662,14 @@ public class AlgorithmStrategy_FullScenarioTests
             opt.Score.Should().BeApproximately(opt.BalanceDiff, 1e-9);
         }
 
-        result.Options.Select(x => x.BalanceDiff)
-            .Should().BeInAscendingOrder("as opções devem vir ordenadas por BalanceDiff crescente");
+        // Dentro da janela de tolerância (0.05), as opções são reordenadas por equilíbrio
+        // dimensional — por isso BalanceDiff pode não ser estritamente crescente.
+        // Verificamos que todas as opções estão dentro da janela em relação à melhor.
+        var balanceDiffs = result.Options.Select(x => x.BalanceDiff).ToList();
+        var bestDiff = balanceDiffs.Min();
+        foreach (var diff in balanceDiffs)
+            diff.Should().BeLessThanOrEqualTo(bestDiff + 0.05,
+                "todas as opções devem estar dentro da janela de tolerância (0.05) em relação ao melhor BalanceDiff");
     }
 
     [Fact]

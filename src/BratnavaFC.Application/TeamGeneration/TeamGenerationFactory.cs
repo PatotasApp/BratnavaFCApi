@@ -12,10 +12,11 @@ public static class TeamGenerationFactory
         ILoggerFactory loggerFactory)
         => type switch
         {
-            StrategyType.Algorithm  => new AlgorithmStrategy(stats, loggerFactory.CreateLogger<AlgorithmStrategy>()),
-            StrategyType.Manual     => new ManualStrategy(stats),
-            StrategyType.Random     => new RandomStrategy(stats),
+            StrategyType.Algorithm   => new AlgorithmStrategy(stats, loggerFactory.CreateLogger<AlgorithmStrategy>()),
+            StrategyType.Manual      => new ManualStrategy(stats),
+            StrategyType.Random      => new RandomStrategy(stats),
             StrategyType.GroupByWins => new GroupByWinsStrategy(stats),
+            StrategyType.Profile     => new ProfileStrategy(stats),
             _ => throw new ArgumentOutOfRangeException(nameof(type), $"Unknown strategy: {type}")
         };
 }

@@ -296,4 +296,130 @@ public class AlgorithmStrategyTests
         result.Options.First().BalanceDiff.Should().BeApproximately(0.0, 1e-9,
             "all neutral players have equal weight 0.50, so any 2v2 split is perfectly balanced");
     }
+
+    // ----------------------------------------------------------------
+    // 10. Dimensional diffs expostos quando ratings estão presentes
+    // ----------------------------------------------------------------
+
+    [Fact]
+    public async Task DimensionalDiffs_Populated_WhenRatingsSet()
+    {
+        var players = TestHelpers.Players(
+            ("A", false), ("B", false), ("C", false), ("D", false));
+
+        var ids = players.Select(p => p.Id).ToList();
+
+        var stats = new[]
+        {
+            TestHelpers.RatedStats(ids[0], "A", wins:5, ties:0, losses:5, attackRating:0.8, defenseRating:0.2, physicalRating:0.6),
+            TestHelpers.RatedStats(ids[1], "B", wins:5, ties:0, losses:5, attackRating:0.7, defenseRating:0.3, physicalRating:0.5),
+            TestHelpers.RatedStats(ids[2], "C", wins:5, ties:0, losses:5, attackRating:0.2, defenseRating:0.8, physicalRating:0.6),
+            TestHelpers.RatedStats(ids[3], "D", wins:5, ties:0, losses:5, attackRating:0.3, defenseRating:0.7, physicalRating:0.5),
+        };
+
+        var strategy = new AlgorithmStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 2, IncludeGoalkeepers = false };
+
+        var result = await strategy.GenerateTeamsAsync(players, settings);
+
+        result.Options.Should().NotBeEmpty();
+        var opt = result.Options.First();
+
+        opt.AttackDiff.Should().HaveValue("AttackDiff deve ser populado quando ratings estão presentes");
+        opt.DefenseDiff.Should().HaveValue("DefenseDiff deve ser populado quando ratings estão presentes");
+        opt.PhysicalDiff.Should().HaveValue("PhysicalDiff deve ser populado quando ratings estão presentes");
+    }
+
+    // ----------------------------------------------------------------
+    // 11. Explicação inclui info dimensional quando ratings existem
+    // ----------------------------------------------------------------
+
+    [Fact]
+    public async Task Explanation_ContainsDimensionalInfo_WhenRatingsSet()
+    {
+        var players = TestHelpers.Players(
+            ("A", false), ("B", false), ("C", false), ("D", false));
+
+        var ids = players.Select(p => p.Id).ToList();
+
+        var stats = new[]
+        {
+            TestHelpers.RatedStats(ids[0], "A", wins:5, ties:0, losses:5, attackRating:0.9, defenseRating:0.1, physicalRating:0.6),
+            TestHelpers.RatedStats(ids[1], "B", wins:5, ties:0, losses:5, attackRating:0.1, defenseRating:0.9, physicalRating:0.5),
+            TestHelpers.RatedStats(ids[2], "C", wins:5, ties:0, losses:5, attackRating:0.8, defenseRating:0.2, physicalRating:0.6),
+            TestHelpers.RatedStats(ids[3], "D", wins:5, ties:0, losses:5, attackRating:0.2, defenseRating:0.8, physicalRating:0.5),
+        };
+
+        var strategy = new AlgorithmStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 2, IncludeGoalkeepers = false };
+
+        var result = await strategy.GenerateTeamsAsync(players, settings);
+
+        result.Options.Should().NotBeEmpty();
+        var opt = result.Options.First();
+
+        opt.Explanation.Should().NotBeNull();
+        opt.Explanation!.Conclusao.Should().Contain("Dimensões",
+            "a conclusão deve incluir o breakdown dimensional quando ratings estão definidos");
+        opt.Explanation.Resumo.Should().NotBeEmpty();
+    }
+
+    // ----------------------------------------------------------------
+    // 12. Janela de tolerância (0.05): opção com melhor equilíbrio
+    //     dimensional vence dentro da janela, mesmo com BalanceDiff
+    //     levemente maior
+    // ----------------------------------------------------------------
+
+    [Fact]
+    public async Task ToleranceWindow_BetterDimensionalBalance_RanksAhead_WithinWindow()
+    {
+        // Setup: 4 jogadores, 2v2
+        //   A (W=0.76, Ofensivo: atk=0.9)
+        //   B (W=0.74, Ofensivo: atk=0.9)
+        //   C (W=0.76, Defensivo: atk=0.1)
+        //   D (W=0.74, Defensivo: atk=0.1)
+        //
+        // 3 opções de 2v2:
+        //   {A,B} vs {C,D}: BalanceDiff=0.00, AttackDiff=1.6 (péssimo dimensional)
+        //   {A,C} vs {B,D}: BalanceDiff=0.04, AttackDiff=0.0 (ótimo dimensional, dentro da janela 0.05)
+        //   {A,D} vs {B,C}: BalanceDiff=0.00, AttackDiff=0.0 (ótimo em tudo → sempre 1o)
+        //
+        // Com tolerância 0.05: as 3 opções entram na janela e são ordenadas por AttackDiff.
+        // O resultado: {A,D/B,C} (diff=0, atk=0) em 1o, {A,C/B,D} (diff=0.04, atk=0) em 2o,
+        // {A,B/C,D} (diff=0.00, atk=1.6) em 3o.
+        // Ou seja, {A,B} vs {C,D} (pior dimensional) NÃO pode ser a 2a opção.
+
+        var players = TestHelpers.Players(
+            ("A", false), ("B", false), ("C", false), ("D", false));
+
+        var ids = players.Select(p => p.Id).ToList();
+
+        var stats = new[]
+        {
+            TestHelpers.RatedStats(ids[0], "A", wins:76, ties:0, losses:24, attackRating:0.9, defenseRating:0.1, physicalRating:0.5),
+            TestHelpers.RatedStats(ids[1], "B", wins:74, ties:0, losses:26, attackRating:0.9, defenseRating:0.1, physicalRating:0.5),
+            TestHelpers.RatedStats(ids[2], "C", wins:76, ties:0, losses:24, attackRating:0.1, defenseRating:0.9, physicalRating:0.5),
+            TestHelpers.RatedStats(ids[3], "D", wins:74, ties:0, losses:26, attackRating:0.1, defenseRating:0.9, physicalRating:0.5),
+        };
+
+        var strategy = new AlgorithmStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 2, IncludeGoalkeepers = false };
+
+        var result = await strategy.GenerateTeamsAsync(players, settings, optionsCount: 3);
+
+        result.Options.Should().HaveCount(3, "existem exatamente 3 composições 2v2 únicas com 4 jogadores");
+
+        // A última opção deve ser a que tem ambos os ofensivos juntos (pior dimensional)
+        var last = result.Options.Last();
+        var lastTeamAIds = last.TeamA.Select(x => x.PlayerId).ToHashSet();
+        var lastTeamBIds = last.TeamB.Select(x => x.PlayerId).ToHashSet();
+
+        bool lastHasBothOffensivesTogether =
+            (lastTeamAIds.Contains(ids[0]) && lastTeamAIds.Contains(ids[1])) ||
+            (lastTeamBIds.Contains(ids[0]) && lastTeamBIds.Contains(ids[1]));
+
+        lastHasBothOffensivesTogether.Should().BeTrue(
+            "a opção com ambos os ofensivos no mesmo time (pior dimensional) deve ser a última " +
+            "dentro da janela de tolerância de 0.05");
+    }
 }

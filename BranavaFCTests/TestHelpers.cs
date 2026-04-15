@@ -75,6 +75,61 @@ internal static class TestHelpers
             SynergyWith = new Dictionary<Guid, double>(),
             NeutralOverride = neutralOverride
         };
+
+    /// <summary>
+    /// Non-neutral stats with normalized dimensional ratings [0,1].
+    /// Used for AlgorithmStrategy dimensional-balance tests.
+    /// </summary>
+    public static PlayerStats RatedStats(
+        Guid id,
+        string name,
+        int wins,
+        int ties,
+        int losses,
+        double attackRating,
+        double defenseRating,
+        double physicalRating)
+        => new PlayerStats
+        {
+            PlayerId          = id,
+            Name              = name,
+            Wins              = wins,
+            Ties              = ties,
+            Losses            = losses,
+            WinRate           = (wins + ties + losses) == 0
+                                    ? 0.0
+                                    : wins / (double)(wins + ties + losses),
+            Goals             = 0,
+            Assists           = 0,
+            SynergyWith       = new Dictionary<Guid, double>(),
+            AttackRatingNorm  = attackRating,
+            DefenseRatingNorm = defenseRating,
+            PhysicalRatingNorm = physicalRating,
+        };
+
+    /// <summary>
+    /// Neutral stats (0 matches) with normalized dimensional ratings [0,1].
+    /// Used for ProfileStrategy tests where history is irrelevant but ratings are required.
+    /// </summary>
+    public static PlayerStats RatedNeutralStats(
+        Guid id,
+        string name,
+        double attackRating,
+        double defenseRating,
+        double physicalRating)
+        => new PlayerStats
+        {
+            PlayerId           = id,
+            Name               = name,
+            Wins               = 0,
+            Ties               = 0,
+            Losses             = 0,
+            WinRate            = 0.0,
+            SynergyWith        = new Dictionary<Guid, double>(),
+            AttackRatingNorm   = attackRating,
+            DefenseRatingNorm  = defenseRating,
+            PhysicalRatingNorm = physicalRating,
+        };
 }
 
 // ----------------------------------------------------------------

@@ -12,6 +12,7 @@ public class TeamGenerationFactoryTests
     [InlineData(StrategyType.Random, "RandomStrategy")]
     [InlineData(StrategyType.Algorithm, "AlgorithmStrategy")]
     [InlineData(StrategyType.GroupByWins, "GroupByWinsStrategy")]
+    [InlineData(StrategyType.Profile, "ProfileStrategy")]
     public void Create_Returns_Correct_Strategy(StrategyType type, string expectedName)
     {
         // Arrange
