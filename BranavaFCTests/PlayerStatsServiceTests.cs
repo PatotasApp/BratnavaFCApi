@@ -995,4 +995,230 @@ public sealed class PlayerStatsServiceTests
         p1Stats.SynergyWith[p2.Id].Should().BeApproximately(0.0, 0.005,
             "all-tie games: effectiveWinsTogether = 2.5, wrTogetherAdj = 0.5 = baseline → Synergy_eff = 0");
     }
+
+    // -----------------------------------------------------------------
+    // Testes — GetVisualReportAsync / Synergy: AssistsGiven, AssistsReceived
+    // -----------------------------------------------------------------
+
+    /// <summary>
+    /// Quando p2 assiste p1, a sinergia de p1 com p2 deve ter AssistsReceived=1
+    /// e a sinergia de p2 com p1 deve ter AssistsGiven=1. Direção inversa deve ser 0.
+    /// </summary>
+    [Fact]
+    public async Task GetVisualReportAsync_Synergy_AssistsGiven_ShouldReflectCorrectDirection()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetVisualReportAsync_Synergy_AssistsGiven_ShouldReflectCorrectDirection));
+
+        var group = await SeedGroupAsync(db);
+        var p1 = await SeedPlayerAsync(db, group.Id); // artilheiro, Time A
+        var p2 = await SeedPlayerAsync(db, group.Id); // assistente, Time A
+        var p3 = await SeedPlayerAsync(db, group.Id); // Time B
+
+        var (match, playerMap) = await SeedMatchUpToPostGameAsync(db, group.Id,
+            new[] { p1.Id, p2.Id }, new[] { p3.Id });
+
+        // p1 marca, p2 assiste
+        match.AddGoalByMatchPlayer(playerMap[p1.Id].Id, playerMap[p2.Id].Id, null);
+        match.FinalizeByVotes();
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var sut    = CreateSut(db);
+        var result = await sut.GetVisualReportAsync(group.Id);
+
+        var p1Synergy = result.Players.Single(p => p.PlayerId == p1.Id)
+                               .Synergies.Single(s => s.WithPlayerId == p2.Id);
+        var p2Synergy = result.Players.Single(p => p.PlayerId == p2.Id)
+                               .Synergies.Single(s => s.WithPlayerId == p1.Id);
+
+        // p2 deu a assistência → p1 recebeu, p2 deu
+        p1Synergy.AssistsReceived.Should().Be(1, "p2 assistiu p1 → p1 deve ter AssistsReceived=1");
+        p1Synergy.AssistsGiven.Should().Be(0,    "p1 não assistiu p2");
+
+        p2Synergy.AssistsGiven.Should().Be(1,    "p2 assistiu p1 → p2 deve ter AssistsGiven=1");
+        p2Synergy.AssistsReceived.Should().Be(0, "p2 não recebeu assistência de p1");
+    }
+
+    /// <summary>
+    /// Quando cada jogador assiste o outro na mesma partida, ambos devem ter
+    /// AssistsGiven=1 e AssistsReceived=1.
+    /// </summary>
+    [Fact]
+    public async Task GetVisualReportAsync_Synergy_AssistsBothDirections_ShouldAccumulateSeparately()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetVisualReportAsync_Synergy_AssistsBothDirections_ShouldAccumulateSeparately));
+
+        var group = await SeedGroupAsync(db);
+        var p1 = await SeedPlayerAsync(db, group.Id); // Time A
+        var p2 = await SeedPlayerAsync(db, group.Id); // Time A
+        var p3 = await SeedPlayerAsync(db, group.Id); // Time B
+
+        var (match, playerMap) = await SeedMatchUpToPostGameAsync(db, group.Id,
+            new[] { p1.Id, p2.Id }, new[] { p3.Id });
+
+        // gol 1: p1 marca, p2 assiste
+        match.AddGoalByMatchPlayer(playerMap[p1.Id].Id, playerMap[p2.Id].Id, null);
+        // gol 2: p2 marca, p1 assiste
+        match.AddGoalByMatchPlayer(playerMap[p2.Id].Id, playerMap[p1.Id].Id, null);
+        match.FinalizeByVotes();
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var sut    = CreateSut(db);
+        var result = await sut.GetVisualReportAsync(group.Id);
+
+        var p1Synergy = result.Players.Single(p => p.PlayerId == p1.Id)
+                               .Synergies.Single(s => s.WithPlayerId == p2.Id);
+        var p2Synergy = result.Players.Single(p => p.PlayerId == p2.Id)
+                               .Synergies.Single(s => s.WithPlayerId == p1.Id);
+
+        p1Synergy.AssistsGiven.Should().Be(1,    "p1 assistiu p2 uma vez");
+        p1Synergy.AssistsReceived.Should().Be(1, "p1 recebeu uma assistência de p2");
+
+        p2Synergy.AssistsGiven.Should().Be(1,    "p2 assistiu p1 uma vez");
+        p2Synergy.AssistsReceived.Should().Be(1, "p2 recebeu uma assistência de p1");
+    }
+
+    /// <summary>
+    /// Assistências de p2 a p1 em partidas distintas devem acumular corretamente.
+    /// </summary>
+    [Fact]
+    public async Task GetVisualReportAsync_Synergy_AssistsAccumulateAcrossMatches()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetVisualReportAsync_Synergy_AssistsAccumulateAcrossMatches));
+
+        var group = await SeedGroupAsync(db);
+        var p1 = await SeedPlayerAsync(db, group.Id); // artilheiro recorrente
+        var p2 = await SeedPlayerAsync(db, group.Id); // assistente recorrente
+        var p3 = await SeedPlayerAsync(db, group.Id); // oponente
+
+        // Partida 1: p1 marca, p2 assiste
+        {
+            var (match, playerMap) = await SeedMatchUpToPostGameAsync(db, group.Id,
+                new[] { p1.Id, p2.Id }, new[] { p3.Id });
+            match.AddGoalByMatchPlayer(playerMap[p1.Id].Id, playerMap[p2.Id].Id, null);
+            match.FinalizeByVotes();
+            await db.SaveChangesAsync();
+            db.ChangeTracker.Clear();
+        }
+
+        // Partida 2: p1 marca novamente, p2 assiste de novo
+        {
+            var (match, playerMap) = await SeedMatchUpToPostGameAsync(db, group.Id,
+                new[] { p1.Id, p2.Id }, new[] { p3.Id });
+            match.AddGoalByMatchPlayer(playerMap[p1.Id].Id, playerMap[p2.Id].Id, null);
+            match.FinalizeByVotes();
+            await db.SaveChangesAsync();
+            db.ChangeTracker.Clear();
+        }
+
+        var sut    = CreateSut(db);
+        var result = await sut.GetVisualReportAsync(group.Id);
+
+        var p2Synergy = result.Players.Single(p => p.PlayerId == p2.Id)
+                               .Synergies.Single(s => s.WithPlayerId == p1.Id);
+
+        p2Synergy.AssistsGiven.Should().Be(2,    "p2 assistiu p1 em 2 partidas → deve acumular para 2");
+        p2Synergy.AssistsReceived.Should().Be(0, "p1 nunca assistiu p2");
+
+        var p1Synergy = result.Players.Single(p => p.PlayerId == p1.Id)
+                               .Synergies.Single(s => s.WithPlayerId == p2.Id);
+        p1Synergy.AssistsReceived.Should().Be(2, "p1 recebeu assistência de p2 em 2 partidas");
+        p1Synergy.AssistsGiven.Should().Be(0,    "p1 nunca assistiu p2");
+    }
+
+    /// <summary>
+    /// Gol contra não tem assistente → nenhuma assistência de par deve ser registrada.
+    /// </summary>
+    [Fact]
+    public async Task GetVisualReportAsync_Synergy_OwnGoal_ShouldNotCreateAssistPair()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetVisualReportAsync_Synergy_OwnGoal_ShouldNotCreateAssistPair));
+
+        var group = await SeedGroupAsync(db);
+        var p1 = await SeedPlayerAsync(db, group.Id); // gol contra, Time A
+        var p2 = await SeedPlayerAsync(db, group.Id); // colega, Time A
+        var p3 = await SeedPlayerAsync(db, group.Id); // Time B
+
+        var (match, playerMap) = await SeedMatchUpToPostGameAsync(db, group.Id,
+            new[] { p1.Id, p2.Id }, new[] { p3.Id });
+
+        match.AddGoalByMatchPlayer(playerMap[p1.Id].Id, null, null, isOwnGoal: true);
+        match.FinalizeByVotes();
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var sut    = CreateSut(db);
+        var result = await sut.GetVisualReportAsync(group.Id);
+
+        // nenhum par deve ter assistência
+        result.Players.SelectMany(p => p.Synergies)
+              .Should().OnlyContain(s => s.AssistsGiven == 0 && s.AssistsReceived == 0,
+                  "gol contra não registra assistência em nenhum par");
+    }
+
+    // -----------------------------------------------------------------
+    // Testes — GetVisualReportAsync / Synergy: MatchesTogether, WinsTogether
+    // -----------------------------------------------------------------
+
+    /// <summary>
+    /// Verifica que MatchesTogether, WinsTogether e WinRateTogether são preenchidos
+    /// corretamente na sinergia visual.
+    /// </summary>
+    [Fact]
+    public async Task GetVisualReportAsync_Synergy_MatchesAndWinsTogetherShouldBePopulated()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetVisualReportAsync_Synergy_MatchesAndWinsTogetherShouldBePopulated));
+
+        var group = await SeedGroupAsync(db);
+        var p1 = await SeedPlayerAsync(db, group.Id); // Time A (vence)
+        var p2 = await SeedPlayerAsync(db, group.Id); // Time A (vence)
+        var p3 = await SeedPlayerAsync(db, group.Id); // Time B
+        var p4 = await SeedPlayerAsync(db, group.Id); // Time B
+
+        // 2 partidas: p1+p2 (Time A) vence as duas
+        for (int i = 0; i < 2; i++)
+        {
+            db.ChangeTracker.Clear();
+            await SeedFinalizedMatchSameTeamAsync(db, group.Id, p1.Id, p2.Id, p3.Id, p4.Id, teamAWins: true);
+        }
+        db.ChangeTracker.Clear();
+
+        var sut    = CreateSut(db);
+        var result = await sut.GetVisualReportAsync(group.Id);
+
+        var p1Synergy = result.Players.Single(p => p.PlayerId == p1.Id)
+                               .Synergies.Single(s => s.WithPlayerId == p2.Id);
+
+        p1Synergy.MatchesTogether.Should().Be(2, "p1 e p2 jogaram juntos em 2 partidas");
+        p1Synergy.WinsTogether.Should().Be(2,    "p1 e p2 venceram nas 2 partidas");
+        p1Synergy.WinRateTogether.Should().BeApproximately(1.0, 1e-9,
+            "2 vitórias em 2 partidas → WinRateTogether = 1.0");
+    }
+
+    /// <summary>
+    /// Jogadores de times opostos não devem ter MatchesTogether > 0 entre si.
+    /// </summary>
+    [Fact]
+    public async Task GetVisualReportAsync_Synergy_OpposingTeamPlayers_ShouldHaveZeroMatchesTogether()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetVisualReportAsync_Synergy_OpposingTeamPlayers_ShouldHaveZeroMatchesTogether));
+
+        var group = await SeedGroupAsync(db);
+        var p1 = await SeedPlayerAsync(db, group.Id); // Time A
+        var p2 = await SeedPlayerAsync(db, group.Id); // Time B
+
+        await SeedFinalizedMatchAsync(db, group.Id, p1.Id, p2.Id);
+        db.ChangeTracker.Clear();
+
+        var sut    = CreateSut(db);
+        var result = await sut.GetVisualReportAsync(group.Id);
+
+        var p1Synergy = result.Players.Single(p => p.PlayerId == p1.Id)
+                               .Synergies.Single(s => s.WithPlayerId == p2.Id);
+
+        p1Synergy.MatchesTogether.Should().Be(0,
+            "p1 e p2 estiveram em times opostos → MatchesTogether = 0");
+        p1Synergy.WinsTogether.Should().Be(0);
+    }
 }

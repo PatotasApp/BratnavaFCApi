@@ -670,6 +670,18 @@ public sealed class PlayerStatsService : IPlayerStatsService
                 {
                     aAcc.Assists++;
                     perPlayer[aPid] = aAcc;
+
+                    // Track assist direction between this pair (both must be tracked players)
+                    if (perPlayer.ContainsKey(pid) && aPid != pid)
+                    {
+                        var pairKey = PairKey.Create(aPid, pid);
+                        if (!pairTotals.TryGetValue(pairKey, out var pairAcc))
+                            pairAcc = PairAccumulator.Empty;
+                        // aPid gave the assist TO pid
+                        if (aPid == pairKey.A) pairAcc.AssistsAtoB++;
+                        else                   pairAcc.AssistsBtoA++;
+                        pairTotals[pairKey] = pairAcc;
+                    }
                 }
             }
         }
@@ -847,6 +859,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
                 continue;
             }
 
+            bool playerIsA = playerId.CompareTo(otherId) <= 0;
             list.Add(new PlayerSynergyItem
             {
                 WithPlayerId = otherId,
@@ -855,7 +868,9 @@ public sealed class PlayerStatsService : IPlayerStatsService
                 WinsTogether = pairAcc.WinsTogether,
                 WinRateTogether = pairAcc.MatchesTogether == 0
                     ? 0.0
-                    : pairAcc.WinsTogether / (double)pairAcc.MatchesTogether
+                    : pairAcc.WinsTogether / (double)pairAcc.MatchesTogether,
+                AssistsGiven    = playerIsA ? pairAcc.AssistsAtoB : pairAcc.AssistsBtoA,
+                AssistsReceived = playerIsA ? pairAcc.AssistsBtoA : pairAcc.AssistsAtoB,
             });
         }
 
@@ -886,6 +901,8 @@ public sealed class PlayerStatsService : IPlayerStatsService
         public int MatchesTogether;
         public int WinsTogether;
         public int TiesTogether;
+        public int AssistsAtoB;  // A gave an assist to B
+        public int AssistsBtoA;  // B gave an assist to A
 
         public static PairAccumulator Empty => new PairAccumulator();
     }
