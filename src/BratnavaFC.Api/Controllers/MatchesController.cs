@@ -415,7 +415,7 @@ public class MatchesController : GroupAuthorizedController
         [FromRoute] Guid clipId,
         CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
 
         var clip = await _db.Set<ReplayClipEntity>()
             .FirstOrDefaultAsync(c => c.Id == clipId && c.GroupId == groupId, ct);
