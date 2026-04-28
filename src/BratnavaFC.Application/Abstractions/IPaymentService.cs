@@ -72,4 +72,11 @@ public interface IPaymentService
     // ── Comprovantes ──────────────────────────────────────────────────────────
     Task<Result<ProofResponseDto>> GetMonthlyProofAsync(Guid groupId, Guid playerId, int year, int month, Guid? requestingUserId = null, bool isAdmin = true, CancellationToken ct = default);
     Task<Result<ProofResponseDto>> GetExtraChargeProofAsync(Guid groupId, Guid chargeId, Guid playerId, Guid? requestingUserId = null, bool isAdmin = true, CancellationToken ct = default);
+
+    // ── Pagar pendências em lote (próprio usuário) ─────────────────────────────
+    /// <summary>Lista todos os itens pendentes do usuário na patota (mensalidades + cobranças extras).</summary>
+    Task<Result<IReadOnlyList<PendingPaymentItemDto>>> GetMyPendingItemsAsync(Guid groupId, Guid userId, CancellationToken ct = default);
+
+    /// <summary>Marca os itens selecionados como pagos em lote.</summary>
+    Task<Result> PaySelectedAsync(Guid groupId, Guid userId, PaySelectedDto dto, CancellationToken ct = default);
 }

@@ -856,6 +856,180 @@ public sealed class PaymentService : IPaymentService
             groupId: groupId);
     }
 
+    // ── Pagar pendências em lote ──────────────────────────────────────────────
+
+    public async Task<Result<IReadOnlyList<PendingPaymentItemDto>>> GetMyPendingItemsAsync(
+        Guid groupId, Guid userId, CancellationToken ct = default)
+    {
+        var player = await _context.Players
+            .AsNoTracking()
+            .Where(p => p.GroupId == groupId && p.UserId == userId && !p.IsGuest)
+            .Select(p => new { p.Id, JoinDate = p.JoinedAt ?? p.CreateDate })
+            .FirstOrDefaultAsync(ct);
+
+        if (player is null)
+            return Result<IReadOnlyList<PendingPaymentItemDto>>.Ok([]);
+
+        var items = new List<PendingPaymentItemDto>();
+
+        // ── Mensalidades ─────────────────────────────────────────────────────
+        var today  = DateTime.UtcNow;
+        var year   = today.Year;
+
+        var settings = await _context.GroupSettings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.GroupId == groupId, ct);
+
+        var maxMonth   = today.Month;
+        var joinYear   = player.JoinDate.Year;
+        var joinMonth  = player.JoinDate.Month;
+        var firstMonth = joinYear == year ? joinMonth
+                       : joinYear >  year ? maxMonth + 1
+                       : 1;
+
+        var hasRecordsOrFee = settings?.MonthlyFee > 0
+            || await _context.MonthlyPayments
+                .AnyAsync(m => m.GroupId == groupId && m.PlayerId == player.Id && m.Year == year, ct);
+
+        if (firstMonth <= maxMonth && hasRecordsOrFee)
+        {
+            var records = await _context.MonthlyPayments
+                .AsNoTracking()
+                .Where(m => m.GroupId == groupId && m.PlayerId == player.Id && m.Year == year)
+                .ToListAsync(ct);
+
+            var recordMap = records.ToDictionary(r => r.Month);
+            var fee = settings?.MonthlyFee ?? 0m;
+
+            for (var m = firstMonth; m <= maxMonth; m++)
+            {
+                if (recordMap.TryGetValue(m, out var rec) && rec.Status == PaymentStatus.Paid)
+                    continue;
+
+                var amount   = rec?.Amount   ?? fee;
+                var discount = rec?.Discount ?? 0m;
+
+                items.Add(new PendingPaymentItemDto
+                {
+                    Id          = $"m-{year}-{m}",
+                    Description = $"{_monthNames[m - 1]} {year}",
+                    Amount      = amount,
+                    Discount    = discount,
+                    FinalAmount = Math.Max(0, amount - discount),
+                    Type        = PendingPaymentType.Monthly,
+                    Year        = year,
+                    Month       = m,
+                });
+            }
+        }
+
+        // ── Cobranças extras ─────────────────────────────────────────────────
+        var pendingExtras = await _context.ExtraChargePayments
+            .AsNoTracking()
+            .Include(ep => ep.ExtraCharge)
+            .Where(ep => ep.GroupId  == groupId
+                      && ep.PlayerId == player.Id
+                      && ep.Status   == PaymentStatus.Pending
+                      && !ep.ExtraCharge!.IsCancelled)
+            .ToListAsync(ct);
+
+        foreach (var ep in pendingExtras)
+        {
+            items.Add(new PendingPaymentItemDto
+            {
+                Id          = $"e-{ep.ExtraChargeId}",
+                Description = ep.ExtraCharge!.Name,
+                Amount      = ep.Amount,
+                Discount    = ep.Discount,
+                FinalAmount = Math.Max(0, ep.Amount - ep.Discount),
+                Type        = PendingPaymentType.Extra,
+                ChargeId    = ep.ExtraChargeId,
+            });
+        }
+
+        return Result<IReadOnlyList<PendingPaymentItemDto>>.Ok(items);
+    }
+
+    public async Task<Result> PaySelectedAsync(
+        Guid groupId, Guid userId, PaySelectedDto dto, CancellationToken ct = default)
+    {
+        if (dto.Items.Length == 0)
+            return Result.Fail("Nenhum item selecionado.", ResultStatus.BadRequest);
+
+        var player = await _context.Players
+            .Where(p => p.GroupId == groupId && p.UserId == userId && !p.IsGuest)
+            .Select(p => new { p.Id })
+            .FirstOrDefaultAsync(ct);
+
+        if (player is null)
+            return Result.Fail("Jogador não encontrado nesta patota.", ResultStatus.NotFound);
+
+        var settings = await _context.GroupSettings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.GroupId == groupId, ct);
+
+        var notifications = new List<Func<Task>>();
+
+        foreach (var item in dto.Items)
+        {
+            if (item.Type == PendingPaymentType.Monthly
+                && item.Year.HasValue && item.Month.HasValue)
+            {
+                var record = await _context.MonthlyPayments
+                    .FirstOrDefaultAsync(m => m.GroupId  == groupId
+                                           && m.PlayerId == player.Id
+                                           && m.Year     == item.Year.Value
+                                           && m.Month    == item.Month.Value, ct);
+
+                if (record is null)
+                {
+                    record = new MonthlyPaymentEntity(
+                        groupId, player.Id,
+                        item.Year.Value, item.Month.Value,
+                        settings?.MonthlyFee ?? 0);
+                    await _context.MonthlyPayments.AddAsync(record, ct);
+                }
+
+                var wasPaid = record.Status == PaymentStatus.Paid;
+                record.MarkAsPaid(null, null, null, null);
+
+                if (!wasPaid)
+                {
+                    var yr = item.Year.Value;
+                    var mo = item.Month.Value;
+                    notifications.Add(() =>
+                        NotifyFinanceirosMonthlyPaidAsync(groupId, player.Id, mo, yr, ct));
+                }
+            }
+            else if (item.Type == PendingPaymentType.Extra && item.ChargeId.HasValue)
+            {
+                var payment = await _context.ExtraChargePayments
+                    .FirstOrDefaultAsync(p => p.ExtraChargeId == item.ChargeId.Value
+                                           && p.PlayerId     == player.Id
+                                           && p.GroupId      == groupId, ct);
+
+                if (payment is null) continue;
+
+                var wasPaid = payment.Status == PaymentStatus.Paid;
+                payment.MarkAsPaid(null, null, null, null);
+
+                if (!wasPaid)
+                {
+                    var cid = item.ChargeId.Value;
+                    notifications.Add(() =>
+                        NotifyFinanceirosExtraChargePaidAsync(groupId, player.Id, cid, ct));
+                }
+            }
+        }
+
+        await _context.SaveChangesAsync(ct);
+
+        foreach (var notify in notifications)
+            await notify();
+
+        return Result.Ok("Pagamentos confirmados com sucesso.");
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static ExtraChargeDto ToExtraChargeDto(ExtraChargeEntity c, Dictionary<Guid, string> names) => new()

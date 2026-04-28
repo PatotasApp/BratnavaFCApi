@@ -209,6 +209,31 @@ public sealed class PaymentController : GroupAuthorizedController
         return ToResponse(result);
     }
 
+    // ── Pagar pendências em lote ──────────────────────────────────────────────
+
+    /// <summary>Retorna todos os itens pendentes do usuário logado na patota (mensalidades + cobranças extras).</summary>
+    [HttpGet("my-pending-items")]
+    public async Task<IActionResult> GetMyPendingItems(Guid groupId, CancellationToken ct)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        var result = await _payments.GetMyPendingItemsAsync(groupId, userId.Value, ct);
+        return ToResponse(result);
+    }
+
+    /// <summary>Marca os itens selecionados como pagos (jogador confirma seus próprios débitos).</summary>
+    [HttpPost("pay-selected")]
+    public async Task<IActionResult> PaySelected(
+        Guid groupId, [FromBody] PaySelectedDto dto, CancellationToken ct)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        var result = await _payments.PaySelectedAsync(groupId, userId.Value, dto, ct);
+        return ToResponse(result);
+    }
+
     // ── Comprovantes ──────────────────────────────────────────────────────────
 
     [HttpGet("monthly/{year:int}/{month:int}/{playerId:guid}/proof")]

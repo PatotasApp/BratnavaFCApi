@@ -66,8 +66,11 @@ public class PollEntity : BaseEntity
     public bool HasExpiredDeadline()
     {
         if (!DeadlineDate.HasValue) return false;
-        var deadlineUtc = DeadlineDate.Value.ToDateTime(DeadlineTime ?? TimeOnly.MaxValue, DateTimeKind.Utc);
-        return DateTime.UtcNow > deadlineUtc;
+        // DeadlineDate/DeadlineTime are stored in Brazil local time (UTC-3) as entered by the user.
+        // Brazil abolished DST in 2019, so the offset is permanently -3h.
+        var localDt = DeadlineDate.Value.ToDateTime(DeadlineTime ?? TimeOnly.MaxValue);
+        var deadlineOffset = new DateTimeOffset(localDt, TimeSpan.FromHours(-3));
+        return DateTimeOffset.UtcNow > deadlineOffset;
     }
 
     /// <summary>
