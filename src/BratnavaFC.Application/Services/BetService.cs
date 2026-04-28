@@ -65,6 +65,25 @@ public sealed class BetService : IBetService
                 mp.Player?.IsGuest ?? false, hasBet, fichas);
         }).ToList();
 
+        // Membros do grupo adicionados depois da escalação ser fechada: aparecem com Team=0
+        var matchPlayerIds = rawPlayers.Select(mp => mp.PlayerId).ToHashSet();
+        var lateMembers = await _db.Players
+            .AsNoTracking()
+            .Where(p => p.GroupId == groupId &&
+                        !p.IsGuest &&
+                        p.Status == Domain.Enums.Status.Active &&
+                        !matchPlayerIds.Contains(p.Id))
+            .ToListAsync(ct);
+
+        foreach (var p in lateMembers)
+        {
+            var hasBet = p.UserId != null && bettedUserIds.Contains(p.UserId.Value);
+            var fichas = hasBet && p.UserId != null
+                ? wageredByUser.GetValueOrDefault(p.UserId.Value)
+                : null;
+            players.Add(new BetPlayerDto(p.Id, p.Id, p.Name, 0, false, hasBet, fichas));
+        }
+
         var myBet = await GetMyBetDtoAsync(match.Id, userId, ct);
         var betWindowOpen = match.Status == MatchStatus.MatchMaking;
 
