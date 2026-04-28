@@ -154,6 +154,35 @@ public sealed class BetService : IBetService
             }
         }
 
+        // Jogador não pode apostar em si mesmo (PlayerGoals / PlayerAssists)
+        var playerSelections = dto.Selections
+            .Where(s => s.Category.Equals("PlayerGoals",   StringComparison.OrdinalIgnoreCase) ||
+                        s.Category.Equals("PlayerAssists", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (playerSelections.Count > 0)
+        {
+            var callerMatchPlayerId = await _db.Set<MatchPlayerEntity>()
+                .AsNoTracking()
+                .Where(mp => mp.MatchId == matchId && mp.Player!.UserId == userId)
+                .Select(mp => (Guid?)mp.Id)
+                .FirstOrDefaultAsync(ct);
+
+            if (callerMatchPlayerId.HasValue)
+            {
+                foreach (var sel in playerSelections)
+                {
+                    var parts = sel.PredictedValue.Split('|');
+                    if (parts.Length >= 1 &&
+                        Guid.TryParse(parts[0], out var selectedMatchPlayerId) &&
+                        selectedMatchPlayerId == callerMatchPlayerId.Value)
+                    {
+                        return Result.Fail("Voce nao pode apostar em si mesmo.");
+                    }
+                }
+            }
+        }
+
         // Criar ou atualizar aposta
         var bet = await _db.Set<MatchBetEntity>()
             .Include(b => b.Selections)
