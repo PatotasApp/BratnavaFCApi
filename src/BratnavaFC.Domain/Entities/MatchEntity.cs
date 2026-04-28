@@ -448,8 +448,8 @@ public class MatchEntity : BaseEntity
 
     public void AddGoalByMatchPlayer(Guid scorerMatchPlayerId, Guid? assistMatchPlayerId, int? timeSeconds, bool isOwnGoal = false)
     {
-        if (Status != MatchStatus.Started && Status != MatchStatus.PostGame)
-            throw new InvalidOperationException("So e possivel registrar gols quando a partida esta Started ou PostGame.");
+        if (Status != MatchStatus.Started && Status != MatchStatus.PostGame && Status != MatchStatus.Finalized)
+            throw new InvalidOperationException("So e possivel registrar gols quando a partida esta Started, PostGame ou Finalized.");
 
         if (scorerMatchPlayerId == Guid.Empty)
             throw new InvalidOperationException("MatchPlayerId do gol e obrigatorio.");
@@ -533,8 +533,6 @@ public class MatchEntity : BaseEntity
 
     public void RemoveGoal(Guid goalId)
     {
-        if (Status == MatchStatus.Finalized)
-            throw new InvalidOperationException("Partida finalizada. Nao e possivel remover gols.");
 
         var idx = Goals.FindIndex(g => g.Id == goalId);
         if (idx < 0) return;
