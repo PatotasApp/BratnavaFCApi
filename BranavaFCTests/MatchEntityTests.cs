@@ -418,7 +418,7 @@ public sealed class MatchEntityTests
         var ex = Assert.Throws<InvalidOperationException>(() =>
             match.AddGoalByMatchPlayer(scorerMp.Id, null, 10));
 
-        Assert.Equal("So e possivel registrar gols quando a partida esta Started ou PostGame.", ex.Message);
+        Assert.Equal("So e possivel registrar gols quando a partida esta Started, PostGame ou Finalized.", ex.Message);
     }
 
     [Fact]
@@ -450,15 +450,17 @@ public sealed class MatchEntityTests
     }
 
     [Fact]
-    public void RemoveGoal_WhenFinalized_ShouldThrow()
+    public void RemoveGoal_WhenFinalized_ShouldWork()
     {
         var (match, _, _, mp1, _) = CreateMatchWithTwoPlayers_PostGame();
 
         match.AddGoalByMatchPlayer(mp1.Id, null, 10);
         match.FinalizeByVotes();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => match.RemoveGoal(Guid.NewGuid()));
-        Assert.Equal("Partida finalizada. Nao e possivel remover gols.", ex.Message);
+        var goalId = match.Goals.First().Id;
+        match.RemoveGoal(goalId);
+
+        Assert.Empty(match.Goals);
     }
 
     private static (MatchEntity match, PlayerEntity p1, PlayerEntity p2, PlayerEntity p3)
