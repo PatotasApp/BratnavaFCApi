@@ -14,5 +14,7 @@ public interface IBetService
     Task<Result>                       DeleteBetAsync(Guid groupId, Guid matchId, Guid userId, CancellationToken ct);
     Task<BetPreviewDto?>               GetBetPreviewAsync(Guid groupId, Guid matchId, CancellationToken ct);
     /// <summary>Resolve todas as apostas não resolvidas de uma partida já finalizada.</summary>
-    Task                               ResolveMatchBetsAsync(Guid matchId, CancellationToken ct);
+    Task ResolveMatchBetsAsync(Guid matchId, CancellationToken ct);
+    /// <summary>Reverte a resolução anterior e re-resolve com o placar atual. Usar quando gols são alterados após finalização.</summary>
+    Task ReResolveMatchBetsAsync(Guid matchId, CancellationToken ct);
 }

@@ -30,6 +30,12 @@ public sealed class MatchBetEntity : BaseEntity
         UpdateDate = DateTime.UtcNow;
     }
 
+    public void Unresolve()
+    {
+        IsResolved = false;
+        UpdateDate = DateTime.UtcNow;
+    }
+
     // EF Core
     private MatchBetEntity() { }
 }

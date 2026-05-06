@@ -43,6 +43,15 @@ public sealed class MatchBetSelectionEntity : BaseEntity
         UpdateDate      = DateTime.UtcNow;
     }
 
+    public void Unresolve()
+    {
+        FichasEarned    = null;
+        IsCorrect       = null;
+        IsPartialCredit = null;
+        ActualValue     = null;
+        UpdateDate      = DateTime.UtcNow;
+    }
+
     // EF Core
     private MatchBetSelectionEntity() { }
 }

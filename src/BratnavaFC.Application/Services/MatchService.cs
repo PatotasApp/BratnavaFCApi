@@ -860,6 +860,10 @@ public sealed class MatchService : IMatchService
             isOwnGoal: dto.IsOwnGoal);
 
         await _context.SaveChangesAsync(ct);
+
+        if (match.Status == Domain.Enums.MatchStatus.Finalized)
+            await _bets.ReResolveMatchBetsAsync(matchId, ct);
+
         return Result.Ok("Gol adicionado com sucesso.");
     }
 
@@ -906,6 +910,10 @@ public sealed class MatchService : IMatchService
             isOwnGoal: dto.IsOwnGoal);
 
         await _context.SaveChangesAsync(ct);
+
+        if (match.Status == Domain.Enums.MatchStatus.Finalized)
+            await _bets.ReResolveMatchBetsAsync(matchId, ct);
+
         return Result.Ok("Gol atualizado com sucesso.");
     }
 
@@ -937,6 +945,10 @@ public sealed class MatchService : IMatchService
         _context.Goals.Remove(goal);
 
         await _context.SaveChangesAsync(ct);
+
+        if (match.Status == Domain.Enums.MatchStatus.Finalized)
+            await _bets.ReResolveMatchBetsAsync(matchId, ct);
+
         return Result.Ok("Gol removido com sucesso.");
     }
 

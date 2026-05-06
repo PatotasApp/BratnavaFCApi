@@ -35,6 +35,14 @@ public sealed class UserBetBalanceEntity : BaseEntity
         UpdateDate    = DateTime.UtcNow;
     }
 
+    public void ReverseBetResult(int correctSelections, int delta)
+    {
+        Balance      -= delta;
+        TotalBets    -= 1;
+        TotalCorrect -= correctSelections;
+        UpdateDate    = DateTime.UtcNow;
+    }
+
     // EF Core
     private UserBetBalanceEntity() { }
 }

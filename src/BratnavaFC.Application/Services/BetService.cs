@@ -499,6 +499,53 @@ public sealed class BetService : IBetService
             await ResolveBetsForMatchAsync(match, ct);
     }
 
+    public async Task ReResolveMatchBetsAsync(Guid matchId, CancellationToken ct)
+    {
+        var match = await _db.Matches
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.Id == matchId, ct);
+
+        if (match is null) return;
+
+        // Carrega apenas bets já resolvidas para reverter
+        var resolvedBets = await _db.Set<MatchBetEntity>()
+            .Include(b => b.Selections)
+            .Where(b => b.MatchId == matchId && b.IsResolved)
+            .ToListAsync(ct);
+
+        if (resolvedBets.Count == 0)
+        {
+            // Nenhuma bet resolvida ainda — resolve normalmente
+            await ResolveBetsForMatchAsync(match, ct);
+            return;
+        }
+
+        var userIds = resolvedBets.Select(b => b.UserId).Distinct().ToList();
+        var balances = await _db.Set<UserBetBalanceEntity>()
+            .Where(b => b.GroupId == resolvedBets[0].GroupId && userIds.Contains(b.UserId))
+            .ToDictionaryAsync(b => b.UserId, b => b, ct);
+
+        // Reverte cada bet: desfaz crédito e re-marca como não resolvida
+        foreach (var bet in resolvedBets)
+        {
+            var previousCorrect = bet.Selections.Count(s => s.IsCorrect == true);
+            var previousDelta   = MatchBaseReward + bet.Selections.Sum(s => s.FichasEarned ?? 0);
+
+            if (balances.TryGetValue(bet.UserId, out var balance))
+                balance.ReverseBetResult(previousCorrect, previousDelta);
+
+            foreach (var sel in bet.Selections)
+                sel.Unresolve();
+
+            bet.Unresolve();
+        }
+
+        await _db.SaveChangesAsync(ct);
+
+        // Re-resolve com o placar atual
+        await ResolveBetsForMatchAsync(match, ct);
+    }
+
     private async Task ResolveBetsForMatchAsync(MatchEntity match, CancellationToken ct)
     {
         var bets = await _db.Set<MatchBetEntity>()
