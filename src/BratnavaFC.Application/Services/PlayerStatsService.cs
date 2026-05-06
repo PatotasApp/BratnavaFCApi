@@ -124,7 +124,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
         // (mantem do jeito que voce ja tinha; aqui usamos PlayerEntity do banco, ok)
         var players = await _context.Players
             .AsNoTracking()
-            .Where(p => p.GroupId == groupId)
+            .Where(p => p.GroupId == groupId && !p.IsGuest)
             .ToListAsync(cancellationToken);
 
         if (players.Count == 0)
