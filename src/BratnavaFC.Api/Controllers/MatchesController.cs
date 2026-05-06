@@ -550,15 +550,8 @@ public class MatchesController : GroupAuthorizedController
         [FromBody] AddGoalRequestDto dto,
         CancellationToken ct)
     {
-        try
-        {
-            await _service.AddGoalAsync(groupId, matchId, dto, ct);
-            return NoContent();
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        var result = await _service.AddGoalAsync(groupId, matchId, dto, ct);
+        return ToResponse(result);
     }
 
     [HttpPut("group/{groupId:guid}/{matchId:guid}/goals/{goalId:guid}")]
