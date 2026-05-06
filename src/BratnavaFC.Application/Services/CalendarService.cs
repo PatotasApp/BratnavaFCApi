@@ -155,6 +155,7 @@ public sealed class CalendarService : ICalendarService
         result.AddRange(BuildMatchEvents(matches, start, end));
         result.AddRange(BuildPollEvents(pollEvents));
         result.AddRange(BuildHolidayEvents(allHolidays, start, end));
+        result.AddRange(BuildWorldCupEvents(start, end));
 
         result.Sort(EventComparer);
         return Result<List<CalendarEventDto>>.Ok(result);
@@ -571,6 +572,40 @@ public sealed class CalendarService : ICalendarService
         }
     }
 
+    // Jogos do Brasil na fase de grupos da Copa do Mundo 2026.
+    // Horários em BRT (UTC-3): originais em UTC-4 + 1h.
+    private static readonly (DateOnly Date, string Time, string Title, string Description)[] BrazilWorldCupMatches =
+    [
+        (new DateOnly(2026, 6, 13), "19:00", "Brasil x Marrocos", "Copa do Mundo 2026 · Fase de Grupos (Grupo C)"),
+        (new DateOnly(2026, 6, 19), "21:30", "Brasil x Haiti",    "Copa do Mundo 2026 · Fase de Grupos (Grupo C)"),
+        (new DateOnly(2026, 6, 24), "19:00", "Brasil x Escócia",  "Copa do Mundo 2026 · Fase de Grupos (Grupo C)"),
+    ];
+
+    private static IEnumerable<CalendarEventDto> BuildWorldCupEvents(DateOnly start, DateOnly end)
+    {
+        foreach (var (date, time, title, description) in BrazilWorldCupMatches)
+        {
+            if (date < start || date > end) continue;
+
+            yield return new CalendarEventDto
+            {
+                Id           = null,
+                Type         = CalendarEventTypes.WorldCup,
+                Title        = title,
+                Date         = date.ToString("yyyy-MM-dd"),
+                Time         = time,
+                TimeTBD      = false,
+                CategoryId   = null,
+                CategoryName = "Copa do Mundo 2026",
+                CategoryColor = "#16a34a",
+                CategoryIcon = null,
+                Icon         = null,
+                SourceId     = null,
+                Description  = description,
+            };
+        }
+    }
+
     private static bool IsValidDate(int year, int month, int day)
     {
         try
@@ -623,6 +658,7 @@ public sealed class CalendarService : ICalendarService
         public const string Match    = "match";
         public const string Holiday  = "holiday";
         public const string Event    = "event";
+        public const string WorldCup = "worldcup";
     }
 
     private sealed class CalendarEventDtoComparer : IComparer<CalendarEventDto>
