@@ -12,13 +12,8 @@ public sealed class BetService : IBetService
 {
     private readonly AppDbContext _db;
 
-    /// <summary>
-    /// Fichas base creditadas por partida (independente de acertos).
-    /// O saldo líquido de uma partida = MatchBaseReward + soma(FichasEarned).
-    /// Pode ser negativo se as perdas superarem o base reward.
-    /// </summary>
-    private const int MatchBaseReward = 200;
-
+    /// <summary>Bônus de participação creditado a quem apostou, independente de acertos.</summary>
+    private const int ParticipationBonus = 50;
     /// <summary>Total máximo de fichas que pode ser apostado por partida.</summary>
     private const int MaxWagerPerMatch = 200;
 
@@ -285,7 +280,7 @@ public sealed class BetService : IBetService
         {
             var sels = ToSelectionDtos(bet.Selections);
             var betEarnings = bet.IsResolved ? sels.Sum(s => s.FichasEarned ?? 0) : 0;
-            var total = bet.IsResolved ? MatchBaseReward + betEarnings : 0;
+            var total = bet.IsResolved ? ParticipationBonus + betEarnings : 0;
 
             return new UserBetResultDto(
                 bet.UserId,
@@ -341,9 +336,9 @@ public sealed class BetService : IBetService
                     userNames.GetValueOrDefault(bet.UserId, "Usuário"),
                     bet.CreateDate,
                     sels,
-                    MatchBaseReward,
+                    ParticipationBonus,
                     betEarnings,
-                    MatchBaseReward + betEarnings
+                    ParticipationBonus + betEarnings
                 );
             }).OrderByDescending(u => u.TotalForMatch).ToList();
 
@@ -467,7 +462,7 @@ public sealed class BetService : IBetService
                 userNames.GetValueOrDefault(bet.UserId, "Usuário"),
                 simSels,
                 betEarnings,
-                MatchBaseReward + betEarnings);
+                ParticipationBonus + betEarnings);
 
         }).OrderByDescending(u => u.SimulatedTotal).ToList();
 
@@ -529,7 +524,7 @@ public sealed class BetService : IBetService
         foreach (var bet in resolvedBets)
         {
             var previousCorrect = bet.Selections.Count(s => s.IsCorrect == true);
-            var previousDelta   = MatchBaseReward + bet.Selections.Sum(s => s.FichasEarned ?? 0);
+            var previousDelta   = ParticipationBonus + bet.Selections.Sum(s => s.FichasEarned ?? 0);
 
             if (balances.TryGetValue(bet.UserId, out var balance))
                 balance.ReverseBetResult(previousCorrect, previousDelta);
@@ -621,9 +616,8 @@ public sealed class BetService : IBetService
 
             bet.MarkResolved();
 
-            // Crédito: +200 base + resultado líquido das apostas
             var balance  = await GetOrCreateBalanceAsync(bet.GroupId, bet.UserId, ct);
-            var netDelta = MatchBaseReward + bet.Selections.Sum(s => s.FichasEarned ?? 0);
+            var netDelta = ParticipationBonus + bet.Selections.Sum(s => s.FichasEarned ?? 0);
             balance.ApplyDelta(netDelta);
             balance.RecordBetResult(correctCount);
         }
@@ -713,7 +707,7 @@ public sealed class BetService : IBetService
         return new MatchBetDto(
             bet.Id, bet.MatchId, bet.UserId, "",
             bet.IsResolved, isLocked, sels,
-            bet.IsResolved ? MatchBaseReward + sels.Sum(s => s.FichasEarned ?? 0) : null
+            bet.IsResolved ? ParticipationBonus + sels.Sum(s => s.FichasEarned ?? 0) : null
         );
     }
 
@@ -742,6 +736,33 @@ public sealed class BetService : IBetService
             "PLAYERASSISTS" => BetCategory.PlayerAssists,
             _               => throw new ArgumentException($"Categoria inválida: {category}"),
         };
+
+    public async Task<int> RecalculateAllBalancesAsync(CancellationToken ct)
+    {
+        var balances = await _db.Set<UserBetBalanceEntity>().ToListAsync(ct);
+
+        var allBets = await _db.Set<MatchBetEntity>()
+            .Include(b => b.Selections)
+            .Where(b => b.IsResolved)
+            .ToListAsync(ct);
+
+        // Agrupa por (GroupId, UserId) e soma só os FichasEarned das seleções
+        var earnedByKey = allBets
+            .GroupBy(b => (b.GroupId, b.UserId))
+            .ToDictionary(
+                g => g.Key,
+                g => g.Count() * ParticipationBonus
+                    + g.SelectMany(b => b.Selections).Sum(s => s.FichasEarned ?? 0));
+
+        foreach (var bal in balances)
+        {
+            var correct = earnedByKey.TryGetValue((bal.GroupId, bal.UserId), out var earned) ? earned : 0;
+            bal.ForceSetBalance(correct);
+        }
+
+        await _db.SaveChangesAsync(ct);
+        return balances.Count;
+    }
 
     private static string? ValidatePredictedValue(string category, string value)
     {

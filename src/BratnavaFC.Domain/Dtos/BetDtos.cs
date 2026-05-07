@@ -62,7 +62,7 @@ public record UserBetResultDto(
     Guid                  UserId,
     string                UserName,
     List<BetSelectionDto> Selections,
-    int                   TotalFichasEarned, // inclui +200 base
+    int                   TotalFichasEarned, // resultado líquido das apostas
     int                   CurrentBalance
 );
 
@@ -79,7 +79,7 @@ public record UserBetInHistoryDto(
     string                UserName,
     DateTime              PlacedAt,
     List<BetSelectionDto> Selections,
-    int                   BaseReward,    // +200 sempre
+    int                   BaseReward,    // +50 bônus de participação
     int                   BetEarnings,   // soma dos FichasEarned (pode ser negativo)
     int                   TotalForMatch  // BaseReward + BetEarnings
 );
@@ -100,7 +100,7 @@ public record BetPreviewUserDto(
     string                UserName,
     List<BetSelectionDto> Selections,           // FichasEarned / IsCorrect simulados
     int                   SimulatedBetEarnings, // soma dos FichasEarned (pode ser negativo)
-    int                   SimulatedTotal        // +200 base + SimulatedBetEarnings
+    int                   SimulatedTotal        // +50 bônus + SimulatedBetEarnings
 );
 
 public record BetPreviewDto(

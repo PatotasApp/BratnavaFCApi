@@ -1609,6 +1609,78 @@ public sealed class MatchService : IMatchService
         return Result<IReadOnlyList<PlayerRecentMatchDto>>.Ok(result);
     }
 
+    public async Task<Result<IReadOnlyList<PlayerRecentMatchDto>>> GetPlayerHistoryAsync(
+        Guid groupId,
+        Guid playerId,
+        int? year,
+        CancellationToken ct)
+    {
+        var query = _context.Matches
+            .AsNoTracking()
+            .Where(m =>
+                m.GroupId == groupId &&
+                m.Status == MatchStatus.Finalized &&
+                m.Players.Any(p => p.PlayerId == playerId && p.Team > 0));
+
+        if (year.HasValue)
+            query = query.Where(m => m.PlayedAt.Year == year.Value);
+
+        var rows = await query
+            .OrderByDescending(m => m.PlayedAt)
+            .Take(500)
+            .Select(m => new
+            {
+                m.Id,
+                m.PlayedAt,
+                m.TeamAGoals,
+                m.TeamBGoals,
+                m.PlaceName,
+                StatusName = m.Status.ToString(),
+                TeamAColorHex  = m.TeamAColor != null ? m.TeamAColor.HexValue : null,
+                TeamAColorName = m.TeamAColor != null ? m.TeamAColor.Name : null,
+                TeamBColorHex  = m.TeamBColor != null ? m.TeamBColor.HexValue : null,
+                TeamBColorName = m.TeamBColor != null ? m.TeamBColor.Name : null,
+                PlayerTeam = m.Players
+                    .Where(p => p.PlayerId == playerId)
+                    .Select(p => (int)p.Team)
+                    .FirstOrDefault(),
+                PlayerGoals = m.Goals.Count(g =>
+                    !g.IsOwnGoal &&
+                    m.Players.Any(mp => mp.Id == g.ScorerMatchPlayerId && mp.PlayerId == playerId)),
+                PlayerAssists = m.Goals.Count(g =>
+                    g.AssistMatchPlayerId.HasValue &&
+                    m.Players.Any(mp => mp.Id == g.AssistMatchPlayerId.Value && mp.PlayerId == playerId)),
+                PlayerOwnGoals = m.Goals.Count(g =>
+                    g.IsOwnGoal &&
+                    m.Players.Any(mp => mp.Id == g.ScorerMatchPlayerId && mp.PlayerId == playerId)),
+                IsPlayerMvp = m.Players
+                    .Where(p => p.PlayerId == playerId)
+                    .Select(p => p.IsMvp ?? false)
+                    .FirstOrDefault(),
+            })
+            .ToListAsync(ct);
+
+        var result = rows.Select(m => new PlayerRecentMatchDto(
+            MatchId:        m.Id,
+            PlayedAt:       m.PlayedAt,
+            TeamAGoals:     m.TeamAGoals ?? 0,
+            TeamBGoals:     m.TeamBGoals ?? 0,
+            StatusName:     m.StatusName,
+            PlaceName:      m.PlaceName,
+            TeamAColorHex:  m.TeamAColorHex,
+            TeamAColorName: m.TeamAColorName,
+            TeamBColorHex:  m.TeamBColorHex,
+            TeamBColorName: m.TeamBColorName,
+            PlayerTeam:     m.PlayerTeam,
+            PlayerGoals:    m.PlayerGoals,
+            PlayerAssists:  m.PlayerAssists,
+            PlayerOwnGoals: m.PlayerOwnGoals,
+            IsPlayerMvp:    m.IsPlayerMvp
+        )).ToList();
+
+        return Result<IReadOnlyList<PlayerRecentMatchDto>>.Ok(result);
+    }
+
     private static PlayerInMatchDto ToPlayerDto(MatchPlayerEntity mp) => new()
     {
         MatchPlayerId      = mp.Id,

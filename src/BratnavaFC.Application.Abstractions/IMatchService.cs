@@ -63,4 +63,10 @@ public interface IMatchService
         Guid playerId,
         int take,
         CancellationToken ct);
+
+    Task<Result<IReadOnlyList<PlayerRecentMatchDto>>> GetPlayerHistoryAsync(
+        Guid groupId,
+        Guid playerId,
+        int? year,
+        CancellationToken ct);
 }

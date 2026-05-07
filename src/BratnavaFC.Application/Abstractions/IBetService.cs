@@ -17,4 +17,6 @@ public interface IBetService
     Task ResolveMatchBetsAsync(Guid matchId, CancellationToken ct);
     /// <summary>Reverte a resolução anterior e re-resolve com o placar atual. Usar quando gols são alterados após finalização.</summary>
     Task ReResolveMatchBetsAsync(Guid matchId, CancellationToken ct);
+    /// <summary>Recalcula todos os saldos do zero a partir das seleções resolvidas (endpoint temporário).</summary>
+    Task<int> RecalculateAllBalancesAsync(CancellationToken ct);
 }

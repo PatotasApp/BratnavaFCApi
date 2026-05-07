@@ -681,6 +681,32 @@ public class MatchesController : GroupAuthorizedController
         return Ok(items);
     }
 
+    [HttpGet("group/{groupId:guid}/player-history")]
+    public async Task<IActionResult> GetPlayerHistory(
+        Guid groupId,
+        [FromQuery] Guid playerId,
+        [FromQuery] int? year = null,
+        CancellationToken ct = default)
+    {
+        if (playerId == Guid.Empty) return BadRequest(new { error = "playerId é obrigatório." });
+
+        // Admins and group admins can query any player in the group.
+        // Regular members can only view their own player's history.
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct))
+        {
+            var userId = GetCurrentUserId();
+            if (userId == null) return Forbid();
+
+            var ownsPlayer = await _db.Players
+                .AnyAsync(p => p.GroupId == groupId && p.Id == playerId && p.UserId == userId.Value, ct);
+
+            if (!ownsPlayer) return Forbid();
+        }
+
+        var items = await _service.GetPlayerHistoryAsync(groupId, playerId, year, ct);
+        return Ok(items);
+    }
+
     [HttpPost("group/{groupId:guid}/{matchId:guid}/guests")]
     public async Task<IActionResult> AddGuestToMatch(
         Guid groupId,

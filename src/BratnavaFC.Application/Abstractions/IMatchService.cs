@@ -69,6 +69,12 @@ public interface IMatchService
         int take,
         CancellationToken ct);
 
+    Task<Result<IReadOnlyList<PlayerRecentMatchDto>>> GetPlayerHistoryAsync(
+        Guid groupId,
+        Guid playerId,
+        int? year,
+        CancellationToken ct);
+
     Task<Result<List<ReplayClipDto>>> GetReplaysAsync(Guid groupId, Guid matchId, Guid? userId, CancellationToken ct);
     Task<(bool IsLiked, int LikeCount)> ToggleLikeAsync(Guid clipId, Guid userId, CancellationToken ct);
     Task<bool> ToggleFavoriteAsync(Guid clipId, Guid userId, CancellationToken ct);

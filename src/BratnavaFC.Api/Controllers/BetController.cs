@@ -136,6 +136,18 @@ public class BetController : GroupAuthorizedController
         return Ok(preview);
     }
 
+    /// <summary>
+    /// TEMPORÁRIO — recalcula todos os saldos do zero a partir das seleções resolvidas.
+    /// Remover após executar.
+    /// </summary>
+    [HttpPost("admin/recalculate-balances")]
+    [Authorize(Roles = "GodMode")]
+    public async Task<IActionResult> RecalculateBalances(CancellationToken ct)
+    {
+        var updated = await _bets.RecalculateAllBalancesAsync(ct);
+        return Ok(new { updated, message = $"{updated} saldo(s) recalculado(s)." });
+    }
+
     /// <summary>Histórico de apostas de todas as partidas resolvidas do grupo.</summary>
     [HttpGet("group/{groupId:guid}/history")]
     public async Task<IActionResult> GetHistory(

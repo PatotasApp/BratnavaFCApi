@@ -2,12 +2,7 @@ namespace BratnavaFC.Domain.Entities;
 
 public sealed class UserBetBalanceEntity : BaseEntity
 {
-    /// <summary>
-    /// Cada partida credita 200 fichas base. Saldo começa em 0.
-    /// Pode ser negativo se o jogador perder mais do que ganhou.
-    /// </summary>
-    public const int MatchBaseReward = 200;
-
+    /// <summary>Saldo acumula apenas lucros/perdas das apostas. Começa em 0.</summary>
     public Guid GroupId      { get; private set; }
     public Guid UserId       { get; private set; }
     public int  Balance      { get; private set; } = 0;
@@ -33,6 +28,12 @@ public sealed class UserBetBalanceEntity : BaseEntity
         TotalBets    += 1;
         TotalCorrect += correctSelections;
         UpdateDate    = DateTime.UtcNow;
+    }
+
+    public void ForceSetBalance(int newBalance)
+    {
+        Balance    = newBalance;
+        UpdateDate = DateTime.UtcNow;
     }
 
     public void ReverseBetResult(int correctSelections, int delta)
