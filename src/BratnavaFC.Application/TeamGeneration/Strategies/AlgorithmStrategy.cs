@@ -118,6 +118,22 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
         // Number of eligible GKs drives the hard goalkeeper-distribution constraint.
         int eligibleGkCount = candidatesByStrength.Count(p => p.Player.IsGoalkeeper);
 
+        // When the player count is odd, temporarily remove the weakest non-GK so the draft
+        // runs on an even pool. The removed player is placed in the stronger team afterwards.
+        // Goalkeepers are excluded from removal because their distribution is constrained separately.
+        CandidatePlayer? oddPlayer = null;
+        if (candidatesByStrength.Count % 2 != 0)
+        {
+            int oddIndex = candidatesByStrength.FindLastIndex(p => !p.Player.IsGoalkeeper);
+            if (oddIndex >= 0)
+            {
+                oddPlayer            = candidatesByStrength[oddIndex];
+                candidatesByStrength = candidatesByStrength.Where((_, i) => i != oddIndex).ToList();
+            }
+            maxAssignable   = Math.Min(candidatesByStrength.Count, perTeam * 2);
+            eligibleGkCount = candidatesByStrength.Count(p => p.Player.IsGoalkeeper);
+        }
+
         // Local delegate: captures considerSynergy — no shared mutable field, fully thread-safe.
         Func<PlayerStats, Guid, PlayerStats, double> pairSynergyFn =
             (a, bid, b) => ComputePairSynergy(a, bid, b, considerSynergy);
@@ -134,9 +150,12 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
                 candidatesByStrength, perTeam, null, null, maxAssignable, eligibleGkCount,
                 pairSynergyFn, out int unseededScenarios);
             _logger.LogInformation("[TeamGen] Unseeded draft | scenarios={Scenarios}", unseededScenarios);
-            return new TeamsOptionsResultDto(
-                SelectBestOutcomes(unseededOutcomes, optionsCount)
-                    .Select(o => BuildTeamOption(o, players, settings, considerSynergy)).ToList());
+            List<TeamOptionDto> unseededOptions = SelectBestOutcomes(unseededOutcomes, optionsCount)
+                .Select(o => BuildTeamOption(o, players, settings, considerSynergy))
+                .ToList();
+            if (oddPlayer is not null)
+                unseededOptions = unseededOptions.Select(o => AddOddPlayerToStrongerTeam(o, oddPlayer)).ToList();
+            return new TeamsOptionsResultDto(unseededOptions);
         }
 
         List<(CandidatePlayer SeedA, CandidatePlayer SeedB)> selectedPairs =
@@ -156,9 +175,47 @@ public sealed class AlgorithmStrategy : ITeamGenerationStrategy
             .Select(o => BuildTeamOption(o, players, settings, considerSynergy))
             .ToList();
 
+        if (oddPlayer is not null)
+            teamOptions = teamOptions.Select(o => AddOddPlayerToStrongerTeam(o, oddPlayer)).ToList();
+
         LogBestResult(bestOutcomes[0]);
 
         return new TeamsOptionsResultDto(teamOptions);
+    }
+
+    // ── Odd-player placement ──────────────────────────────────────────────────
+
+    private static TeamOptionDto AddOddPlayerToStrongerTeam(TeamOptionDto opt, CandidatePlayer oddPlayer)
+    {
+        var pw = new PlayerWeightDto(oddPlayer.Player.Id, EffectiveWeight(oddPlayer.Stats))
+        {
+            AttackRatingNorm   = oddPlayer.Stats.AttackRatingNorm,
+            DefenseRatingNorm  = oddPlayer.Stats.DefenseRatingNorm,
+            PhysicalRatingNorm = oddPlayer.Stats.PhysicalRatingNorm,
+        };
+
+        List<PlayerWeightDto> newTeamA      = opt.TeamA.ToList();
+        List<PlayerWeightDto> newTeamB      = opt.TeamB.ToList();
+        List<PlayerWeightDto> newUnassigned = opt.Unassigned.Where(x => x.PlayerId != oddPlayer.Player.Id).ToList();
+
+        // Add to the stronger team (higher weight); break ties in favour of TeamA.
+        if (opt.TeamAWeight >= opt.TeamBWeight)
+            newTeamA.Add(pw);
+        else
+            newTeamB.Add(pw);
+
+        double newWeightA = newTeamA.Sum(x => x.Weight);
+        double newWeightB = newTeamB.Sum(x => x.Weight);
+
+        return opt with
+        {
+            TeamA       = newTeamA,
+            TeamB       = newTeamB,
+            Unassigned  = newUnassigned,
+            TeamAWeight = newWeightA,
+            TeamBWeight = newWeightB,
+            BalanceDiff = Math.Abs(newWeightA - newWeightB),
+        };
     }
 
     // ── Seed-pair evaluation ──────────────────────────────────────────────────

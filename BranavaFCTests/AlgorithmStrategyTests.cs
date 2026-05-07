@@ -365,7 +365,217 @@ public class AlgorithmStrategyTests
     }
 
     // ----------------------------------------------------------------
-    // 12. Janela de tolerância (0.05): opção com melhor equilíbrio
+    // 12. Odd player: weakest removed during draft, placed in stronger team
+    // ----------------------------------------------------------------
+
+    [Fact]
+    public async Task OddPlayerCount_WeakestIsNotInUnassigned()
+    {
+        // 5 players (odd): weights ~0.90, 0.80, 0.70, 0.60, 0.50
+        // Weakest (E, 0.50) must end up in a team — never in Unassigned.
+        var players = TestHelpers.Players(
+            ("A", false), ("B", false), ("C", false), ("D", false), ("E", false));
+
+        var ids = players.Select(p => p.Id).ToList();
+        var stats = new[]
+        {
+            TestHelpers.Stats(ids[0], "A", wins: 9, ties: 0, losses: 1),  // ~0.90
+            TestHelpers.Stats(ids[1], "B", wins: 8, ties: 0, losses: 2),  // ~0.80
+            TestHelpers.Stats(ids[2], "C", wins: 7, ties: 0, losses: 3),  // ~0.70
+            TestHelpers.Stats(ids[3], "D", wins: 6, ties: 0, losses: 4),  // ~0.60
+            TestHelpers.Stats(ids[4], "E", wins: 5, ties: 0, losses: 5),  // 0.50
+        };
+
+        var strategy = new AlgorithmStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 2, IncludeGoalkeepers = false };
+
+        var result = await strategy.GenerateTeamsAsync(players, settings);
+
+        result.Options.Should().NotBeEmpty();
+
+        foreach (var opt in result.Options)
+        {
+            var unassignedIds = opt.Unassigned.Select(x => x.PlayerId).ToHashSet();
+            unassignedIds.Should().NotContain(ids[4],
+                "the odd (weakest) player must be placed in a team, not left unassigned");
+        }
+    }
+
+    [Fact]
+    public async Task OddPlayerCount_WeakestPlacedInStrongerTeam()
+    {
+        // 5 players (odd): weights ~0.90, 0.80, 0.70, 0.60, 0.50
+        // The weakest (E) must go to whichever team has higher pre-addition weight.
+        var players = TestHelpers.Players(
+            ("A", false), ("B", false), ("C", false), ("D", false), ("E", false));
+
+        var ids = players.Select(p => p.Id).ToList();
+        var stats = new[]
+        {
+            TestHelpers.Stats(ids[0], "A", wins: 9, ties: 0, losses: 1),
+            TestHelpers.Stats(ids[1], "B", wins: 8, ties: 0, losses: 2),
+            TestHelpers.Stats(ids[2], "C", wins: 7, ties: 0, losses: 3),
+            TestHelpers.Stats(ids[3], "D", wins: 6, ties: 0, losses: 4),
+            TestHelpers.Stats(ids[4], "E", wins: 5, ties: 0, losses: 5),
+        };
+
+        var strategy = new AlgorithmStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 2, IncludeGoalkeepers = false };
+
+        var result = await strategy.GenerateTeamsAsync(players, settings);
+
+        result.Options.Should().NotBeEmpty();
+
+        double weakestWeight = 0.50;
+
+        foreach (var opt in result.Options)
+        {
+            bool eInA = opt.TeamA.Any(x => x.PlayerId == ids[4]);
+            bool eInB = opt.TeamB.Any(x => x.PlayerId == ids[4]);
+
+            (eInA || eInB).Should().BeTrue("E must be in one of the two teams");
+
+            // Weight of the containing team before E was added
+            double containingWeightBeforeE = eInA
+                ? opt.TeamAWeight - weakestWeight
+                : opt.TeamBWeight - weakestWeight;
+
+            double otherWeight = eInA ? opt.TeamBWeight : opt.TeamAWeight;
+
+            containingWeightBeforeE.Should().BeGreaterThanOrEqualTo(otherWeight - 1e-9,
+                "the odd player must be added to the stronger team");
+        }
+    }
+
+    [Fact]
+    public async Task OddPlayerCount_AllPlayersAccountedFor()
+    {
+        // 5 players (odd): TeamA + TeamB + Unassigned must contain all 5 player IDs.
+        var players = TestHelpers.Players(
+            ("A", false), ("B", false), ("C", false), ("D", false), ("E", false));
+
+        var ids = players.Select(p => p.Id).ToHashSet();
+        var stats = players.Select(p => TestHelpers.NeutralStats(p.Id, p.Name));
+
+        var strategy = new AlgorithmStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 2, IncludeGoalkeepers = false };
+
+        var result = await strategy.GenerateTeamsAsync(players, settings);
+
+        result.Options.Should().NotBeEmpty();
+
+        foreach (var opt in result.Options)
+        {
+            var allSeen = opt.TeamA.Select(x => x.PlayerId)
+                .Concat(opt.TeamB.Select(x => x.PlayerId))
+                .Concat(opt.Unassigned.Select(x => x.PlayerId))
+                .ToHashSet();
+
+            allSeen.Should().BeEquivalentTo(ids,
+                "every player must appear in exactly one bucket");
+        }
+    }
+
+    [Fact]
+    public async Task OddPlayerCount_WeakestIsGK_SecondWeakestNonGKIsRemovedInstead()
+    {
+        // 5 players (odd): A(0.90), B(0.80), C(0.70), D(0.60), GK(0.50 — goalkeeper)
+        // The weakest is the GK — it must NOT be the odd player.
+        // The weakest non-GK (D, 0.60) must be removed and placed in the stronger team.
+        // IncludeGoalkeepers = true so the GK participates in the draft.
+        var players = TestHelpers.Players(
+            ("A", false), ("B", false), ("C", false), ("D", false), ("GK", true));
+
+        var ids = players.ToDictionary(p => p.Name, p => p.Id);
+        var stats = new[]
+        {
+            TestHelpers.Stats(ids["A"],  "A",  wins: 9, ties: 0, losses: 1),
+            TestHelpers.Stats(ids["B"],  "B",  wins: 8, ties: 0, losses: 2),
+            TestHelpers.Stats(ids["C"],  "C",  wins: 7, ties: 0, losses: 3),
+            TestHelpers.Stats(ids["D"],  "D",  wins: 6, ties: 0, losses: 4),
+            TestHelpers.Stats(ids["GK"], "GK", wins: 5, ties: 0, losses: 5),
+        };
+
+        var strategy = new AlgorithmStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 2, IncludeGoalkeepers = true };
+
+        var result = await strategy.GenerateTeamsAsync(players, settings);
+
+        result.Options.Should().NotBeEmpty();
+
+        foreach (var opt in result.Options)
+        {
+            var unassignedIds = opt.Unassigned.Select(x => x.PlayerId).ToHashSet();
+
+            unassignedIds.Should().NotContain(ids["D"],
+                "the weakest non-GK (D) must be placed in a team as the odd player");
+
+            var teamIds = opt.TeamA.Select(x => x.PlayerId)
+                .Concat(opt.TeamB.Select(x => x.PlayerId))
+                .ToHashSet();
+
+            teamIds.Should().Contain(ids["GK"],
+                "GK must not be removed as the odd player");
+        }
+    }
+
+    [Fact]
+    public async Task EvenPlayerCount_BehaviorUnchanged()
+    {
+        // 6 players (even) — should behave exactly as before: 3v3, no odd-player logic.
+        var players = TestHelpers.Players(
+            ("A", false), ("B", false), ("C", false),
+            ("D", false), ("E", false), ("F", false));
+
+        var stats = players.Select(p => TestHelpers.Stats(p.Id, p.Name, wins: 5, ties: 0, losses: 5));
+
+        var strategy = new AlgorithmStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 3, IncludeGoalkeepers = false };
+
+        var result = await strategy.GenerateTeamsAsync(players, settings);
+
+        result.Options.Should().NotBeEmpty();
+
+        foreach (var opt in result.Options)
+        {
+            opt.TeamA.Should().HaveCount(3);
+            opt.TeamB.Should().HaveCount(3);
+            opt.Unassigned.Should().BeEmpty();
+        }
+    }
+
+    [Fact]
+    public async Task OddPlayerCount_BalanceDiffReflectsActualWeights()
+    {
+        // After odd-player placement, BalanceDiff must equal |TeamAWeight - TeamBWeight|.
+        var players = TestHelpers.Players(
+            ("A", false), ("B", false), ("C", false), ("D", false), ("E", false));
+
+        var ids = players.Select(p => p.Id).ToList();
+        var stats = new[]
+        {
+            TestHelpers.Stats(ids[0], "A", wins: 9, ties: 0, losses: 1),
+            TestHelpers.Stats(ids[1], "B", wins: 8, ties: 0, losses: 2),
+            TestHelpers.Stats(ids[2], "C", wins: 7, ties: 0, losses: 3),
+            TestHelpers.Stats(ids[3], "D", wins: 6, ties: 0, losses: 4),
+            TestHelpers.Stats(ids[4], "E", wins: 5, ties: 0, losses: 5),
+        };
+
+        var strategy = new AlgorithmStrategy(new FakeStatsService(stats));
+        var settings = new TeamGenerationSettings { PlayersPerTeam = 2, IncludeGoalkeepers = false };
+
+        var result = await strategy.GenerateTeamsAsync(players, settings);
+
+        foreach (var opt in result.Options)
+        {
+            var expectedDiff = Math.Abs(opt.TeamAWeight - opt.TeamBWeight);
+            opt.BalanceDiff.Should().BeApproximately(expectedDiff, 1e-9,
+                "BalanceDiff must equal |TeamAWeight - TeamBWeight| even after odd-player placement");
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // 13. Janela de tolerância (0.05): opção com melhor equilíbrio
     //     dimensional vence dentro da janela, mesmo com BalanceDiff
     //     levemente maior
     // ----------------------------------------------------------------
