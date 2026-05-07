@@ -438,6 +438,15 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<string>("PlayerIcon")
                         .HasColumnType("text");
 
+                    b.Property<string>("Rank1Icon")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Rank2Icon")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Rank3Icon")
+                        .HasColumnType("text");
+
                     b.Property<bool>("ShowPlayerStats")
                         .HasColumnType("boolean");
 

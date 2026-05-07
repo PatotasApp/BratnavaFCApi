@@ -46,6 +46,9 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 OwnGoalIcon    = null,
                 MvpIcon        = null,
                 PlayerIcon     = null,
+                Rank1Icon      = null,
+                Rank2Icon      = null,
+                Rank3Icon      = null,
                 MonthlyFee     = null,
                 MvpTieRule       = (int)MvpTieRule.AllMvp,
                 MvpTieMaxPlayers = 2,
@@ -76,7 +79,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 dto.DefaultDayOfWeek,
                 dto.DefaultKickoffTime);
 
-            entity.SetIcons(dto.GoalIcon, dto.GoalkeeperIcon, dto.AssistIcon, dto.OwnGoalIcon, dto.MvpIcon, dto.PlayerIcon);
+            entity.SetIcons(dto.GoalIcon, dto.GoalkeeperIcon, dto.AssistIcon, dto.OwnGoalIcon, dto.MvpIcon, dto.PlayerIcon, dto.Rank1Icon, dto.Rank2Icon, dto.Rank3Icon);
             entity.SetMonthlyFee(dto.MonthlyFee);
             if (dto.PaymentMode.HasValue)
                 entity.SetPaymentMode((PaymentMode)dto.PaymentMode.Value);
@@ -94,7 +97,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 dto.DefaultPlaceName,
                 dto.DefaultDayOfWeek,
                 dto.DefaultKickoffTime);
-            entity.SetIcons(dto.GoalIcon, dto.GoalkeeperIcon, dto.AssistIcon, dto.OwnGoalIcon, dto.MvpIcon, dto.PlayerIcon);
+            entity.SetIcons(dto.GoalIcon, dto.GoalkeeperIcon, dto.AssistIcon, dto.OwnGoalIcon, dto.MvpIcon, dto.PlayerIcon, dto.Rank1Icon, dto.Rank2Icon, dto.Rank3Icon);
             entity.SetMonthlyFee(dto.MonthlyFee);
             if (dto.PaymentMode.HasValue)
                 entity.SetPaymentMode((PaymentMode)dto.PaymentMode.Value);
@@ -121,7 +124,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 dto.DefaultPlaceName,
                 dto.DefaultDayOfWeek,
                 dto.DefaultKickoffTime);
-            existing.SetIcons(dto.GoalIcon, dto.GoalkeeperIcon, dto.AssistIcon, dto.OwnGoalIcon, dto.MvpIcon, dto.PlayerIcon);
+            existing.SetIcons(dto.GoalIcon, dto.GoalkeeperIcon, dto.AssistIcon, dto.OwnGoalIcon, dto.MvpIcon, dto.PlayerIcon, dto.Rank1Icon, dto.Rank2Icon, dto.Rank3Icon);
             existing.SetMonthlyFee(dto.MonthlyFee);
             if (dto.PaymentMode.HasValue)
                 existing.SetPaymentMode((PaymentMode)dto.PaymentMode.Value);
@@ -153,6 +156,9 @@ public sealed class GroupSettingsService : IGroupSettingsService
         OwnGoalIcon    = e.OwnGoalIcon,
         MvpIcon        = e.MvpIcon,
         PlayerIcon     = e.PlayerIcon,
+        Rank1Icon      = e.Rank1Icon,
+        Rank2Icon      = e.Rank2Icon,
+        Rank3Icon      = e.Rank3Icon,
         PaymentMode      = (int)e.PaymentMode,
         MonthlyFee       = e.MonthlyFee,
         MvpTieRule       = (int)e.MvpTieRule,

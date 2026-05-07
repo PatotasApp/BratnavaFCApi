@@ -43,6 +43,9 @@ public sealed class GroupSettingsEntity : BaseEntity
     public string? OwnGoalIcon    { get; private set; }
     public string? MvpIcon        { get; private set; }
     public string? PlayerIcon     { get; private set; }
+    public string? Rank1Icon      { get; private set; }
+    public string? Rank2Icon      { get; private set; }
+    public string? Rank3Icon      { get; private set; }
 
     // ── Pagamento ─────────────────────────────────────────────────────────────
     public PaymentMode PaymentMode { get; private set; } = PaymentMode.Monthly;
@@ -88,7 +91,10 @@ public sealed class GroupSettingsEntity : BaseEntity
         string? assistIcon,
         string? ownGoalIcon,
         string? mvpIcon,
-        string? playerIcon)
+        string? playerIcon,
+        string? rank1Icon,
+        string? rank2Icon,
+        string? rank3Icon)
     {
         GoalIcon       = goalIcon;
         GoalkeeperIcon = goalkeeperIcon;
@@ -96,6 +102,9 @@ public sealed class GroupSettingsEntity : BaseEntity
         OwnGoalIcon    = ownGoalIcon;
         MvpIcon        = mvpIcon;
         PlayerIcon     = playerIcon;
+        Rank1Icon      = rank1Icon;
+        Rank2Icon      = rank2Icon;
+        Rank3Icon      = rank3Icon;
     }
 
     private void SetPlayerLimits(int minPlayers, int maxPlayers)

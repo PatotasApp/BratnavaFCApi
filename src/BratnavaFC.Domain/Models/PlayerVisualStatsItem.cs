@@ -22,6 +22,7 @@ namespace BratnavaFC.Domain.Models
         public double WinRate { get; init; }
 
         public int Mvps { get; init; }
+        public int MvpVotes { get; init; }
 
         public int Goals { get; init; }
         public int Assists { get; init; }

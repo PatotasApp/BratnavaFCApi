@@ -146,6 +146,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
             .Where(m => m.GroupId == groupId && m.Status == MatchStatus.Finalized)
             .Include(m => m.Players)
             .Include(m => m.Goals)
+            .Include(m => m.Votes)
             .ToListAsync(cancellationToken);
 
         var matchesFiltered = matches
@@ -163,7 +164,22 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
         var perPlayer = InitializePlayerAccumulators(playerIds);
         var mvpCounts = playerIds.ToDictionary(id => id, _ => 0);
+        var mvpVoteCounts = playerIds.ToDictionary(id => id, _ => 0);
         var pairTotals = new Dictionary<PairKey, PairAccumulator>();
+
+        foreach (var x in matchesFiltered)
+        {
+            var mpIdToPlayerId = x.Match.Players
+                .Where(mp => playerIds.Contains(mp.PlayerId))
+                .ToDictionary(mp => mp.Id, mp => mp.PlayerId);
+
+            foreach (var vote in x.Match.Votes ?? [])
+            {
+                if (mpIdToPlayerId.TryGetValue(vote.VotedForId, out var votedPlayerId)
+                    && mvpVoteCounts.ContainsKey(votedPlayerId))
+                    mvpVoteCounts[votedPlayerId]++;
+            }
+        }
 
         foreach (var x in matchesFiltered)
         {
@@ -205,6 +221,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
                 WinRate = winRate,
 
                 Mvps = mvpCounts.TryGetValue(pl.Id, out var mvps) ? mvps : 0,
+                MvpVotes = mvpVoteCounts.TryGetValue(pl.Id, out var votes) ? votes : 0,
 
                 Goals    = acc.Goals,
                 Assists  = acc.Assists,
