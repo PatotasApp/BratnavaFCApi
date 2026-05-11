@@ -378,7 +378,10 @@ app.UseMiddleware<AuditMiddleware>();
 // =====================
 // HANGFIRE DASHBOARD + JOBS
 // =====================
-app.UseHangfireDashboard("/hangfire");
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization = [ new AllowAllConnectionsFilter() ]
+});
 
 // AddOrUpdate is called on every startup — idempotent.
 // Creates the job on first deploy; updates cron/method on subsequent deploys if changed.
