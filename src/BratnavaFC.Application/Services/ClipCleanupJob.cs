@@ -24,6 +24,8 @@ public sealed class ClipCleanupJob : IClipCleanupJob
 
     public async Task ExecuteAsync(CancellationToken ct)
     {
+        _logger.LogInformation("ClipCleanupJob: starting");
+
         var candidates = await _db.ReplayClips
             .Where(c =>
                 !_db.ReplayLikes.Any(l => l.ClipId == c.Id) &&
