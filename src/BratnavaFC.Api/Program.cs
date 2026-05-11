@@ -385,7 +385,9 @@ if (app.Environment.IsDevelopment())
 
 // AddOrUpdate is called on every startup — idempotent.
 // Creates the job on first deploy; updates cron/method on subsequent deploys if changed.
-RecurringJob.AddOrUpdate<IClipCleanupJob>(
+// IRecurringJobManager must be used instead of the static RecurringJob API in ASP.NET Core.
+var recurringJobs = app.Services.GetRequiredService<IRecurringJobManager>();
+recurringJobs.AddOrUpdate<IClipCleanupJob>(
     recurringJobId: "clip-r2-cleanup",
     methodCall: job => job.ExecuteAsync(CancellationToken.None),
     cronExpression: "0 3 1,15 * *",
