@@ -21,6 +21,8 @@ using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
+using Hangfire;
+using Hangfire.PostgreSql;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -143,6 +145,23 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 
 // =====================
+// HANGFIRE
+// =====================
+builder.Services.AddHangfire(config => config
+    .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+    .UseSimpleAssemblyNameTypeSerializer()
+    .UseRecommendedSerializerSettings()
+    .UsePostgreSqlStorage(options =>
+        options.UseNpgsqlConnection(connectionString!)));
+
+builder.Services.AddHangfireServer(options =>
+{
+    options.WorkerCount = 2;
+    options.Queues      = ["default"];
+});
+
+
+// =====================
 // DEPENDENCY INJECTION
 // =====================
 builder.Services.AddScoped(typeof(IRepositoryBase<>), typeof(RepositoryBase<>));
@@ -163,6 +182,7 @@ builder.Services.AddScoped<IPushService, PushService>();
 builder.Services.AddScoped<IAbsenceService, AbsenceService>();
 builder.Services.AddScoped<IBetService, BetService>();
 builder.Services.AddScoped<IMatchCardService, MatchCardService>();
+builder.Services.AddScoped<IClipCleanupJob, ClipCleanupJob>();
 
 // =====================
 // FIREBASE ADMIN
@@ -355,5 +375,21 @@ app.UseAuthorization();
 app.UseMiddleware<AuditMiddleware>();
 
 app.MapControllers();
+
+// =====================
+// HANGFIRE DASHBOARD + JOBS
+// =====================
+if (app.Environment.IsDevelopment())
+{
+    app.UseHangfireDashboard("/hangfire");
+}
+
+// AddOrUpdate is called on every startup — idempotent.
+// Creates the job on first deploy; updates cron/method on subsequent deploys if changed.
+RecurringJob.AddOrUpdate<IClipCleanupJob>(
+    recurringJobId: "clip-r2-cleanup",
+    methodCall: job => job.ExecuteAsync(CancellationToken.None),
+    cronExpression: "0 3 1,15 * *",
+    options: new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
 
 app.Run();
