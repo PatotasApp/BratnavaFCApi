@@ -153,12 +153,17 @@ builder.Services.AddHangfire(config => config
     .UseRecommendedSerializerSettings()
     .UsePostgreSqlStorage(
         options => options.UseNpgsqlConnection(connectionString!),
-        new PostgreSqlStorageOptions { SchemaName = "hangfire" }));
+        new PostgreSqlStorageOptions
+        {
+            SchemaName        = "hangfire",
+            QueuePollInterval = TimeSpan.FromHours(1)
+        }));
 
 builder.Services.AddHangfireServer(options =>
 {
-    options.WorkerCount = 1;
-    options.Queues      = ["default"];
+    options.WorkerCount             = 1;
+    options.Queues                  = ["default"];
+    options.SchedulePollingInterval = TimeSpan.FromHours(1);
 });
 
 
