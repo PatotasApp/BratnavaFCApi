@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\github\\\\BratnavaFCApi\" -Recurse -Filter \"*.sln\" -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -First 10)",
+      "Bash(dotnet restore *)",
+      "Bash(rtk git *)",
+      "Bash(rtk ls *)",
+      "Bash(rtk dotnet *)",
+      "Bash(rtk grep *)",
+      "Bash(rtk find *)",
+      "Bash(dotnet test *)"
+    ]
+  }
+}

@@ -151,8 +151,9 @@ builder.Services.AddHangfire(config => config
     .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
     .UseSimpleAssemblyNameTypeSerializer()
     .UseRecommendedSerializerSettings()
-    .UsePostgreSqlStorage(options =>
-        options.UseNpgsqlConnection(connectionString!)));
+    .UsePostgreSqlStorage(
+        options => options.UseNpgsqlConnection(connectionString!),
+        new PostgreSqlStorageOptions { SchemaName = "hangfire" }));
 
 builder.Services.AddHangfireServer(options =>
 {
