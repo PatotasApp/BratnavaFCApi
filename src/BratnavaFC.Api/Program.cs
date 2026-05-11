@@ -380,7 +380,7 @@ app.UseMiddleware<AuditMiddleware>();
 // =====================
 app.UseHangfireDashboard("/hangfire", new DashboardOptions
 {
-    Authorization = [ new AllowAllConnectionsFilter() ]
+    Authorization = []
 });
 
 // AddOrUpdate is called on every startup — idempotent.
