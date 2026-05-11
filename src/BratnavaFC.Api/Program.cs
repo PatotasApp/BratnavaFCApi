@@ -156,7 +156,7 @@ builder.Services.AddHangfire(config => config
 
 builder.Services.AddHangfireServer(options =>
 {
-    options.WorkerCount = 2;
+    options.WorkerCount = 1;
     options.Queues      = ["default"];
 });
 
@@ -374,8 +374,6 @@ app.UseAuthorization();
 // Deve vir APÓS UseAuthentication para que User.FindFirstValue("sub") funcione
 app.UseMiddleware<AuditMiddleware>();
 
-app.MapControllers();
-
 // =====================
 // HANGFIRE DASHBOARD + JOBS
 // =====================
@@ -391,5 +389,7 @@ RecurringJob.AddOrUpdate<IClipCleanupJob>(
     methodCall: job => job.ExecuteAsync(CancellationToken.None),
     cronExpression: "0 3 1,15 * *",
     options: new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+app.MapControllers();
 
 app.Run();
