@@ -78,6 +78,12 @@ public class PlayerEntity : InactivatableEntity
         IsGuest = isGuest;
     }
 
+    /// <summary>Desvincula a conta de usuário — converte para convidado sem conta associada.</summary>
+    public void ClearUser()
+    {
+        UserId = null;
+    }
+
     /// <summary>Marca a data de entrada como mensalista. Chamado ao aceitar o convite.</summary>
     public void SetJoinedAt(DateTime joinedAt)
     {

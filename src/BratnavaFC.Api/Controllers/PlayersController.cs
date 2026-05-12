@@ -3,6 +3,7 @@ using BratnavaFC.Domain.Dtos.Players;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace BratnavaFC.Api.Controllers;
@@ -63,6 +64,29 @@ public class PlayersController : GroupAuthorizedController
     public async Task<IActionResult> ReactivateAsync(Guid playerId, CancellationToken cancellationToken)
     {
         var result = await _playerService.ReactivateAsync(playerId, cancellationToken);
+        return ToResponse(result);
+    }
+
+    /// <summary>
+    /// Remove um mensalista da patota: desvincula a conta e converte para convidado.
+    /// Requer permissão de admin do grupo.
+    /// </summary>
+    [HttpPost("{playerId:guid}/remove-from-group")]
+    [Authorize(Roles = "User,Admin,GodMode")]
+    public async Task<IActionResult> RemoveFromGroup(Guid playerId, CancellationToken cancellationToken)
+    {
+        // Resolve o groupId do jogador para verificar autorização
+        var groupId = await _db.Players
+            .Where(p => p.Id == playerId)
+            .Select(p => (Guid?)p.GroupId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (groupId == null) return NotFound();
+
+        if (!await IsAuthorizedForGroupAsync(groupId.Value, _db, cancellationToken))
+            return Forbid();
+
+        var result = await _playerService.RemoveFromGroupAsync(playerId, cancellationToken);
         return ToResponse(result);
     }
 

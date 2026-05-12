@@ -235,6 +235,7 @@ public class PlayerService : IPlayerService
         var groupId    = player.GroupId;
 
         player.SetIsGuest(true);
+        player.ClearUser();
 
         _repository.Update(player);
         await _repository.SaveChangesAsync(cancellationToken);
@@ -301,6 +302,29 @@ public class PlayerService : IPlayerService
         return Result<IReadOnlyList<BirthdayStatusDto>>.Ok(result);
     }
 
+    public async Task<Result> RemoveFromGroupAsync(Guid playerId, CancellationToken cancellationToken)
+    {
+        var player = await _repository.GetByIdIncludingInactiveAsync(playerId, cancellationToken);
+        if (player == null)
+            return Result.Fail("Jogador não encontrado.", ResultStatus.NotFound);
+
+        if (player.IsGuest && player.UserId == null)
+            return Result.Fail("Jogador já é convidado sem conta vinculada.", ResultStatus.BadRequest);
+
+        var playerName = player.Name;
+        var groupId    = player.GroupId;
+
+        player.SetIsGuest(true);
+        player.ClearUser();
+
+        _repository.Update(player);
+        await _repository.SaveChangesAsync(cancellationToken);
+
+        await NotifyAdminsPlayerRemovedAsync(groupId, playerName, cancellationToken);
+
+        return Result.Ok("Jogador removido da patota.");
+    }
+
     // ── Notificações ──────────────────────────────────────────────────────────
 
     private Task NotifyAdminsPlayerLeftAsync(Guid groupId, string playerName, CancellationToken ct) =>
@@ -309,6 +333,14 @@ public class PlayerService : IPlayerService
             title: "Jogador saiu do grupo",
             body:  $"{playerName} saiu do grupo.",
             data:  new Dictionary<string, string> { ["type"] = "player_left", ["groupId"] = groupId.ToString() },
+            ct);
+
+    private Task NotifyAdminsPlayerRemovedAsync(Guid groupId, string playerName, CancellationToken ct) =>
+        _push.SendToGroupAdminsAsync(
+            groupId,
+            title: "Jogador removido da patota",
+            body:  $"{playerName} foi removido e voltou a ser convidado.",
+            data:  new Dictionary<string, string> { ["type"] = "player_removed", ["groupId"] = groupId.ToString() },
             ct);
 
     // ── Mapeamento ────────────────────────────────────────────────────────────
