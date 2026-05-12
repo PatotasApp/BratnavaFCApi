@@ -254,6 +254,71 @@ public class PollEntityTests
 
         poll.AllowMultipleVotes.Should().BeTrue();
     }
+
+    // ── SetDeadline ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public void SetDeadline_ShouldSetDateAndTime()
+    {
+        var poll = MakePoll();
+        var date = new DateOnly(2030, 8, 15);
+        var time = new TimeOnly(21, 0);
+
+        poll.SetDeadline(date, time);
+
+        poll.DeadlineDate.Should().Be(date);
+        poll.DeadlineTime.Should().Be(time);
+    }
+
+    [Fact]
+    public void SetDeadline_DateOnly_ShouldSetDateAndLeaveTimeNull()
+    {
+        var poll = MakePoll();
+
+        poll.SetDeadline(new DateOnly(2030, 1, 1), null);
+
+        poll.DeadlineDate.Should().Be(new DateOnly(2030, 1, 1));
+        poll.DeadlineTime.Should().BeNull();
+    }
+
+    [Fact]
+    public void SetDeadline_WithNullDate_ShouldClearBothFields()
+    {
+        var future = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(5));
+        var poll = MakePoll(deadlineDate: future, deadlineTime: new TimeOnly(12, 0));
+
+        poll.SetDeadline(null, null);
+
+        poll.DeadlineDate.Should().BeNull();
+        poll.DeadlineTime.Should().BeNull();
+    }
+
+    [Fact]
+    public void SetDeadline_ShouldReplaceExistingDeadline()
+    {
+        var old = new DateOnly(2025, 1, 1);
+        var poll = MakePoll(deadlineDate: old, deadlineTime: new TimeOnly(18, 0));
+        var newDate = new DateOnly(2030, 6, 30);
+        var newTime = new TimeOnly(23, 59);
+
+        poll.SetDeadline(newDate, newTime);
+
+        poll.DeadlineDate.Should().Be(newDate);
+        poll.DeadlineTime.Should().Be(newTime);
+    }
+
+    [Fact]
+    public void SetDeadline_ShouldNotAffectOtherFields()
+    {
+        var poll = MakePoll(allowMultiple: true, showVotes: true, status: "open");
+
+        poll.SetDeadline(new DateOnly(2030, 3, 1), null);
+
+        poll.Title.Should().Be("Título teste");
+        poll.AllowMultipleVotes.Should().BeTrue();
+        poll.ShowVotes.Should().BeTrue();
+        poll.Status.Should().Be("open");
+    }
 }
 
 // ── PollOptionEntity ──────────────────────────────────────────────────────────

@@ -122,4 +122,61 @@ public class PlayerEntityTests
 
         p.IsGuest.Should().BeTrue();
     }
+
+    // ─── ClearUser ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void ClearUser_ShouldSetUserIdToNull()
+    {
+        var userId = Guid.NewGuid();
+        var p = new PlayerEntity("Fulano", userId, Guid.NewGuid(), 0m, false, false, Status.Active);
+
+        p.UserId.Should().Be(userId, "UserId deve estar preenchido antes do clear.");
+
+        p.ClearUser();
+
+        p.UserId.Should().BeNull("ClearUser deve zerar o vínculo com a conta.");
+    }
+
+    [Fact]
+    public void ClearUser_WhenAlreadyNull_ShouldRemainNull()
+    {
+        // Convidado criado sem conta
+        var p = new PlayerEntity("Visitante", null, Guid.NewGuid(), 0m, false, true, Status.Active);
+
+        p.ClearUser();
+
+        p.UserId.Should().BeNull("Chamadas repetidas de ClearUser devem ser idempotentes.");
+    }
+
+    [Fact]
+    public void ClearUser_ShouldNotAffectOtherFields()
+    {
+        var userId  = Guid.NewGuid();
+        var groupId = Guid.NewGuid();
+        var p = new PlayerEntity("Caio", userId, groupId, 8m, true, false, Status.Active);
+
+        p.ClearUser();
+
+        p.Name.Should().Be("Caio");
+        p.GroupId.Should().Be(groupId);
+        p.SkillPoints.Should().Be(8m);
+        p.IsGoalkeeper.Should().BeTrue();
+        p.Status.Should().Be(Status.Active);
+    }
+
+    [Fact]
+    public void ClearUser_AfterSetUser_ShouldClearAgain()
+    {
+        var groupId = Guid.NewGuid();
+        var p = new PlayerEntity("Caio", null, groupId, 0m, false, true, Status.Active);
+
+        var newUserId = Guid.NewGuid();
+        p.SetUser(newUserId);
+        p.UserId.Should().Be(newUserId);
+
+        p.ClearUser();
+
+        p.UserId.Should().BeNull("ClearUser após SetUser deve funcionar corretamente.");
+    }
 }
