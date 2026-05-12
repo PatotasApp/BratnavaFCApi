@@ -54,6 +54,14 @@ public class PollEntity : BaseEntity
         UpdateDate = DateTime.UtcNow;
     }
 
+    /// <summary>Substitui integralmente o prazo (incluindo null para remover).</summary>
+    public void SetDeadline(DateOnly? deadlineDate, TimeOnly? deadlineTime)
+    {
+        DeadlineDate = deadlineDate;
+        DeadlineTime = deadlineTime;
+        UpdateDate   = DateTime.UtcNow;
+    }
+
     public void Close() { Status = "closed"; UpdateDate = DateTime.UtcNow; }
     public void Reopen() { Status = "open"; UpdateDate = DateTime.UtcNow; }
 

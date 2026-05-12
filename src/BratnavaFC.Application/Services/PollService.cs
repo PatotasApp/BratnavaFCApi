@@ -520,6 +520,38 @@ public sealed class PollService : IPollService
         }
     }
 
+    public async Task<Result> UpdateDeadlineAsync(Guid groupId, Guid pollId, UpdatePollDeadlineDto dto, CancellationToken ct = default)
+    {
+        try
+        {
+            var poll = await _db.Polls.FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
+            if (poll is null) return Result.Fail("Votação não encontrada.");
+
+            if (dto.ClearDeadline)
+            {
+                poll.SetDeadline(null, null);
+            }
+            else
+            {
+                DateOnly? deadlineDate = dto.DeadlineDate is not null && DateOnly.TryParse(dto.DeadlineDate, out var dd) ? dd : null;
+                TimeOnly? deadlineTime = dto.DeadlineTime is not null && TimeOnly.TryParse(dto.DeadlineTime, out var dt) ? dt : null;
+                poll.SetDeadline(deadlineDate, deadlineTime);
+            }
+
+            // Se estava encerrada manualmente, reabrir — não faz sentido estender
+            // (ou remover) o prazo e manter a votação fechada.
+            if (poll.Status == "closed")
+                poll.Reopen();
+
+            await _db.SaveChangesAsync(ct);
+            return Result.Ok();
+        }
+        catch (Exception ex)
+        {
+            return Result.Fail(ex.Message);
+        }
+    }
+
     // ── Notificações ──────────────────────────────────────────────────────────
 
     private Task NotifyPollCreatedAsync(Guid groupId, Guid pollId, string title, CancellationToken ct) =>

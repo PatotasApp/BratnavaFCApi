@@ -91,6 +91,15 @@ public sealed class PollsController : GroupAuthorizedController
         return ToResponse(result);
     }
 
+    // PATCH /api/Polls/group/{groupId}/{pollId}/deadline
+    [HttpPatch("group/{groupId:guid}/{pollId:guid}/deadline")]
+    public async Task<IActionResult> UpdateDeadline(Guid groupId, Guid pollId, [FromBody] UpdatePollDeadlineDto dto, CancellationToken ct)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        var result = await _polls.UpdateDeadlineAsync(groupId, pollId, dto, ct);
+        return ToResponse(result);
+    }
+
     // DELETE /api/Polls/group/{groupId}/{pollId}
     [HttpDelete("group/{groupId:guid}/{pollId:guid}")]
     public async Task<IActionResult> DeletePoll(Guid groupId, Guid pollId, CancellationToken ct)

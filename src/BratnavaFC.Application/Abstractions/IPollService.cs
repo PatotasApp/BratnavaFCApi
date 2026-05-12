@@ -19,4 +19,5 @@ public interface IPollService
     Task<Result<PollDto>> CastVoteAsync(Guid groupId, Guid pollId, Guid playerId, CastVoteDto dto, bool isAdmin = false, CancellationToken ct = default);
     Task<Result<PollDto>> RemoveVoteAsync(Guid groupId, Guid pollId, Guid playerId, bool isAdmin = false, CancellationToken ct = default);
     Task<Result<PollDto>> AdminCastVoteAsync(Guid groupId, Guid pollId, AdminCastVoteDto dto, CancellationToken ct = default);
+    Task<Result> UpdateDeadlineAsync(Guid groupId, Guid pollId, UpdatePollDeadlineDto dto, CancellationToken ct = default);
 }
