@@ -61,5 +61,36 @@ public sealed class R2ReplayUrlService : IReplayUrlService, IDisposable
         }, ct);
     }
 
+    public async Task<string> UploadObjectAsync(string objectKey, Stream content, string contentType, CancellationToken ct)
+    {
+        // Cloudflare R2 não suporta STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER.
+        // Bufferizar em MemoryStream garante que o SDK conhece o Content-Length
+        // antecipadamente e usa assinatura padrão em vez de chunked com trailer.
+        MemoryStream buffer;
+        if (content is MemoryStream ms)
+        {
+            buffer = ms;
+        }
+        else
+        {
+            buffer = new MemoryStream();
+            await content.CopyToAsync(buffer, ct);
+            buffer.Position = 0;
+        }
+
+        var response = await _client.PutObjectAsync(new PutObjectRequest
+        {
+            BucketName       = _bucketName,
+            Key              = objectKey,
+            InputStream      = buffer,
+            ContentType      = contentType,
+            UseChunkEncoding = false,
+        }, ct);
+
+        return response.ETag ?? string.Empty;
+    }
+
+    public string BucketName => _bucketName;
+
     public void Dispose() => _client.Dispose();
 }

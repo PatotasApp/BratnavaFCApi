@@ -490,6 +490,38 @@ public class MatchesController : GroupAuthorizedController
         return NoContent();
     }
 
+    /// <summary>Upload manual de vídeo para uma partida (admin only).</summary>
+    [HttpPost("group/{groupId:guid}/{matchId:guid}/replays/upload")]
+    [RequestSizeLimit(500 * 1024 * 1024)] // 500 MB
+    [RequestFormLimits(MultipartBodyLengthLimit = 500 * 1024 * 1024)]
+    public async Task<IActionResult> UploadReplay(
+        [FromRoute] Guid groupId,
+        [FromRoute] Guid matchId,
+        [FromForm] IFormFile file,
+        [FromForm] string eventType,
+        CancellationToken ct)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        if (file is null || file.Length == 0)
+            return BadRequest(new { error = "Nenhum arquivo enviado." });
+
+        var allowedTypes = new[] { "video/mp4", "video/quicktime", "video/webm", "video/x-msvideo" };
+        if (!allowedTypes.Contains(file.ContentType.ToLowerInvariant()))
+            return BadRequest(new { error = "Formato de vídeo não suportado. Use MP4, MOV, WebM ou AVI." });
+
+        await using var stream = file.OpenReadStream();
+        var result = await _service.UploadReplayAsync(
+            groupId, matchId, userId.Value,
+            stream, file.ContentType, file.FileName,
+            eventType, ct);
+
+        return ToResponse(result);
+    }
+
     [EnableRateLimiting("PerUser")]
     [HttpGet("group/{groupId:guid}/{matchId:guid}/goals")]
     public async Task<IActionResult> GetGoals(Guid groupId, Guid matchId, CancellationToken cancellationToken)

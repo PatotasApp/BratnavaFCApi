@@ -83,4 +83,5 @@ public interface IMatchService
     Task<Result<List<LikedReplayClipDto>>> GetMyLikesAsync(Guid groupId, Guid userId, CancellationToken ct);
     Task<Result<List<LikedReplayClipDto>>> GetMyFavoritesAsync(Guid groupId, Guid userId, CancellationToken ct);
     Task DeleteReplayAsync(Guid groupId, Guid clipId, CancellationToken ct);
+    Task<Result<ReplayClipDto>> UploadReplayAsync(Guid groupId, Guid matchId, Guid userId, Stream content, string contentType, string fileName, string eventType, CancellationToken ct);
 }

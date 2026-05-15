@@ -2228,4 +2228,61 @@ public sealed class MatchService : IMatchService
         try { await _replayUrls.DeleteObjectAsync(clip.ObjectKey, ct); }
         catch { /* ignorar falha de R2 */ }
     }
+
+    public async Task<Result<ReplayClipDto>> UploadReplayAsync(
+        Guid groupId, Guid matchId, Guid userId,
+        Stream content, string contentType, string fileName,
+        string eventType, CancellationToken ct)
+    {
+        // Valida que a partida pertence ao grupo e que o usuário é admin
+        var match = await _context.Matches
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct);
+
+        if (match is null)
+            return Result<ReplayClipDto>.Fail("Partida não encontrada.");
+
+        if (!Enum.TryParse<MatchEventType>(eventType, ignoreCase: true, out var parsedEventType))
+            return Result<ReplayClipDto>.Fail("Tipo de evento inválido. Use 'Gol' ou 'Jogada'.");
+
+        var ext      = Path.GetExtension(fileName).ToLowerInvariant();
+        var safeExt  = ext is ".mp4" or ".mov" or ".webm" or ".avi" ? ext : ".mp4";
+        var subpasta = parsedEventType == MatchEventType.Gol ? "gols" : "jogadas";
+        var objectKey = $"{groupId}/{matchId}/{subpasta}/{Guid.NewGuid()}{safeExt}";
+
+        string etag;
+        try
+        {
+            etag = await _replayUrls.UploadObjectAsync(objectKey, content, contentType, ct);
+        }
+        catch (Exception ex)
+        {
+            return Result<ReplayClipDto>.Fail($"Falha ao enviar vídeo para o storage: {ex.Message}");
+        }
+
+        var clip = new ReplayClipEntity(
+            groupId,
+            matchId,
+            _replayUrls.BucketName,
+            objectKey,
+            contentType,
+            etag,
+            DateTimeOffset.UtcNow,
+            parsedEventType);
+
+        _context.ReplayClips.Add(clip);
+        await _context.SaveChangesAsync(ct);
+
+        var dto = new ReplayClipDto(
+            clip.Id,
+            clip.ObjectKey,
+            _replayUrls.GeneratePresignedUrl(clip.ObjectKey),
+            clip.EventType.ToString(),
+            clip.RecordedAt,
+            LikeCount:       0,
+            IsLikedByMe:     false,
+            IsFavoritedByMe: false);
+
+        return Result<ReplayClipDto>.Ok(dto);
+    }
 }
