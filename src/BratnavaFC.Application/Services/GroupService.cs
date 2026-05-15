@@ -32,12 +32,18 @@ public class GroupService : IGroupService
     {
         try
         {
-            var adminsExist = await _context.Users.AnyAsync(u => request.UserAdminIds.Contains(u.Id), cancellationToken);
-            if (!adminsExist)
+            var creator = await _context.Users
+                .FirstOrDefaultAsync(u => u.Id == request.CreatedByUserId, cancellationToken);
+
+            if (creator == null)
                 return Result<Guid>.Fail("Usuário administrador não encontrado.", ResultStatus.NotFound);
 
             var group = new GroupEntity(request.Name, request.ScheduleMatchDate, request.CreatedByUserId);
             group.SetAdmins(request.UserAdminIds);
+
+            var creatorName = $"{creator.FirstName} {creator.LastName}".Trim();
+            var creatorPlayer = new PlayerEntity(creatorName, creator.Id, group.Id, 0, false, false, Status.Active);
+            _context.Players.Add(creatorPlayer);
 
             _repository.Add(group);
             await _repository.SaveChangesAsync(cancellationToken);
