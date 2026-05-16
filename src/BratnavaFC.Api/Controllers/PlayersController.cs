@@ -126,6 +126,28 @@ public class PlayersController : GroupAuthorizedController
         return ToResponse(result);
     }
 
+    /// <summary>
+    /// Alterna a posição de um jogador entre goleiro e jogador de linha.
+    /// Requer permissão de admin do grupo.
+    /// </summary>
+    [HttpPatch("{playerId:guid}/toggle-goalkeeper")]
+    [Authorize(Roles = "User,Admin,GodMode")]
+    public async Task<IActionResult> ToggleGoalkeeper(Guid playerId, CancellationToken cancellationToken)
+    {
+        var groupId = await _db.Players
+            .Where(p => p.Id == playerId)
+            .Select(p => (Guid?)p.GroupId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (groupId == null) return NotFound();
+
+        if (!await IsAuthorizedForGroupAsync(groupId.Value, _db, cancellationToken))
+            return Forbid();
+
+        var result = await _playerService.ToggleGoalkeeperAsync(playerId, cancellationToken);
+        return ToResponse(result);
+    }
+
     private Guid GetUserIdOrThrow()
     {
         // padrão

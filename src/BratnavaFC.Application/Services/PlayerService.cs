@@ -343,6 +343,20 @@ public class PlayerService : IPlayerService
             data:  new Dictionary<string, string> { ["type"] = "player_removed", ["groupId"] = groupId.ToString() },
             ct);
 
+    // ── Toggle goleiro/linha ──────────────────────────────────────────────────
+
+    public async Task<Result<PlayerDto>> ToggleGoalkeeperAsync(Guid playerId, CancellationToken cancellationToken)
+    {
+        var player = await _repository.GetByIdAsync(playerId, cancellationToken);
+        if (player == null)
+            return Result<PlayerDto>.Fail("Jogador não encontrado.", ResultStatus.NotFound);
+
+        player.SetGoalkeeper(!player.IsGoalkeeper);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return Result<PlayerDto>.Ok(MapToDto(player));
+    }
+
     // ── Mapeamento ────────────────────────────────────────────────────────────
 
     private static PlayerDto MapToDto(PlayerEntity player) => new(
