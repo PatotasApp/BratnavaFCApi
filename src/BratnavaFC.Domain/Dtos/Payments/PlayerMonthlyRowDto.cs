@@ -2,9 +2,10 @@ namespace BratnavaFC.Domain.Dtos.Payments;
 
 public sealed class PlayerMonthlyRowDto
 {
-    public Guid   PlayerId   { get; init; }
-    public Guid?  UserId     { get; init; }
-    public string PlayerName { get; init; } = string.Empty;
+    public Guid   PlayerId     { get; init; }
+    public Guid?  UserId       { get; init; }
+    public string PlayerName   { get; init; } = string.Empty;
+    public bool   IsGoalkeeper { get; init; }
 
     /// <summary>Ano em que o jogador entrou na patota.</summary>
     public int JoinedYear  { get; init; }

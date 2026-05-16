@@ -41,7 +41,7 @@ public sealed class PaymentService : IPaymentService
                      && p.UserId != null
                      && p.Status == Status.Active)
             .OrderBy(p => p.Name)
-            .Select(p => new { p.Id, p.Name, p.UserId, JoinDate = p.JoinedAt ?? p.CreateDate })
+            .Select(p => new { p.Id, p.Name, p.UserId, p.IsGoalkeeper, JoinDate = p.JoinedAt ?? p.CreateDate })
             .ToListAsync(ct);
 
         if (players.Count == 0)
@@ -61,8 +61,9 @@ public sealed class PaymentService : IPaymentService
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.GroupId == groupId, ct);
 
-        var recordMap  = records.ToLookup(r => (r.PlayerId, r.Month));
-        var monthlyFee = settings?.MonthlyFee;
+        var recordMap        = records.ToLookup(r => (r.PlayerId, r.Month));
+        var monthlyFee       = settings?.MonthlyFee;
+        var goalkeeperFee    = settings?.GoalkeeperMonthlyFee;
 
         // Só exibe meses até o atual (ano corrente) — meses futuros não são pendências
         var today    = DateTime.UtcNow;
@@ -82,12 +83,16 @@ public sealed class PaymentService : IPaymentService
             var months = Enumerable.Range(firstMonth, count).Select(m =>
             {
                 var rec = recordMap[(p.Id, m)].FirstOrDefault();
+                var effectiveFee = p.IsGoalkeeper
+                    ? (goalkeeperFee ?? monthlyFee ?? 0)
+                    : (monthlyFee ?? 0);
+
                 return rec is null
                     ? new MonthlyPaymentCellDto
                     {
                         Month  = m,
                         Status = PaymentStatus.Pending,
-                        Amount = monthlyFee ?? 0,
+                        Amount = effectiveFee,
                     }
                     : new MonthlyPaymentCellDto
                     {
@@ -104,20 +109,22 @@ public sealed class PaymentService : IPaymentService
 
             return new PlayerMonthlyRowDto
             {
-                PlayerId   = p.Id,
-                UserId     = p.UserId,
-                PlayerName = p.Name,
-                JoinedYear = joinYear,
-                JoinedMonth= joinMonth,
-                Months     = months,
+                PlayerId     = p.Id,
+                UserId       = p.UserId,
+                PlayerName   = p.Name,
+                IsGoalkeeper = p.IsGoalkeeper,
+                JoinedYear   = joinYear,
+                JoinedMonth  = joinMonth,
+                Months       = months,
             };
         }).ToArray();
 
         return Result<MonthlyGridDto>.Ok(new MonthlyGridDto
         {
-            Year       = year,
-            MonthlyFee = monthlyFee,
-            Players    = rows,
+            Year                 = year,
+            MonthlyFee           = monthlyFee,
+            GoalkeeperMonthlyFee = goalkeeperFee,
+            Players              = rows,
         });
     }
 
@@ -133,19 +140,22 @@ public sealed class PaymentService : IPaymentService
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.GroupId == groupId, ct);
 
-        var fee = settings?.MonthlyFee ?? 0m;
+        var linePlayerFee  = settings?.MonthlyFee ?? 0m;
+        var goalkeeperFee2 = settings?.GoalkeeperMonthlyFee;
 
         // Mensalistas = ativos, não-guest, com UserId
-        var playerIds = await _context.Players
+        var players = await _context.Players
             .AsNoTracking()
             .Where(p => p.GroupId == groupId
                      && !p.IsGuest
                      && p.UserId != null
                      && p.Status == Status.Active)
-            .Select(p => p.Id)
+            .Select(p => new { p.Id, p.IsGoalkeeper })
             .ToListAsync(ct);
 
-        if (playerIds.Count == 0) return Result<(int Created, int Skipped)>.Ok((0, 0));
+        if (players.Count == 0) return Result<(int Created, int Skipped)>.Ok((0, 0));
+
+        var playerIds = players.Select(p => p.Id).ToList();
 
         // Quais já têm registro?
         var existing = await _context.MonthlyPayments
@@ -158,15 +168,17 @@ public sealed class PaymentService : IPaymentService
             .ToListAsync(ct);
 
         var existingSet = existing.ToHashSet();
-        var toCreate = playerIds.Where(id => !existingSet.Contains(id)).ToList();
+        var toCreate = players.Where(p => !existingSet.Contains(p.Id)).ToList();
 
         if (toCreate.Count > 0)
         {
-            var now = DateTime.UtcNow;
-            foreach (var playerId in toCreate)
+            foreach (var player in toCreate)
             {
+                var fee = player.IsGoalkeeper
+                    ? (goalkeeperFee2 ?? linePlayerFee)
+                    : linePlayerFee;
                 var record = new MonthlyPaymentEntity(
-                    groupId, playerId, year, month, fee);
+                    groupId, player.Id, year, month, fee);
                 await _context.MonthlyPayments.AddAsync(record, ct);
             }
             await _context.SaveChangesAsync(ct);
@@ -221,13 +233,17 @@ public sealed class PaymentService : IPaymentService
 
         if (record is null)
         {
-            record = new MonthlyPaymentEntity(
-                groupId,
-                dto.PlayerId,
-                dto.Year,
-                dto.Month,
-                settings?.MonthlyFee ?? 0);
+            var isGoalkeeper = await _context.Players
+                .AsNoTracking()
+                .Where(p => p.Id == dto.PlayerId)
+                .Select(p => p.IsGoalkeeper)
+                .FirstOrDefaultAsync(ct);
 
+            var fee = isGoalkeeper
+                ? (settings?.GoalkeeperMonthlyFee ?? settings?.MonthlyFee ?? 0)
+                : (settings?.MonthlyFee ?? 0);
+
+            record = new MonthlyPaymentEntity(groupId, dto.PlayerId, dto.Year, dto.Month, fee);
             await _context.MonthlyPayments.AddAsync(record, ct);
         }
 
@@ -447,7 +463,7 @@ public sealed class PaymentService : IPaymentService
                      && p.UserId  == userId
                      && !p.IsGuest
                      && p.Status  == Status.Active)
-            .Select(p => new { p.Id, p.Name, p.UserId, JoinDate = p.JoinedAt ?? p.CreateDate })
+            .Select(p => new { p.Id, p.Name, p.UserId, p.IsGoalkeeper, JoinDate = p.JoinedAt ?? p.CreateDate })
             .FirstOrDefaultAsync(ct);
 
         if (player is null) return Result<PlayerMonthlyRowDto?>.Ok(null);
@@ -463,8 +479,9 @@ public sealed class PaymentService : IPaymentService
                      && m.Year     == year)
             .ToListAsync(ct);
 
-        var recordMap  = records.ToLookup(r => r.Month);
-        var monthlyFee = settings?.MonthlyFee;
+        var recordMap     = records.ToLookup(r => r.Month);
+        var monthlyFee    = settings?.MonthlyFee;
+        var goalkeeperFee = settings?.GoalkeeperMonthlyFee;
 
         // Só retorna meses até o mês atual (para o ano corrente)
         // — meses futuros não existem como pendências
@@ -482,8 +499,11 @@ public sealed class PaymentService : IPaymentService
         var months = Enumerable.Range(firstMonth, count).Select(m =>
         {
             var rec = recordMap[m].FirstOrDefault();
+            var effectiveFee = player.IsGoalkeeper
+                ? (goalkeeperFee ?? monthlyFee ?? 0)
+                : (monthlyFee ?? 0);
             return rec is null
-                ? new MonthlyPaymentCellDto { Month = m, Status = PaymentStatus.Pending, Amount = monthlyFee ?? 0 }
+                ? new MonthlyPaymentCellDto { Month = m, Status = PaymentStatus.Pending, Amount = effectiveFee }
                 : new MonthlyPaymentCellDto
                 {
                     Month          = m,
@@ -499,12 +519,13 @@ public sealed class PaymentService : IPaymentService
 
         return Result<PlayerMonthlyRowDto?>.Ok(new PlayerMonthlyRowDto
         {
-            PlayerId    = player.Id,
-            UserId      = player.UserId,
-            PlayerName  = player.Name,
-            JoinedYear  = joinYear,
-            JoinedMonth = joinMonth,
-            Months      = months,
+            PlayerId     = player.Id,
+            UserId       = player.UserId,
+            PlayerName   = player.Name,
+            IsGoalkeeper = player.IsGoalkeeper,
+            JoinedYear   = joinYear,
+            JoinedMonth  = joinMonth,
+            Months       = months,
         });
     }
 

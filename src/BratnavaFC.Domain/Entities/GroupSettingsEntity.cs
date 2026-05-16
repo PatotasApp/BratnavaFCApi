@@ -48,10 +48,27 @@ public sealed class GroupSettingsEntity : BaseEntity
     public string? Rank3Icon      { get; private set; }
 
     // ── Pagamento ─────────────────────────────────────────────────────────────
-    public PaymentMode PaymentMode { get; private set; } = PaymentMode.Monthly;
-    public decimal?    MonthlyFee  { get; private set; }
+    public PaymentMode PaymentMode           { get; private set; } = PaymentMode.Monthly;
+    /// <summary>Mensalidade para jogadores de linha.</summary>
+    public decimal?    MonthlyFee            { get; private set; }
+    /// <summary>Mensalidade para goleiros. Se nulo, usa MonthlyFee.</summary>
+    public decimal?    GoalkeeperMonthlyFee  { get; private set; }
 
     public void SetPaymentMode(PaymentMode mode) => PaymentMode = mode;
+
+    public void SetMonthlyFee(decimal? value)
+    {
+        if (value.HasValue && value.Value < 0)
+            throw new InvalidOperationException("MonthlyFee nao pode ser negativo.");
+        MonthlyFee = value;
+    }
+
+    public void SetGoalkeeperMonthlyFee(decimal? value)
+    {
+        if (value.HasValue && value.Value < 0)
+            throw new InvalidOperationException("GoalkeeperMonthlyFee nao pode ser negativo.");
+        GoalkeeperMonthlyFee = value;
+    }
 
     // ── Regra de empate no MVP ────────────────────────────────────────────────
     public MvpTieRule MvpTieRule        { get; private set; } = MvpTieRule.AllMvp;
@@ -128,14 +145,6 @@ public sealed class GroupSettingsEntity : BaseEntity
     private void SetDefaultPlaceName(string? placeName)
     {
         DefaultPlaceName = string.IsNullOrWhiteSpace(placeName) ? null : placeName.Trim();
-    }
-
-    public void SetMonthlyFee(decimal? value)
-    {
-        if (value.HasValue && value.Value < 0)
-            throw new InvalidOperationException("MonthlyFee nao pode ser negativo.");
-
-        MonthlyFee = value;
     }
 
     private void SetDefaultSchedule(DayOfWeek? dayOfWeek, TimeSpan? kickoffTime)

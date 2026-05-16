@@ -2,7 +2,8 @@ namespace BratnavaFC.Domain.Dtos.Payments;
 
 public sealed class MonthlyGridDto
 {
-    public int                      Year       { get; init; }
-    public decimal?                 MonthlyFee { get; init; }
-    public PlayerMonthlyRowDto[]    Players    { get; init; } = [];
+    public int                   Year                 { get; init; }
+    public decimal?              MonthlyFee           { get; init; }
+    public decimal?              GoalkeeperMonthlyFee { get; init; }
+    public PlayerMonthlyRowDto[] Players              { get; init; } = [];
 }

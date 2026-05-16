@@ -49,7 +49,8 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 Rank1Icon      = null,
                 Rank2Icon      = null,
                 Rank3Icon      = null,
-                MonthlyFee     = null,
+                MonthlyFee           = null,
+                GoalkeeperMonthlyFee = null,
                 MvpTieRule       = (int)MvpTieRule.AllMvp,
                 MvpTieMaxPlayers = 2,
                 ShowPlayerStats  = false,
@@ -81,6 +82,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
 
             entity.SetIcons(dto.GoalIcon, dto.GoalkeeperIcon, dto.AssistIcon, dto.OwnGoalIcon, dto.MvpIcon, dto.PlayerIcon, dto.Rank1Icon, dto.Rank2Icon, dto.Rank3Icon);
             entity.SetMonthlyFee(dto.MonthlyFee);
+            entity.SetGoalkeeperMonthlyFee(dto.GoalkeeperMonthlyFee);
             if (dto.PaymentMode.HasValue)
                 entity.SetPaymentMode((PaymentMode)dto.PaymentMode.Value);
             if (dto.MvpTieRule.HasValue)
@@ -99,6 +101,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 dto.DefaultKickoffTime);
             entity.SetIcons(dto.GoalIcon, dto.GoalkeeperIcon, dto.AssistIcon, dto.OwnGoalIcon, dto.MvpIcon, dto.PlayerIcon, dto.Rank1Icon, dto.Rank2Icon, dto.Rank3Icon);
             entity.SetMonthlyFee(dto.MonthlyFee);
+            entity.SetGoalkeeperMonthlyFee(dto.GoalkeeperMonthlyFee);
             if (dto.PaymentMode.HasValue)
                 entity.SetPaymentMode((PaymentMode)dto.PaymentMode.Value);
             if (dto.MvpTieRule.HasValue)
@@ -126,6 +129,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 dto.DefaultKickoffTime);
             existing.SetIcons(dto.GoalIcon, dto.GoalkeeperIcon, dto.AssistIcon, dto.OwnGoalIcon, dto.MvpIcon, dto.PlayerIcon, dto.Rank1Icon, dto.Rank2Icon, dto.Rank3Icon);
             existing.SetMonthlyFee(dto.MonthlyFee);
+            existing.SetGoalkeeperMonthlyFee(dto.GoalkeeperMonthlyFee);
             if (dto.PaymentMode.HasValue)
                 existing.SetPaymentMode((PaymentMode)dto.PaymentMode.Value);
             if (dto.MvpTieRule.HasValue)
@@ -159,9 +163,10 @@ public sealed class GroupSettingsService : IGroupSettingsService
         Rank1Icon      = e.Rank1Icon,
         Rank2Icon      = e.Rank2Icon,
         Rank3Icon      = e.Rank3Icon,
-        PaymentMode      = (int)e.PaymentMode,
-        MonthlyFee       = e.MonthlyFee,
-        MvpTieRule       = (int)e.MvpTieRule,
+        PaymentMode          = (int)e.PaymentMode,
+        MonthlyFee           = e.MonthlyFee,
+        GoalkeeperMonthlyFee = e.GoalkeeperMonthlyFee,
+        MvpTieRule           = (int)e.MvpTieRule,
         MvpTieMaxPlayers = e.MvpTieMaxPlayers,
         ShowPlayerStats  = e.ShowPlayerStats,
     };
