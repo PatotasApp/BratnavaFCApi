@@ -124,7 +124,7 @@ public class PollEntityTests
     [Fact]
     public void HasExpiredDeadline_WhenDeadlineInPast_ShouldReturnTrue()
     {
-        var past = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
+        var past = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-2));
         var poll = MakePoll(deadlineDate: past);
 
         poll.HasExpiredDeadline().Should().BeTrue();
@@ -156,7 +156,7 @@ public class PollEntityTests
     [Fact]
     public void ValidateVoteChange_WhenDeadlineExpired_ShouldReturnError()
     {
-        var past = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
+        var past = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-2));
         var poll = MakePoll(deadlineDate: past);
 
         var error = poll.ValidateVoteChange();

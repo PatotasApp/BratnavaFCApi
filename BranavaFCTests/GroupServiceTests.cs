@@ -77,6 +77,61 @@ public class GroupServiceTests
         saved.Admins.First().UserId.Should().Be(user.Id);
     }
 
+    [Fact]
+    public async Task CreateAsync_ShouldCreatePlayerForCreator_WhenUserExists()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(CreateAsync_ShouldCreatePlayerForCreator_WhenUserExists));
+
+        var user = new UserEntity("jsilva", "João", "Silva", "j@b.com", "hash", null, null);
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var sut = CreateSut(db);
+        var req = new CreateGroupDto("Patota do João", [user.Id], null, user.Id);
+
+        // Act
+        var result = await sut.CreateAsync(req, CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
+
+        var player = await db.Players.FirstOrDefaultAsync(p => p.UserId == user.Id);
+        player.Should().NotBeNull();
+        player!.GroupId.Should().Be(result.Data);
+        player.Name.Should().Be("João Silva");
+        player.IsGuest.Should().BeFalse();
+        player.IsGoalkeeper.Should().BeFalse();
+        player.SkillPoints.Should().Be(0);
+        player.Status.Should().Be(Status.Active);
+    }
+
+    [Theory]
+    [InlineData("Maria", "Souza", "Maria Souza")]
+    [InlineData("Carlos", "Santos", "Carlos Santos")]
+    public async Task CreateAsync_ShouldSetPlayerName_FromCreatorFullName(
+        string firstName, string lastName, string expectedName)
+    {
+        // Arrange
+        var dbName = $"{nameof(CreateAsync_ShouldSetPlayerName_FromCreatorFullName)}_{firstName}";
+        await using var db = DbContextFactory.Create(dbName);
+
+        var user = new UserEntity($"user_{firstName}", firstName, lastName, $"{firstName}@b.com", "hash", null, null);
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var sut = CreateSut(db);
+        var req = new CreateGroupDto("Patota", [user.Id], null, user.Id);
+
+        // Act
+        var result = await sut.CreateAsync(req, CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        var player = await db.Players.FirstOrDefaultAsync(p => p.UserId == user.Id);
+        player!.Name.Should().Be(expectedName);
+    }
+
     // ─── GetByIdAsync ─────────────────────────────────────────────────────────
 
     [Fact]
