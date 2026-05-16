@@ -652,6 +652,256 @@ public class GroupService_AcceptInviteTests
     }
 }
 
+// ─── GroupService — GetGroupPendingInvitesAsync ───────────────────────────────
+
+public class GroupService_GetGroupPendingInvitesTests
+{
+    [Fact]
+    public async Task HappyPath_ShouldReturnPendingInvitesWithUserInfo()
+    {
+        await using var db  = DbContextFactory.Create(nameof(HappyPath_ShouldReturnPendingInvitesWithUserInfo));
+        var sut = Builders.MakeSut(db);
+
+        var user  = Builders.MakeUser("joao");
+        var group = Builders.MakeGroup();
+        db.Users.Add(user);
+        db.Groups.Add(group);
+        var invite = new GroupInviteEntity(group.Id, user.Id, null);
+        db.GroupInvites.Add(invite);
+        await db.SaveChangesAsync();
+
+        var result = await sut.GetGroupPendingInvitesAsync(group.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Data.Should().HaveCount(1);
+
+        var dto = result.Data![0];
+        dto.Id.Should().Be(invite.Id);
+        dto.TargetUserId.Should().Be(user.Id);
+        dto.TargetUserFullName.Should().Be("Primeiro Sobrenome");
+        dto.TargetUserLogin.Should().Be("joao");
+    }
+
+    [Fact]
+    public async Task WhenNoPendingInvites_ShouldReturnEmptyList()
+    {
+        await using var db  = DbContextFactory.Create(nameof(WhenNoPendingInvites_ShouldReturnEmptyList));
+        var sut = Builders.MakeSut(db);
+
+        var group = Builders.MakeGroup();
+        db.Groups.Add(group);
+        await db.SaveChangesAsync();
+
+        var result = await sut.GetGroupPendingInvitesAsync(group.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Data.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ShouldExcludeAcceptedAndRejectedInvites()
+    {
+        await using var db  = DbContextFactory.Create(nameof(ShouldExcludeAcceptedAndRejectedInvites));
+        var sut = Builders.MakeSut(db);
+
+        var user1 = Builders.MakeUser("user1");
+        var user2 = Builders.MakeUser("user2");
+        var user3 = Builders.MakeUser("user3");
+        var group = Builders.MakeGroup();
+        db.Users.AddRange(user1, user2, user3);
+        db.Groups.Add(group);
+
+        var pending  = new GroupInviteEntity(group.Id, user1.Id, null);
+        var accepted = new GroupInviteEntity(group.Id, user2.Id, null);
+        accepted.Accept();
+        var rejected = new GroupInviteEntity(group.Id, user3.Id, null);
+        rejected.Reject();
+        db.GroupInvites.AddRange(pending, accepted, rejected);
+        await db.SaveChangesAsync();
+
+        var result = await sut.GetGroupPendingInvitesAsync(group.Id, CancellationToken.None);
+
+        result.Data.Should().HaveCount(1);
+        result.Data![0].Id.Should().Be(pending.Id);
+    }
+
+    [Fact]
+    public async Task ShouldNotReturnInvitesFromOtherGroups()
+    {
+        await using var db  = DbContextFactory.Create(nameof(ShouldNotReturnInvitesFromOtherGroups));
+        var sut = Builders.MakeSut(db);
+
+        var user   = Builders.MakeUser();
+        var group1 = Builders.MakeGroup("G1");
+        var group2 = Builders.MakeGroup("G2");
+        db.Users.Add(user);
+        db.Groups.AddRange(group1, group2);
+        db.GroupInvites.Add(new GroupInviteEntity(group2.Id, user.Id, null));
+        await db.SaveChangesAsync();
+
+        var result = await sut.GetGroupPendingInvitesAsync(group1.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Data.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task WithMultipleInvites_ShouldReturnAll()
+    {
+        await using var db  = DbContextFactory.Create(nameof(WithMultipleInvites_ShouldReturnAll));
+        var sut = Builders.MakeSut(db);
+
+        var user1 = Builders.MakeUser("user1");
+        var user2 = Builders.MakeUser("user2");
+        var group = Builders.MakeGroup();
+        db.Users.AddRange(user1, user2);
+        db.Groups.Add(group);
+
+        var invite1 = new GroupInviteEntity(group.Id, user1.Id, null);
+        var invite2 = new GroupInviteEntity(group.Id, user2.Id, null);
+        db.GroupInvites.AddRange(invite1, invite2);
+        await db.SaveChangesAsync();
+
+        var result = await sut.GetGroupPendingInvitesAsync(group.Id, CancellationToken.None);
+
+        result.Data.Should().HaveCount(2);
+        result.Data!.Select(d => d.Id).Should().Contain(new[] { invite1.Id, invite2.Id });
+    }
+}
+
+// ─── GroupService — CancelInviteAsync ────────────────────────────────────────
+
+public class GroupService_CancelInviteTests
+{
+    [Fact]
+    public async Task HappyPath_ShouldRemoveInviteFromDatabase()
+    {
+        await using var db  = DbContextFactory.Create(nameof(HappyPath_ShouldRemoveInviteFromDatabase));
+        var sut = Builders.MakeSut(db);
+
+        var user  = Builders.MakeUser();
+        var group = Builders.MakeGroup();
+        db.Users.Add(user);
+        db.Groups.Add(group);
+        var invite = new GroupInviteEntity(group.Id, user.Id, null);
+        db.GroupInvites.Add(invite);
+        await db.SaveChangesAsync();
+
+        var result = await sut.CancelInviteAsync(group.Id, invite.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        var deleted = await db.GroupInvites.FindAsync(invite.Id);
+        deleted.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task WhenInviteNotFound_ShouldReturnNotFound()
+    {
+        await using var db  = DbContextFactory.Create(nameof(WhenInviteNotFound_ShouldReturnNotFound));
+        var sut = Builders.MakeSut(db);
+
+        var group = Builders.MakeGroup();
+        db.Groups.Add(group);
+        await db.SaveChangesAsync();
+
+        var result = await sut.CancelInviteAsync(group.Id, Guid.NewGuid(), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
+    }
+
+    [Fact]
+    public async Task WhenInviteBelongsToAnotherGroup_ShouldReturnNotFound()
+    {
+        await using var db  = DbContextFactory.Create(nameof(WhenInviteBelongsToAnotherGroup_ShouldReturnNotFound));
+        var sut = Builders.MakeSut(db);
+
+        var user   = Builders.MakeUser();
+        var group1 = Builders.MakeGroup("G1");
+        var group2 = Builders.MakeGroup("G2");
+        db.Users.Add(user);
+        db.Groups.AddRange(group1, group2);
+        var invite = new GroupInviteEntity(group2.Id, user.Id, null);
+        db.GroupInvites.Add(invite);
+        await db.SaveChangesAsync();
+
+        // Try to cancel invite from group2 using group1's id
+        var result = await sut.CancelInviteAsync(group1.Id, invite.Id, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
+
+        // Invite must still exist untouched
+        var stillExists = await db.GroupInvites.FindAsync(invite.Id);
+        stillExists.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task WhenInviteAlreadyAccepted_ShouldReturnNotFound()
+    {
+        await using var db  = DbContextFactory.Create(nameof(WhenInviteAlreadyAccepted_ShouldReturnNotFound));
+        var sut = Builders.MakeSut(db);
+
+        var user  = Builders.MakeUser();
+        var group = Builders.MakeGroup();
+        db.Users.Add(user);
+        db.Groups.Add(group);
+        var invite = new GroupInviteEntity(group.Id, user.Id, null);
+        invite.Accept();
+        db.GroupInvites.Add(invite);
+        await db.SaveChangesAsync();
+
+        var result = await sut.CancelInviteAsync(group.Id, invite.Id, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
+    }
+
+    [Fact]
+    public async Task WhenInviteAlreadyRejected_ShouldReturnNotFound()
+    {
+        await using var db  = DbContextFactory.Create(nameof(WhenInviteAlreadyRejected_ShouldReturnNotFound));
+        var sut = Builders.MakeSut(db);
+
+        var user  = Builders.MakeUser();
+        var group = Builders.MakeGroup();
+        db.Users.Add(user);
+        db.Groups.Add(group);
+        var invite = new GroupInviteEntity(group.Id, user.Id, null);
+        invite.Reject();
+        db.GroupInvites.Add(invite);
+        await db.SaveChangesAsync();
+
+        var result = await sut.CancelInviteAsync(group.Id, invite.Id, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
+    }
+
+    [Fact]
+    public async Task CancelOne_ShouldNotAffectOtherPendingInvites()
+    {
+        await using var db  = DbContextFactory.Create(nameof(CancelOne_ShouldNotAffectOtherPendingInvites));
+        var sut = Builders.MakeSut(db);
+
+        var user1 = Builders.MakeUser("user1");
+        var user2 = Builders.MakeUser("user2");
+        var group = Builders.MakeGroup();
+        db.Users.AddRange(user1, user2);
+        db.Groups.Add(group);
+        var invite1 = new GroupInviteEntity(group.Id, user1.Id, null);
+        var invite2 = new GroupInviteEntity(group.Id, user2.Id, null);
+        db.GroupInvites.AddRange(invite1, invite2);
+        await db.SaveChangesAsync();
+
+        await sut.CancelInviteAsync(group.Id, invite1.Id, CancellationToken.None);
+
+        var remaining = db.GroupInvites.ToList();
+        remaining.Should().HaveCount(1);
+        remaining[0].Id.Should().Be(invite2.Id);
+    }
+}
+
 // ─── GroupService — RejectInviteAsync ────────────────────────────────────────
 
 public class GroupService_RejectInviteTests

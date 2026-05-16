@@ -124,7 +124,9 @@ public class PollEntityTests
     [Fact]
     public void HasExpiredDeadline_WhenDeadlineInPast_ShouldReturnTrue()
     {
-        var past = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
+        // Use -2 days: entity interprets dates as Brazil (UTC-3), so -1 day at 23:59:59
+        // Brazil = today ~03:00 UTC, which is still in the future before 03:00 UTC.
+        var past = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-2));
         var poll = MakePoll(deadlineDate: past);
 
         poll.HasExpiredDeadline().Should().BeTrue();
@@ -156,7 +158,7 @@ public class PollEntityTests
     [Fact]
     public void ValidateVoteChange_WhenDeadlineExpired_ShouldReturnError()
     {
-        var past = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
+        var past = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-2));
         var poll = MakePoll(deadlineDate: past);
 
         var error = poll.ValidateVoteChange();
