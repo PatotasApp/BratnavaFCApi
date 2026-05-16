@@ -118,4 +118,82 @@ public class GroupSettingsEntityTests
         // Assert
         Assert.False(s.ShowPlayerStats);
     }
+
+    // ── GoalkeeperMonthlyFee ──────────────────────────────────────────────────
+
+    [Fact]
+    public void GoalkeeperMonthlyFee_Default_ShouldBeNull()
+    {
+        // Arrange + Act
+        var s = new GroupSettingsEntity(Guid.NewGuid(), 5, 10, null, null, null);
+
+        // Assert
+        Assert.Null(s.GoalkeeperMonthlyFee);
+    }
+
+    [Fact]
+    public void SetGoalkeeperMonthlyFee_WithPositiveValue_ShouldSet()
+    {
+        // Arrange
+        var s = new GroupSettingsEntity(Guid.NewGuid(), 5, 10, null, null, null);
+
+        // Act
+        s.SetGoalkeeperMonthlyFee(60m);
+
+        // Assert
+        Assert.Equal(60m, s.GoalkeeperMonthlyFee);
+    }
+
+    [Fact]
+    public void SetGoalkeeperMonthlyFee_WithZero_ShouldAccept()
+    {
+        // Arrange
+        var s = new GroupSettingsEntity(Guid.NewGuid(), 5, 10, null, null, null);
+
+        // Act
+        s.SetGoalkeeperMonthlyFee(0m);
+
+        // Assert
+        Assert.Equal(0m, s.GoalkeeperMonthlyFee);
+    }
+
+    [Fact]
+    public void SetGoalkeeperMonthlyFee_WithNull_ShouldClear()
+    {
+        // Arrange
+        var s = new GroupSettingsEntity(Guid.NewGuid(), 5, 10, null, null, null);
+        s.SetGoalkeeperMonthlyFee(60m);
+
+        // Act
+        s.SetGoalkeeperMonthlyFee(null);
+
+        // Assert
+        Assert.Null(s.GoalkeeperMonthlyFee);
+    }
+
+    [Fact]
+    public void SetGoalkeeperMonthlyFee_WithNegativeValue_ShouldThrow()
+    {
+        // Arrange
+        var s = new GroupSettingsEntity(Guid.NewGuid(), 5, 10, null, null, null);
+
+        // Act + Assert
+        var ex = Assert.Throws<InvalidOperationException>(() => s.SetGoalkeeperMonthlyFee(-1m));
+        Assert.Equal("GoalkeeperMonthlyFee nao pode ser negativo.", ex.Message);
+    }
+
+    [Fact]
+    public void SetGoalkeeperMonthlyFee_IsIndependentOfMonthlyFee()
+    {
+        // Arrange
+        var s = new GroupSettingsEntity(Guid.NewGuid(), 5, 10, null, null, null);
+        s.SetMonthlyFee(100m);
+
+        // Act
+        s.SetGoalkeeperMonthlyFee(60m);
+
+        // Assert — both fees coexist independently
+        Assert.Equal(100m, s.MonthlyFee);
+        Assert.Equal(60m, s.GoalkeeperMonthlyFee);
+    }
 }

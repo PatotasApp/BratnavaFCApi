@@ -267,4 +267,157 @@ public class GroupSettingsServiceTests
         result.Data!.ShowPlayerStats.Should().BeTrue();
         result.Data.IsPersisted.Should().BeTrue();
     }
+
+    // ── GoalkeeperMonthlyFee ──────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetAsync_WhenNoSettings_ShouldReturnGoalkeeperMonthlyFee_Null()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(GetAsync_WhenNoSettings_ShouldReturnGoalkeeperMonthlyFee_Null));
+
+        var group = new GroupEntity("G", null, Guid.NewGuid());
+        db.Groups.Add(group);
+        await db.SaveChangesAsync();
+
+        var sut = new GroupSettingsService(db);
+
+        // Act
+        var result = await sut.GetAsync(group.Id, CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Data!.GoalkeeperMonthlyFee.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task UpsertAsync_WhenNew_WithGoalkeeperFee_ShouldPersistBothFees()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(UpsertAsync_WhenNew_WithGoalkeeperFee_ShouldPersistBothFees));
+
+        var group = new GroupEntity("G", null, Guid.NewGuid());
+        db.Groups.Add(group);
+        await db.SaveChangesAsync();
+
+        var sut = new GroupSettingsService(db);
+
+        var req = new UpsertGroupSettingsDto
+        {
+            MinPlayers           = 5,
+            MaxPlayers           = 10,
+            MonthlyFee           = 100m,
+            GoalkeeperMonthlyFee = 60m,
+        };
+
+        // Act
+        var result = await sut.UpsertAsync(group.Id, req, CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Data!.MonthlyFee.Should().Be(100m);
+        result.Data.GoalkeeperMonthlyFee.Should().Be(60m);
+
+        var saved = await db.GroupSettings.FirstAsync(x => x.GroupId == group.Id);
+        saved.MonthlyFee.Should().Be(100m);
+        saved.GoalkeeperMonthlyFee.Should().Be(60m);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_WhenExists_WithGoalkeeperFee_ShouldUpdateFee()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(UpsertAsync_WhenExists_WithGoalkeeperFee_ShouldUpdateFee));
+
+        var group = new GroupEntity("G", null, Guid.NewGuid());
+        db.Groups.Add(group);
+
+        var settings = new GroupSettingsEntity(group.Id, 5, 10, null, null, null);
+        settings.SetMonthlyFee(100m);
+        db.GroupSettings.Add(settings);
+        await db.SaveChangesAsync();
+
+        var sut = new GroupSettingsService(db);
+
+        var req = new UpsertGroupSettingsDto
+        {
+            MinPlayers           = 5,
+            MaxPlayers           = 10,
+            MonthlyFee           = 100m,
+            GoalkeeperMonthlyFee = 55m,
+        };
+
+        // Act
+        var result = await sut.UpsertAsync(group.Id, req, CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Data!.GoalkeeperMonthlyFee.Should().Be(55m);
+
+        var saved = await db.GroupSettings.FirstAsync(x => x.GroupId == group.Id);
+        saved.GoalkeeperMonthlyFee.Should().Be(55m);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_WhenGoalkeeperFeeSetToNull_ShouldClearFee()
+    {
+        // Arrange — começa com ambas as fees e limpa a do goleiro
+        await using var db = DbContextFactory.Create(nameof(UpsertAsync_WhenGoalkeeperFeeSetToNull_ShouldClearFee));
+
+        var group = new GroupEntity("G", null, Guid.NewGuid());
+        db.Groups.Add(group);
+
+        var settings = new GroupSettingsEntity(group.Id, 5, 10, null, null, null);
+        settings.SetMonthlyFee(100m);
+        settings.SetGoalkeeperMonthlyFee(60m);
+        db.GroupSettings.Add(settings);
+        await db.SaveChangesAsync();
+
+        var sut = new GroupSettingsService(db);
+
+        var req = new UpsertGroupSettingsDto
+        {
+            MinPlayers           = 5,
+            MaxPlayers           = 10,
+            MonthlyFee           = 100m,
+            GoalkeeperMonthlyFee = null,
+        };
+
+        // Act
+        var result = await sut.UpsertAsync(group.Id, req, CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Data!.GoalkeeperMonthlyFee.Should().BeNull();
+
+        var saved = await db.GroupSettings.FirstAsync(x => x.GroupId == group.Id);
+        saved.GoalkeeperMonthlyFee.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetAsync_WhenPersistedWithBothFees_ShouldReturnBothFees()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(GetAsync_WhenPersistedWithBothFees_ShouldReturnBothFees));
+
+        var group = new GroupEntity("G", null, Guid.NewGuid());
+        db.Groups.Add(group);
+
+        var settings = new GroupSettingsEntity(group.Id, 5, 10, null, null, null);
+        settings.SetMonthlyFee(100m);
+        settings.SetGoalkeeperMonthlyFee(60m);
+        db.GroupSettings.Add(settings);
+        await db.SaveChangesAsync();
+
+        var sut = new GroupSettingsService(db);
+
+        // Act
+        var result = await sut.GetAsync(group.Id, CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Data!.MonthlyFee.Should().Be(100m);
+        result.Data.GoalkeeperMonthlyFee.Should().Be(60m);
+        result.Data.IsPersisted.Should().BeTrue();
+    }
 }

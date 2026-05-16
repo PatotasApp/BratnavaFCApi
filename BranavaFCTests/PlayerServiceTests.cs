@@ -647,4 +647,88 @@ public class PlayerServiceTests
         reloaded.IsGuest.Should().BeTrue();
         reloaded.UserId.Should().BeNull();
     }
+
+    // ─── ToggleGoalkeeperAsync ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ToggleGoalkeeperAsync_WhenLinePlayer_ShouldBecomeGoalkeeper()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(ToggleGoalkeeperAsync_WhenLinePlayer_ShouldBecomeGoalkeeper));
+
+        var group = new GroupEntity("G", null, Guid.NewGuid());
+        var user  = new UserEntity("u", "F", "L", "u@test.com", "hash", null, null);
+        db.Groups.Add(group);
+        db.Users.Add(user);
+
+        var player = new PlayerEntity("Caio", user.Id, group.Id, 5m, false, false, Status.Active);
+        db.Players.Add(player);
+        await db.SaveChangesAsync();
+
+        var logger = new Mock<ILogger<PlayerService>>();
+        var repo   = new RepositoryBase<PlayerEntity>(db);
+        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>());
+
+        // Act
+        var result = await sut.ToggleGoalkeeperAsync(player.Id, CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Data!.IsGoalkeeper.Should().BeTrue();
+
+        var reloaded = await db.Players.IgnoreQueryFilters().FirstAsync(p => p.Id == player.Id);
+        reloaded.IsGoalkeeper.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ToggleGoalkeeperAsync_WhenGoalkeeper_ShouldBecomeLinePlayer()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(ToggleGoalkeeperAsync_WhenGoalkeeper_ShouldBecomeLinePlayer));
+
+        var group = new GroupEntity("G", null, Guid.NewGuid());
+        var user  = new UserEntity("u", "F", "L", "u@test.com", "hash", null, null);
+        db.Groups.Add(group);
+        db.Users.Add(user);
+
+        var player = new PlayerEntity("Felipe", user.Id, group.Id, 7m, true, false, Status.Active);
+        db.Players.Add(player);
+        await db.SaveChangesAsync();
+
+        var logger = new Mock<ILogger<PlayerService>>();
+        var repo   = new RepositoryBase<PlayerEntity>(db);
+        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>());
+
+        // Act
+        var result = await sut.ToggleGoalkeeperAsync(player.Id, CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Data!.IsGoalkeeper.Should().BeFalse();
+
+        var reloaded = await db.Players.IgnoreQueryFilters().FirstAsync(p => p.Id == player.Id);
+        reloaded.IsGoalkeeper.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ToggleGoalkeeperAsync_WhenPlayerNotFound_ShouldReturnFailure()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(ToggleGoalkeeperAsync_WhenPlayerNotFound_ShouldReturnFailure));
+
+        var repo = new Mock<IRepositoryBase<PlayerEntity>>();
+        repo.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PlayerEntity?)null);
+
+        var logger = new Mock<ILogger<PlayerService>>();
+        var sut    = new PlayerService(repo.Object, logger.Object, db, Mock.Of<IPushService>());
+
+        // Act
+        var result = await sut.ToggleGoalkeeperAsync(Guid.NewGuid(), CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Error.Should().Be("Jogador não encontrado.");
+    }
 }
