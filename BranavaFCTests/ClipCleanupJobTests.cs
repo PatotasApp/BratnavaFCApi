@@ -16,9 +16,11 @@ public class ClipCleanupJobTests
         IReplayUrlService? r2 = null) =>
         new(db, r2 ?? Mock.Of<IReplayUrlService>(), NullLogger<ClipCleanupJob>.Instance);
 
-    private static ReplayClipEntity MakeClip(string objectKey = "bucket/clip.mp4") =>
+    private static ReplayClipEntity MakeClip(
+        string objectKey = "bucket/clip.mp4",
+        DateTimeOffset? recordedAt = null) =>
         new(Guid.NewGuid(), Guid.NewGuid(), "goal-replays", objectKey,
-            "video/mp4", "etag", DateTimeOffset.UtcNow, MatchEventType.Gol);
+            "video/mp4", "etag", recordedAt ?? DateTimeOffset.UtcNow.AddDays(-30), MatchEventType.Gol);
 
     // ── 1. No clips ─────────────────────────────────────────────────────────
 
@@ -167,5 +169,87 @@ public class ClipCleanupJobTests
         var remaining = await db.ReplayClips.ToListAsync();
         remaining.Should().HaveCount(2);
         remaining.Should().NotContain(c => c.ObjectKey == "bucket/eligible.mp4");
+    }
+
+    // ── 7. Recent clip (within 7-day grace period) ───────────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldPreserveClip_WhenRecordedWithin7Days()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(ExecuteAsync_ShouldPreserveClip_WhenRecordedWithin7Days));
+        var recentClip = MakeClip("bucket/recent.mp4", DateTimeOffset.UtcNow.AddDays(-3));
+        db.ReplayClips.Add(recentClip);
+        await db.SaveChangesAsync();
+
+        var r2 = new Mock<IReplayUrlService>();
+        var sut = CreateSut(db, r2.Object);
+
+        // Act
+        await sut.ExecuteAsync(CancellationToken.None);
+
+        // Assert
+        r2.Verify(x => x.DeleteObjectAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        var remaining = await db.ReplayClips.ToListAsync();
+        remaining.Should().HaveCount(1);
+    }
+
+    // ── 8. Old clip (past 7-day grace period) ────────────────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldDeleteClip_WhenRecordedMoreThan7DaysAgo()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(ExecuteAsync_ShouldDeleteClip_WhenRecordedMoreThan7DaysAgo));
+        var oldClip = MakeClip("bucket/old.mp4", DateTimeOffset.UtcNow.AddDays(-8));
+        db.ReplayClips.Add(oldClip);
+        await db.SaveChangesAsync();
+
+        var r2 = new Mock<IReplayUrlService>();
+        r2.Setup(x => x.DeleteObjectAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+          .Returns(Task.CompletedTask);
+        var sut = CreateSut(db, r2.Object);
+
+        // Act
+        await sut.ExecuteAsync(CancellationToken.None);
+
+        // Assert
+        r2.Verify(x => x.DeleteObjectAsync("bucket/old.mp4", It.IsAny<CancellationToken>()), Times.Once);
+        var remaining = await db.ReplayClips.ToListAsync();
+        remaining.Should().BeEmpty();
+    }
+
+    // ── 9. Mixed ages — only old unengaged clips are deleted ─────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_WithMixedAgeClips_ShouldOnlyDeleteOldUnengagedClips()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(ExecuteAsync_WithMixedAgeClips_ShouldOnlyDeleteOldUnengagedClips));
+
+        var oldOrphan    = MakeClip("bucket/old-orphan.mp4",   DateTimeOffset.UtcNow.AddDays(-10));
+        var recentOrphan = MakeClip("bucket/recent-orphan.mp4", DateTimeOffset.UtcNow.AddDays(-2));
+        var oldLiked     = MakeClip("bucket/old-liked.mp4",    DateTimeOffset.UtcNow.AddDays(-15));
+
+        db.ReplayClips.AddRange(oldOrphan, recentOrphan, oldLiked);
+        db.ReplayLikes.Add(new ReplayLikeEntity(oldLiked.Id, Guid.NewGuid()));
+        await db.SaveChangesAsync();
+
+        var r2 = new Mock<IReplayUrlService>();
+        r2.Setup(x => x.DeleteObjectAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+          .Returns(Task.CompletedTask);
+        var sut = CreateSut(db, r2.Object);
+
+        // Act
+        await sut.ExecuteAsync(CancellationToken.None);
+
+        // Assert
+        r2.Verify(x => x.DeleteObjectAsync("bucket/old-orphan.mp4",    It.IsAny<CancellationToken>()), Times.Once);
+        r2.Verify(x => x.DeleteObjectAsync("bucket/recent-orphan.mp4", It.IsAny<CancellationToken>()), Times.Never);
+        r2.Verify(x => x.DeleteObjectAsync("bucket/old-liked.mp4",     It.IsAny<CancellationToken>()), Times.Never);
+
+        var remaining = await db.ReplayClips.ToListAsync();
+        remaining.Should().HaveCount(2);
+        remaining.Should().NotContain(c => c.ObjectKey == "bucket/old-orphan.mp4");
     }
 }

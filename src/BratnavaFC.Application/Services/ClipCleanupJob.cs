@@ -26,8 +26,11 @@ public sealed class ClipCleanupJob : IClipCleanupJob
     {
         _logger.LogInformation("ClipCleanupJob: starting");
 
+        var cutoff = DateTimeOffset.UtcNow.AddDays(-7);
+
         var candidates = await _db.ReplayClips
             .Where(c =>
+                c.RecordedAt < cutoff &&
                 !_db.ReplayLikes.Any(l => l.ClipId == c.Id) &&
                 !_db.ReplayFavorites.Any(f => f.ClipId == c.Id))
             .ToListAsync(ct);
