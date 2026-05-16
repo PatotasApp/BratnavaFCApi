@@ -25,6 +25,8 @@ public interface IGroupService
     Task<Result<GroupInviteDto>> CreateInviteAsync(Guid groupId, CreateGroupInviteDto request, CancellationToken cancellationToken);
     Task<Result<List<GroupInviteDto>>> GetMyInvitesAsync(Guid userId, CancellationToken cancellationToken);
     Task<Result<int>> GetMyPendingInviteCountAsync(Guid userId, CancellationToken cancellationToken);
+    Task<Result<List<GroupPendingInviteAdminDto>>> GetGroupPendingInvitesAsync(Guid groupId, CancellationToken cancellationToken);
+    Task<Result> CancelInviteAsync(Guid groupId, Guid inviteId, CancellationToken cancellationToken);
     Task<Result> AcceptInviteAsync(Guid inviteId, Guid userId, CancellationToken cancellationToken);
     Task<Result> RejectInviteAsync(Guid inviteId, Guid userId, CancellationToken cancellationToken);
     Task<Result> CreatorLeaveGroupAsync(Guid groupId, Guid requestingUserId, CreatorLeaveGroupDto dto, CancellationToken cancellationToken);
