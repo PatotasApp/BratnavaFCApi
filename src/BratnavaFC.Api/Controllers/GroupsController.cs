@@ -154,6 +154,30 @@ public class GroupsController : GroupAuthorizedController
 
     // ── Convites ──────────────────────────────────────────────────────────────
 
+    /// <summary>Lista os convites pendentes da patota com dados do convidado (visão do admin).</summary>
+    [HttpGet("{groupId:guid}/invites/pending")]
+    [Authorize(Roles = "User,Admin,GodMode")]
+    public async Task<IActionResult> GetGroupPendingInvitesAsync(Guid groupId, CancellationToken cancellationToken)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
+            return Forbid();
+
+        var result = await _groupService.GetGroupPendingInvitesAsync(groupId, cancellationToken);
+        return ToResponse(result);
+    }
+
+    /// <summary>Admin cancela um convite pendente.</summary>
+    [HttpDelete("{groupId:guid}/invites/{inviteId:guid}")]
+    [Authorize(Roles = "User,Admin,GodMode")]
+    public async Task<IActionResult> CancelInviteAsync(Guid groupId, Guid inviteId, CancellationToken cancellationToken)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
+            return Forbid();
+
+        var result = await _groupService.CancelInviteAsync(groupId, inviteId, cancellationToken);
+        return ToResponse(result);
+    }
+
     /// <summary>Admin da patota envia convite para um usuário.</summary>
     [HttpPost("{groupId:guid}/invites")]
     [Authorize(Roles = "User,Admin,GodMode")]

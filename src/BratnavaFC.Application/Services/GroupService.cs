@@ -526,6 +526,37 @@ public class GroupService : IGroupService
         return Result<int>.Ok(count);
     }
 
+    public async Task<Result<List<GroupPendingInviteAdminDto>>> GetGroupPendingInvitesAsync(Guid groupId, CancellationToken cancellationToken)
+    {
+        var list = await _context.GroupInvites
+            .Include(i => i.TargetUser)
+            .Where(i => i.GroupId == groupId && i.Status == GroupInviteStatus.Pending)
+            .OrderByDescending(i => i.CreateDate)
+            .Select(i => new GroupPendingInviteAdminDto(
+                i.Id,
+                i.TargetUserId,
+                $"{i.TargetUser.FirstName} {i.TargetUser.LastName}".Trim(),
+                i.TargetUser.UserName,
+                i.CreateDate))
+            .ToListAsync(cancellationToken);
+
+        return Result<List<GroupPendingInviteAdminDto>>.Ok(list);
+    }
+
+    public async Task<Result> CancelInviteAsync(Guid groupId, Guid inviteId, CancellationToken cancellationToken)
+    {
+        var invite = await _context.GroupInvites
+            .FirstOrDefaultAsync(i => i.Id == inviteId && i.GroupId == groupId && i.Status == GroupInviteStatus.Pending, cancellationToken);
+
+        if (invite == null)
+            return Result.Fail("Convite não encontrado ou já não está pendente.", ResultStatus.NotFound);
+
+        _context.GroupInvites.Remove(invite);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return Result.Ok("Convite cancelado.");
+    }
+
     public async Task<Result> AcceptInviteAsync(Guid inviteId, Guid userId, CancellationToken cancellationToken)
     {
         try
