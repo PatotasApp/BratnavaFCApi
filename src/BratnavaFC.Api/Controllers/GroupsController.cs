@@ -79,6 +79,15 @@ public class GroupsController : GroupAuthorizedController
         return ToResponse(result);
     }
 
+    [HttpGet("{groupId:guid}/my-roles")]
+    [Authorize]
+    public async Task<IActionResult> GetMyRolesAsync(Guid groupId, CancellationToken cancellationToken)
+    {
+        var isAdmin       = await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken);
+        var isFinanceiro  = await IsFinanceiroForGroupAsync(groupId, _db, cancellationToken);
+        return Ok(new { success = true, data = new { isAdmin, isFinanceiro } });
+    }
+
     [HttpGet("admin/{adminId:guid}")]
     public async Task<IActionResult> GetByAdminIdAsync(Guid adminId, CancellationToken cancellationToken)
     {

@@ -25,13 +25,12 @@ public abstract class GroupAuthorizedController : BaseApiController
         => User.IsInRole("Admin") || User.IsInRole("GodMode");
 
     /// <summary>
-    /// Returns true if the caller has a global Admin/GodMode role
-    /// OR is registered as an admin of the specific group.
+    /// Returns true if the caller is registered as an admin of the specific group.
+    /// Global roles (Admin, GodMode) are intentionally excluded — all users must be
+    /// explicitly added as group admins to act as one.
     /// </summary>
     protected async Task<bool> IsAuthorizedForGroupAsync(Guid groupId, AppDbContext db, CancellationToken ct)
     {
-        if (HasGlobalAdminRole()) return true;
-
         var userId = GetCurrentUserId();
         if (userId == null) return false;
 
@@ -66,8 +65,6 @@ public abstract class GroupAuthorizedController : BaseApiController
     /// </summary>
     protected async Task<bool> IsFinanceiroForGroupAsync(Guid groupId, AppDbContext db, CancellationToken ct)
     {
-        if (User.IsInRole("GodMode")) return true;
-
         var userId = GetCurrentUserId();
         if (userId == null) return false;
 
