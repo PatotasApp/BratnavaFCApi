@@ -444,7 +444,10 @@ public sealed class PaymentService : IPaymentService
         await _context.SaveChangesAsync(ct);
 
         if (dto.Status == PaymentStatus.Paid && !wasAlreadyPaidExtra)
+        {
             await NotifyFinanceirosExtraChargePaidAsync(groupId, playerId, chargeId, ct);
+            _ = NotifyIfChargeFullyPaidAsync(groupId, chargeId, ct);
+        }
 
         if (dto.Status == PaymentStatus.Pending && !wasAlreadyPendingExtra)
             await NotifyPlayerExtraChargePendingAsync(groupId, playerId, chargeId, ct);
@@ -784,15 +787,8 @@ public sealed class PaymentService : IPaymentService
         var userIds = playerUserIds.Where(id => id.HasValue).Select(id => id!.Value).ToList();
         if (userIds.Count == 0) return;
 
-        var tokens = await _context.PushTokens
-            .Where(t => userIds.Contains(t.UserId) && t.IsActive)
-            .Select(t => t.Token)
-            .ToListAsync(ct);
-
-        if (tokens.Count == 0) return;
-
-        await _push.SendToTokensAsync(
-            tokens,
+        await _push.SendToUsersAsync(
+            userIds,
             title: "Nova cobrança",
             body:  $"Você tem uma nova cobrança: \"{chargeName}\" — R$ {amount:N2}.",
             data:  new Dictionary<string, string> { ["type"] = "payment_pending", ["groupId"] = groupId.ToString() },
@@ -821,6 +817,46 @@ public sealed class PaymentService : IPaymentService
             body:  $"{playerName ?? "Jogador"} confirmou o pagamento de \"{chargeName ?? "cobrança extra"}\".",
             data:  new Dictionary<string, string> { ["type"] = "payment_confirmed", ["groupId"] = groupId.ToString() },
             ct);
+    }
+
+    /// <summary>
+    /// Verifica se todos os pagamentos da cobrança extra estão quitados e, se sim, notifica os financeiros.
+    /// Fire-and-forget — não bloqueia a resposta do endpoint.
+    /// </summary>
+    private async Task NotifyIfChargeFullyPaidAsync(Guid groupId, Guid chargeId, CancellationToken ct)
+    {
+        try
+        {
+            // Ignora cobranças canceladas
+            var chargeExists = await _context.ExtraCharges
+                .AsNoTracking()
+                .AnyAsync(c => c.Id == chargeId && !c.IsCancelled, ct);
+
+            if (!chargeExists) return;
+
+            // Se ainda há algum pagamento pendente, não houve quitação total
+            var anyPending = await _context.ExtraChargePayments
+                .AsNoTracking()
+                .AnyAsync(p => p.ExtraChargeId == chargeId
+                            && p.GroupId       == groupId
+                            && p.Status        == PaymentStatus.Pending, ct);
+
+            if (anyPending) return;
+
+            var chargeName = await _context.ExtraCharges
+                .AsNoTracking()
+                .Where(c => c.Id == chargeId)
+                .Select(c => c.Name)
+                .FirstOrDefaultAsync(ct);
+
+            await _push.SendToGroupFinanceirosAsync(
+                groupId,
+                title: "Meta atingida!",
+                body:  $"A cobrança \"{chargeName ?? "Cobrança"}\" foi totalmente paga pelo grupo.",
+                data:  new Dictionary<string, string> { ["type"] = "charge_fully_paid", ["groupId"] = groupId.ToString() },
+                ct);
+        }
+        catch { /* notificação não crítica */ }
     }
 
     private async Task NotifyPlayerMonthlyPendingAsync(

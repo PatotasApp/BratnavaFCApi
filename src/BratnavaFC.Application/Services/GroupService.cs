@@ -645,6 +645,8 @@ public class GroupService : IGroupService
             _context.GroupInvites.Update(invite);
             await _context.SaveChangesAsync(cancellationToken);
 
+            _ = NotifyAdminsInviteAcceptedAsync(invite.GroupId, thePlayer.Name, invite.Group.Name, cancellationToken);
+
             return Result.Ok("Convite aceito com sucesso.");
         }
         catch (Exception ex)
@@ -708,6 +710,24 @@ public class GroupService : IGroupService
             data:  new Dictionary<string, string> { ["type"] = "group_invite", ["groupId"] = groupId.ToString() },
             ct,
             groupId: groupId);
+
+    /// <summary>
+    /// Notifica admins do grupo quando um convite é aceito.
+    /// Fire-and-forget — não bloqueia a resposta do endpoint.
+    /// </summary>
+    private async Task NotifyAdminsInviteAcceptedAsync(Guid groupId, string playerName, string groupName, CancellationToken ct)
+    {
+        try
+        {
+            await _push.SendToGroupAdminsAsync(
+                groupId,
+                title: "Novo membro!",
+                body:  $"{playerName} aceitou o convite e entrou no grupo \"{groupName}\".",
+                data:  new Dictionary<string, string> { ["type"] = "invite_accepted", ["groupId"] = groupId.ToString() },
+                ct);
+        }
+        catch { /* notificação não crítica */ }
+    }
 
     public async Task<Result> CreatorLeaveGroupAsync(Guid groupId, Guid requestingUserId, CreatorLeaveGroupDto dto, CancellationToken cancellationToken)
     {

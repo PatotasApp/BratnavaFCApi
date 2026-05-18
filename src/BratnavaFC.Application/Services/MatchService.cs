@@ -15,19 +15,22 @@ public sealed class MatchService : IMatchService
     private readonly IPushService _push;
     private readonly IReplayUrlService _replayUrls;
     private readonly IBetService _bets;
+    private readonly INotificationScheduler _scheduler;
 
     public MatchService(
         AppDbContext context,
         IRepositoryBase<MatchEntity> repository,
         IPushService push,
         IReplayUrlService replayUrls,
-        IBetService bets)
+        IBetService bets,
+        INotificationScheduler scheduler)
     {
-        _context = context;
+        _context    = context;
         _repository = repository;
-        _push = push;
+        _push       = push;
         _replayUrls = replayUrls;
-        _bets = bets;
+        _bets       = bets;
+        _scheduler  = scheduler;
     }
 
     public async Task<Result<List<MatchDetailsDto>>> GetAllAsync(Guid groupId, CancellationToken ct = default)
@@ -286,6 +289,7 @@ public sealed class MatchService : IMatchService
         await _repository.SaveChangesAsync(ct);
 
         await NotifyMatchInviteAsync(groupId, match.Id, ct);
+        await _scheduler.ScheduleMatchRemindersAsync(match.Id, groupId, match.PlayedAt, ct);
 
         return Result<MatchEntity>.Ok(match, "Partida criada com sucesso.", ResultStatus.Created);
     }
@@ -332,6 +336,7 @@ public sealed class MatchService : IMatchService
         match.UpdateDetails(groupId, dto.PlayedAt, dto.PlaceName, matchIdFromRoute: matchId, dtoId: dto.Id);
 
         await _context.SaveChangesAsync(ct);
+        await _scheduler.RescheduleMatchRemindersAsync(matchId, groupId, match.PlayedAt, ct);
         return Result.Ok("Partida atualizada com sucesso.");
     }
 
@@ -345,6 +350,7 @@ public sealed class MatchService : IMatchService
 
         match.EnsureCanDelete();
 
+        await _scheduler.CancelMatchRemindersAsync(matchId, ct);
         _repository.Remove(match);
         await _repository.SaveChangesAsync(ct);
         return Result.Ok("Partida removida com sucesso.");
@@ -388,6 +394,7 @@ public sealed class MatchService : IMatchService
         match.AcceptInvite(playerId);
 
         await _context.SaveChangesAsync(ct);
+        _ = NotifyAttendanceAsync(groupId, matchId, playerId, accepted: true, ct);
         return Result.Ok("Partida atualizada com sucesso.");
     }
 
@@ -403,6 +410,7 @@ public sealed class MatchService : IMatchService
         match.RejectInvite(playerId);
 
         await _context.SaveChangesAsync(ct);
+        _ = NotifyAttendanceAsync(groupId, matchId, playerId, accepted: false, ct);
         return Result.Ok("Partida atualizada com sucesso.");
     }
 
@@ -426,6 +434,7 @@ public sealed class MatchService : IMatchService
 
         match.AcceptInvite(playerId);
         await _context.SaveChangesAsync(ct);
+        _ = NotifyAttendanceAsync(groupId, matchId, playerId, accepted: true, ct);
         return Result.Ok("Presença confirmada.");
     }
 
@@ -449,6 +458,7 @@ public sealed class MatchService : IMatchService
 
         match.RejectInvite(playerId);
         await _context.SaveChangesAsync(ct);
+        _ = NotifyAttendanceAsync(groupId, matchId, playerId, accepted: false, ct);
         return Result.Ok("Presença recusada.");
     }
 
@@ -503,7 +513,10 @@ public sealed class MatchService : IMatchService
         // Se todos os jogadores não-convidados já votaram, persiste o MVP automaticamente
         var (tieRule, tieMax) = await LoadMvpTieRuleAsync(groupId, ct);
         if (match.AutoSetMvpIfAllVoted(tieRule, tieMax))
+        {
             await _context.SaveChangesAsync(ct);
+            _ = NotifyMvpDefinedAsync(groupId, matchId, ct);
+        }
 
         return Result.Ok("Partida atualizada com sucesso.");
     }
@@ -587,6 +600,7 @@ public sealed class MatchService : IMatchService
         await _bets.ResolveMatchBetsAsync(matchId, ct);
 
         await NotifyMatchFinalizedAsync(groupId, matchId, ct);
+        _ = NotifyMvpDefinedAsync(groupId, matchId, ct);
 
         return Result.Ok("Partida atualizada com sucesso.");
     }
@@ -1901,6 +1915,89 @@ public sealed class MatchService : IMatchService
             body: "Confira os resultados e o MVP da partida.",
             data: new Dictionary<string, string> { ["type"] = "match_finalized", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
             ct);
+
+    /// <summary>
+    /// Notifica admins sobre confirmação/recusa de presença e verifica se o quorum mínimo foi atingido.
+    /// Fire-and-forget — não bloqueia a resposta do endpoint.
+    /// </summary>
+    private async Task NotifyAttendanceAsync(Guid groupId, Guid matchId, Guid playerId, bool accepted, CancellationToken ct)
+    {
+        try
+        {
+            var playerName = await _context.Players
+                .AsNoTracking()
+                .Where(p => p.Id == playerId)
+                .Select(p => p.Name)
+                .FirstOrDefaultAsync(ct);
+
+            var confirmedCount = await _context.MatchPlayers
+                .AsNoTracking()
+                .CountAsync(mp => mp.MatchId == matchId && mp.InviteResponse == InviteResponse.Accepted, ct);
+
+            if (accepted)
+            {
+                await _push.SendToGroupAdminsAsync(
+                    groupId,
+                    title: $"{playerName ?? "Jogador"} confirmou presença.",
+                    body:  $"Agora são {confirmedCount} confirmados.",
+                    data:  new Dictionary<string, string> { ["type"] = "attendance_confirmed", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
+                    ct);
+
+                // Quorum: notifica apenas quando o limiar é atingido exatamente
+                var minPlayers = await _context.GroupSettings
+                    .AsNoTracking()
+                    .Where(s => s.GroupId == groupId)
+                    .Select(s => (int?)s.MinPlayers)
+                    .FirstOrDefaultAsync(ct);
+
+                if (minPlayers.HasValue && minPlayers.Value > 0 && confirmedCount == minPlayers.Value)
+                {
+                    await _push.SendToGroupAdminsAsync(
+                        groupId,
+                        title: "Quorum atingido!",
+                        body:  $"Já são {confirmedCount} jogadores confirmados para a partida.",
+                        data:  new Dictionary<string, string> { ["type"] = "quorum_reached", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
+                        ct);
+                }
+            }
+            else
+            {
+                await _push.SendToGroupAdminsAsync(
+                    groupId,
+                    title: $"{playerName ?? "Jogador"} recusou presença.",
+                    body:  $"Ficou com {confirmedCount} confirmados.",
+                    data:  new Dictionary<string, string> { ["type"] = "attendance_rejected", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
+                    ct);
+            }
+        }
+        catch { /* notificação não crítica */ }
+    }
+
+    /// <summary>
+    /// Notifica todos do grupo quando o MVP é definido (via votação ou finalização manual).
+    /// Fire-and-forget — não bloqueia a resposta do endpoint.
+    /// </summary>
+    private async Task NotifyMvpDefinedAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        try
+        {
+            var mvpName = await _context.MatchPlayers
+                .AsNoTracking()
+                .Where(mp => mp.MatchId == matchId && mp.IsMvp == true)
+                .Select(mp => mp.Player!.Name)
+                .FirstOrDefaultAsync(ct);
+
+            if (mvpName is null) return;
+
+            await _push.SendToGroupAsync(
+                groupId,
+                title: "MVP da partida!",
+                body:  $"{mvpName} foi eleito o MVP! Parabéns!",
+                data:  new Dictionary<string, string> { ["type"] = "match_mvp", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
+                ct);
+        }
+        catch { /* notificação não crítica */ }
+    }
 
     private Task NotifyTeamsAssignedAsync(Guid groupId, Guid matchId, CancellationToken ct) =>
         _push.SendToGroupAsync(

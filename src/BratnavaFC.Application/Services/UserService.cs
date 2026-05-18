@@ -17,17 +17,20 @@ public class UserService : IUserService
     private readonly IRepositoryBase<UserEntity> _repository;
     private readonly ILogger<UserService> _logger;
     private readonly PasswordHasher<UserEntity> _passwordHasher;
+    private readonly IPushService _push;
 
     public UserService(
         AppDbContext db,
         IRepositoryBase<UserEntity> repository,
         ILogger<UserService> logger,
-        PasswordHasher<UserEntity> passwordHasher)
+        PasswordHasher<UserEntity> passwordHasher,
+        IPushService push)
     {
         _repository = repository;
         _logger = logger;
         _passwordHasher = passwordHasher;
         _db = db;
+        _push = push;
     }
 
     public async Task<Result> CreateUserAsync(CreateUserDto dto, CancellationToken cancellationToken)
@@ -99,7 +102,7 @@ public class UserService : IUserService
     {
         var page = req.Page <= 0 ? 1 : req.Page;
         var pageSize = req.PageSize <= 0 ? 20 : req.PageSize;
-        if (pageSize > 200) pageSize = 200;
+        if (pageSize > 2000) pageSize = 2000;
 
         IQueryable<UserEntity> q = _db.Users;
 
@@ -248,7 +251,24 @@ public class UserService : IUserService
         _repository.Update(user);
         await _repository.SaveChangesAsync(cancellationToken);
 
+        _ = NotifyPasswordChangedAsync(userId, cancellationToken);
+
         return Result.Ok("Senha atualizada com sucesso.");
+    }
+
+    private async Task NotifyPasswordChangedAsync(Guid userId, CancellationToken ct)
+    {
+        try
+        {
+            await _push.SendToUserAsync(
+                userId,
+                title: "Senha alterada",
+                body:  "Sua senha foi alterada. Se não foi você, entre em contato.",
+                data:  new Dictionary<string, string> { ["type"] = "password_changed" },
+                ct,
+                groupId: null);
+        }
+        catch { /* notificação não crítica */ }
     }
 
     public async Task<Result> InactivateAsync(Guid userId, CancellationToken cancellationToken)
