@@ -1,4 +1,5 @@
 // Tests/Application/Services/UserServiceTests.cs
+using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Users;
@@ -28,7 +29,8 @@ public class UserServiceTests
         var hasher = new PasswordHasher<UserEntity>();
         var logger = new Mock<ILogger<UserService>>();
 
-        var sut = new UserService(db, repo.Object, logger.Object, hasher);
+        var push = new Mock<IPushService>();
+        var sut = new UserService(db, repo.Object, logger.Object, hasher, push.Object);
 
         var existingUser = new UserEntity(
             userName: "luis",
@@ -71,7 +73,8 @@ public class UserServiceTests
         var hasher = new PasswordHasher<UserEntity>();
         var logger = new Mock<ILogger<UserService>>();
 
-        var sut = new UserService(db, repo.Object, logger.Object, hasher);
+        var push = new Mock<IPushService>();
+        var sut = new UserService(db, repo.Object, logger.Object, hasher, push.Object);
 
         var existingUser = new UserEntity(
             userName: "luis",
@@ -118,7 +121,8 @@ public class UserServiceTests
         var logger = new Mock<ILogger<UserService>>();
         var hasher = new PasswordHasher<UserEntity>();
 
-        var sut = new UserService(db, repo.Object, logger.Object, hasher);
+        var push = new Mock<IPushService>();
+        var sut = new UserService(db, repo.Object, logger.Object, hasher, push.Object);
 
         var dto = new CreateUserDto
         (
@@ -157,7 +161,8 @@ public class UserServiceTests
         repo.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var sut = new UserService(db, repo.Object, logger.Object, hasher);
+        var push = new Mock<IPushService>();
+        var sut = new UserService(db, repo.Object, logger.Object, hasher, push.Object);
 
         var dto = new CreateUserDto
         (
@@ -213,7 +218,8 @@ public class UserServiceTests
         var repo = new Mock<IRepositoryBase<UserEntity>>();
         var logger = new Mock<ILogger<UserService>>();
         var hasher = new PasswordHasher<UserEntity>();
-        var sut = new UserService(db, repo.Object, logger.Object, hasher);
+        var push = new Mock<IPushService>();
+        var sut = new UserService(db, repo.Object, logger.Object, hasher, push.Object);
 
         var req = new ListUsersRequestDto
         {
@@ -262,7 +268,8 @@ public class UserServiceTests
         repo.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var sut = new UserService(db, repo.Object, logger.Object, hasher);
+        var push = new Mock<IPushService>();
+        var sut = new UserService(db, repo.Object, logger.Object, hasher, push.Object);
 
         var dto = new ChangePasswordDto
         {
@@ -304,7 +311,8 @@ public class UserServiceTests
         repo.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var sut = new UserService(db, repo.Object, logger.Object, hasher);
+        var push = new Mock<IPushService>();
+        var sut = new UserService(db, repo.Object, logger.Object, hasher, push.Object);
 
         var dto = new ChangePasswordDto
         {
@@ -343,7 +351,8 @@ public class UserServiceTests
         var repo   = new Mock<IRepositoryBase<UserEntity>>();
         var logger = new Mock<ILogger<UserService>>();
         var hasher = new PasswordHasher<UserEntity>();
-        var sut    = new UserService(db, repo.Object, logger.Object, hasher);
+        var push   = new Mock<IPushService>();
+        var sut    = new UserService(db, repo.Object, logger.Object, hasher, push.Object);
 
         var req = new ListUsersRequestDto { Page = 1, PageSize = 9999 };
 
@@ -366,7 +375,8 @@ public class UserServiceTests
         var repo   = new Mock<IRepositoryBase<UserEntity>>();
         var logger = new Mock<ILogger<UserService>>();
         var hasher = new PasswordHasher<UserEntity>();
-        var sut    = new UserService(db, repo.Object, logger.Object, hasher);
+        var push   = new Mock<IPushService>();
+        var sut    = new UserService(db, repo.Object, logger.Object, hasher, push.Object);
 
         var req = new ListUsersRequestDto { Page = 1, PageSize = 2000 };
 
@@ -387,7 +397,8 @@ public class UserServiceTests
         var repo   = new Mock<IRepositoryBase<UserEntity>>();
         var logger = new Mock<ILogger<UserService>>();
         var hasher = new PasswordHasher<UserEntity>();
-        var sut    = new UserService(db, repo.Object, logger.Object, hasher);
+        var push   = new Mock<IPushService>();
+        var sut    = new UserService(db, repo.Object, logger.Object, hasher, push.Object);
 
         var req = new ListUsersRequestDto { Page = 1, PageSize = 50 };
 
@@ -421,7 +432,8 @@ public class UserServiceTests
         repo.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var sut = new UserService(db, repo.Object, logger.Object, hasher);
+        var push = new Mock<IPushService>();
+        var sut = new UserService(db, repo.Object, logger.Object, hasher, push.Object);
 
         var dto = new UpdateUserDto
         {
@@ -461,7 +473,8 @@ public class UserServiceTests
         repo.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var sut = new UserService(db, repo.Object, logger.Object, hasher);
+        var push = new Mock<IPushService>();
+        var sut = new UserService(db, repo.Object, logger.Object, hasher, push.Object);
 
         var dto = new UpdateUserDto
         {
