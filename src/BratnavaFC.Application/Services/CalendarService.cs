@@ -33,12 +33,14 @@ public sealed class CalendarService : ICalendarService
     private readonly AppDbContext _context;
     private readonly IHolidayService _holidays;
     private readonly IPushService _push;
+    private readonly INotificationScheduler _scheduler;
 
-    public CalendarService(AppDbContext context, IHolidayService holidays, IPushService push)
+    public CalendarService(AppDbContext context, IHolidayService holidays, IPushService push, INotificationScheduler scheduler)
     {
-        _context  = context;
-        _holidays = holidays;
-        _push     = push;
+        _context   = context;
+        _holidays  = holidays;
+        _push      = push;
+        _scheduler = scheduler;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -201,6 +203,7 @@ public sealed class CalendarService : ICalendarService
         await _context.SaveChangesAsync(ct);
 
         await NotifyEventCreatedAsync(groupId, ev.Id, dto.Title, eventDate, eventTime, ct);
+        await _scheduler.ScheduleCalendarRemindersAsync(ev.Id, groupId, dto.Title, eventDate, eventTime, ct);
 
         return Result<CalendarEventDto>.Ok(MapEventToDto(ev, category), "Evento criado com sucesso.", ResultStatus.Created);
     }
@@ -251,6 +254,7 @@ public sealed class CalendarService : ICalendarService
             dto.Icon);
 
         await _context.SaveChangesAsync(ct);
+        await _scheduler.RescheduleCalendarRemindersAsync(ev.Id, groupId, ev.Title, ev.EventDate, ev.EventTime, ct);
 
         return Result<CalendarEventDto>.Ok(MapEventToDto(ev, category), "Evento atualizado com sucesso.");
     }
@@ -267,6 +271,7 @@ public sealed class CalendarService : ICalendarService
             return Result.Ok("Evento removido com sucesso.");
 
         var title = ev.Title;
+        await _scheduler.CancelCalendarRemindersAsync(eventId, ct);
         _context.CalendarEvents.Remove(ev);
         await _context.SaveChangesAsync(ct);
 

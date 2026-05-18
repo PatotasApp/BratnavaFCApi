@@ -12,11 +12,13 @@ public sealed class PollService : IPollService
 {
     private readonly AppDbContext _db;
     private readonly IPushService _push;
+        private readonly INotificationScheduler _scheduler;
 
-    public PollService(AppDbContext db, IPushService push)
+    public PollService(AppDbContext db, IPushService push, INotificationScheduler scheduler)
     {
-        _db   = db;
-        _push = push;
+        _db        = db;
+        _push      = push;
+        _scheduler = scheduler;
     }
 
     public async Task<Result<List<PollSummaryDto>>> GetPollsAsync(Guid groupId, Guid playerId, CancellationToken ct = default)
@@ -212,6 +214,7 @@ public sealed class PollService : IPollService
             await _db.SaveChangesAsync(ct);
 
             await NotifyPollCreatedAsync(groupId, poll.Id, dto.Title, ct);
+            await _scheduler.SchedulePollRemindersAsync(poll.Id, groupId, dto.Title, deadlineDate, deadlineTime, ct);
 
             return await GetPollAsync(groupId, poll.Id, Guid.Empty, true, ct, skipImages: true);
         }
@@ -250,6 +253,7 @@ public sealed class PollService : IPollService
             await _db.SaveChangesAsync(ct);
 
             await NotifyEventPollCreatedAsync(groupId, poll.Id, dto.Title, ct);
+            await _scheduler.SchedulePollRemindersAsync(poll.Id, groupId, dto.Title, deadlineDate, deadlineTime, ct);
 
             return await GetPollAsync(groupId, poll.Id, Guid.Empty, true, ct, skipImages: true);
         }
@@ -340,6 +344,7 @@ public sealed class PollService : IPollService
         {
             var poll = await _db.Polls.FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
             if (poll is null) return Result.Ok(); // já excluído — idempotente
+            await _scheduler.CancelPollRemindersAsync(pollId, ct);
             _db.Polls.Remove(poll);
             await _db.SaveChangesAsync(ct);
             return Result.Ok();
@@ -544,6 +549,8 @@ public sealed class PollService : IPollService
                 poll.Reopen();
 
             await _db.SaveChangesAsync(ct);
+            await _scheduler.ReschedulePollRemindersAsync(
+                pollId, groupId, poll.Title, poll.DeadlineDate, poll.DeadlineTime, ct);
             return Result.Ok();
         }
         catch (Exception ex)
@@ -558,7 +565,7 @@ public sealed class PollService : IPollService
         _push.SendToGroupAsync(
             groupId,
             title: $"Nova votação: {title}",
-            body:  "Uma nova votação foi criada. Vote agora!",
+            body:  "Uma nova votação foi criada.",
             data:  new Dictionary<string, string> { ["type"] = "poll_created", ["groupId"] = groupId.ToString(), ["pollId"] = pollId.ToString() },
             ct);
 
