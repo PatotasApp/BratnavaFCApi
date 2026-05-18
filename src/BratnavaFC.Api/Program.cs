@@ -17,8 +17,6 @@ using Microsoft.OpenApi.Models;
 using System.IdentityModel.Tokens.Jwt;
 using BratnavaFC.Api;
 using BratnavaFC.Api.Middleware;
-using BratnavaFC.Application.Abstractions;
-using BratnavaFC.Application.Services;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 using Hangfire;
@@ -161,9 +159,9 @@ builder.Services.AddHangfire(config => config
 
 builder.Services.AddHangfireServer(options =>
 {
-    options.WorkerCount             = 1;
+    options.WorkerCount             = 2;
     options.Queues                  = ["default"];
-    options.SchedulePollingInterval = TimeSpan.FromHours(1);
+    options.SchedulePollingInterval = TimeSpan.FromMinutes(5);
 });
 
 
@@ -189,6 +187,11 @@ builder.Services.AddScoped<IAbsenceService, AbsenceService>();
 builder.Services.AddScoped<IBetService, BetService>();
 builder.Services.AddScoped<IMatchCardService, MatchCardService>();
 builder.Services.AddScoped<IClipCleanupJob, ClipCleanupJob>();
+builder.Services.AddScoped<INotificationScheduler, NotificationScheduler>();
+builder.Services.AddScoped<IMatchReminderJob, MatchReminderJob>();
+builder.Services.AddScoped<IPollReminderJob, PollReminderJob>();
+builder.Services.AddScoped<ICalendarReminderJob, CalendarReminderJob>();
+builder.Services.AddScoped<IBirthdayNotificationJob, BirthdayNotificationJob>();
 
 // =====================
 // FIREBASE ADMIN
@@ -396,6 +399,13 @@ recurringJobs.AddOrUpdate<IClipCleanupJob>(
     recurringJobId: "clip-r2-cleanup",
     methodCall: job => job.ExecuteAsync(CancellationToken.None),
     cronExpression: "0 3 1,15 * *",
+    options: new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+// Notificações de aniversário: todo dia às 08:00 horário de Brasília (UTC-3 = 11:00 UTC)
+recurringJobs.AddOrUpdate<IBirthdayNotificationJob>(
+    recurringJobId: "birthday-daily",
+    methodCall: job => job.ExecuteAsync(CancellationToken.None),
+    cronExpression: "0 11 * * *",
     options: new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
 
 app.MapControllers();
