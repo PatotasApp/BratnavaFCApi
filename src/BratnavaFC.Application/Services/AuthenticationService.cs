@@ -45,7 +45,7 @@ public sealed class AuthenticationService : IAuthenticationService
         if (user is null)
         {
             _logger.LogWarning("Login attempt failed: user '{Username}' not found.", username);
-            return Result<TokenDto>.Fail("User not found");
+            return Result<TokenDto>.Fail("Usuário ou senha incorretos.");
         }
 
         var verify = _passwordHasher.VerifyHashedPassword(user, user.Password, request.Password);
@@ -53,7 +53,7 @@ public sealed class AuthenticationService : IAuthenticationService
         if (verify == PasswordVerificationResult.Failed)
         {
             _logger.LogWarning("Login attempt failed: invalid password for user '{Username}'.", username);
-            return Result<TokenDto>.Fail("Invalid user or password.");
+            return Result<TokenDto>.Fail("Usuário ou senha incorretos.");
         }
 
         var refreshToken = new RefreshTokenEntity

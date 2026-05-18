@@ -35,6 +35,7 @@ public class GroupsController : GroupAuthorizedController
     }
 
     [HttpDelete("{groupId:guid}")]
+    [Authorize(Roles = "GodMode")]
     public async Task<IActionResult> DeleteGroupAsync(Guid groupId, CancellationToken cancellationToken)
     {
         var result = await _groupService.DeleteAsync(groupId, cancellationToken);
@@ -110,7 +111,7 @@ public class GroupsController : GroupAuthorizedController
         var requestingUserId = GetCurrentUserId();
         if (requestingUserId == null) return Unauthorized();
 
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
+        if (!User.IsInRole("GodMode") && !await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
             return Forbid();
 
         var result = await _groupService.RemoveAdminAsync(groupId, userId, requestingUserId.Value, cancellationToken);
@@ -131,7 +132,7 @@ public class GroupsController : GroupAuthorizedController
     {
         if (request == null) return BadRequest();
 
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
+        if (!User.IsInRole("GodMode") && !await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
             return Forbid();
 
         var result = await _groupService.AddFinanceiroToGroupAsync(groupId, request.UserId, cancellationToken);
@@ -141,7 +142,7 @@ public class GroupsController : GroupAuthorizedController
     [HttpDelete("{groupId:guid}/financeiros/{userId:guid}")]
     public async Task<IActionResult> RemoveFinanceiroAsync(Guid groupId, Guid userId, CancellationToken cancellationToken)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
+        if (!User.IsInRole("GodMode") && !await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
             return Forbid();
 
         var result = await _groupService.RemoveFinanceiroAsync(groupId, userId, cancellationToken);

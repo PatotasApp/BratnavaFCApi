@@ -134,9 +134,9 @@ public class MatchesController : GroupAuthorizedController
     }
 
     [HttpDelete("group/{groupId:guid}/{matchId:guid}")]
+    [Authorize(Roles = "GodMode")]
     public async Task<IActionResult> Delete(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
             var result = await _service.DeleteAsync(groupId, matchId, cancellationToken);
@@ -480,12 +480,12 @@ public class MatchesController : GroupAuthorizedController
     }
 
     [HttpDelete("group/{groupId:guid}/replays/{clipId:guid}")]
+    [Authorize(Roles = "GodMode")]
     public async Task<IActionResult> DeleteReplay(
         [FromRoute] Guid groupId,
         [FromRoute] Guid clipId,
         CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         await _service.DeleteReplayAsync(groupId, clipId, ct);
         return NoContent();
     }
@@ -607,9 +607,9 @@ public class MatchesController : GroupAuthorizedController
     }
 
     [HttpDelete("group/{groupId:guid}/{matchId:guid}/goals/{goalId:guid}")]
+    [Authorize(Roles = "GodMode")]
     public async Task<IActionResult> RemoveGoal(Guid groupId, Guid matchId, Guid goalId, CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         try
         {
             await _service.RemoveGoalAsync(groupId, matchId, goalId, ct);

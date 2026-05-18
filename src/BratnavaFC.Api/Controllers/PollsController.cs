@@ -102,9 +102,9 @@ public sealed class PollsController : GroupAuthorizedController
 
     // DELETE /api/Polls/group/{groupId}/{pollId}
     [HttpDelete("group/{groupId:guid}/{pollId:guid}")]
+    [Authorize(Roles = "GodMode")]
     public async Task<IActionResult> DeletePoll(Guid groupId, Guid pollId, CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         var result = await _polls.DeletePollAsync(groupId, pollId, ct);
         return ToResponse(result);
     }
@@ -129,9 +129,9 @@ public sealed class PollsController : GroupAuthorizedController
 
     // DELETE /api/Polls/group/{groupId}/{pollId}/options/{optionId}
     [HttpDelete("group/{groupId:guid}/{pollId:guid}/options/{optionId:guid}")]
+    [Authorize(Roles = "GodMode")]
     public async Task<IActionResult> DeleteOption(Guid groupId, Guid pollId, Guid optionId, CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         var result = await _polls.DeleteOptionAsync(groupId, pollId, optionId, ct);
         return ToResponse(result);
     }

@@ -1,5 +1,6 @@
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BratnavaFC.Api.Controllers;
@@ -55,6 +56,15 @@ public class TeamColorController : BaseApiController
     public async Task<IActionResult> Activate(Guid groupId, Guid colorId, CancellationToken ct)
     {
         var result = await _service.ActivateAsync(groupId, colorId, ct);
+        return ToResponse(result);
+    }
+
+    /// <summary>Exclui permanentemente uma cor do time. Apenas GodMode.</summary>
+    [HttpDelete("group/{groupId:guid}/{colorId:guid}")]
+    [Authorize(Roles = "GodMode")]
+    public async Task<IActionResult> Delete(Guid groupId, Guid colorId, CancellationToken ct)
+    {
+        var result = await _service.DeleteAsync(groupId, colorId, ct);
         return ToResponse(result);
     }
 }

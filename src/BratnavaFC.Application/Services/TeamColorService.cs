@@ -133,6 +133,20 @@ public sealed class TeamColorService : ITeamColorService
         return Result.Ok("Cor do time atualizada com sucesso.");
     }
 
+    public async Task<Result> DeleteAsync(Guid groupId, Guid colorId, CancellationToken ct)
+    {
+        var entity = await _context.TeamColors
+            .FirstOrDefaultAsync(c => c.GroupId == groupId && c.Id == colorId, ct);
+
+        if (entity is null)
+            return Result.Fail("Cor do time não encontrada para este grupo.", ResultStatus.NotFound);
+
+        _context.TeamColors.Remove(entity);
+        await _context.SaveChangesAsync(ct);
+
+        return Result.Ok("Cor removida permanentemente.");
+    }
+
     private async Task<Result> EnsureGroupExistsAsync(Guid groupId, CancellationToken ct)
     {
         if (groupId == Guid.Empty)

@@ -31,6 +31,7 @@ public class PlayersController : GroupAuthorizedController
     }
 
     [HttpDelete("{playerId:guid}")]
+    [Authorize(Roles = "GodMode")]
     public async Task<IActionResult> DeletePlayer(Guid playerId, CancellationToken cancellationToken)
     {
         var result = await _playerService.DeleteAsync(playerId, cancellationToken);

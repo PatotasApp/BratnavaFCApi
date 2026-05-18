@@ -17,4 +17,7 @@ public interface ITeamColorService
 
     Task<Result> InactivateAsync(Guid groupId, Guid colorId, CancellationToken ct);
     Task<Result> ActivateAsync(Guid groupId, Guid colorId, CancellationToken ct);
+
+    /// <summary>Exclui permanentemente uma cor. Apenas GodMode.</summary>
+    Task<Result> DeleteAsync(Guid groupId, Guid colorId, CancellationToken ct);
 }

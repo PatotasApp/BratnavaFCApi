@@ -66,13 +66,12 @@ public sealed class CalendarController : GroupAuthorizedController
         return ToResponse(result);
     }
 
-    /// <summary>Remove um evento manual. Somente admins do grupo.</summary>
+    /// <summary>Remove permanentemente um evento. Apenas GodMode.</summary>
     [HttpDelete("group/{groupId:guid}/events/{eventId:guid}")]
+    [Authorize(Roles = "GodMode")]
     public async Task<IActionResult> DeleteEvent(
         Guid groupId, Guid eventId, CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
-
         var result = await _service.DeleteEventAsync(groupId, eventId, ct);
         return ToResponse(result);
     }
@@ -109,13 +108,12 @@ public sealed class CalendarController : GroupAuthorizedController
         return ToResponse(result);
     }
 
-    /// <summary>Remove uma categoria (não-system). Somente admins do grupo.</summary>
+    /// <summary>Remove permanentemente uma categoria. Apenas GodMode.</summary>
     [HttpDelete("group/{groupId:guid}/categories/{categoryId:guid}")]
+    [Authorize(Roles = "GodMode")]
     public async Task<IActionResult> DeleteCategory(
         Guid groupId, Guid categoryId, CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
-
         var result = await _service.DeleteCategoryAsync(groupId, categoryId, ct);
         return ToResponse(result);
     }
