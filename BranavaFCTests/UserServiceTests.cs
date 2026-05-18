@@ -327,6 +327,78 @@ public class UserServiceTests
         verify.Should().Be(PasswordVerificationResult.Success);
     }
 
+    // ─── GetAllAsync — page size cap ──────────────────────────────────────────
+
+    [Fact]
+    public async Task GetAllAsync_WhenPageSizeExceeds2000_ShouldCapAt2000()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(GetAllAsync_WhenPageSizeExceeds2000_ShouldCapAt2000));
+
+        // Cria 3 usuários para confirmar que a query roda sem estourar
+        for (int i = 1; i <= 3; i++)
+            db.Users.Add(new UserEntity($"u{i}", "A", "B", $"u{i}@test.com", "hash", null, null));
+        await db.SaveChangesAsync();
+
+        var repo   = new Mock<IRepositoryBase<UserEntity>>();
+        var logger = new Mock<ILogger<UserService>>();
+        var hasher = new PasswordHasher<UserEntity>();
+        var sut    = new UserService(db, repo.Object, logger.Object, hasher);
+
+        var req = new ListUsersRequestDto { Page = 1, PageSize = 9999 };
+
+        // Act
+        var result = await sut.GetAllAsync(req, CancellationToken.None);
+
+        // Assert — o serviço não deve lançar exceção e deve retornar com sucesso
+        result.Success.Should().BeTrue();
+        // o pageSize interno é truncado para 2000, mas como só há 3 usuários todos aparecem
+        result.Data!.Items.Should().HaveCount(3);
+        result.Data.PageSize.Should().Be(2000, "o pageSize deve ser capeado em 2000.");
+    }
+
+    [Fact]
+    public async Task GetAllAsync_WhenPageSizeIs2000_ShouldNotReduce()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(GetAllAsync_WhenPageSizeIs2000_ShouldNotReduce));
+
+        var repo   = new Mock<IRepositoryBase<UserEntity>>();
+        var logger = new Mock<ILogger<UserService>>();
+        var hasher = new PasswordHasher<UserEntity>();
+        var sut    = new UserService(db, repo.Object, logger.Object, hasher);
+
+        var req = new ListUsersRequestDto { Page = 1, PageSize = 2000 };
+
+        // Act
+        var result = await sut.GetAllAsync(req, CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Data!.PageSize.Should().Be(2000);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_WhenPageSizeBelow2000_ShouldKeepOriginalValue()
+    {
+        // Arrange
+        await using var db = DbContextFactory.Create(nameof(GetAllAsync_WhenPageSizeBelow2000_ShouldKeepOriginalValue));
+
+        var repo   = new Mock<IRepositoryBase<UserEntity>>();
+        var logger = new Mock<ILogger<UserService>>();
+        var hasher = new PasswordHasher<UserEntity>();
+        var sut    = new UserService(db, repo.Object, logger.Object, hasher);
+
+        var req = new ListUsersRequestDto { Page = 1, PageSize = 50 };
+
+        // Act
+        var result = await sut.GetAllAsync(req, CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Data!.PageSize.Should().Be(50, "valores abaixo de 2000 não devem ser alterados.");
+    }
+
     // Opcional: se você implementou UpdateAsync com Status no DTO chamando Inactivate/Reactivate
     [Fact]
     public async Task UpdateAsync_WhenStatusBecomesInactive_ShouldInactivateAndSetInactivatedAt()

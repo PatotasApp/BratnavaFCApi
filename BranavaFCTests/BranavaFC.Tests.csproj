@@ -20,6 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\src\BratnavaFC.Api\BratnavaFC.Api.csproj" />
     <ProjectReference Include="..\src\BratnavaFC.Application\BratnavaFC.Application.csproj" />
     <ProjectReference Include="..\src\BratnavaFC.Domain\BratnavaFC.Domain.csproj" />
   </ItemGroup>

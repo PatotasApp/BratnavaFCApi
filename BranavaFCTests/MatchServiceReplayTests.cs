@@ -20,7 +20,7 @@ public class MatchServiceReplayTests
         var repo = new RepositoryBase<MatchEntity>(db);
         var push = Mock.Of<IPushService>();
         var urls = replayUrls ?? Mock.Of<IReplayUrlService>();
-        return new MatchService(db, repo, push, urls, Mock.Of<IBetService>());
+        return new MatchService(db, repo, push, urls, Mock.Of<IBetService>(), Mock.Of<INotificationScheduler>());
     }
 
     private static ReplayClipEntity MakeClip(

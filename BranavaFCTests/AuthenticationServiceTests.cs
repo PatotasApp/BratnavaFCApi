@@ -49,7 +49,7 @@ public class AuthenticationServiceTests
 
         // Assert
         result.Success.Should().BeFalse();
-        result.Error.Should().Be("User not found");
+        result.Error.Should().Be("Usuário ou senha incorretos.");
         result.Status.Should().Be(ResultStatus.BadRequest);
     }
 
@@ -82,7 +82,7 @@ public class AuthenticationServiceTests
 
         // Assert
         result.Success.Should().BeFalse();
-        result.Error.Should().Be("Invalid user or password.");
+        result.Error.Should().Be("Usuário ou senha incorretos.");
         result.Status.Should().Be(ResultStatus.BadRequest);
     }
 

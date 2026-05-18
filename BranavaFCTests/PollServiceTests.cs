@@ -37,7 +37,7 @@ public class PollServiceTests
     {
         // Arrange
         await using var db  = DbContextFactory.Create(nameof(UpdateDeadlineAsync_WhenPollNotFound_ShouldReturnFailure));
-        var sut = new PollService(db, Mock.Of<IPushService>());
+        var sut = new PollService(db, Mock.Of<IPushService>(), Mock.Of<INotificationScheduler>());
 
         // Act
         var result = await sut.UpdateDeadlineAsync(
@@ -60,7 +60,7 @@ public class PollServiceTests
         db.Polls.Add(poll);
         await db.SaveChangesAsync();
 
-        var sut = new PollService(db, Mock.Of<IPushService>());
+        var sut = new PollService(db, Mock.Of<IPushService>(), Mock.Of<INotificationScheduler>());
         var dto = new UpdatePollDeadlineDto { DeadlineDate = "2030-01-01" };
 
         // Act — groupId diferente do poll
@@ -82,7 +82,7 @@ public class PollServiceTests
         db.Polls.Add(poll);
         await db.SaveChangesAsync();
 
-        var sut = new PollService(db, Mock.Of<IPushService>());
+        var sut = new PollService(db, Mock.Of<IPushService>(), Mock.Of<INotificationScheduler>());
         var dto = new UpdatePollDeadlineDto { DeadlineDate = "2030-12-31", DeadlineTime = "20:00" };
 
         // Act
@@ -108,7 +108,7 @@ public class PollServiceTests
         db.Polls.Add(poll);
         await db.SaveChangesAsync();
 
-        var sut = new PollService(db, Mock.Of<IPushService>());
+        var sut = new PollService(db, Mock.Of<IPushService>(), Mock.Of<INotificationScheduler>());
         var dto = new UpdatePollDeadlineDto { DeadlineDate = "2030-06-15" }; // sem horário
 
         // Act
@@ -133,7 +133,7 @@ public class PollServiceTests
         db.Polls.Add(poll);
         await db.SaveChangesAsync();
 
-        var sut = new PollService(db, Mock.Of<IPushService>());
+        var sut = new PollService(db, Mock.Of<IPushService>(), Mock.Of<INotificationScheduler>());
         var dto = new UpdatePollDeadlineDto { ClearDeadline = true };
 
         // Act
@@ -157,7 +157,7 @@ public class PollServiceTests
         db.Polls.Add(poll);
         await db.SaveChangesAsync();
 
-        var sut = new PollService(db, Mock.Of<IPushService>());
+        var sut = new PollService(db, Mock.Of<IPushService>(), Mock.Of<INotificationScheduler>());
         var dto = new UpdatePollDeadlineDto { DeadlineDate = "2030-12-31", DeadlineTime = "18:00" };
 
         // Act
@@ -183,7 +183,7 @@ public class PollServiceTests
         db.Polls.Add(poll);
         await db.SaveChangesAsync();
 
-        var sut = new PollService(db, Mock.Of<IPushService>());
+        var sut = new PollService(db, Mock.Of<IPushService>(), Mock.Of<INotificationScheduler>());
         var dto = new UpdatePollDeadlineDto { ClearDeadline = true };
 
         // Act
@@ -208,7 +208,7 @@ public class PollServiceTests
         db.Polls.Add(poll);
         await db.SaveChangesAsync();
 
-        var sut = new PollService(db, Mock.Of<IPushService>());
+        var sut = new PollService(db, Mock.Of<IPushService>(), Mock.Of<INotificationScheduler>());
         var dto = new UpdatePollDeadlineDto { DeadlineDate = "2031-03-10", DeadlineTime = "09:30" };
 
         await sut.UpdateDeadlineAsync(groupId, poll.Id, dto, CancellationToken.None);

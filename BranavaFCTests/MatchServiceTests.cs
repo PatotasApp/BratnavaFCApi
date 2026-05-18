@@ -61,7 +61,7 @@ public sealed class MatchServiceTests
     }
 
     private static MatchService CreateSut(AppDbContext db, Mock<IRepositoryBase<MatchEntity>> repo)
-        => new(db, repo.Object, Mock.Of<IPushService>(), Mock.Of<IReplayUrlService>(), Mock.Of<IBetService>());
+        => new(db, repo.Object, Mock.Of<IPushService>(), Mock.Of<IReplayUrlService>(), Mock.Of<IBetService>(), Mock.Of<INotificationScheduler>());
 
     // =========================
     // Seeds

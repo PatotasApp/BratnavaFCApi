@@ -353,4 +353,97 @@ public class TeamColorServiceTests
         var saved = await db.TeamColors.FindAsync(color.Id);
         saved!.IsActive.Should().BeTrue();
     }
+
+    // ─── DeleteAsync ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task DeleteAsync_WhenColorNotFound_ShouldReturnNotFound()
+    {
+        await using var db = DbContextFactory.Create(nameof(DeleteAsync_WhenColorNotFound_ShouldReturnNotFound));
+
+        var group = new GroupEntity("G", null, Guid.NewGuid());
+        db.Groups.Add(group);
+        await db.SaveChangesAsync();
+
+        var sut = new TeamColorService(db);
+
+        var result = await sut.DeleteAsync(group.Id, Guid.NewGuid(), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
+        result.Error.Should().Contain("Cor do time");
+    }
+
+    [Fact]
+    public async Task DeleteAsync_WhenColorBelongsToOtherGroup_ShouldReturnNotFound()
+    {
+        await using var db = DbContextFactory.Create(nameof(DeleteAsync_WhenColorBelongsToOtherGroup_ShouldReturnNotFound));
+
+        var group1 = new GroupEntity("G1", null, Guid.NewGuid());
+        var group2 = new GroupEntity("G2", null, Guid.NewGuid());
+        db.Groups.AddRange(group1, group2);
+        await db.SaveChangesAsync();
+
+        // cor pertence ao group1
+        var color = new TeamColorEntity(group1.Id, "Azul", "#0000FF");
+        db.TeamColors.Add(color);
+        await db.SaveChangesAsync();
+
+        var sut = new TeamColorService(db);
+
+        // tenta deletar com groupId do group2
+        var result = await sut.DeleteAsync(group2.Id, color.Id, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.NotFound);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_WhenValid_ShouldRemoveFromDatabase()
+    {
+        await using var db = DbContextFactory.Create(nameof(DeleteAsync_WhenValid_ShouldRemoveFromDatabase));
+
+        var group = new GroupEntity("G", null, Guid.NewGuid());
+        db.Groups.Add(group);
+        await db.SaveChangesAsync();
+
+        var color = new TeamColorEntity(group.Id, "Azul", "#0000FF");
+        db.TeamColors.Add(color);
+        await db.SaveChangesAsync();
+
+        var sut = new TeamColorService(db);
+
+        var result = await sut.DeleteAsync(group.Id, color.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Message.Should().Contain("removida permanentemente");
+
+        var gone = await db.TeamColors.FindAsync(color.Id);
+        gone.Should().BeNull("a cor deve ter sido fisicamente removida do banco.");
+    }
+
+    [Fact]
+    public async Task DeleteAsync_WhenInactiveColor_ShouldAlsoDelete()
+    {
+        // GodMode pode excluir mesmo cores inativas
+        await using var db = DbContextFactory.Create(nameof(DeleteAsync_WhenInactiveColor_ShouldAlsoDelete));
+
+        var group = new GroupEntity("G", null, Guid.NewGuid());
+        db.Groups.Add(group);
+        await db.SaveChangesAsync();
+
+        var color = new TeamColorEntity(group.Id, "Cinza", "#888888");
+        color.Inactivate();
+        db.TeamColors.Add(color);
+        await db.SaveChangesAsync();
+
+        var sut = new TeamColorService(db);
+
+        var result = await sut.DeleteAsync(group.Id, color.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+
+        var gone = await db.TeamColors.FindAsync(color.Id);
+        gone.Should().BeNull();
+    }
 }
