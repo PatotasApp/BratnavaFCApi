@@ -33,17 +33,19 @@ public class PushService : IPushService
             if (platform != "android" && platform != "ios")
                 return Result.Fail("Platform deve ser 'android' ou 'ios'.");
 
+            // Lookup por (userId + token): não roubamos o token de outro usuário.
+            // O mesmo dispositivo físico pode ter linhas para diferentes usuários.
             var existing = await _context.PushTokens
-                .FirstOrDefaultAsync(t => t.Token == token, cancellationToken);
+                .FirstOrDefaultAsync(t => t.UserId == userId && t.Token == token, cancellationToken);
 
             if (existing is not null)
             {
-                // Token já existe — reatribuir ao usuário atual e ativar
-                existing.ReassignToUser(userId);
+                // Linha já existe para este usuário — apenas reativar
+                existing.Reactivate();
             }
             else
             {
-                // Novo token para este usuário
+                // Primeiro registro deste par (usuário, token)
                 var newToken = new PushTokenEntity(userId, token, platform);
                 _context.PushTokens.Add(newToken);
             }

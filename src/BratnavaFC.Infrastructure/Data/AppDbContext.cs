@@ -635,11 +635,9 @@ public class AppDbContext : DbContext
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Busca rápida de tokens ativos por usuário
-            builder.HasIndex(x => x.UserId);
-
-            // Token único globalmente (um mesmo dispositivo não pode ter dois registros)
-            builder.HasIndex(x => x.Token).IsUnique();
+            // Par (UserId, Token) único: permite que o mesmo dispositivo tenha
+            // registros para usuários diferentes sem roubar o token de ninguém.
+            builder.HasIndex(x => new { x.UserId, x.Token }).IsUnique();
         });
 
         modelBuilder.Entity<UserAbsenceEntity>(builder =>

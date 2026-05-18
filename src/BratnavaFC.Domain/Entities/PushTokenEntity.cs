@@ -27,12 +27,9 @@ public class PushTokenEntity : BaseEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
-    /// <summary>Reassocia o token a um novo usuário e o reativa.</summary>
-    public void ReassignToUser(Guid userId)
+    /// <summary>Reativa o token (ex.: usuário fez login novamente no mesmo dispositivo).</summary>
+    public void Reactivate()
     {
-        if (userId == Guid.Empty)
-            throw new InvalidOperationException("UserId é obrigatório.");
-        UserId = userId;
         IsActive = true;
         UpdatedAt = DateTime.UtcNow;
     }
