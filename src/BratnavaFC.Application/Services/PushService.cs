@@ -75,15 +75,18 @@ public class PushService : IPushService
             "[Push] SendToUser userId={UserId} | tokens={Count} | title={Title}",
             userId, tokens.Count, title);
 
-        if (tokens.Count == 0)
-        {
-            _logger.LogWarning("[Push] Nenhum token ativo para usuário {UserId}. Notificação ignorada.", userId);
-            return;
-        }
-
         var prefixedTitle = groupId.HasValue
             ? await PrefixWithGroupNameAsync(title, groupId.Value, cancellationToken)
             : title;
+
+        // Persiste na caixa de entrada independente de ter token ativo
+        await PersistAsync([userId], groupId, prefixedTitle, body, data, cancellationToken);
+
+        if (tokens.Count == 0)
+        {
+            _logger.LogWarning("[Push] Nenhum token ativo para usuário {UserId}. Push ignorado, notificação salva.", userId);
+            return;
+        }
 
         await SendToTokensAsync(tokens, prefixedTitle, body, data, cancellationToken);
     }
@@ -104,6 +107,13 @@ public class PushService : IPushService
             .Select(p => p.UserId!.Value)
             .Distinct()
             .ToListAsync(cancellationToken);
+
+        // Persiste no sininho usando title/body do payload data
+        data.TryGetValue("title", out var inboxTitle);
+        data.TryGetValue("body",  out var inboxBody);
+        data.TryGetValue("type",  out var inboxType);
+        if (!string.IsNullOrEmpty(inboxTitle))
+            await PersistAsync(userIds, groupId, inboxTitle, inboxBody ?? string.Empty, data, cancellationToken, inboxType);
 
         if (userIds.Count == 0) return;
 
@@ -174,7 +184,7 @@ public class PushService : IPushService
             .Distinct()
             .ToListAsync(cancellationToken);
 
-        await SendToUserListAsync(userIds, $"{groupName} · {title}", body, data, cancellationToken);
+        await SendToUserListAsync(userIds, $"{groupName} · {title}", body, data, cancellationToken, groupId);
     }
 
     public async Task SendToGroupAdminsAsync(
@@ -188,7 +198,7 @@ public class PushService : IPushService
             .Select(ga => ga.UserId)
             .ToListAsync(cancellationToken);
 
-        await SendToUserListAsync(userIds, $"{groupName} · {title}", body, data, cancellationToken);
+        await SendToUserListAsync(userIds, $"{groupName} · {title}", body, data, cancellationToken, groupId);
     }
 
     public async Task SendToGroupFinanceirosAsync(
@@ -202,15 +212,26 @@ public class PushService : IPushService
             .Select(gf => gf.UserId)
             .ToListAsync(cancellationToken);
 
-        await SendToUserListAsync(userIds, $"{groupName} · {title}", body, data, cancellationToken);
+        await SendToUserListAsync(userIds, $"{groupName} · {title}", body, data, cancellationToken, groupId);
     }
+
+    public Task SendToUsersAsync(
+        List<Guid> userIds, string title, string body,
+        Dictionary<string, string>? data = null,
+        CancellationToken cancellationToken = default,
+        Guid? groupId = null)
+        => SendToUserListAsync(userIds, title, body, data, cancellationToken, groupId);
 
     private async Task SendToUserListAsync(
         List<Guid> userIds, string title, string body,
         Dictionary<string, string>? data,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? groupId = null)
     {
         if (userIds.Count == 0) return;
+
+        // Persiste na caixa de entrada de cada usuário
+        await PersistAsync(userIds, groupId, title, body, data, cancellationToken);
 
         var tokens = await _context.PushTokens
             .Where(t => userIds.Contains(t.UserId) && t.IsActive)
@@ -245,6 +266,38 @@ public class PushService : IPushService
         foreach (var batch in batches)
         {
             await SendBatchAsync(batch, prefixedTitle, body, data, cancellationToken);
+        }
+    }
+
+    // ── Persistência no sininho ───────────────────────────────────────────────
+
+    private async Task PersistAsync(
+        List<Guid> userIds, Guid? groupId,
+        string title, string body,
+        Dictionary<string, string>? data,
+        CancellationToken ct,
+        string? typeOverride = null)
+    {
+        if (userIds.Count == 0) return;
+
+        var type     = typeOverride ?? data?.GetValueOrDefault("type");
+        var dataJson = data is { Count: > 0 }
+            ? System.Text.Json.JsonSerializer.Serialize(data)
+            : null;
+
+        foreach (var uid in userIds)
+        {
+            _context.UserNotifications.Add(
+                new UserNotificationEntity(uid, groupId, title, body, type, dataJson));
+        }
+
+        try
+        {
+            await _context.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Push] Falha ao persistir notificações no inbox para {Count} usuário(s).", userIds.Count);
         }
     }
 

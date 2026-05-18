@@ -42,9 +42,30 @@ public class AppDbContext : DbContext
     public DbSet<MatchBetEntity> MatchBets => Set<MatchBetEntity>();
     public DbSet<MatchBetSelectionEntity> MatchBetSelections => Set<MatchBetSelectionEntity>();
     public DbSet<UserBetBalanceEntity> UserBetBalances => Set<UserBetBalanceEntity>();
+    public DbSet<ScheduledNotificationJobEntity> ScheduledNotificationJobs => Set<ScheduledNotificationJobEntity>();
+    public DbSet<UserNotificationEntity> UserNotifications => Set<UserNotificationEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<UserNotificationEntity>(builder =>
+        {
+            builder.HasKey(x => x.Id);
+            builder.Property(x => x.Title).IsRequired().HasMaxLength(200);
+            builder.Property(x => x.Body).IsRequired().HasMaxLength(500);
+            builder.Property(x => x.Type).HasMaxLength(60);
+            builder.HasIndex(x => new { x.UserId, x.IsRead, x.CreateDate });
+        });
+
+        modelBuilder.Entity<ScheduledNotificationJobEntity>(builder =>
+        {
+            builder.HasKey(x => x.Id);
+            builder.Property(x => x.EntityType).IsRequired().HasMaxLength(20);
+            builder.Property(x => x.TriggerType).IsRequired().HasMaxLength(10);
+            builder.Property(x => x.HangfireJobId).IsRequired().HasMaxLength(100);
+            builder.HasIndex(x => new { x.EntityType, x.EntityId });
+        });
+
+
         modelBuilder.Entity<MatchEntity>(builder =>
         {
             builder.HasKey(x => x.Id);

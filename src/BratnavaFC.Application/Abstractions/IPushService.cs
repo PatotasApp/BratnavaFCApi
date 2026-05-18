@@ -16,6 +16,14 @@ public interface IPushService
         Guid? groupId = null);
 
     /// <summary>
+    /// Envia notificação para uma lista de usuários (por userId), persiste no inbox e dispara push.
+    /// Se groupId for fornecido, o nome do grupo é prefixado no título automaticamente.
+    /// </summary>
+    Task SendToUsersAsync(List<Guid> userIds, string title, string body,
+        Dictionary<string, string>? data = null, CancellationToken cancellationToken = default,
+        Guid? groupId = null);
+
+    /// <summary>
     /// Envia notificação para uma lista de tokens FCM específica.
     /// Se groupId for fornecido, o nome do grupo é prefixado no título automaticamente.
     /// </summary>
