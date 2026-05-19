@@ -81,8 +81,14 @@ public class PushService : IPushService
             ? await PrefixWithGroupNameAsync(title, groupId.Value, cancellationToken)
             : title;
 
+        // Identifica o usuário no título para dispositivos com múltiplas contas
+        var personalizedTitle = await PersonalizeTitleAsync(userId, prefixedTitle, cancellationToken);
+
+        // Injeta userId no payload para que o app saiba a qual conta pertence
+        var enrichedData = EnrichWithUserId(data, userId);
+
         // Persiste na caixa de entrada independente de ter token ativo
-        await PersistAsync([userId], groupId, prefixedTitle, body, data, cancellationToken);
+        await PersistAsync([userId], groupId, personalizedTitle, body, enrichedData, cancellationToken);
 
         if (tokens.Count == 0)
         {
@@ -90,7 +96,7 @@ public class PushService : IPushService
             return;
         }
 
-        await SendToTokensAsync(tokens, prefixedTitle, body, data, cancellationToken);
+        await SendToTokensAsync(tokens, personalizedTitle, body, enrichedData, cancellationToken);
     }
 
     public async Task SendDataOnlyToGroupAsync(
@@ -232,17 +238,33 @@ public class PushService : IPushService
     {
         if (userIds.Count == 0) return;
 
-        // Persiste na caixa de entrada de cada usuário
+        // Persiste na caixa de entrada de cada usuário (sem prefixo de nome)
         await PersistAsync(userIds, groupId, title, body, data, cancellationToken);
 
-        var tokens = await _context.PushTokens
+        // Busca tokens agrupados por usuário para poder personalizar o título
+        var tokensByUser = await _context.PushTokens
             .Where(t => userIds.Contains(t.UserId) && t.IsActive)
-            .Select(t => t.Token)
+            .Select(t => new { t.UserId, t.Token })
             .ToListAsync(cancellationToken);
 
-        if (tokens.Count == 0) return;
+        if (tokensByUser.Count == 0) return;
 
-        await SendToTokensAsync(tokens, title, body, data, cancellationToken);
+        // Busca nomes de usuário para personalização
+        var ids = tokensByUser.Select(t => t.UserId).Distinct().ToList();
+        var names = await _context.Users
+            .Where(u => ids.Contains(u.Id))
+            .Select(u => new { u.Id, Name = u.UserName ?? (u.FirstName + " " + u.LastName).Trim() })
+            .ToDictionaryAsync(u => u.Id, u => u.Name, cancellationToken);
+
+        // Agrupa por usuário e envia com título personalizado
+        foreach (var group in tokensByUser.GroupBy(t => t.UserId))
+        {
+            var tokens = group.Select(t => t.Token).ToList();
+            var userName = names.GetValueOrDefault(group.Key, string.Empty);
+            var personalizedTitle = string.IsNullOrEmpty(userName) ? title : $"[{userName}] {title}";
+            var enrichedData = EnrichWithUserId(data, group.Key);
+            await SendToTokensAsync(tokens, personalizedTitle, body, enrichedData, cancellationToken);
+        }
     }
 
     public async Task SendToTokensAsync(
@@ -304,6 +326,35 @@ public class PushService : IPushService
     }
 
     // ── Helpers privados ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Prefixa o título com [username] para que dispositivos com múltiplas
+    /// contas saibam a qual usuário a notificação pertence.
+    /// Ex.: "[luis] Senha alterada"
+    /// </summary>
+    private async Task<string> PersonalizeTitleAsync(Guid userId, string title, CancellationToken ct)
+    {
+        var name = await _context.Users
+            .Where(u => u.Id == userId)
+            .Select(u => u.UserName ?? (u.FirstName + " " + u.LastName).Trim())
+            .FirstOrDefaultAsync(ct);
+
+        return string.IsNullOrWhiteSpace(name) ? title : $"[{name}] {title}";
+    }
+
+    /// <summary>
+    /// Injeta userId no payload de dados — permite ao app identificar a conta
+    /// destinatária, especialmente em foreground com múltiplas contas ativas.
+    /// </summary>
+    private static Dictionary<string, string> EnrichWithUserId(
+        Dictionary<string, string>? data, Guid userId)
+    {
+        var enriched = data is null
+            ? new Dictionary<string, string>()
+            : new Dictionary<string, string>(data);
+        enriched["userId"] = userId.ToString();
+        return enriched;
+    }
 
     /// <summary>Retorna o nome do grupo ou string vazia se não encontrado.</summary>
     private async Task<string> GetGroupNameAsync(Guid groupId, CancellationToken ct)

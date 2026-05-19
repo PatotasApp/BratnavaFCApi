@@ -80,7 +80,7 @@ public sealed class BirthdayNotificationJob : IBirthdayNotificationJob
                     await _push.SendToGroupAsync(
                         grp.Key,
                         title: "🎂 Aniversário hoje!",
-                        body:  $"Hoje é aniversário de {player.Name}! Manda parabéns.",
+                        body:  $"Hoje é aniversário de {player.Name}!",
                         data:  new Dictionary<string, string>
                         {
                             ["type"]    = "birthday",
