@@ -1892,29 +1892,38 @@ public sealed class MatchService : IMatchService
             },
             ct);
 
-    private Task NotifyMatchStartedAsync(Guid groupId, Guid matchId, CancellationToken ct) =>
-        _push.SendToGroupAsync(
-            groupId,
+    private async Task NotifyMatchStartedAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        var userIds = await GetMatchParticipantUserIdsAsync(matchId, ct);
+        await _push.SendToUsersAsync(
+            userIds,
             title: "Partida iniciada!",
             body: "A partida do seu grupo começou. Boa sorte!",
             data: new Dictionary<string, string> { ["type"] = "match_started", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
-            ct);
+            groupId: groupId);
+    }
 
-    private Task NotifyMatchEndedAsync(Guid groupId, Guid matchId, CancellationToken ct) =>
-        _push.SendToGroupAsync(
-            groupId,
+    private async Task NotifyMatchEndedAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        var userIds = await GetMatchParticipantUserIdsAsync(matchId, ct);
+        await _push.SendToUsersAsync(
+            userIds,
             title: "Partida encerrada!",
             body: "A partida acabou! Vote no MVP antes que a votação feche.",
             data: new Dictionary<string, string> { ["type"] = "match_ended", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
-            ct);
+            groupId: groupId);
+    }
 
-    private Task NotifyMatchFinalizedAsync(Guid groupId, Guid matchId, CancellationToken ct) =>
-        _push.SendToGroupAsync(
-            groupId,
+    private async Task NotifyMatchFinalizedAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        var userIds = await GetMatchParticipantUserIdsAsync(matchId, ct);
+        await _push.SendToUsersAsync(
+            userIds,
             title: "Partida finalizada!",
             body: "Confira os resultados e o MVP da partida.",
             data: new Dictionary<string, string> { ["type"] = "match_finalized", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
-            ct);
+            groupId: groupId);
+    }
 
     /// <summary>
     /// Notifica admins sobre confirmação/recusa de presença e verifica se o quorum mínimo foi atingido.
@@ -1974,7 +1983,7 @@ public sealed class MatchService : IMatchService
     }
 
     /// <summary>
-    /// Notifica todos do grupo quando o MVP é definido (via votação ou finalização manual).
+    /// Notifica participantes da partida quando o MVP é definido (via votação ou finalização manual).
     /// Fire-and-forget — não bloqueia a resposta do endpoint.
     /// </summary>
     private async Task NotifyMvpDefinedAsync(Guid groupId, Guid matchId, CancellationToken ct)
@@ -1989,23 +1998,41 @@ public sealed class MatchService : IMatchService
 
             if (mvpName is null) return;
 
-            await _push.SendToGroupAsync(
-                groupId,
+            var userIds = await GetMatchParticipantUserIdsAsync(matchId, ct);
+            await _push.SendToUsersAsync(
+                userIds,
                 title: "MVP da partida!",
                 body:  $"{mvpName} foi eleito o MVP! Parabéns!",
                 data:  new Dictionary<string, string> { ["type"] = "match_mvp", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
-                ct);
+                groupId: groupId);
         }
         catch { /* notificação não crítica */ }
     }
 
-    private Task NotifyTeamsAssignedAsync(Guid groupId, Guid matchId, CancellationToken ct) =>
-        _push.SendToGroupAsync(
-            groupId,
+    private async Task NotifyTeamsAssignedAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        var userIds = await GetMatchParticipantUserIdsAsync(matchId, ct);
+        await _push.SendToUsersAsync(
+            userIds,
             title: "Times definidos!",
             body: "Os times da partida foram sorteados. Confira o seu time!",
             data: new Dictionary<string, string> { ["type"] = "teams_assigned", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
-            ct);
+            groupId: groupId);
+    }
+
+    /// <summary>
+    /// Retorna os UserId dos jogadores que aceitaram o convite da partida.
+    /// Usado para restringir notificações pós-matchmaking apenas aos participantes.
+    /// </summary>
+    private async Task<List<Guid>> GetMatchParticipantUserIdsAsync(Guid matchId, CancellationToken ct) =>
+        await _context.MatchPlayers
+            .AsNoTracking()
+            .Where(mp => mp.MatchId == matchId
+                      && mp.InviteResponse == InviteResponse.Accepted
+                      && mp.Player!.UserId != null)
+            .Select(mp => mp.Player!.UserId!.Value)
+            .Distinct()
+            .ToListAsync(ct);
 
     public async Task<Result<List<ReplayClipDto>>> GetReplaysAsync(Guid groupId, Guid matchId, Guid? userId, CancellationToken ct)
     {
