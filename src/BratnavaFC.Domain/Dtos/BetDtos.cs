@@ -22,7 +22,8 @@ public record BetSelectionDto(
     int     FichasWagered,
     int?    FichasEarned,
     bool?   IsCorrect,
-    bool?   IsPartialCredit
+    bool?   IsPartialCredit,
+    string? PlayerName = null // nome do jogador apostado (PlayerGoals / PlayerAssists)
 );
 
 public record MatchBetDto(

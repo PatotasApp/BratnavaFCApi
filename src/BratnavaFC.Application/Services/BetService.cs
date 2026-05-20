@@ -324,12 +324,30 @@ public sealed class BetService : IBetService
             .Where(u => allUserIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => $"{u.FirstName} {u.LastName}".Trim(), ct);
 
+        // Resolve nomes dos jogadores apostados (PlayerGoals / PlayerAssists)
+        var playerBetCategories = new[] { BetCategory.PlayerGoals, BetCategory.PlayerAssists };
+        var matchPlayerIdStrings = allBets
+            .SelectMany(b => b.Selections)
+            .Where(s => playerBetCategories.Contains(s.Category))
+            .Select(s => s.PredictedValue.Split('|').FirstOrDefault())
+            .Where(id => Guid.TryParse(id, out _))
+            .Select(id => Guid.Parse(id!))
+            .Distinct()
+            .ToList();
+
+        var playerNames = matchPlayerIdStrings.Count > 0
+            ? await _db.MatchPlayers.AsNoTracking()
+                .Where(mp => matchPlayerIdStrings.Contains(mp.Id))
+                .Select(mp => new { Id = mp.Id.ToString(), mp.Player!.Name })
+                .ToDictionaryAsync(mp => mp.Id, mp => mp.Name, ct)
+            : new Dictionary<string, string>();
+
         return matches.Select(match =>
         {
             var bets     = allBets.Where(b => b.MatchId == match.Id).ToList();
             var userBets = bets.Select(bet =>
             {
-                var sels        = ToSelectionDtos(bet.Selections);
+                var sels        = ToSelectionDtos(bet.Selections, playerNames);
                 var betEarnings = sels.Sum(s => s.FichasEarned ?? 0);
                 return new UserBetInHistoryDto(
                     bet.UserId,
@@ -679,17 +697,22 @@ public sealed class BetService : IBetService
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static List<BetSelectionDto> ToSelectionDtos(
-        IEnumerable<MatchBetSelectionEntity> selections) =>
-        selections.Select(s => new BetSelectionDto(
-            s.Id,
-            s.Category.ToString(),
-            s.PredictedValue,
-            s.ActualValue,
-            s.FichasWagered,
-            s.FichasEarned,
-            s.IsCorrect,
-            s.IsPartialCredit
-        )).ToList();
+        IEnumerable<MatchBetSelectionEntity> selections,
+        Dictionary<string, string>? playerNames = null) =>
+        selections.Select(s =>
+        {
+            string? playerName = null;
+            if (playerNames is { Count: > 0 } &&
+                (s.Category == BetCategory.PlayerGoals || s.Category == BetCategory.PlayerAssists))
+            {
+                var mpId = s.PredictedValue.Split('|').FirstOrDefault();
+                if (mpId != null) playerNames.TryGetValue(mpId, out playerName);
+            }
+            return new BetSelectionDto(
+                s.Id, s.Category.ToString(), s.PredictedValue, s.ActualValue,
+                s.FichasWagered, s.FichasEarned, s.IsCorrect, s.IsPartialCredit,
+                PlayerName: playerName);
+        }).ToList();
 
     private async Task<MatchBetDto?> GetMyBetDtoAsync(Guid matchId, Guid userId, CancellationToken ct)
     {
