@@ -21,6 +21,41 @@ public class BetController : GroupAuthorizedController
     }
 
     /// <summary>
+    /// Lista de partidas elegíveis para apostas no grupo:
+    /// status MatchMaking + pelo menos um jogador em cada time.
+    /// Usada para popular o carrossel de seleção de partida.
+    /// </summary>
+    [HttpGet("group/{groupId:guid}/bettable-matches")]
+    public async Task<IActionResult> GetBettableMatches(
+        [FromRoute] Guid groupId, CancellationToken ct)
+    {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
+        var matches = await _bets.GetBettableMatchesAsync(groupId, ct);
+        return Ok(matches);
+    }
+
+    /// <summary>
+    /// Retorna o contexto de aposta de uma partida específica (carrossel multi-partida).
+    /// Inclui a lista de jogadores e a aposta já feita pelo usuário (se houver).
+    /// </summary>
+    [HttpGet("group/{groupId:guid}/match/{matchId:guid}/context")]
+    public async Task<IActionResult> GetContextForMatch(
+        [FromRoute] Guid groupId,
+        [FromRoute] Guid matchId,
+        CancellationToken ct)
+    {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
+
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        var ctx = await _bets.GetContextForMatchAsync(groupId, matchId, userId.Value, ct);
+        if (ctx is null) return NotFound();
+
+        return Ok(ctx);
+    }
+
+    /// <summary>
     /// Retorna o contexto da partida atual para montar o formulário de aposta.
     /// Inclui a lista de jogadores e a aposta já feita pelo usuário (se houver).
     /// </summary>
@@ -134,18 +169,6 @@ public class BetController : GroupAuthorizedController
         if (preview is null) return NotFound();
 
         return Ok(preview);
-    }
-
-    /// <summary>
-    /// TEMPORÁRIO — recalcula todos os saldos do zero a partir das seleções resolvidas.
-    /// Remover após executar.
-    /// </summary>
-    [HttpPost("admin/recalculate-balances")]
-    [Authorize(Roles = "GodMode")]
-    public async Task<IActionResult> RecalculateBalances(CancellationToken ct)
-    {
-        var updated = await _bets.RecalculateAllBalancesAsync(ct);
-        return Ok(new { updated, message = $"{updated} saldo(s) recalculado(s)." });
     }
 
     /// <summary>Histórico de apostas de todas as partidas resolvidas do grupo.</summary>

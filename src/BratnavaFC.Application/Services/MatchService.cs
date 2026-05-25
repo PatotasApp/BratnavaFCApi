@@ -1,5 +1,6 @@
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Common;
+using BratnavaFC.Domain.Constants;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
@@ -273,12 +274,14 @@ public sealed class MatchService : IMatchService
         var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
         if (!groupCheck.Success) return Result<MatchEntity>.Fail(groupCheck.Error!, groupCheck.Status);
 
-        var hasOpenMatch = await _context.Matches
+        var activeMatchCount = await _context.Matches
             .AsNoTracking()
-            .AnyAsync(m => m.GroupId == groupId && m.Status != MatchStatus.Finalized, ct);
+            .CountAsync(m => m.GroupId == groupId && m.Status != MatchStatus.Finalized, ct);
 
-        if (hasOpenMatch)
-            return Result<MatchEntity>.Fail("Ja existe uma partida em andamento (não finalizada) para este grupo.");
+        if (activeMatchCount >= MatchConstants.MaxSimultaneousActiveMatches)
+            return Result<MatchEntity>.Fail(
+                $"Limite de {MatchConstants.MaxSimultaneousActiveMatches} partidas simultâneas atingido. " +
+                "Finalize uma partida antes de criar outra.");
 
         _repository.Add(match);
 
@@ -530,7 +533,10 @@ public sealed class MatchService : IMatchService
         if (match is null)
             return Result<MatchPlayerEntity>.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
-        return Result<MatchPlayerEntity>.Ok(match.GetComputedMvp()!);
+        var mvp = match.GetComputedMvp();
+        if (mvp is null)
+            return Result<MatchPlayerEntity>.Fail("MVP ainda não computado.", ResultStatus.NotFound);
+        return Result<MatchPlayerEntity>.Ok(mvp);
     }
 
     public async Task<Result> SetScoreAsync(Guid groupId, Guid matchId, int teamAGoals, int teamBGoals, CancellationToken ct)
@@ -971,14 +977,125 @@ public sealed class MatchService : IMatchService
         var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
         if (!groupCheck.Success) return Result<MatchEntity>.Fail(groupCheck.Error!, groupCheck.Status);
 
+        // "Current" = nearest upcoming non-finalized match (ascending PlayedAt).
         var match = await _context.Matches
             .AsNoTracking()
             .Where(m => m.GroupId == groupId && m.Status != MatchStatus.Finalized)
-            .OrderByDescending(m => m.PlayedAt)
+            .OrderBy(m => m.PlayedAt)
             .FirstOrDefaultAsync(ct);
 
         return Result<MatchEntity>.Ok(match!);
     }
+
+    public async Task<Result<List<MatchHeaderDto>>> GetUpcomingAsync(Guid groupId, CancellationToken ct)
+    {
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return Result<List<MatchHeaderDto>>.Fail(groupCheck.Error!, groupCheck.Status);
+
+        var headers = await _context.Matches
+            .AsNoTracking()
+            .Where(m => m.GroupId == groupId && m.Status != MatchStatus.Finalized)
+            .OrderBy(m => m.PlayedAt)
+            .Take(MatchConstants.MaxSimultaneousActiveMatches)
+            .Select(m => new MatchHeaderDto
+            {
+                MatchId    = m.Id,
+                GroupId    = m.GroupId,
+                PlayedAt   = m.PlayedAt,
+                PlaceName  = m.PlaceName,
+                Status     = (short)m.Status,
+                StatusName = m.Status.ToString(),
+                StepKey    = ToStepKey(m.Status),
+                CanRewind  = m.Status > MatchStatus.Created,
+                TeamAGoals = m.TeamAGoals,
+                TeamBGoals = m.TeamBGoals,
+            })
+            .ToListAsync(ct);
+
+        return Result<List<MatchHeaderDto>>.Ok(headers);
+    }
+
+    public async Task<Result> SyncPlayerIntoActiveMatchesAsync(Guid groupId, Guid playerId, CancellationToken ct)
+    {
+        var player = await _context.Players
+            .FirstOrDefaultAsync(p => p.Id == playerId && p.GroupId == groupId && p.Status == Status.Active, ct);
+
+        if (player is null)
+            return Result.Ok(); // Player not found, wrong group, or inactive — nothing to sync
+
+        // Only sync into matches that are still in a pre-game phase (invite list is meaningful)
+        var eligibleMatches = await _context.Matches
+            .Where(m => m.GroupId == groupId &&
+                        (m.Status == MatchStatus.Created || m.Status == MatchStatus.Acceptation))
+            .Include(m => m.Players)
+            .ToListAsync(ct);
+
+        if (eligibleMatches.Count == 0)
+            return Result.Ok();
+
+        // Query the DB for matches where this player is already a participant.
+        // Avoids relying on potentially stale in-memory navigation collections
+        // (e.g. when the caller just added the player via _context.MatchPlayers.Add
+        // without going through match.Players.Add, EF Core's fix-up may not update
+        // the tracked List<T> in time).
+        var eligibleMatchIds = eligibleMatches.Select(m => m.Id).ToList();
+        var alreadyInMatchIds = (await _context.MatchPlayers
+                .Where(mp => mp.PlayerId == playerId && eligibleMatchIds.Contains(mp.MatchId))
+                .Select(mp => mp.MatchId)
+                .ToListAsync(ct))
+            .ToHashSet();
+
+        // Pre-load absences for this player so we can auto-reject when they have a registered absence
+        var absencesByDate = new Dictionary<DateOnly, UserAbsenceEntity>();
+        if (player.UserId.HasValue)
+        {
+            var absences = await _context.UserAbsences
+                .Where(a => a.UserId == player.UserId.Value)
+                .ToListAsync(ct);
+
+            foreach (var match in eligibleMatches)
+            {
+                var date    = DateOnly.FromDateTime(match.PlayedAt);
+                var absence = absences.FirstOrDefault(a => a.StartDate <= date && a.EndDate >= date);
+                if (absence is not null)
+                    absencesByDate[date] = absence;
+            }
+        }
+
+        foreach (var match in eligibleMatches)
+        {
+            if (alreadyInMatchIds.Contains(match.Id)) continue;
+
+            var mp = new MatchPlayerEntity(player.Id);
+            match.AddPlayer(mp, player);
+
+            // AddPlayer adds mp to the in-memory collection only.
+            // Explicitly register the entity as Added so EF Core generates INSERT,
+            // not UPDATE (which it would do via DetectChanges snapshot-diff for
+            // untracked entities with a non-empty GUID key).
+            _context.MatchPlayers.Add(mp);
+
+            var matchDate = DateOnly.FromDateTime(match.PlayedAt);
+            if (player.UserId.HasValue && absencesByDate.TryGetValue(matchDate, out var absence))
+                mp.AutoRejectByAbsence(absence.Id);
+        }
+
+        await _context.SaveChangesAsync(ct);
+        return Result.Ok();
+    }
+
+    /// <summary>Maps a <see cref="MatchStatus"/> to the frontend wizard step-key string.</summary>
+    private static string ToStepKey(MatchStatus status) => status switch
+    {
+        MatchStatus.Created     => MatchStepKeys.Create,
+        MatchStatus.Acceptation => MatchStepKeys.Accept,
+        MatchStatus.MatchMaking => MatchStepKeys.Teams,
+        MatchStatus.Started     => MatchStepKeys.Playing,
+        MatchStatus.Ended       => MatchStepKeys.Ended,
+        MatchStatus.PostGame    => MatchStepKeys.Post,
+        MatchStatus.Finalized   => MatchStepKeys.Done,
+        _                       => MatchStepKeys.Create,
+    };
 
     public async Task<Result> AddGoalsBulkAsync(Guid groupId, Guid matchId, AddGoalsBulkRequestDto dto, CancellationToken ct)
     {
@@ -1120,13 +1237,7 @@ public sealed class MatchService : IMatchService
                 PlaceName = m.PlaceName,
                 Status = (short)m.Status,
                 StatusName = m.Status.ToString(),
-                StepKey = m.Status == MatchStatus.Created ? "create" :
-                          m.Status == MatchStatus.Acceptation ? "accept" :
-                          m.Status == MatchStatus.MatchMaking ? "teams" :
-                          m.Status == MatchStatus.Started ? "playing" :
-                          m.Status == MatchStatus.Ended ? "ended" :
-                          m.Status == MatchStatus.PostGame ? "post" :
-                          m.Status == MatchStatus.Finalized ? "done" : "create",
+                StepKey = ToStepKey(m.Status),
                 CanRewind = m.Status > MatchStatus.Created,
                 TeamAGoals = m.TeamAGoals,
                 TeamBGoals = m.TeamBGoals
@@ -1486,13 +1597,15 @@ public sealed class MatchService : IMatchService
     public async Task<Result<IReadOnlyList<MatchHistoryItemDto>>> GetHistoryAsync(
         Guid groupId,
         int take,
+        int skip,
         CancellationToken cancellationToken,
         Guid? playerId = null)
     {
         if (groupId == Guid.Empty)
             return Result<IReadOnlyList<MatchHistoryItemDto>>.Fail("GroupId e obrigatorio.");
 
-        take = take <= 0 ? 200 : Math.Min(take, 500);
+        take = take <= 0 ? 20 : Math.Min(take, 100);
+        skip = Math.Max(0, skip);
 
         IQueryable<MatchEntity> query = _context.Matches
             .AsNoTracking()
@@ -1509,6 +1622,7 @@ public sealed class MatchService : IMatchService
 
         var items = await query
             .OrderByDescending(m => m.PlayedAt)
+            .Skip(skip)
             .Take(take)
             .Select(m => new MatchHistoryItemDto(
                 m.Id,
@@ -1874,6 +1988,11 @@ public sealed class MatchService : IMatchService
         _context.MatchPlayers.Add(mp);
 
         await _context.SaveChangesAsync(ct);
+
+        // Sync the new guest into all other pre-game matches of the group so they can participate
+        // in upcoming matches as well (guests keep a history and may return)
+        await SyncPlayerIntoActiveMatchesAsync(match.GroupId, guest.Id, ct);
+
         return Result.Ok("Convidado adicionado com sucesso.");
     }
 
@@ -2111,6 +2230,20 @@ public sealed class MatchService : IMatchService
 
         await _context.SaveChangesAsync(ct);
         return existing is null; // true = now favorited
+    }
+
+    public async Task<Result<List<ClipLikerDto>>> GetClipLikersAsync(Guid clipId, CancellationToken ct)
+    {
+        // OrderBy must come before the projection so EF Core can translate it to SQL.
+        var likers = await (
+            from l in _context.ReplayLikes.AsNoTracking()
+            join u in _context.Users.AsNoTracking() on l.UserId equals u.Id
+            where l.ClipId == clipId
+            orderby l.CreatedAt descending
+            select new ClipLikerDto(u.Id, u.UserName, l.CreatedAt)
+        ).ToListAsync(ct);
+
+        return Result<List<ClipLikerDto>>.Ok(likers);
     }
 
     public async Task<Result<List<LikedReplayClipDto>>> GetLikedReplaysAsync(Guid groupId, Guid? userId, CancellationToken ct)
@@ -2379,9 +2512,9 @@ public sealed class MatchService : IMatchService
         {
             etag = await _replayUrls.UploadObjectAsync(objectKey, content, contentType, ct);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            return Result<ReplayClipDto>.Fail($"Falha ao enviar vídeo para o storage: {ex.Message}");
+            return Result<ReplayClipDto>.Fail("Falha ao enviar vídeo para o storage. Tente novamente.");
         }
 
         var clip = new ReplayClipEntity(

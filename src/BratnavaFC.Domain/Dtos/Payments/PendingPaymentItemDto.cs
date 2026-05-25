@@ -24,4 +24,10 @@ public sealed class PendingPaymentItemDto
 
     /// <summary>Preenchido apenas para cobranças extras.</summary>
     public Guid? ChargeId { get; init; }
+
+    /// <summary>
+    /// Indica se o item já está pago.
+    /// Usado pelo modal para pré-marcar itens e permitir desfazer pagamentos.
+    /// </summary>
+    public bool IsPaid { get; init; }
 }

@@ -205,16 +205,23 @@ public class GroupService : IGroupService
 
             var players = allPlayers.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, p.User?.UserName, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating, p.AttackRating, p.DefenseRating, p.OverallRating)).ToList();
 
+            var adminUserIds      = group.Admins.Select(x => x.UserId).ToArray();
+            var financeiroUserIds = group.Financeiros.Select(x => x.UserId).ToArray();
+            var allRoleIds        = adminUserIds.Concat(financeiroUserIds).Distinct().ToList();
+
+            var roleNames = await _context.Users
+                .AsNoTracking()
+                .Where(u => allRoleIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => $"{u.FirstName} {u.LastName}".Trim(), cancellationToken);
+
             var dto = new GroupDto(
-                group.Id,
-                group.Name,
-                group.ScheduleMatchDate,
-                group.Admins.Select(x => x.UserId).ToArray(),
-                group.Financeiros.Select(x => x.UserId).ToArray(),
-                group.Status,
-                players,
-                group.CreatedByUserId
-            );
+                group.Id, group.Name, group.ScheduleMatchDate,
+                adminUserIds, financeiroUserIds,
+                group.Status, players, group.CreatedByUserId)
+            {
+                AdminNames      = adminUserIds.Select(id => roleNames.GetValueOrDefault(id, "")).ToArray(),
+                FinanceiroNames = financeiroUserIds.Select(id => roleNames.GetValueOrDefault(id, "")).ToArray(),
+            };
 
             return Result<GroupDto>.Ok(dto);
         }
@@ -228,8 +235,9 @@ public class GroupService : IGroupService
     public async Task<Result<List<GroupDto>>> GetByAdminIdAsync(Guid adminId, CancellationToken cancellationToken)
     {
         var list = await _context.GroupAdmins
-            .Include(x => x.Group)
-            .ThenInclude(x => x.Players)
+            .Include(x => x.Group).ThenInclude(g => g.Players)
+            .Include(x => x.Group).ThenInclude(g => g.Admins)
+            .Include(x => x.Group).ThenInclude(g => g.Financeiros)
             .Where(x => x.UserId == adminId)
             .Select(g => new GroupDto(
                 g.Group.Id,
@@ -249,8 +257,9 @@ public class GroupService : IGroupService
     public async Task<Result<List<GroupDto>>> GetByFinanceiroIdAsync(Guid financeiroId, CancellationToken cancellationToken)
     {
         var list = await _context.GroupFinanceiros
-            .Include(x => x.Group)
-            .ThenInclude(x => x.Players)
+            .Include(x => x.Group).ThenInclude(g => g.Players)
+            .Include(x => x.Group).ThenInclude(g => g.Admins)
+            .Include(x => x.Group).ThenInclude(g => g.Financeiros)
             .Where(x => x.UserId == financeiroId)
             .Select(g => new GroupDto(
                 g.Group.Id,

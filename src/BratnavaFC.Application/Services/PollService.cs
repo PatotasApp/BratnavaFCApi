@@ -5,6 +5,7 @@ using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace BratnavaFC.Application.Services;
 
@@ -12,13 +13,15 @@ public sealed class PollService : IPollService
 {
     private readonly AppDbContext _db;
     private readonly IPushService _push;
-        private readonly INotificationScheduler _scheduler;
+    private readonly INotificationScheduler _scheduler;
+    private readonly ILogger<PollService> _logger;
 
-    public PollService(AppDbContext db, IPushService push, INotificationScheduler scheduler)
+    public PollService(AppDbContext db, IPushService push, INotificationScheduler scheduler, ILogger<PollService> logger)
     {
         _db        = db;
         _push      = push;
         _scheduler = scheduler;
+        _logger    = logger;
     }
 
     public async Task<Result<List<PollSummaryDto>>> GetPollsAsync(Guid groupId, Guid playerId, CancellationToken ct = default)
@@ -67,7 +70,8 @@ public sealed class PollService : IPollService
         }
         catch (Exception ex)
         {
-            return Result<List<PollSummaryDto>>.Fail(ex.Message);
+            _logger.LogError(ex, "Erro em GetPollsAsync.");
+            return Result<List<PollSummaryDto>>.Fail("Erro interno. Tente novamente.");
         }
     }
 
@@ -180,7 +184,8 @@ public sealed class PollService : IPollService
         }
         catch (Exception ex)
         {
-            return Result<PollDto>.Fail(ex.Message);
+            _logger.LogError(ex, "Erro em GetPollAsync.");
+            return Result<PollDto>.Fail("Erro interno. Tente novamente.");
         }
     }
 
@@ -220,7 +225,8 @@ public sealed class PollService : IPollService
         }
         catch (Exception ex)
         {
-            return Result<PollDto>.Fail(ex.Message);
+            _logger.LogError(ex, "Erro em CreatePollAsync.");
+            return Result<PollDto>.Fail("Erro interno. Tente novamente.");
         }
     }
 
@@ -259,7 +265,8 @@ public sealed class PollService : IPollService
         }
         catch (Exception ex)
         {
-            return Result<PollDto>.Fail(ex.Message);
+            _logger.LogError(ex, "Erro em CreateEventPollAsync.");
+            return Result<PollDto>.Fail("Erro interno. Tente novamente.");
         }
     }
 
@@ -300,7 +307,8 @@ public sealed class PollService : IPollService
         }
         catch (Exception ex)
         {
-            return Result.Fail(ex.Message);
+            _logger.LogError(ex, "Erro em ClosePollAsync.");
+            return Result.Fail("Erro interno. Tente novamente.");
         }
     }
 
@@ -317,7 +325,8 @@ public sealed class PollService : IPollService
         }
         catch (Exception ex)
         {
-            return Result.Fail(ex.Message);
+            _logger.LogError(ex, "Erro em ReopenPollAsync.");
+            return Result.Fail("Erro interno. Tente novamente.");
         }
     }
 
@@ -334,7 +343,8 @@ public sealed class PollService : IPollService
         }
         catch (Exception ex)
         {
-            return Result.Fail(ex.Message);
+            _logger.LogError(ex, "Erro em SetShowVotesAsync.");
+            return Result.Fail("Erro interno. Tente novamente.");
         }
     }
 
@@ -351,7 +361,8 @@ public sealed class PollService : IPollService
         }
         catch (Exception ex)
         {
-            return Result.Fail(ex.Message);
+            _logger.LogError(ex, "Erro em DeletePollAsync.");
+            return Result.Fail("Erro interno. Tente novamente.");
         }
     }
 
@@ -377,7 +388,8 @@ public sealed class PollService : IPollService
         }
         catch (Exception ex)
         {
-            return Result<PollOptionDto>.Fail(ex.Message);
+            _logger.LogError(ex, "Erro em AddOptionAsync.");
+            return Result<PollOptionDto>.Fail("Erro interno. Tente novamente.");
         }
     }
 
@@ -419,7 +431,8 @@ public sealed class PollService : IPollService
         }
         catch (Exception ex)
         {
-            return Result<PollOptionDto>.Fail(ex.Message);
+            _logger.LogError(ex, "Erro em UpdateOptionAsync.");
+            return Result<PollOptionDto>.Fail("Erro interno. Tente novamente.");
         }
     }
 
@@ -439,7 +452,8 @@ public sealed class PollService : IPollService
         }
         catch (Exception ex)
         {
-            return Result.Fail(ex.Message);
+            _logger.LogError(ex, "Erro em DeleteOptionAsync.");
+            return Result.Fail("Erro interno. Tente novamente.");
         }
     }
 
@@ -468,7 +482,8 @@ public sealed class PollService : IPollService
         }
         catch (Exception ex)
         {
-            return Result<PollDto>.Fail(ex.Message);
+            _logger.LogError(ex, "Erro em CastVoteAsync.");
+            return Result<PollDto>.Fail("Erro interno. Tente novamente.");
         }
     }
 
@@ -489,7 +504,8 @@ public sealed class PollService : IPollService
         }
         catch (Exception ex)
         {
-            return Result<PollDto>.Fail(ex.Message);
+            _logger.LogError(ex, "Erro em RemoveVoteAsync.");
+            return Result<PollDto>.Fail("Erro interno. Tente novamente.");
         }
     }
 
@@ -521,7 +537,8 @@ public sealed class PollService : IPollService
         }
         catch (Exception ex)
         {
-            return Result<PollDto>.Fail(ex.Message);
+            _logger.LogError(ex, "Erro em AdminCastVoteAsync.");
+            return Result<PollDto>.Fail("Erro interno. Tente novamente.");
         }
     }
 
@@ -555,7 +572,8 @@ public sealed class PollService : IPollService
         }
         catch (Exception ex)
         {
-            return Result.Fail(ex.Message);
+            _logger.LogError(ex, "Erro em UpdateDeadlineAsync.");
+            return Result.Fail("Erro interno. Tente novamente.");
         }
     }
 

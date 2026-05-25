@@ -33,7 +33,75 @@ public sealed class BetService : IBetService
             .FirstOrDefaultAsync(ct);
 
         if (match is null) return null;
+        return await BuildContextAsync(match, userId, ct);
+    }
 
+    public async Task<CurrentMatchBetContextDto?> GetContextForMatchAsync(
+        Guid groupId, Guid matchId, Guid userId, CancellationToken ct)
+    {
+        var match = await _db.Matches
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct);
+
+        if (match is null) return null;
+        return await BuildContextAsync(match, userId, ct);
+    }
+
+    // ── Lista de partidas apostáveis (carousel) ───────────────────────────────
+
+    public async Task<List<BettableMatchDto>> GetBettableMatchesAsync(
+        Guid groupId, CancellationToken ct)
+    {
+        var matches = await _db.Matches
+            .AsNoTracking()
+            .Where(m => m.GroupId == groupId && m.Status == MatchStatus.MatchMaking)
+            .OrderBy(m => m.PlayedAt)
+            .ToListAsync(ct);
+
+        if (matches.Count == 0) return [];
+
+        var matchIds = matches.Select(m => m.Id).ToList();
+
+        // Single query: which matches have at least one player in each team
+        var teamsByMatch = await _db.MatchPlayers
+            .AsNoTracking()
+            .Where(mp => matchIds.Contains(mp.MatchId) && (mp.Team == 1 || mp.Team == 2))
+            .GroupBy(mp => mp.MatchId)
+            .Select(g => new { MatchId = g.Key, Teams = g.Select(mp => mp.Team).Distinct().ToList() })
+            .ToListAsync(ct);
+
+        var bettableIds = teamsByMatch
+            .Where(x => x.Teams.Contains((short)1) && x.Teams.Contains((short)2))
+            .Select(x => x.MatchId)
+            .ToHashSet();
+
+        return matches
+            .Where(m => bettableIds.Contains(m.Id))
+            .Select(m => new BettableMatchDto(m.Id, m.PlayedAt, m.PlaceName))
+            .ToList();
+    }
+
+    // ── Apaga todas as apostas não-resolvidas de uma partida ─────────────────
+
+    public async Task ResetBetsForMatchAsync(Guid matchId, CancellationToken ct)
+    {
+        var bets = await _db.Set<MatchBetEntity>()
+            .Include(b => b.Selections)
+            .Where(b => b.MatchId == matchId && !b.IsResolved)
+            .ToListAsync(ct);
+
+        if (bets.Count == 0) return;
+
+        _db.Set<MatchBetSelectionEntity>().RemoveRange(bets.SelectMany(b => b.Selections).ToList());
+        _db.Set<MatchBetEntity>().RemoveRange(bets);
+        await _db.SaveChangesAsync(ct);
+    }
+
+    // ── Helper: monta o contexto para um MatchEntity já carregado ────────────
+
+    private async Task<CurrentMatchBetContextDto> BuildContextAsync(
+        MatchEntity match, Guid userId, CancellationToken ct)
+    {
         // UserId de quem já apostou + total de fichas apostadas
         var betTotals = await _db.Set<MatchBetEntity>()
             .AsNoTracking()
@@ -41,8 +109,8 @@ public sealed class BetService : IBetService
             .Select(b => new { b.UserId, Total = (int?)b.Selections.Sum(s => s.FichasWagered) })
             .ToListAsync(ct);
 
-        var bettedUserIds   = betTotals.Select(x => x.UserId).ToHashSet();
-        var wageredByUser   = betTotals.ToDictionary(x => x.UserId, x => x.Total);
+        var bettedUserIds = betTotals.Select(x => x.UserId).ToHashSet();
+        var wageredByUser = betTotals.ToDictionary(x => x.UserId, x => x.Total);
 
         var rawPlayers = await _db.MatchPlayers
             .AsNoTracking()
@@ -64,7 +132,7 @@ public sealed class BetService : IBetService
         var matchPlayerIds = rawPlayers.Select(mp => mp.PlayerId).ToHashSet();
         var lateMembers = await _db.Players
             .AsNoTracking()
-            .Where(p => p.GroupId == groupId &&
+            .Where(p => p.GroupId == match.GroupId &&
                         !p.IsGuest &&
                         p.Status == Domain.Enums.Status.Active &&
                         !matchPlayerIds.Contains(p.Id))
@@ -80,7 +148,10 @@ public sealed class BetService : IBetService
         }
 
         var myBet = await GetMyBetDtoAsync(match.Id, userId, ct);
-        var betWindowOpen = match.Status == MatchStatus.MatchMaking;
+
+        // Bet window is open only during MatchMaking AND teams have been assigned
+        var hasTeams = rawPlayers.Any(mp => mp.Team == 1) && rawPlayers.Any(mp => mp.Team == 2);
+        var betWindowOpen = match.Status == MatchStatus.MatchMaking && hasTeams;
 
         return new CurrentMatchBetContextDto(
             match.Id,
@@ -178,33 +249,54 @@ public sealed class BetService : IBetService
             }
         }
 
-        // Criar ou atualizar aposta
+        // Times devem estar definidos para que a aposta seja válida
+        var teamFlags = await _db.MatchPlayers
+            .Where(mp => mp.MatchId == matchId && (mp.Team == 1 || mp.Team == 2))
+            .Select(mp => mp.Team)
+            .Distinct()
+            .ToListAsync(ct);
+
+        if (!teamFlags.Contains((short)1) || !teamFlags.Contains((short)2))
+            return Result.Fail("Os times ainda não foram definidos para esta partida.");
+
+        // Criar ou atualizar aposta — dentro de uma transação para garantir atomicidade
         var bet = await _db.Set<MatchBetEntity>()
             .Include(b => b.Selections)
             .FirstOrDefaultAsync(b => b.MatchId == matchId && b.UserId == userId, ct);
 
-        if (bet is null)
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        try
         {
-            bet = new MatchBetEntity(groupId, matchId, userId);
-            _db.Set<MatchBetEntity>().Add(bet);
+            if (bet is null)
+            {
+                bet = new MatchBetEntity(groupId, matchId, userId);
+                _db.Set<MatchBetEntity>().Add(bet);
+                await _db.SaveChangesAsync(ct);
+            }
+            else
+            {
+                _db.Set<MatchBetSelectionEntity>().RemoveRange(bet.Selections.ToList());
+                await _db.SaveChangesAsync(ct);
+            }
+
+            var newSelections = dto.Selections.Select(s => new MatchBetSelectionEntity(
+                bet.Id,
+                ParseCategory(s.Category),
+                s.PredictedValue.Trim(),
+                s.FichasWagered
+            )).ToList();
+
+            bet.ReplaceSelections(newSelections);
+            _db.Set<MatchBetSelectionEntity>().AddRange(newSelections);
             await _db.SaveChangesAsync(ct);
+
+            await tx.CommitAsync(ct);
         }
-        else
+        catch
         {
-            _db.Set<MatchBetSelectionEntity>().RemoveRange(bet.Selections.ToList());
-            await _db.SaveChangesAsync(ct);
+            await tx.RollbackAsync(ct);
+            throw;
         }
-
-        var newSelections = dto.Selections.Select(s => new MatchBetSelectionEntity(
-            bet.Id,
-            ParseCategory(s.Category),
-            s.PredictedValue.Trim(),
-            s.FichasWagered
-        )).ToList();
-
-        bet.ReplaceSelections(newSelections);
-        _db.Set<MatchBetSelectionEntity>().AddRange(newSelections);
-        await _db.SaveChangesAsync(ct);
 
         return Result.Ok();
     }
@@ -223,6 +315,15 @@ public sealed class BetService : IBetService
 
         if (match.Status != MatchStatus.MatchMaking)
             return Result.Fail("As apostas só podem ser removidas durante o matchmaking.");
+
+        var deleteTeamFlags = await _db.MatchPlayers
+            .Where(mp => mp.MatchId == matchId && (mp.Team == 1 || mp.Team == 2))
+            .Select(mp => mp.Team)
+            .Distinct()
+            .ToListAsync(ct);
+
+        if (!deleteTeamFlags.Contains((short)1) || !deleteTeamFlags.Contains((short)2))
+            return Result.Fail("Os times ainda não foram definidos para esta partida.");
 
         var bet = await _db.Set<MatchBetEntity>()
             .Include(b => b.Selections)
@@ -298,6 +399,11 @@ public sealed class BetService : IBetService
 
     public async Task<List<MatchBetHistoryDto>> GetHistoryAsync(Guid groupId, CancellationToken ct)
     {
+        // Resolve any bets for finalized matches that were never explicitly resolved.
+        // This prevents history from appearing empty just because GetMatchResults
+        // was never called for those matches.
+        await EnsureResolvedForGroupAsync(groupId, ct);
+
         var matchIds = await _db.Set<MatchBetEntity>()
             .AsNoTracking()
             .Where(b => b.GroupId == groupId && b.IsResolved)
@@ -375,6 +481,8 @@ public sealed class BetService : IBetService
     public async Task<List<BetLeaderboardEntryDto>> GetLeaderboardAsync(
         Guid groupId, CancellationToken ct)
     {
+        await EnsureResolvedForGroupAsync(groupId, ct);
+
         var balances = await _db.Set<UserBetBalanceEntity>()
             .AsNoTracking()
             .Where(b => b.GroupId == groupId)
@@ -484,7 +592,7 @@ public sealed class BetService : IBetService
 
         }).OrderByDescending(u => u.SimulatedTotal).ToList();
 
-        return new BetPreviewDto(matchId, scoreA, scoreB, userBets);
+        return new BetPreviewDto(matchId, scoreA, scoreB, userBets, ParticipationBonus);
     }
 
     private static string BuildPlayerActualValue(string predictedValue, Dictionary<Guid, int> countByPlayer)
@@ -557,6 +665,31 @@ public sealed class BetService : IBetService
 
         // Re-resolve com o placar atual
         await ResolveBetsForMatchAsync(match, ct);
+    }
+
+    /// <summary>
+    /// Resolves all pending bets for finalized matches in the group.
+    /// History and leaderboard queries call this so they never return stale
+    /// empty data just because <c>GetMatchResultsAsync</c> was never explicitly hit.
+    /// </summary>
+    private async Task EnsureResolvedForGroupAsync(Guid groupId, CancellationToken ct)
+    {
+        var unresolvedMatchIds = await _db.Set<MatchBetEntity>()
+            .AsNoTracking()
+            .Where(b => b.GroupId == groupId && !b.IsResolved)
+            .Select(b => b.MatchId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        if (unresolvedMatchIds.Count == 0) return;
+
+        var finalizedMatches = await _db.Matches
+            .Where(m => unresolvedMatchIds.Contains(m.Id) &&
+                        m.Status == MatchStatus.Finalized)
+            .ToListAsync(ct);
+
+        foreach (var match in finalizedMatches)
+            await ResolveBetsForMatchAsync(match, ct);
     }
 
     private async Task ResolveBetsForMatchAsync(MatchEntity match, CancellationToken ct)
@@ -744,7 +877,9 @@ public sealed class BetService : IBetService
         {
             balance = new UserBetBalanceEntity(groupId, userId);
             _db.Set<UserBetBalanceEntity>().Add(balance);
-            await _db.SaveChangesAsync(ct);
+            // Não chamar SaveChangesAsync aqui: o chamador (ResolveBetsForMatchAsync)
+            // persiste tudo de uma vez no SaveChangesAsync ao final do loop,
+            // evitando múltiplos round-trips ao banco por usuário novo.
         }
 
         return balance;

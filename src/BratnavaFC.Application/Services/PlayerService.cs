@@ -16,13 +16,20 @@ public class PlayerService : IPlayerService
     private readonly ILogger<PlayerService> _logger;
     private readonly AppDbContext _context;
     private readonly IPushService _push;
+    private readonly IMatchService _matchService;
 
-    public PlayerService(IRepositoryBase<PlayerEntity> repository, ILogger<PlayerService> logger, AppDbContext context, IPushService push)
+    public PlayerService(
+        IRepositoryBase<PlayerEntity> repository,
+        ILogger<PlayerService> logger,
+        AppDbContext context,
+        IPushService push,
+        IMatchService matchService)
     {
-        _repository = repository;
-        _logger     = logger;
-        _context    = context;
-        _push       = push;
+        _repository   = repository;
+        _logger       = logger;
+        _context      = context;
+        _push         = push;
+        _matchService = matchService;
     }
 
     public async Task<Result<PlayerDto>> CreateAsync(CreatePlayerDto request, CancellationToken cancellationToken)
@@ -72,6 +79,10 @@ public class PlayerService : IPlayerService
             _context.Players.Add(player);
             await _context.SaveChangesAsync(cancellationToken);
 
+            // Auto-sync the new active player into all pre-game matches of this group
+            if (player.Status == Status.Active)
+                await _matchService.SyncPlayerIntoActiveMatchesAsync(request.GroupId, player.Id, cancellationToken);
+
             return Result<PlayerDto>.Ok(MapToDto(player), "Jogador criado com sucesso.", ResultStatus.Created);
         }
         catch (Exception ex)
@@ -88,6 +99,8 @@ public class PlayerService : IPlayerService
             var player = await _repository.GetByIdIncludingInactiveAsync(playerId, cancellationToken);
             if (player == null)
                 return Result<PlayerDto>.Fail("Jogador não encontrado.", ResultStatus.NotFound);
+
+            var wasInactive = player.Status != Status.Active;
 
             player.Rename(request.Name);
             player.SetSkillPoints(request.SkillPoints);
@@ -106,6 +119,10 @@ public class PlayerService : IPlayerService
             _repository.Update(player);
             await _repository.SaveChangesAsync(cancellationToken);
 
+            // Sync into pre-game matches when the player transitions from inactive to active
+            if (wasInactive && player.Status == Status.Active)
+                await _matchService.SyncPlayerIntoActiveMatchesAsync(player.GroupId, player.Id, cancellationToken);
+
             return Result<PlayerDto>.Ok(MapToDto(player), "Jogador atualizado com sucesso.");
         }
         catch (Exception ex)
@@ -122,6 +139,27 @@ public class PlayerService : IPlayerService
             var player = await _repository.GetByIdIncludingInactiveAsync(playerId, cancellationToken);
             if (player == null)
                 return Result.Fail("Jogador não encontrado.", ResultStatus.NotFound);
+
+            // A player who appeared in any match past the pre-game phase is part of match
+            // history and must not be deleted (they'd leave orphaned stats / goals / votes).
+            var hasMatchHistory = await _context.MatchPlayers
+                .AnyAsync(
+                    mp => mp.PlayerId == playerId &&
+                          mp.Match!.Status != MatchStatus.Created &&
+                          mp.Match!.Status != MatchStatus.Acceptation,
+                    cancellationToken);
+
+            if (hasMatchHistory)
+                return Result.Fail("Jogador possui histórico de partidas e não pode ser excluído. Desative-o em vez de excluir.");
+
+            // Remove any pending pre-game invitations before deleting the player row,
+            // otherwise the FK on MatchPlayers.PlayerId would reject the DELETE.
+            var preGameInvites = await _context.MatchPlayers
+                .Where(mp => mp.PlayerId == playerId)
+                .ToListAsync(cancellationToken);
+
+            if (preGameInvites.Count > 0)
+                _context.MatchPlayers.RemoveRange(preGameInvites);
 
             _repository.Remove(player);
             await _repository.SaveChangesAsync(cancellationToken);
@@ -186,6 +224,9 @@ public class PlayerService : IPlayerService
 
             _repository.Update(player);
             await _repository.SaveChangesAsync(cancellationToken);
+
+            // Auto-sync the reactivated player into all pre-game matches of their group
+            await _matchService.SyncPlayerIntoActiveMatchesAsync(player.GroupId, player.Id, cancellationToken);
 
             return Result.Ok("Jogador atualizado com sucesso.");
         }

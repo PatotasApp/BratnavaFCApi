@@ -257,4 +257,16 @@ public sealed class PaymentController : GroupAuthorizedController
         var result  = await _payments.GetExtraChargeProofAsync(groupId, chargeId, playerId, userId, isAdmin, ct);
         return ToResponse(result);
     }
+
+    /// <summary>
+    /// Remove todas as mensalidades e reseta todos os pagamentos de cobranças extras
+    /// para Pendente. Também limpa o caixa. Usar apenas para diagnóstico/teste.
+    /// </summary>
+    [HttpDelete("all")]
+    [Authorize(Roles = "GodMode")]
+    public async Task<IActionResult> ClearAllPayments(Guid groupId, CancellationToken ct)
+    {
+        var result = await _payments.ClearAllPaymentsAsync(groupId, ct);
+        return ToResponse(result);
+    }
 }

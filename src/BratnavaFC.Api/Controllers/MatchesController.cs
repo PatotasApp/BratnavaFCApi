@@ -20,19 +20,22 @@ public class MatchesController : GroupAuthorizedController
     private readonly IMatchEventPublisher _eventPublisher;
     private readonly IReplayUrlService _replayUrl;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IBetService _bets;
 
-    public MatchesController(IMatchService service, AppDbContext db, IMatchEventPublisher eventPublisher, IReplayUrlService replayUrl, IHttpClientFactory httpClientFactory)
+    public MatchesController(IMatchService service, AppDbContext db, IMatchEventPublisher eventPublisher, IReplayUrlService replayUrl, IHttpClientFactory httpClientFactory, IBetService bets)
     {
         _service            = service;
         _db                 = db;
         _eventPublisher     = eventPublisher;
         _replayUrl          = replayUrl;
         _httpClientFactory  = httpClientFactory;
+        _bets               = bets;
     }
 
     [HttpGet("group/{groupId:guid}")]
     public async Task<IActionResult> GetAll(Guid groupId, CancellationToken cancellationToken)
     {
+        if (!await IsGroupMemberAsync(groupId, _db, cancellationToken)) return Forbid();
         var matches = await _service.GetAllAsync(groupId, cancellationToken);
         return Ok(matches);
     }
@@ -40,23 +43,38 @@ public class MatchesController : GroupAuthorizedController
     [HttpGet("group/{groupId:guid}/{matchId:guid}")]
     public async Task<IActionResult> Get(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
+        if (!await IsGroupMemberAsync(groupId, _db, cancellationToken)) return Forbid();
         var match = await _service.GetByIdAsync(groupId, matchId, cancellationToken);
-        if (match == null) return NotFound();
+        if (match is null || !match.Success || match.Data is null) return NotFound();
         return ToResponse(Result<MatchDto>.Ok(ToDto(match.Data)));
     }
 
     [HttpGet("group/{groupId:guid}/current")]
     public async Task<IActionResult> GetCurrent(Guid groupId, CancellationToken cancellationToken)
     {
+        if (!await IsGroupMemberAsync(groupId, _db, cancellationToken)) return Forbid();
         var match = await _service.GetCurrentAsync(groupId, cancellationToken);
         if (match.Data is null) return NotFound();
         return ToResponse(Result<MatchDto>.Ok(ToDto(match.Data)));
+    }
+
+    /// <summary>
+    /// Returns all non-finalized matches ordered by date ascending (nearest first).
+    /// Capped at <see cref="BratnavaFC.Domain.Constants.MatchConstants.MaxSimultaneousActiveMatches"/>.
+    /// </summary>
+    [HttpGet("group/{groupId:guid}/upcoming")]
+    public async Task<IActionResult> GetUpcoming(Guid groupId, CancellationToken ct)
+    {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
+        var result = await _service.GetUpcomingAsync(groupId, ct);
+        return ToResponse(result);
     }
 
     // header leve (pra stepper / status)
     [HttpGet("group/{groupId:guid}/{matchId:guid}/header")]
     public async Task<IActionResult> GetHeader(Guid groupId, Guid matchId, CancellationToken ct)
     {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
         var dto = await _service.GetHeaderAsync(groupId, matchId, ct);
         if (dto is null) return NotFound();
         return Ok(dto);
@@ -65,6 +83,7 @@ public class MatchesController : GroupAuthorizedController
     [HttpGet("group/{groupId:guid}/{matchId:guid}/acceptation")]
     public async Task<IActionResult> GetAcceptation(Guid groupId, Guid matchId, CancellationToken ct)
     {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
         var dto = await _service.GetAcceptationAsync(groupId, matchId, ct);
         if (dto is null) return NotFound();
         return Ok(dto);
@@ -73,6 +92,7 @@ public class MatchesController : GroupAuthorizedController
     [HttpGet("group/{groupId:guid}/{matchId:guid}/matchmaking")]
     public async Task<IActionResult> GetMatchMaking(Guid groupId, Guid matchId, CancellationToken ct)
     {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
         var dto = await _service.GetMatchMakingAsync(groupId, matchId, ct);
         if (dto is null) return NotFound();
         return Ok(dto);
@@ -81,6 +101,7 @@ public class MatchesController : GroupAuthorizedController
     [HttpGet("group/{groupId:guid}/{matchId:guid}/postgame")]
     public async Task<IActionResult> GetPostGame(Guid groupId, Guid matchId, CancellationToken ct)
     {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
         var dto = await _service.GetPostGameAsync(groupId, matchId, ct);
         if (dto is null) return NotFound();
         return Ok(dto);
@@ -89,13 +110,16 @@ public class MatchesController : GroupAuthorizedController
     [HttpPost("group/{groupId:guid}")]
     public async Task<IActionResult> Create(Guid groupId, [FromBody] CreateMatchDto dto, CancellationToken cancellationToken)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
             var entity = new MatchEntity(groupId, dto.PlayedAt, dto.PlaceName);
             var created = await _service.Create(groupId, entity, cancellationToken);
 
-            return CreatedAtAction(nameof(Get), new { groupId, matchId = created.Data?.Id }, ToDto(created.Data));
+            if (!created.Success || created.Data is null)
+                return BadRequest(new { error = created.Error ?? "Falha ao criar partida." });
+
+            return CreatedAtAction(nameof(Get), new { groupId, matchId = created.Data.Id }, ToDto(created.Data));
         }
         catch (InvalidOperationException ex)
         {
@@ -106,7 +130,7 @@ public class MatchesController : GroupAuthorizedController
     [HttpPost("group/{groupId:guid}/{matchId:guid}/players/sync")]
     public async Task<IActionResult> SyncPlayers(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
             await _service.SyncPlayersFromGroupAsync(groupId, matchId, cancellationToken);
@@ -121,7 +145,7 @@ public class MatchesController : GroupAuthorizedController
     [HttpPut("group/{groupId:guid}/{matchId:guid}")]
     public async Task<IActionResult> Update(Guid groupId, Guid matchId, [FromBody] UpdateMatchDto dto, CancellationToken cancellationToken)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
             var result = await _service.UpdateAsync(groupId, matchId, dto, cancellationToken);
@@ -205,7 +229,7 @@ public class MatchesController : GroupAuthorizedController
     [HttpPost("group/{groupId:guid}/{matchId:guid}/start")]
     public async Task<IActionResult> StartAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
             await _service.StartMatchAsync(groupId, matchId, cancellationToken);
@@ -220,7 +244,7 @@ public class MatchesController : GroupAuthorizedController
     [HttpPost("group/{groupId:guid}/{matchId:guid}/end")]
     public async Task<IActionResult> EndAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
             await _service.EndMatchAsync(groupId, matchId, cancellationToken);
@@ -258,7 +282,7 @@ public class MatchesController : GroupAuthorizedController
     [HttpPatch("group/{groupId:guid}/{matchId:guid}/score")]
     public async Task<IActionResult> SetScoreAsync(Guid groupId, Guid matchId, [FromBody] SetScoreRequestDto dto, CancellationToken cancellationToken)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
             await _service.SetScoreAsync(groupId, matchId, dto.TeamAGoals, dto.TeamBGoals, cancellationToken);
@@ -273,7 +297,7 @@ public class MatchesController : GroupAuthorizedController
     [HttpPatch("group/{groupId:guid}/{matchId:guid}/colors")]
     public async Task<IActionResult> SetMatchColorsAsync(Guid groupId, Guid matchId, [FromBody] SetMatchColorsRequestDto dto, CancellationToken cancellationToken)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
             await _service.SetTeamColorsAsync(groupId, matchId, dto.TeamAColorId, dto.TeamBColorId, dto.Randomize, cancellationToken);
@@ -288,7 +312,7 @@ public class MatchesController : GroupAuthorizedController
     [HttpPost("group/{groupId:guid}/{matchId:guid}/finalize")]
     public async Task<IActionResult> FinalizeAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
             await _service.FinalizeMatchAsync(groupId, matchId, cancellationToken);
@@ -303,7 +327,7 @@ public class MatchesController : GroupAuthorizedController
     [HttpPost("group/{groupId:guid}/{matchId:guid}/reapply-mvp")]
     public async Task<IActionResult> ReapplyMvpAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, cancellationToken)) return Forbid();
         var result = await _service.ReapplyMvpTieRuleAsync(groupId, matchId, cancellationToken);
         return ToResponse(result);
     }
@@ -367,7 +391,7 @@ public class MatchesController : GroupAuthorizedController
         [FromRoute] Guid groupId,
         CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
         var result = await _service.GetAllGroupReplaysAsync(groupId, userId.Value, ct);
@@ -379,7 +403,7 @@ public class MatchesController : GroupAuthorizedController
         [FromRoute] Guid groupId,
         CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
         var userId = GetCurrentUserId();
         var result = await _service.GetLikedReplaysAsync(groupId, userId, ct);
         return ToResponse(result);
@@ -394,6 +418,17 @@ public class MatchesController : GroupAuthorizedController
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
         var result = await _service.GetMyLikesAsync(groupId, userId.Value, ct);
+        return ToResponse(result);
+    }
+
+    [HttpGet("group/{groupId:guid}/replays/{clipId:guid}/likers")]
+    public async Task<IActionResult> GetClipLikers(
+        [FromRoute] Guid groupId,
+        [FromRoute] Guid clipId,
+        CancellationToken ct)
+    {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
+        var result = await _service.GetClipLikersAsync(clipId, ct);
         return ToResponse(result);
     }
 
@@ -501,7 +536,7 @@ public class MatchesController : GroupAuthorizedController
         [FromForm] string eventType,
         CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
 
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
@@ -537,8 +572,13 @@ public class MatchesController : GroupAuthorizedController
         [FromBody] AssignTeamsDto dto,
         CancellationToken cancellationToken)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, cancellationToken)) return Forbid();
         await _service.AssignTeamsAsync(groupId, matchId, dto, cancellationToken);
+
+        // Whenever teams are (re)assigned, pending bets are stale:
+        // players may have changed sides, making old selections invalid.
+        await _bets.ResetBetsForMatchAsync(matchId, cancellationToken);
+
         return NoContent();
     }
 
@@ -549,7 +589,7 @@ public class MatchesController : GroupAuthorizedController
         [FromBody] SwapPlayersDto dto,
         CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
         try
         {
             await _service.SwapPlayersByPlayerIdAsync(groupId, matchId, dto.PlayerAId, dto.PlayerBId, ct);
@@ -566,7 +606,7 @@ public class MatchesController : GroupAuthorizedController
         Guid groupId, Guid matchId, Guid matchPlayerId,
         [FromBody] SetPlayerRoleDto dto, CancellationToken cancellationToken)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
             await _service.SetPlayerRoleAsync(groupId, matchId, matchPlayerId, dto, cancellationToken);
@@ -594,7 +634,7 @@ public class MatchesController : GroupAuthorizedController
         [FromBody] UpdateGoalRequestDto dto,
         CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
         try
         {
             await _service.UpdateGoalAsync(groupId, matchId, goalId, dto, ct);
@@ -624,7 +664,7 @@ public class MatchesController : GroupAuthorizedController
     [HttpPost("group/{groupId:guid}/{matchId:guid}/matchmaking")]
     public async Task<IActionResult> GoToMatchMaking(Guid groupId, Guid matchId, CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
         try
         {
             await _service.GoToMatchMakingAsync(groupId, matchId, ct);
@@ -639,7 +679,7 @@ public class MatchesController : GroupAuthorizedController
     [HttpPost("group/{groupId:guid}/{matchId:guid}/postgame")]
     public async Task<IActionResult> GoToPostGame(Guid groupId, Guid matchId, CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
         try
         {
             await _service.GoToPostGameAsync(groupId, matchId, ct);
@@ -658,7 +698,7 @@ public class MatchesController : GroupAuthorizedController
         [FromBody] AddGoalsBulkRequestDto dto,
         CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
         try
         {
             await _service.AddGoalsBulkAsync(groupId, matchId, dto, ct);
@@ -673,7 +713,7 @@ public class MatchesController : GroupAuthorizedController
     [HttpPost("group/{groupId:guid}/{matchId:guid}/rewind")]
     public async Task<IActionResult> Rewind(Guid groupId, Guid matchId, CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
         try
         {
             await _service.RewindOneStepAsync(groupId, matchId, ct);
@@ -687,13 +727,16 @@ public class MatchesController : GroupAuthorizedController
 
     [HttpGet("group/{groupId:guid}/history")]
     public async Task<IActionResult> GetHistory(
-    Guid groupId,
-    [FromQuery] int take = 200,
-    [FromQuery] Guid? playerId = null,
-    CancellationToken cancellationToken = default)
+        Guid groupId,
+        [FromQuery] int take = 20,
+        [FromQuery] int skip = 0,
+        [FromQuery] Guid? playerId = null,
+        CancellationToken cancellationToken = default)
     {
-        var items = await _service.GetHistoryAsync(groupId, take, cancellationToken, playerId);
-        return Ok(items);
+        if (!await IsGroupMemberAsync(groupId, _db, cancellationToken)) return Forbid();
+        var result = await _service.GetHistoryAsync(groupId, take, skip, cancellationToken, playerId);
+        if (!result.Success) return BadRequest(new { error = result.Error });
+        return Ok(result);
     }
 
     /// <summary>
@@ -724,7 +767,7 @@ public class MatchesController : GroupAuthorizedController
 
         // Admins and group admins can query any player in the group.
         // Regular members can only view their own player's history.
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct))
+        if (!await IsGroupAdminAsync(groupId, _db, ct))
         {
             var userId = GetCurrentUserId();
             if (userId == null) return Forbid();
@@ -746,7 +789,7 @@ public class MatchesController : GroupAuthorizedController
         [FromBody] AddGuestToMatchDto dto,
         CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
         try
         {
             await _service.AddGuestToMatchAsync(groupId, matchId, dto, ct);
@@ -765,7 +808,7 @@ public class MatchesController : GroupAuthorizedController
         [FromBody] PublishMatchEventRequest dto,
         CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
         await _eventPublisher.PublishAsync(groupId, matchId, dto.Type, dto.SecondsBeforeStart, dto.DurationSeconds, ct);
         return NoContent();
     }

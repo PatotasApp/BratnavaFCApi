@@ -108,7 +108,19 @@ public record BetPreviewDto(
     Guid                    MatchId,
     int                     CurrentScoreA,
     int                     CurrentScoreB,
-    List<BetPreviewUserDto> UserBets            // ordenado por SimulatedTotal desc
+    List<BetPreviewUserDto> UserBets,           // ordenado por SimulatedTotal desc
+    int                     ParticipationBonus = 50
+);
+
+// ── Bettable matches (carousel) ───────────────────────────────────────────────
+
+/// <summary>
+/// A match eligible for betting: MatchMaking status + at least one player in each team.
+/// </summary>
+public record BettableMatchDto(
+    Guid     MatchId,
+    DateTime PlayedAt,
+    string   PlaceName
 );
 
 // ── Leaderboard ───────────────────────────────────────────────────────────────

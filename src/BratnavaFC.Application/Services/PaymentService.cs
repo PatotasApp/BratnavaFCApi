@@ -14,12 +14,18 @@ public sealed class PaymentService : IPaymentService
     private readonly AppDbContext _context;
     private readonly IPushService _push;
     private readonly ILogger<PaymentService> _logger;
+    private readonly IFinancialTransactionService _transactions;
 
-    public PaymentService(AppDbContext context, IPushService push, ILogger<PaymentService> logger)
+    public PaymentService(
+        AppDbContext context,
+        IPushService push,
+        ILogger<PaymentService> logger,
+        IFinancialTransactionService transactions)
     {
-        _context = context;
-        _push    = push;
-        _logger  = logger;
+        _context      = context;
+        _push         = push;
+        _logger       = logger;
+        _transactions = transactions;
     }
 
     private static readonly string[] _monthNames =
@@ -247,6 +253,10 @@ public sealed class PaymentService : IPaymentService
             await _context.MonthlyPayments.AddAsync(record, ct);
         }
 
+        // Captura o effective antes de aplicar o desconto — usado no caixa quando
+        // o desconto integral zera o effective mas auto-marca o registro como Paid.
+        var monthlyEffectiveBefore = Math.Max(0, record.Amount - record.Discount);
+
         if (dto.Discount.HasValue && isAdmin)
         {
             record.ApplyDiscount(dto.Discount.Value, dto.DiscountReason, actingUserId);
@@ -269,6 +279,29 @@ public sealed class PaymentService : IPaymentService
         }
 
         await _context.SaveChangesAsync(ct);
+
+        // ── Caixa: registra/remove entrada automática ────────────────────────
+        var monthlyPlayerName = await _context.Players
+            .AsNoTracking()
+            .Where(p => p.Id == record.PlayerId)
+            .Select(p => p.Name)
+            .FirstOrDefaultAsync(ct);
+
+        var monthlyEffectiveAfter = Math.Max(0, record.Amount - record.Discount);
+        var monthlyCaixaAmount    = record.Status == PaymentStatus.Paid && monthlyEffectiveAfter <= 0
+            ? monthlyEffectiveBefore
+            : monthlyEffectiveAfter;
+
+        await _transactions.RecordOrRemovePaymentEntryAsync(
+            groupId,
+            TransactionSourceType.MonthlyPayment,
+            record.Id,
+            monthlyCaixaAmount,
+            $"Mensalidade {_monthNames[record.Month - 1]}/{record.Year} – {monthlyPlayerName}",
+            new DateOnly(record.Year, record.Month, 1),
+            record.Status == PaymentStatus.Paid,
+            monthlyPlayerName,
+            ct);
 
         if (dto.Status == PaymentStatus.Paid && !wasAlreadyPaid)
             await NotifyFinanceirosMonthlyPaidAsync(groupId, dto.PlayerId, dto.Month, dto.Year, ct);
@@ -383,10 +416,64 @@ public sealed class PaymentService : IPaymentService
                      && dto.PlayerIds.Contains(p.PlayerId))
             .ToListAsync(ct);
 
+        // Captura o valor efetivo ANTES do desconto. Usado no caixa quando o
+        // desconto integral zera o effective: o pagamento auto-paga (Paid) mas
+        // amount - discount = 0 → usa effectiveBefore para registrar a entrada.
+        var effectiveBeforeMap = payments.ToDictionary(
+            p => p.Id,
+            p => Math.Max(0, p.Amount - p.Discount));
+
         foreach (var payment in payments)
+        {
             payment.ApplyDiscount(dto.Discount, dto.DiscountReason, adminId);
 
+            // Se MarkAsPaid e o pagamento ainda está pendente (desconto parcial),
+            // marcar como pago para que a entrada apareça no caixa.
+            if (dto.MarkAsPaid && payment.Status == PaymentStatus.Pending)
+                payment.MarkAsPaid(adminId, null, null, null);
+        }
+
         await _context.SaveChangesAsync(ct);
+
+        // ── Caixa: atualiza ou cria entradas afetadas ────────────────────────
+        if (payments.Count > 0)
+        {
+            var playerIds = payments.Select(p => p.PlayerId).Distinct().ToList();
+            var playerMap = await _context.Players.AsNoTracking()
+                .Where(p => playerIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => p.Name, ct);
+
+            var chargeName = await _context.ExtraCharges.AsNoTracking()
+                .Where(c => c.Id == chargeId)
+                .Select(c => c.Name)
+                .FirstOrDefaultAsync(ct) ?? "Cobrança";
+
+            foreach (var payment in payments)
+            {
+                var playerName   = playerMap.GetValueOrDefault(payment.PlayerId, "Jogador");
+                var effectiveAfter = Math.Max(0, payment.Amount - payment.Discount);
+
+                // Desconto integral auto-paga o registro (Discount >= Amount) mas zera
+                // o effective. Nesse caso usa effectiveBefore como valor no caixa —
+                // o admin está confirmando o recebimento do valor que era devido.
+                var caixaAmount = payment.Status == PaymentStatus.Paid && effectiveAfter <= 0
+                    ? effectiveBeforeMap.GetValueOrDefault(payment.Id)
+                    : effectiveAfter;
+
+                await _transactions.RecordOrRemovePaymentEntryAsync(
+                    groupId,
+                    TransactionSourceType.ExtraCharge,
+                    payment.Id,
+                    caixaAmount,
+                    $"{chargeName} – {playerName}",
+                    payment.PaidAt.HasValue
+                        ? DateOnly.FromDateTime(payment.PaidAt.Value)
+                        : DateOnly.FromDateTime(DateTime.UtcNow),
+                    payment.Status == PaymentStatus.Paid,
+                    playerName,
+                    ct);
+            }
+        }
 
         return Result.Ok("Desconto aplicado com sucesso.");
     }
@@ -422,6 +509,10 @@ public sealed class PaymentService : IPaymentService
         if (payment is null)
             return Result.Fail("Pagamento não encontrado.", ResultStatus.NotFound);
 
+        // Captura o effective antes de aplicar o desconto — usado no caixa quando
+        // o desconto integral zera o effective mas auto-marca o registro como Paid.
+        var extraEffectiveBefore = Math.Max(0, payment.Amount - payment.Discount);
+
         if (dto.Discount.HasValue && isAdmin)
             payment.ApplyDiscount(dto.Discount.Value, dto.DiscountReason, actingUserId);
 
@@ -443,10 +534,41 @@ public sealed class PaymentService : IPaymentService
 
         await _context.SaveChangesAsync(ct);
 
+        // ── Caixa: registra/remove entrada automática ────────────────────────
+        var extraNames = await _context.Players
+            .AsNoTracking()
+            .Where(p => p.Id == playerId)
+            .Select(p => new { p.Name })
+            .FirstOrDefaultAsync(ct);
+
+        var chargeName = await _context.ExtraCharges
+            .AsNoTracking()
+            .Where(c => c.Id == chargeId)
+            .Select(c => c.Name)
+            .FirstOrDefaultAsync(ct);
+
+        var extraEffectiveAfter = Math.Max(0, payment.Amount - payment.Discount);
+        var extraCaixaAmount    = payment.Status == PaymentStatus.Paid && extraEffectiveAfter <= 0
+            ? extraEffectiveBefore
+            : extraEffectiveAfter;
+
+        await _transactions.RecordOrRemovePaymentEntryAsync(
+            groupId,
+            TransactionSourceType.ExtraCharge,
+            payment.Id,
+            extraCaixaAmount,
+            $"{chargeName} – {extraNames?.Name}",
+            payment.PaidAt.HasValue
+                ? DateOnly.FromDateTime(payment.PaidAt.Value)
+                : DateOnly.FromDateTime(DateTime.UtcNow),
+            payment.Status == PaymentStatus.Paid,
+            extraNames?.Name,
+            ct);
+
         if (dto.Status == PaymentStatus.Paid && !wasAlreadyPaidExtra)
         {
             await NotifyFinanceirosExtraChargePaidAsync(groupId, playerId, chargeId, ct);
-            _ = NotifyIfChargeFullyPaidAsync(groupId, chargeId, ct);
+            await NotifyIfChargeFullyPaidAsync(groupId, chargeId, ct);
         }
 
         if (dto.Status == PaymentStatus.Pending && !wasAlreadyPendingExtra)
@@ -921,7 +1043,7 @@ public sealed class PaymentService : IPaymentService
         var player = await _context.Players
             .AsNoTracking()
             .Where(p => p.GroupId == groupId && p.UserId == userId && !p.IsGuest)
-            .Select(p => new { p.Id, JoinDate = p.JoinedAt ?? p.CreateDate })
+            .Select(p => new { p.Id, p.IsGoalkeeper, JoinDate = p.JoinedAt ?? p.CreateDate })
             .FirstOrDefaultAsync(ct);
 
         if (player is null)
@@ -956,15 +1078,17 @@ public sealed class PaymentService : IPaymentService
                 .ToListAsync(ct);
 
             var recordMap = records.ToDictionary(r => r.Month);
-            var fee = settings?.MonthlyFee ?? 0m;
+            var fee = player.IsGoalkeeper
+                ? (settings?.GoalkeeperMonthlyFee ?? settings?.MonthlyFee ?? 0m)
+                : (settings?.MonthlyFee ?? 0m);
 
             for (var m = firstMonth; m <= maxMonth; m++)
             {
-                if (recordMap.TryGetValue(m, out var rec) && rec.Status == PaymentStatus.Paid)
-                    continue;
+                recordMap.TryGetValue(m, out var rec);
 
                 var amount   = rec?.Amount   ?? fee;
                 var discount = rec?.Discount ?? 0m;
+                var isPaid   = rec?.Status == PaymentStatus.Paid;
 
                 items.Add(new PendingPaymentItemDto
                 {
@@ -976,31 +1100,38 @@ public sealed class PaymentService : IPaymentService
                     Type        = PendingPaymentType.Monthly,
                     Year        = year,
                     Month       = m,
+                    IsPaid      = isPaid,
                 });
             }
         }
 
-        // ── Cobranças extras ─────────────────────────────────────────────────
-        var pendingExtras = await _context.ExtraChargePayments
+        // ── Cobranças extras (pagas e pendentes) ─────────────────────────────
+        var allExtras = await _context.ExtraChargePayments
             .AsNoTracking()
             .Include(ep => ep.ExtraCharge)
             .Where(ep => ep.GroupId  == groupId
                       && ep.PlayerId == player.Id
-                      && ep.Status   == PaymentStatus.Pending
                       && !ep.ExtraCharge!.IsCancelled)
             .ToListAsync(ct);
 
-        foreach (var ep in pendingExtras)
+        foreach (var ep in allExtras)
         {
+            var effective = Math.Max(0, ep.Amount - ep.Discount);
+
+            // Cobranças com desconto total (effective = 0) auto-pagas não têm
+            // impacto no caixa e não fazem sentido aparecer no modal de pagamento.
+            if (ep.Status == PaymentStatus.Paid && effective <= 0) continue;
+
             items.Add(new PendingPaymentItemDto
             {
                 Id          = $"e-{ep.ExtraChargeId}",
                 Description = ep.ExtraCharge!.Name,
                 Amount      = ep.Amount,
                 Discount    = ep.Discount,
-                FinalAmount = Math.Max(0, ep.Amount - ep.Discount),
+                FinalAmount = effective,
                 Type        = PendingPaymentType.Extra,
                 ChargeId    = ep.ExtraChargeId,
+                IsPaid      = ep.Status == PaymentStatus.Paid,
             });
         }
 
@@ -1015,7 +1146,7 @@ public sealed class PaymentService : IPaymentService
 
         var player = await _context.Players
             .Where(p => p.GroupId == groupId && p.UserId == userId && !p.IsGuest)
-            .Select(p => new { p.Id })
+            .Select(p => new { p.Id, p.IsGoalkeeper })
             .FirstOrDefaultAsync(ct);
 
         if (player is null)
@@ -1025,66 +1156,178 @@ public sealed class PaymentService : IPaymentService
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.GroupId == groupId, ct);
 
-        var notifications = new List<Func<Task>>();
+        // Fetch player name and charge names needed for Caixa hooks
+        var paySelectedPlayerName = await _context.Players
+            .AsNoTracking()
+            .Where(p => p.Id == player.Id)
+            .Select(p => p.Name)
+            .FirstOrDefaultAsync(ct);
+
+        var extraChargeIds = dto.Items
+            .Where(i => i.Type == PendingPaymentType.Extra && i.ChargeId.HasValue)
+            .Select(i => i.ChargeId!.Value)
+            .Distinct()
+            .ToList();
+
+        var chargeNames = extraChargeIds.Count > 0
+            ? await _context.ExtraCharges
+                .AsNoTracking()
+                .Where(c => extraChargeIds.Contains(c.Id))
+                .ToDictionaryAsync(c => c.Id, c => c.Name, ct)
+            : new Dictionary<Guid, string>();
+
+        var notifications    = new List<Func<Task>>();
+        var transactionHooks = new List<Func<Task>>();
 
         foreach (var item in dto.Items)
         {
             if (item.Type == PendingPaymentType.Monthly
                 && item.Year.HasValue && item.Month.HasValue)
             {
+                var yr = item.Year.Value;
+                var mo = item.Month.Value;
+
                 var record = await _context.MonthlyPayments
                     .FirstOrDefaultAsync(m => m.GroupId  == groupId
                                            && m.PlayerId == player.Id
-                                           && m.Year     == item.Year.Value
-                                           && m.Month    == item.Month.Value, ct);
+                                           && m.Year     == yr
+                                           && m.Month    == mo, ct);
 
                 if (record is null)
                 {
-                    record = new MonthlyPaymentEntity(
-                        groupId, player.Id,
-                        item.Year.Value, item.Month.Value,
-                        settings?.MonthlyFee ?? 0);
+                    // Só cria o registro se o objetivo é marcar como pago
+                    if (!item.IsPaid) continue;
+                    var newFee = player.IsGoalkeeper
+                        ? (settings?.GoalkeeperMonthlyFee ?? settings?.MonthlyFee ?? 0)
+                        : (settings?.MonthlyFee ?? 0);
+                    record = new MonthlyPaymentEntity(groupId, player.Id, yr, mo, newFee);
                     await _context.MonthlyPayments.AddAsync(record, ct);
                 }
 
                 var wasPaid = record.Status == PaymentStatus.Paid;
-                record.MarkAsPaid(null, null, null, null);
 
-                if (!wasPaid)
+                if (item.IsPaid)
                 {
-                    var yr = item.Year.Value;
-                    var mo = item.Month.Value;
-                    notifications.Add(() =>
-                        NotifyFinanceirosMonthlyPaidAsync(groupId, player.Id, mo, yr, ct));
+                    record.MarkAsPaid(null, null, null, null);
+                    if (!wasPaid)
+                        notifications.Add(() => NotifyFinanceirosMonthlyPaidAsync(groupId, player.Id, mo, yr, ct));
                 }
+                else
+                {
+                    record.MarkAsPending();
+                    if (wasPaid)
+                        notifications.Add(() => NotifyPlayerMonthlyPendingAsync(groupId, player.Id, mo, yr, ct));
+                }
+
+                // Sempre sincroniza o caixa — RecordOrRemove é idempotente
+                var capturedRecord = record;
+                transactionHooks.Add(() =>
+                    _transactions.RecordOrRemovePaymentEntryAsync(
+                        groupId,
+                        TransactionSourceType.MonthlyPayment,
+                        capturedRecord.Id,
+                        capturedRecord.Amount - capturedRecord.Discount,
+                        $"Mensalidade {_monthNames[mo - 1]}/{yr} – {paySelectedPlayerName}",
+                        new DateOnly(yr, mo, 1),
+                        item.IsPaid,
+                        paySelectedPlayerName,
+                        ct));
             }
             else if (item.Type == PendingPaymentType.Extra && item.ChargeId.HasValue)
             {
+                var cid = item.ChargeId.Value;
+
                 var payment = await _context.ExtraChargePayments
-                    .FirstOrDefaultAsync(p => p.ExtraChargeId == item.ChargeId.Value
+                    .FirstOrDefaultAsync(p => p.ExtraChargeId == cid
                                            && p.PlayerId     == player.Id
                                            && p.GroupId      == groupId, ct);
 
                 if (payment is null) continue;
 
                 var wasPaid = payment.Status == PaymentStatus.Paid;
-                payment.MarkAsPaid(null, null, null, null);
 
-                if (!wasPaid)
+                if (item.IsPaid)
                 {
-                    var cid = item.ChargeId.Value;
-                    notifications.Add(() =>
-                        NotifyFinanceirosExtraChargePaidAsync(groupId, player.Id, cid, ct));
+                    payment.MarkAsPaid(null, null, null, null);
+                    if (!wasPaid)
+                    {
+                        var cidCapture = cid;
+                        notifications.Add(() => NotifyFinanceirosExtraChargePaidAsync(groupId, player.Id, cidCapture, ct));
+                        // Executado após SaveChangesAsync, de forma sequencial — sem concorrência no DbContext
+                        notifications.Add(() => NotifyIfChargeFullyPaidAsync(groupId, cidCapture, ct));
+                    }
                 }
+                else
+                {
+                    payment.MarkAsPending();
+                    if (wasPaid)
+                        notifications.Add(() => NotifyPlayerExtraChargePendingAsync(groupId, player.Id, cid, ct));
+                }
+
+                // Sempre sincroniza o caixa — RecordOrRemove é idempotente
+                var capturedPayment = payment;
+                var capturedName    = chargeNames.GetValueOrDefault(cid, "Cobrança");
+                transactionHooks.Add(() =>
+                    _transactions.RecordOrRemovePaymentEntryAsync(
+                        groupId,
+                        TransactionSourceType.ExtraCharge,
+                        capturedPayment.Id,
+                        capturedPayment.Amount - capturedPayment.Discount,
+                        $"{capturedName} – {paySelectedPlayerName}",
+                        capturedPayment.PaidAt.HasValue
+                            ? DateOnly.FromDateTime(capturedPayment.PaidAt.Value)
+                            : DateOnly.FromDateTime(DateTime.UtcNow),
+                        item.IsPaid,
+                        paySelectedPlayerName,
+                        ct));
             }
         }
 
         await _context.SaveChangesAsync(ct);
 
+        foreach (var hook in transactionHooks)
+            await hook();
+
         foreach (var notify in notifications)
             await notify();
 
         return Result.Ok("Pagamentos confirmados com sucesso.");
+    }
+
+    // ── Limpeza (diagnóstico) ─────────────────────────────────────────────────
+
+    public async Task<Result<(int MonthlyDeleted, int ExtraReset)>> ClearAllPaymentsAsync(
+        Guid groupId, CancellationToken ct = default)
+    {
+        // 1) Remove todas as mensalidades do grupo
+        var monthly = await _context.MonthlyPayments
+            .Where(m => m.GroupId == groupId)
+            .ToListAsync(ct);
+
+        _context.MonthlyPayments.RemoveRange(monthly);
+
+        // 2) Reseta cobranças extras para Pendente via SQL direto (private setters)
+        var extraReset = await _context.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ExtraChargePayments""
+              SET ""Status""         = 0,
+                  ""PaidAt""         = NULL,
+                  ""Discount""       = 0,
+                  ""DiscountReason"" = NULL,
+                  ""ProofBase64""    = NULL,
+                  ""ProofFileName""  = NULL,
+                  ""ProofMimeType""  = NULL,
+                  ""MarkedByAdminId"" = NULL
+              WHERE ""GroupId"" = {0}",
+            groupId);
+
+        // 3) Remove lançamentos do caixa
+        await _transactions.ClearAllTransactionsAsync(groupId, ct);
+
+        await _context.SaveChangesAsync(ct);
+
+        return Result<(int MonthlyDeleted, int ExtraReset)>.Ok(
+            (monthly.Count, extraReset),
+            $"{monthly.Count} mensalidade(s) removida(s), {extraReset} cobrança(s) extra resetada(s).");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

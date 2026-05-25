@@ -79,4 +79,11 @@ public interface IPaymentService
 
     /// <summary>Marca os itens selecionados como pagos em lote.</summary>
     Task<Result> PaySelectedAsync(Guid groupId, Guid userId, PaySelectedDto dto, CancellationToken ct = default);
+
+    /// <summary>
+    /// Remove todas as mensalidades e reseta todos os pagamentos de cobranças extras
+    /// do grupo para Pendente. Usado apenas para diagnóstico/teste.
+    /// </summary>
+    Task<Result<(int MonthlyDeleted, int ExtraReset)>> ClearAllPaymentsAsync(
+        Guid groupId, CancellationToken ct = default);
 }

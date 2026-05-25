@@ -180,6 +180,7 @@ builder.Services.AddScoped<TeamGenerationService>();
 builder.Services.AddScoped<PasswordHasher<UserEntity>>();
 builder.Services.AddScoped<IGroupSettingsService, GroupSettingsService>();
 builder.Services.AddScoped<ICalendarService, CalendarService>();
+builder.Services.AddScoped<IFinancialTransactionService, FinancialTransactionService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IPollService, PollService>();
 builder.Services.AddScoped<IPushService, PushService>();
@@ -388,7 +389,7 @@ app.UseMiddleware<AuditMiddleware>();
 // =====================
 app.UseHangfireDashboard("/hangfire", new DashboardOptions
 {
-    Authorization = []
+    Authorization = [new BratnavaFC.Api.Auth.HangfireGodModeAuthFilter()]
 });
 
 // AddOrUpdate is called on every startup — idempotent.

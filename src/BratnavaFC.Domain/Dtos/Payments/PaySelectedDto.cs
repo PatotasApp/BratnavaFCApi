@@ -11,4 +11,9 @@ public sealed class PaySelectedItem
     public int?  Year     { get; set; }
     public int?  Month    { get; set; }
     public Guid? ChargeId { get; set; }
+
+    /// <summary>
+    /// Estado desejado: true = marcar como pago, false = reverter para pendente.
+    /// </summary>
+    public bool IsPaid { get; set; }
 }

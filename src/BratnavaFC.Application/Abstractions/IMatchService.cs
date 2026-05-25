@@ -56,10 +56,17 @@ public interface IMatchService
     Task<Result<MatchMatchMakingDto>> GetMatchMakingAsync(Guid groupId, Guid matchId, CancellationToken ct);
     Task<Result<MatchPostGameDto>> GetPostGameAsync(Guid groupId, Guid matchId, CancellationToken ct);
 
-    Task<Result<MatchEntity>> GetCurrentAsync(Guid groupId, CancellationToken ct);
+    Task<Result<MatchEntity>>           GetCurrentAsync(Guid groupId, CancellationToken ct);
+    Task<Result<List<MatchHeaderDto>>> GetUpcomingAsync(Guid groupId, CancellationToken ct);
+
+    /// <summary>
+    /// Adds a single active player to every pre-game match (Created / Acceptation) of the group
+    /// they do not already belong to. Called automatically when a player is created or reactivated.
+    /// </summary>
+    Task<Result> SyncPlayerIntoActiveMatchesAsync(Guid groupId, Guid playerId, CancellationToken ct);
 
     Task<Result> RewindOneStepAsync(Guid groupId, Guid matchId, CancellationToken ct);
-    Task<Result<IReadOnlyList<MatchHistoryItemDto>>> GetHistoryAsync(Guid groupId, int take, CancellationToken cancellationToken, Guid? playerId = null);
+    Task<Result<IReadOnlyList<MatchHistoryItemDto>>> GetHistoryAsync(Guid groupId, int take, int skip, CancellationToken cancellationToken, Guid? playerId = null);
 
     Task<Result> AddGuestToMatchAsync(Guid groupId, Guid matchId, AddGuestToMatchDto dto, CancellationToken ct);
 
@@ -82,6 +89,7 @@ public interface IMatchService
     Task<Result<List<LikedReplayClipDto>>> GetAllGroupReplaysAsync(Guid groupId, Guid userId, CancellationToken ct);
     Task<Result<List<LikedReplayClipDto>>> GetMyLikesAsync(Guid groupId, Guid userId, CancellationToken ct);
     Task<Result<List<LikedReplayClipDto>>> GetMyFavoritesAsync(Guid groupId, Guid userId, CancellationToken ct);
+    Task<Result<List<ClipLikerDto>>>        GetClipLikersAsync(Guid clipId, CancellationToken ct);
     Task DeleteReplayAsync(Guid groupId, Guid clipId, CancellationToken ct);
     Task<Result<ReplayClipDto>> UploadReplayAsync(Guid groupId, Guid matchId, Guid userId, Stream content, string contentType, string fileName, string eventType, CancellationToken ct);
 }

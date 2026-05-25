@@ -143,6 +143,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
         var matches = await _context.Matches
             .AsNoTracking()
+            .AsSplitQuery()
             .Where(m => m.GroupId == groupId && m.Status == MatchStatus.Finalized)
             .Include(m => m.Players)
             .Include(m => m.Goals)
@@ -267,6 +268,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
         var matches = await _context.Matches
             .AsNoTracking()
+            .AsSplitQuery()
             .Where(m => m.GroupId == groupId && m.Status == MatchStatus.Finalized)
             .Include(m => m.Players)
             .Include(m => m.Goals)
