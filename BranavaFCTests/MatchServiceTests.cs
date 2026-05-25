@@ -8,6 +8,7 @@ using BratnavaFC.Application.Services;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Common;
+using BratnavaFC.Domain.Constants;
 using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
 using FluentAssertions;
@@ -224,16 +225,17 @@ public sealed class MatchServiceTests
     }
 
     [Fact]
-    public async Task Create_WhenAlreadyExistsNonFinalizedMatch_ShouldThrow_AndNotCreateNew()
+    public async Task Create_WhenMaxSimultaneousMatchesReached_ShouldFail_AndNotCreateNew()
     {
-        await using var db = DbContextFactory.Create(nameof(Create_WhenAlreadyExistsNonFinalizedMatch_ShouldThrow_AndNotCreateNew));
+        await using var db = DbContextFactory.Create(nameof(Create_WhenMaxSimultaneousMatchesReached_ShouldFail_AndNotCreateNew));
         var repo = BuildRepoMock(db);
         var sut = CreateSut(db, repo);
 
         var group = await SeedGroupAsync(db);
 
-        // existe uma partida "em andamento" (!= Finalized)
-        await SeedMatchAsync(db, group.Id, playersCount: 2, targetStatus: MatchStatus.Acceptation, acceptAllInvites: false);
+        // Cria exatamente o limite de partidas não-finalizadas simultâneas
+        for (var i = 0; i < MatchConstants.MaxSimultaneousActiveMatches; i++)
+            await SeedMatchAsync(db, group.Id, playersCount: 2, targetStatus: MatchStatus.Acceptation, acceptAllInvites: false);
 
         var beforeCount = await db.Matches.CountAsync();
 
@@ -242,7 +244,7 @@ public sealed class MatchServiceTests
         var result = await sut.Create(group.Id, newMatch, CancellationToken.None);
 
         result.Success.Should().BeFalse();
-        result.Error.Should().Be("Ja existe uma partida em andamento (não finalizada) para este grupo.");
+        result.Error.Should().Contain(MatchConstants.MaxSimultaneousActiveMatches.ToString());
         result.Status.Should().Be(ResultStatus.BadRequest);
 
         var afterCount = await db.Matches.CountAsync();
@@ -384,15 +386,16 @@ public sealed class MatchServiceTests
     }
 
     [Fact]
-    public async Task GetCurrentAsync_WhenHasNonFinalized_ShouldReturnLatestByPlayedAt()
+    public async Task GetCurrentAsync_WhenHasNonFinalized_ShouldReturnEarliestByPlayedAt()
     {
-        await using var db = DbContextFactory.Create(nameof(GetCurrentAsync_WhenHasNonFinalized_ShouldReturnLatestByPlayedAt));
+        // "Current" = a partida não-finalizada mais próxima (OrderBy PlayedAt ASC → primeiro da fila)
+        await using var db = DbContextFactory.Create(nameof(GetCurrentAsync_WhenHasNonFinalized_ShouldReturnEarliestByPlayedAt));
         var repo = BuildRepoMock(db);
         var sut = CreateSut(db, repo);
 
         var group = await SeedGroupAsync(db);
 
-        // mais antiga (não finalizada)
+        // mais antiga (não finalizada) — deve ser retornada como "current"
         var (m1, _) = await SeedMatchAsync(
             db,
             group.Id,
@@ -414,7 +417,8 @@ public sealed class MatchServiceTests
         var current = await sut.GetCurrentAsync(group.Id, CancellationToken.None);
 
         current.Data.Should().NotBeNull();
-        current.Data!.Id.Should().Be(m2.Id);
+        // OrderBy ASC → menor PlayedAt primeiro → m1 (-2h) é retornada
+        current.Data!.Id.Should().Be(m1.Id);
         current.Data!.Status.Should().NotBe(MatchStatus.Finalized);
     }
 

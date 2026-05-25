@@ -14,6 +14,20 @@ namespace BranavaFC.Tests;
 
 public class PlayerServiceTests
 {
+    /// <summary>
+    /// Returns a pre-configured IMatchService mock that satisfies the sync call
+    /// without performing any real DB work. Tests that care about sync behavior
+    /// should set up their own mock.
+    /// </summary>
+    private static IMatchService MatchServiceMock()
+    {
+        var mock = new Mock<IMatchService>();
+        mock.Setup(m => m.SyncPlayerIntoActiveMatchesAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Ok());
+        return mock.Object;
+    }
+
     [Fact]
     public async Task CreateAsync_WhenGroupNotExists_ShouldReturnFailure()
     {
@@ -23,7 +37,7 @@ public class PlayerServiceTests
         var logger = new Mock<ILogger<PlayerService>>();
         var repo = new Mock<IRepositoryBase<PlayerEntity>>();
 
-        var sut = new PlayerService(repo.Object, logger.Object, db, Mock.Of<IPushService>());
+        var sut = new PlayerService(repo.Object, logger.Object, db, Mock.Of<IPushService>(), MatchServiceMock());
 
         var req = new CreatePlayerDto(
             Name: "A",
@@ -56,7 +70,7 @@ public class PlayerServiceTests
 
         var logger = new Mock<ILogger<PlayerService>>();
         var repo = new Mock<IRepositoryBase<PlayerEntity>>();
-        var sut = new PlayerService(repo.Object, logger.Object, db, Mock.Of<IPushService>());
+        var sut = new PlayerService(repo.Object, logger.Object, db, Mock.Of<IPushService>(), MatchServiceMock());
 
         var req = new CreatePlayerDto(
             Name: "A",
@@ -96,7 +110,7 @@ public class PlayerServiceTests
 
         var logger = new Mock<ILogger<PlayerService>>();
         var repo = new RepositoryBase<PlayerEntity>(db);
-        var sut = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>());
+        var sut = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>(), MatchServiceMock());
 
         var req = new CreatePlayerDto(
             Name: "A",
@@ -132,7 +146,7 @@ public class PlayerServiceTests
 
         var logger = new Mock<ILogger<PlayerService>>();
         var repo = new RepositoryBase<PlayerEntity>(db);
-        var sut = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>());
+        var sut = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>(), MatchServiceMock());
 
         var req = new CreatePlayerDto(
             Name: "  Caio  ",
@@ -175,7 +189,7 @@ public class PlayerServiceTests
         repo.Setup(r => r.GetByIdIncludingInactiveAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((PlayerEntity?)null);
 
-        var sut = new PlayerService(repo.Object, logger.Object, db, Mock.Of<IPushService>());
+        var sut = new PlayerService(repo.Object, logger.Object, db, Mock.Of<IPushService>(), MatchServiceMock());
 
         var req = new UpdatePlayerDto(
             Name: "X",
@@ -214,7 +228,7 @@ public class PlayerServiceTests
 
         var logger = new Mock<ILogger<PlayerService>>();
         var repo = new RepositoryBase<PlayerEntity>(db);
-        var sut = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>());
+        var sut = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>(), MatchServiceMock());
 
         var req = new UpdatePlayerDto(
             Name: "  New Name  ",
@@ -261,7 +275,7 @@ public class PlayerServiceTests
 
         var logger = new Mock<ILogger<PlayerService>>();
         var repo = new RepositoryBase<PlayerEntity>(db);
-        var sut = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>());
+        var sut = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>(), MatchServiceMock());
 
         var req = new UpdatePlayerDto(
             Name: "   ",
@@ -300,7 +314,7 @@ public class PlayerServiceTests
 
         var logger = new Mock<ILogger<PlayerService>>();
         var repo   = new RepositoryBase<PlayerEntity>(db);
-        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>());
+        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>(), MatchServiceMock());
 
         // Act
         var result = await sut.LeaveGroupAsync(player.Id, user.Id, CancellationToken.None);
@@ -329,7 +343,7 @@ public class PlayerServiceTests
 
         var logger = new Mock<ILogger<PlayerService>>();
         var repo   = new RepositoryBase<PlayerEntity>(db);
-        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>());
+        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>(), MatchServiceMock());
 
         // Act
         await sut.LeaveGroupAsync(player.Id, user.Id, CancellationToken.None);
@@ -353,7 +367,7 @@ public class PlayerServiceTests
         repo.Setup(r => r.GetByIdIncludingInactiveAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((PlayerEntity?)null);
 
-        var sut = new PlayerService(repo.Object, logger.Object, db, Mock.Of<IPushService>());
+        var sut = new PlayerService(repo.Object, logger.Object, db, Mock.Of<IPushService>(), MatchServiceMock());
 
         // Act
         var result = await sut.LeaveGroupAsync(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None);
@@ -382,7 +396,7 @@ public class PlayerServiceTests
 
         var logger = new Mock<ILogger<PlayerService>>();
         var repo   = new RepositoryBase<PlayerEntity>(db);
-        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>());
+        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>(), MatchServiceMock());
 
         // Act — requestingUserId não é o dono do player
         var result = await sut.LeaveGroupAsync(player.Id, intruder, CancellationToken.None);
@@ -412,7 +426,7 @@ public class PlayerServiceTests
 
         var logger = new Mock<ILogger<PlayerService>>();
         var repo = new RepositoryBase<PlayerEntity>(db);
-        var sut = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>());
+        var sut = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>(), MatchServiceMock());
 
         var req = new UpdatePlayerDto(
             Name: "Ok",
@@ -450,7 +464,7 @@ public class PlayerServiceTests
 
         var logger = new Mock<ILogger<PlayerService>>();
         var repo   = new RepositoryBase<PlayerEntity>(db);
-        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>());
+        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>(), MatchServiceMock());
 
         // Act
         var result = await sut.RemoveFromGroupAsync(player.Id, CancellationToken.None);
@@ -482,7 +496,7 @@ public class PlayerServiceTests
 
         var logger = new Mock<ILogger<PlayerService>>();
         var repo   = new RepositoryBase<PlayerEntity>(db);
-        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>());
+        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>(), MatchServiceMock());
 
         // Act
         await sut.RemoveFromGroupAsync(player.Id, CancellationToken.None);
@@ -509,7 +523,7 @@ public class PlayerServiceTests
             .ReturnsAsync((PlayerEntity?)null);
 
         var logger = new Mock<ILogger<PlayerService>>();
-        var sut    = new PlayerService(repo.Object, logger.Object, db, Mock.Of<IPushService>());
+        var sut    = new PlayerService(repo.Object, logger.Object, db, Mock.Of<IPushService>(), MatchServiceMock());
 
         // Act
         var result = await sut.RemoveFromGroupAsync(Guid.NewGuid(), CancellationToken.None);
@@ -535,7 +549,7 @@ public class PlayerServiceTests
 
         var logger = new Mock<ILogger<PlayerService>>();
         var repo   = new RepositoryBase<PlayerEntity>(db);
-        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>());
+        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>(), MatchServiceMock());
 
         // Act
         var result = await sut.RemoveFromGroupAsync(guest.Id, CancellationToken.None);
@@ -564,7 +578,7 @@ public class PlayerServiceTests
 
         var logger = new Mock<ILogger<PlayerService>>();
         var repo   = new RepositoryBase<PlayerEntity>(db);
-        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>());
+        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>(), MatchServiceMock());
 
         // Act
         var result = await sut.RemoveFromGroupAsync(player.Id, CancellationToken.None);
@@ -603,7 +617,7 @@ public class PlayerServiceTests
                 It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var sut = new PlayerService(repo, logger.Object, db, pushMock.Object);
+        var sut = new PlayerService(repo, logger.Object, db, pushMock.Object, MatchServiceMock());
 
         // Act
         await sut.RemoveFromGroupAsync(player.Id, CancellationToken.None);
@@ -636,7 +650,7 @@ public class PlayerServiceTests
 
         var logger = new Mock<ILogger<PlayerService>>();
         var repo   = new RepositoryBase<PlayerEntity>(db);
-        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>());
+        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>(), MatchServiceMock());
 
         // Act
         var result = await sut.RemoveFromGroupAsync(player.Id, CancellationToken.None);
@@ -667,7 +681,7 @@ public class PlayerServiceTests
 
         var logger = new Mock<ILogger<PlayerService>>();
         var repo   = new RepositoryBase<PlayerEntity>(db);
-        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>());
+        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>(), MatchServiceMock());
 
         // Act
         var result = await sut.ToggleGoalkeeperAsync(player.Id, CancellationToken.None);
@@ -697,7 +711,7 @@ public class PlayerServiceTests
 
         var logger = new Mock<ILogger<PlayerService>>();
         var repo   = new RepositoryBase<PlayerEntity>(db);
-        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>());
+        var sut    = new PlayerService(repo, logger.Object, db, Mock.Of<IPushService>(), MatchServiceMock());
 
         // Act
         var result = await sut.ToggleGoalkeeperAsync(player.Id, CancellationToken.None);
@@ -721,7 +735,7 @@ public class PlayerServiceTests
             .ReturnsAsync((PlayerEntity?)null);
 
         var logger = new Mock<ILogger<PlayerService>>();
-        var sut    = new PlayerService(repo.Object, logger.Object, db, Mock.Of<IPushService>());
+        var sut    = new PlayerService(repo.Object, logger.Object, db, Mock.Of<IPushService>(), MatchServiceMock());
 
         // Act
         var result = await sut.ToggleGoalkeeperAsync(Guid.NewGuid(), CancellationToken.None);

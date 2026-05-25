@@ -34,6 +34,36 @@ file static class BetBuilders
 
     public static BetService MakeSut(BratnavaFC.Infrastructure.Data.AppDbContext db) => new(db);
 
+    /// <summary>
+    /// Seeds one player in TeamA and one in TeamB for the given match so that the
+    /// "teams must be set" gate in PlaceOrUpdateBetAsync / DeleteBetAsync is satisfied.
+    /// </summary>
+    public static async Task SetTeamsOnMatchAsync(
+        BratnavaFC.Infrastructure.Data.AppDbContext db,
+        MatchEntity match,
+        Guid groupId)
+    {
+        var p1 = MakePlayer(groupId);
+        var p2 = MakePlayer(groupId);
+        db.Players.Add(p1);
+        db.Players.Add(p2);
+        await db.SaveChangesAsync();
+
+        var mp1 = new MatchPlayerEntity(p1.Id);
+        typeof(MatchPlayerEntity).GetProperty(nameof(MatchPlayerEntity.MatchId))!.SetValue(mp1, match.Id);
+        typeof(MatchPlayerEntity).GetProperty(nameof(MatchPlayerEntity.GroupId))!.SetValue(mp1, groupId);
+        typeof(MatchPlayerEntity).GetProperty(nameof(MatchPlayerEntity.Team))!  .SetValue(mp1, (short)1);
+
+        var mp2 = new MatchPlayerEntity(p2.Id);
+        typeof(MatchPlayerEntity).GetProperty(nameof(MatchPlayerEntity.MatchId))!.SetValue(mp2, match.Id);
+        typeof(MatchPlayerEntity).GetProperty(nameof(MatchPlayerEntity.GroupId))!.SetValue(mp2, groupId);
+        typeof(MatchPlayerEntity).GetProperty(nameof(MatchPlayerEntity.Team))!  .SetValue(mp2, (short)2);
+
+        db.Set<MatchPlayerEntity>().Add(mp1);
+        db.Set<MatchPlayerEntity>().Add(mp2);
+        await db.SaveChangesAsync();
+    }
+
     public static PlaceMatchBetDto SimpleDto(string winner = "TeamA", int wager = 50) =>
         new(new List<BetSelectionRequestDto>
         {
@@ -54,6 +84,7 @@ public class BetService_PlaceOrUpdateTests
         var match  = BetBuilders.MakeMatchInMatchMaking(group.Id);
         db.Groups.Add(group); db.Users.Add(user); db.Matches.Add(match);
         await db.SaveChangesAsync();
+        await BetBuilders.SetTeamsOnMatchAsync(db, match, group.Id);
 
         var result = await BetBuilders.MakeSut(db).PlaceOrUpdateBetAsync(
             group.Id, match.Id, user.Id, BetBuilders.SimpleDto(), CancellationToken.None);
@@ -75,6 +106,7 @@ public class BetService_PlaceOrUpdateTests
         var match = BetBuilders.MakeMatchInMatchMaking(group.Id);
         db.Groups.Add(group); db.Users.Add(user); db.Matches.Add(match);
         await db.SaveChangesAsync();
+        await BetBuilders.SetTeamsOnMatchAsync(db, match, group.Id);
 
         var sut = BetBuilders.MakeSut(db);
         await sut.PlaceOrUpdateBetAsync(group.Id, match.Id, user.Id, BetBuilders.SimpleDto("TeamA", 50), CancellationToken.None);
@@ -274,6 +306,7 @@ public class BetService_DeleteTests
         var match = BetBuilders.MakeMatchInMatchMaking(group.Id);
         db.Groups.Add(group); db.Users.Add(user); db.Matches.Add(match);
         await db.SaveChangesAsync();
+        await BetBuilders.SetTeamsOnMatchAsync(db, match, group.Id);
 
         var sut = BetBuilders.MakeSut(db);
         await sut.PlaceOrUpdateBetAsync(group.Id, match.Id, user.Id, BetBuilders.SimpleDto(), CancellationToken.None);
@@ -438,6 +471,7 @@ public class BetService_ResolveTests
         db.Users.Add(user);
         db.Matches.Add(match);
         await db.SaveChangesAsync();
+        await BetBuilders.SetTeamsOnMatchAsync(db, match, group.Id);
         return (group, user, match);
     }
 
@@ -638,6 +672,7 @@ public class BetService_ResolveTests
         var match  = BetBuilders.MakeMatchInMatchMaking(group.Id);
         db.Groups.Add(group); db.Users.AddRange(user1, user2); db.Matches.Add(match);
         await db.SaveChangesAsync();
+        await BetBuilders.SetTeamsOnMatchAsync(db, match, group.Id);
 
         var sut = BetBuilders.MakeSut(db);
         await sut.PlaceOrUpdateBetAsync(group.Id, match.Id, user1.Id,
@@ -671,6 +706,7 @@ public class BetService_ReResolveTests
         var match = BetBuilders.MakeMatchInMatchMaking(group.Id);
         db.Groups.Add(group); db.Users.Add(user); db.Matches.Add(match);
         await db.SaveChangesAsync();
+        await BetBuilders.SetTeamsOnMatchAsync(db, match, group.Id);
 
         var sut = BetBuilders.MakeSut(db);
         await sut.PlaceOrUpdateBetAsync(group.Id, match.Id, user.Id,
