@@ -102,6 +102,18 @@ public sealed class AuthenticationService : IAuthenticationService
         return Result<TokenDto>.Ok(new TokenDto(newJwt, newRefreshToken));
     }
 
+    public async Task RevokeTokenAsync(string refreshToken, CancellationToken cancellationToken)
+    {
+        var entity = await _db.RefreshTokens
+            .FirstOrDefaultAsync(x => x.Token == refreshToken, cancellationToken);
+
+        if (entity is not null)
+        {
+            _db.RefreshTokens.Remove(entity);
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+    }
+
     private static string CreateToken(UserEntity user, IConfiguration configuration)
     {
         var secretKey = configuration["Jwt:SecretKey"];

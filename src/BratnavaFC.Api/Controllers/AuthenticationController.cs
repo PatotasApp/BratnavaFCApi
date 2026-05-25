@@ -29,4 +29,15 @@ public sealed class AuthenticationController : BaseApiController
         var result = await _authenticationService.RefreshTokenAsync(request, cancellationToken);
         return ToResponse(result);
     }
+
+    /// <summary>
+    /// Revoga o refresh token informado, invalidando-o no banco.
+    /// Deve ser chamado no logout para impedir reutilização de tokens comprometidos.
+    /// </summary>
+    [HttpPost("revoke")]
+    public async Task<IActionResult> RevokeAsync([FromBody] RefreshTokenDto request, CancellationToken cancellationToken)
+    {
+        await _authenticationService.RevokeTokenAsync(request.RefreshToken, cancellationToken);
+        return NoContent();
+    }
 }
