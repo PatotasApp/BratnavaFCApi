@@ -7,10 +7,20 @@ using System.Security.Claims;
 namespace BratnavaFC.Api.Controllers;
 
 /// <summary>
-/// Base controller that adds group-level admin authorization on top of global role checks.
+/// Base controller that adds group-level authorization on top of the JWT role checks.
+///
+/// GodMode design principle
+/// ────────────────────────
+/// A user with the GodMode role is treated as a virtual admin and member of every
+/// group. No database records are created for this — the short-circuit happens
+/// exclusively inside <see cref="IsGodMode"/>. Every authorization helper calls
+/// IsGodMode() first, so controllers never need to mention the GodMode role
+/// explicitly.
 /// </summary>
 public abstract class GroupAuthorizedController : BaseApiController
 {
+    // ── Identity helpers ─────────────────────────────────────────────────────
+
     protected Guid? GetCurrentUserId()
     {
         var raw =
@@ -21,16 +31,32 @@ public abstract class GroupAuthorizedController : BaseApiController
         return Guid.TryParse(raw, out var id) && id != Guid.Empty ? id : null;
     }
 
-    protected bool HasGlobalAdminRole()
-        => User.IsInRole("Admin") || User.IsInRole("GodMode");
+    /// <summary>
+    /// Single source of truth for the GodMode check.
+    /// GodMode is a virtual admin/member/financeiro of every group — no DB record needed.
+    /// All authorization helpers below call this first; controllers must not.
+    /// </summary>
+    protected bool IsGodMode() => User.IsInRole("GodMode");
 
     /// <summary>
-    /// Returns true if the caller is registered as an admin of the specific group.
-    /// Global roles (Admin, GodMode) are intentionally excluded — all users must be
-    /// explicitly added as group admins to act as one.
+    /// Returns true when the caller has the platform-level Admin or GodMode role.
+    /// Use only when you want BOTH roles to bypass a check (e.g. IsGroupAdminAsync).
+    /// </summary>
+    private bool HasPlatformAdminRole() => User.IsInRole("Admin") || IsGodMode();
+
+    // ── Group authorization helpers ──────────────────────────────────────────
+
+    /// <summary>
+    /// Returns true if the caller is a GodMode user
+    /// OR is explicitly registered as an admin of the specific group.
+    ///
+    /// Use for operations that only the group's own admins should perform
+    /// (platform-level Admin role does NOT grant group ownership here).
     /// </summary>
     protected async Task<bool> IsAuthorizedForGroupAsync(Guid groupId, AppDbContext db, CancellationToken ct)
     {
+        if (IsGodMode()) return true;
+
         var userId = GetCurrentUserId();
         if (userId == null) return false;
 
@@ -39,32 +65,52 @@ public abstract class GroupAuthorizedController : BaseApiController
     }
 
     /// <summary>
-    /// Returns true if the caller has a global Admin/GodMode role,
-    /// is a group admin, OR is a regular member (has a player in the group).
-    /// Use for endpoints accessible to all group participants.
+    /// Returns true if the caller is GodMode, has the platform Admin role,
+    /// OR is registered as an admin of the specific group.
+    ///
+    /// Use for endpoints that both group admins and platform admins should reach.
     /// </summary>
-    protected async Task<bool> IsGroupMemberAsync(Guid groupId, AppDbContext db, CancellationToken ct)
+    protected async Task<bool> IsGroupAdminAsync(Guid groupId, AppDbContext db, CancellationToken ct)
     {
-        if (HasGlobalAdminRole()) return true;
+        if (HasPlatformAdminRole()) return true;
 
         var userId = GetCurrentUserId();
         if (userId == null) return false;
 
-        // group admin check
+        return await db.GroupAdmins
+            .AnyAsync(x => x.GroupId == groupId && x.UserId == userId.Value, ct);
+    }
+
+    /// <summary>
+    /// Returns true if the caller is GodMode, has the platform Admin role,
+    /// is a group admin, OR is a regular member (has a player record in the group).
+    ///
+    /// Use for endpoints accessible to all group participants.
+    /// </summary>
+    protected async Task<bool> IsGroupMemberAsync(Guid groupId, AppDbContext db, CancellationToken ct)
+    {
+        if (HasPlatformAdminRole()) return true;
+
+        var userId = GetCurrentUserId();
+        if (userId == null) return false;
+
         if (await db.GroupAdmins.AnyAsync(x => x.GroupId == groupId && x.UserId == userId.Value, ct))
             return true;
 
-        // regular member (player linked to a user account in this group)
         return await db.Players
             .AnyAsync(x => x.GroupId == groupId && x.UserId == userId.Value, ct);
     }
 
     /// <summary>
-    /// Returns true if the caller is GodMode OR is registered as a financeiro of the specific group.
-    /// Admins are NOT automatically financeiros — they must be explicitly added.
+    /// Returns true if the caller is GodMode
+    /// OR is explicitly registered as a financeiro of the specific group.
+    ///
+    /// Platform Admin does NOT automatically become financeiro — must be explicitly added.
     /// </summary>
     protected async Task<bool> IsFinanceiroForGroupAsync(Guid groupId, AppDbContext db, CancellationToken ct)
     {
+        if (IsGodMode()) return true;
+
         var userId = GetCurrentUserId();
         if (userId == null) return false;
 
@@ -72,7 +118,7 @@ public abstract class GroupAuthorizedController : BaseApiController
             .AnyAsync(x => x.GroupId == groupId && x.UserId == userId.Value, ct);
     }
 
-    // ── Result pattern helpers ──────────────────────────────────────────────
+    // ── Result pattern helpers ───────────────────────────────────────────────
 
     /// <summary>
     /// Converte Result&lt;T&gt; em IActionResult:

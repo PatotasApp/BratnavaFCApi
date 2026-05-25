@@ -1,5 +1,6 @@
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos;
+using BratnavaFC.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -7,18 +8,22 @@ namespace BratnavaFC.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class TeamColorController : BaseApiController
+[Authorize(Roles = "User,Admin,GodMode")]
+public class TeamColorController : GroupAuthorizedController
 {
     private readonly ITeamColorService _service;
+    private readonly AppDbContext _db;
 
-    public TeamColorController(ITeamColorService service)
+    public TeamColorController(ITeamColorService service, AppDbContext db)
     {
         _service = service;
+        _db = db;
     }
 
     [HttpGet("group/{groupId:guid}")]
     public async Task<IActionResult> GetAll(Guid groupId, [FromQuery] bool activeOnly, CancellationToken ct)
     {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
         var result = await _service.GetAllAsync(groupId, activeOnly, ct);
         return ToResponse(result);
     }
@@ -26,6 +31,7 @@ public class TeamColorController : BaseApiController
     [HttpGet("group/{groupId:guid}/{colorId:guid}")]
     public async Task<IActionResult> Get(Guid groupId, Guid colorId, CancellationToken ct)
     {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
         var result = await _service.GetByIdAsync(groupId, colorId, ct);
         return ToResponse(result);
     }
@@ -33,6 +39,7 @@ public class TeamColorController : BaseApiController
     [HttpPost("group/{groupId:guid}")]
     public async Task<IActionResult> Create(Guid groupId, [FromBody] CreateTeamColorDto dto, CancellationToken ct)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         dto.GroupId = groupId;
         var result = await _service.CreateAsync(dto, ct);
         return ToResponse(result);
@@ -41,6 +48,7 @@ public class TeamColorController : BaseApiController
     [HttpPut("group/{groupId:guid}/{colorId:guid}")]
     public async Task<IActionResult> Update(Guid groupId, Guid colorId, [FromBody] UpdateTeamColorDto dto, CancellationToken ct)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         var result = await _service.UpdateAsync(groupId, colorId, dto, ct);
         return ToResponse(result);
     }
@@ -48,6 +56,7 @@ public class TeamColorController : BaseApiController
     [HttpPost("group/{groupId:guid}/{colorId:guid}/deactivate")]
     public async Task<IActionResult> Inactivate(Guid groupId, Guid colorId, CancellationToken ct)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         var result = await _service.InactivateAsync(groupId, colorId, ct);
         return ToResponse(result);
     }
@@ -55,6 +64,7 @@ public class TeamColorController : BaseApiController
     [HttpPost("group/{groupId:guid}/{colorId:guid}/activate")]
     public async Task<IActionResult> Activate(Guid groupId, Guid colorId, CancellationToken ct)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         var result = await _service.ActivateAsync(groupId, colorId, ct);
         return ToResponse(result);
     }

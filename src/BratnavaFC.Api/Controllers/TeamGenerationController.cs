@@ -3,11 +3,13 @@ using BratnavaFC.Application.TeamGeneration;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BratnavaFC.Api.Controllers;
 
 [Route("api/[controller]")]
+[Authorize(Roles = "User,Admin,GodMode")]
 public class TeamGenerationController : BaseApiController
 {
     private readonly TeamGenerationService _teamService;

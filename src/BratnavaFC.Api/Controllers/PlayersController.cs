@@ -22,9 +22,13 @@ public class PlayersController : GroupAuthorizedController
     }
 
     [HttpPost]
+    [Authorize(Roles = "User,Admin,GodMode")]
     public async Task<IActionResult> CreatePlayer([FromBody] CreatePlayerDto request, CancellationToken cancellationToken)
     {
         if (request == null) return BadRequest();
+
+        if (!await IsAuthorizedForGroupAsync(request.GroupId, _db, cancellationToken))
+            return Forbid();
 
         var result = await _playerService.CreateAsync(request, cancellationToken);
         return ToResponse(result);
@@ -39,6 +43,7 @@ public class PlayersController : GroupAuthorizedController
     }
 
     [HttpGet("{playerId:guid}")]
+    [Authorize(Roles = "User,Admin,GodMode")]
     public async Task<IActionResult> GetPlayer(Guid playerId, CancellationToken cancellationToken)
     {
         var result = await _playerService.GetByIdAsync(playerId, cancellationToken);
@@ -46,24 +51,50 @@ public class PlayersController : GroupAuthorizedController
     }
 
     [HttpPut("{playerId:guid}")]
+    [Authorize(Roles = "User,Admin,GodMode")]
     public async Task<IActionResult> UpdatePlayer(Guid playerId, [FromBody] UpdatePlayerDto request, CancellationToken cancellationToken)
     {
         if (request == null) return BadRequest();
+
+        if (!await IsAuthorizedForGroupAsync(request.GroupId, _db, cancellationToken))
+            return Forbid();
 
         var result = await _playerService.UpdateAsync(playerId, request, cancellationToken);
         return ToResponse(result);
     }
 
     [HttpPost("{playerId:guid}/inactivate")]
+    [Authorize(Roles = "User,Admin,GodMode")]
     public async Task<IActionResult> InactivateAsync(Guid playerId, CancellationToken cancellationToken)
     {
+        var groupId = await _db.Players
+            .Where(p => p.Id == playerId)
+            .Select(p => (Guid?)p.GroupId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (groupId == null) return NotFound();
+
+        if (!await IsAuthorizedForGroupAsync(groupId.Value, _db, cancellationToken))
+            return Forbid();
+
         var result = await _playerService.InactivateAsync(playerId, cancellationToken);
         return ToResponse(result);
     }
 
     [HttpPost("{playerId:guid}/reactivate")]
+    [Authorize(Roles = "User,Admin,GodMode")]
     public async Task<IActionResult> ReactivateAsync(Guid playerId, CancellationToken cancellationToken)
     {
+        var groupId = await _db.Players
+            .Where(p => p.Id == playerId)
+            .Select(p => (Guid?)p.GroupId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (groupId == null) return NotFound();
+
+        if (!await IsAuthorizedForGroupAsync(groupId.Value, _db, cancellationToken))
+            return Forbid();
+
         var result = await _playerService.ReactivateAsync(playerId, cancellationToken);
         return ToResponse(result);
     }

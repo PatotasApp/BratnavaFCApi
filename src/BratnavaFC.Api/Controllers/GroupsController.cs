@@ -9,6 +9,7 @@ namespace BratnavaFC.Api.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
+[Authorize(Roles = "User,Admin,GodMode")]
 public class GroupsController : GroupAuthorizedController
 {
     private readonly IGroupService _groupService;
@@ -47,6 +48,9 @@ public class GroupsController : GroupAuthorizedController
     {
         if (request == null) return BadRequest();
 
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
+            return Forbid();
+
         var result = await _groupService.UpdateAsync(groupId, request, cancellationToken);
         return ToResponse(result);
     }
@@ -54,6 +58,9 @@ public class GroupsController : GroupAuthorizedController
     [HttpPut("{groupId:guid}/inactivate")]
     public async Task<IActionResult> InactivateAsync(Guid groupId, CancellationToken cancellationToken)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
+            return Forbid();
+
         var result = await _groupService.InactivateAsync(groupId, cancellationToken);
         return ToResponse(result);
     }
@@ -61,6 +68,9 @@ public class GroupsController : GroupAuthorizedController
     [HttpPut("{groupId:guid}/reactivate")]
     public async Task<IActionResult> ReactivateAsync(Guid groupId, CancellationToken cancellationToken)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
+            return Forbid();
+
         var result = await _groupService.ReactivateAsync(groupId, cancellationToken);
         return ToResponse(result);
     }
@@ -101,6 +111,9 @@ public class GroupsController : GroupAuthorizedController
     {
         if (request == null) return BadRequest();
 
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
+            return Forbid();
+
         var result = await _groupService.AddAdminToGroupAsync(groupId, request, cancellationToken);
         return ToResponse(result);
     }
@@ -111,7 +124,7 @@ public class GroupsController : GroupAuthorizedController
         var requestingUserId = GetCurrentUserId();
         if (requestingUserId == null) return Unauthorized();
 
-        if (!User.IsInRole("GodMode") && !await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
             return Forbid();
 
         var result = await _groupService.RemoveAdminAsync(groupId, userId, requestingUserId.Value, cancellationToken);
@@ -132,7 +145,7 @@ public class GroupsController : GroupAuthorizedController
     {
         if (request == null) return BadRequest();
 
-        if (!User.IsInRole("GodMode") && !await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
             return Forbid();
 
         var result = await _groupService.AddFinanceiroToGroupAsync(groupId, request.UserId, cancellationToken);
@@ -142,7 +155,7 @@ public class GroupsController : GroupAuthorizedController
     [HttpDelete("{groupId:guid}/financeiros/{userId:guid}")]
     public async Task<IActionResult> RemoveFinanceiroAsync(Guid groupId, Guid userId, CancellationToken cancellationToken)
     {
-        if (!User.IsInRole("GodMode") && !await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
             return Forbid();
 
         var result = await _groupService.RemoveFinanceiroAsync(groupId, userId, cancellationToken);
