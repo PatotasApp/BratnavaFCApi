@@ -18,6 +18,7 @@ public class AppDbContext : DbContext
     public DbSet<TeamColorEntity> TeamColors => Set<TeamColorEntity>();
     public DbSet<UserEntity> Users => Set<UserEntity>();
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
+    public DbSet<PasswordResetTokenEntity> PasswordResetTokens => Set<PasswordResetTokenEntity>();
     public DbSet<GroupEntity> Groups => Set<GroupEntity>();
     public DbSet<GroupAdminEntity> GroupAdmins => Set<GroupAdminEntity>();
     public DbSet<GroupFinanceiroEntity> GroupFinanceiros => Set<GroupFinanceiroEntity>();
@@ -795,6 +796,13 @@ public class AppDbContext : DbContext
 
             b.HasIndex(x => new { x.GroupId, x.Date });
             b.HasIndex(x => new { x.SourceType, x.SourceId });
+        });
+
+        modelBuilder.Entity<PasswordResetTokenEntity>(builder =>
+        {
+            builder.HasKey(x => x.Id);
+            builder.Property(x => x.Code).IsRequired().HasMaxLength(6);
+            builder.HasIndex(x => new { x.UserId, x.IsUsed, x.ExpiresAt });
         });
 
     }
