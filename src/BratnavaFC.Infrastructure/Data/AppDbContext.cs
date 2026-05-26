@@ -803,6 +803,10 @@ public class AppDbContext : DbContext
             builder.HasKey(x => x.Id);
             builder.Property(x => x.Code).IsRequired().HasMaxLength(6);
             builder.HasIndex(x => new { x.UserId, x.IsUsed, x.ExpiresAt });
+            builder.HasOne<UserEntity>()
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
     }
