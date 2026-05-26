@@ -37,6 +37,7 @@ public sealed class PollService : IPollService
                     p.Id, p.Title, p.Description, p.AllowMultipleVotes, p.ShowVotes, p.Status, p.CreateDate,
                     p.DeadlineDate, p.DeadlineTime,
                     p.Type, p.EventDate, p.EventTime, p.EventLocation, p.EventIcon, p.CostType, p.CostAmount,
+                    p.LinkedMatchId,
                     OptionCount = p.Options.Count,
                     TotalVoters = p.Votes.Select(v => v.PlayerId).Distinct().Count(),
                     HasVoted = p.Votes.Any(v => v.PlayerId == playerId)
@@ -63,7 +64,8 @@ public sealed class PollService : IPollService
                 OptionCount = p.OptionCount,
                 TotalVoters = p.TotalVoters,
                 HasVoted = p.HasVoted,
-                CreateDate = p.CreateDate
+                CreateDate = p.CreateDate,
+                LinkedMatchId = p.LinkedMatchId
             }).ToList();
 
             return Result<List<PollSummaryDto>>.Ok(dtos);
@@ -88,7 +90,7 @@ public sealed class PollService : IPollService
                     p.Id, p.Title, p.Description, p.AllowMultipleVotes, p.ShowVotes,
                     p.Status, p.DeadlineDate, p.DeadlineTime, p.Type,
                     p.EventDate, p.EventTime, p.EventLocation, p.EventIcon,
-                    p.CostType, p.CostAmount, p.CreateDate
+                    p.CostType, p.CostAmount, p.CreateDate, p.LinkedMatchId
                 })
                 .FirstOrDefaultAsync(ct);
 
@@ -167,6 +169,7 @@ public sealed class PollService : IPollService
                 CreateDate = poll.CreateDate,
                 MyVotedOptionIds = myVotes,
                 TotalVoters = totalVoters,
+                LinkedMatchId = poll.LinkedMatchId,
                 Votes = (poll.ShowVotes || isAdmin) ? votesWithPlayer : null,
                 Options = options.Select(o => new PollOptionDto
                 {

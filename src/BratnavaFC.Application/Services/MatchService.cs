@@ -263,7 +263,9 @@ public sealed class MatchService : IMatchService
             }).ToList(),
 
             VoteCounts = voteCounts,
-            Goals = goals
+            Goals = goals,
+
+            LinkedPollId = match.LinkedPollId,
         };
 
         return Result<MatchDetailsDto>.Ok(dto);
@@ -999,16 +1001,17 @@ public sealed class MatchService : IMatchService
             .Take(MatchConstants.MaxSimultaneousActiveMatches)
             .Select(m => new MatchHeaderDto
             {
-                MatchId    = m.Id,
-                GroupId    = m.GroupId,
-                PlayedAt   = m.PlayedAt,
-                PlaceName  = m.PlaceName,
-                Status     = (short)m.Status,
-                StatusName = m.Status.ToString(),
-                StepKey    = ToStepKey(m.Status),
-                CanRewind  = m.Status > MatchStatus.Created,
-                TeamAGoals = m.TeamAGoals,
-                TeamBGoals = m.TeamBGoals,
+                MatchId      = m.Id,
+                GroupId      = m.GroupId,
+                PlayedAt     = m.PlayedAt,
+                PlaceName    = m.PlaceName,
+                Status       = (short)m.Status,
+                StatusName   = m.Status.ToString(),
+                StepKey      = ToStepKey(m.Status),
+                CanRewind    = m.Status > MatchStatus.Created,
+                TeamAGoals   = m.TeamAGoals,
+                TeamBGoals   = m.TeamBGoals,
+                LinkedPollId = m.LinkedPollId,
             })
             .ToListAsync(ct);
 
@@ -1231,16 +1234,17 @@ public sealed class MatchService : IMatchService
             .Where(m => m.GroupId == groupId && m.Id == matchId)
             .Select(m => new MatchHeaderDto
             {
-                MatchId = m.Id,
-                GroupId = m.GroupId,
-                PlayedAt = m.PlayedAt,
-                PlaceName = m.PlaceName,
-                Status = (short)m.Status,
-                StatusName = m.Status.ToString(),
-                StepKey = ToStepKey(m.Status),
-                CanRewind = m.Status > MatchStatus.Created,
-                TeamAGoals = m.TeamAGoals,
-                TeamBGoals = m.TeamBGoals
+                MatchId      = m.Id,
+                GroupId      = m.GroupId,
+                PlayedAt     = m.PlayedAt,
+                PlaceName    = m.PlaceName,
+                Status       = (short)m.Status,
+                StatusName   = m.Status.ToString(),
+                StepKey      = ToStepKey(m.Status),
+                CanRewind    = m.Status > MatchStatus.Created,
+                TeamAGoals   = m.TeamAGoals,
+                TeamBGoals   = m.TeamBGoals,
+                LinkedPollId = m.LinkedPollId,
             })
             .FirstOrDefaultAsync(ct);
 
@@ -1949,7 +1953,9 @@ public sealed class MatchService : IMatchService
             }).ToList(),
 
             VoteCounts = voteCounts,
-            Goals = goals
+            Goals = goals,
+
+            LinkedPollId = match.LinkedPollId,
         };
     }
 

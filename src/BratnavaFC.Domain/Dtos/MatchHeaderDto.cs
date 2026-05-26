@@ -20,5 +20,8 @@ namespace BratnavaFC.Domain.Dtos
 
         public int? TeamAGoals { get; init; }
         public int? TeamBGoals { get; init; }
+
+        /// <summary>Id da votação/evento vinculado a esta partida, se houver.</summary>
+        public Guid? LinkedPollId { get; init; }
     }
 }

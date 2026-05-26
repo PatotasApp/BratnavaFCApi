@@ -22,4 +22,5 @@ public sealed class PollDto
     public List<Guid> MyVotedOptionIds { get; set; } = new();
     public int TotalVoters { get; set; }
     public List<PollMemberVoteDto>? Members { get; set; } // somente para admins: todos os membros com seus votos
+    public Guid? LinkedMatchId { get; set; }
 }

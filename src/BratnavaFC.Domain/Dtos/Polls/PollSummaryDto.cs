@@ -20,4 +20,5 @@ public sealed class PollSummaryDto
     public int TotalVoters { get; set; }
     public bool HasVoted { get; set; }
     public DateTime CreateDate { get; set; }
+    public Guid? LinkedMatchId { get; set; }
 }

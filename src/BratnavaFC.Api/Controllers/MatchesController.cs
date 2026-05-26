@@ -813,6 +813,58 @@ public class MatchesController : GroupAuthorizedController
         return NoContent();
     }
 
+    // ── Linked poll ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Vincula ou desvincula uma votação desta partida.
+    /// Envie { "pollId": "guid" } para vincular ou { "pollId": null } para desvincular.
+    /// </summary>
+    [HttpPatch("group/{groupId:guid}/{matchId:guid}/linked-poll")]
+    public async Task<IActionResult> SetLinkedPoll(
+        Guid groupId,
+        Guid matchId,
+        [FromBody] SetLinkedPollRequest dto,
+        CancellationToken ct)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+
+        var match = await _db.Matches
+            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct);
+
+        if (match is null) return NotFound(new { error = "Partida não encontrada." });
+
+        // ── Clear the old poll's back-reference (if any) ─────────────────────
+        if (match.LinkedPollId.HasValue && match.LinkedPollId != dto.PollId)
+        {
+            var oldPoll = await _db.Polls.FirstOrDefaultAsync(p => p.Id == match.LinkedPollId.Value, ct);
+            oldPoll?.SetLinkedMatch(null);
+        }
+
+        if (dto.PollId.HasValue)
+        {
+            var newPoll = await _db.Polls
+                .FirstOrDefaultAsync(p => p.Id == dto.PollId.Value && p.GroupId == groupId, ct);
+            if (newPoll is null)
+                return BadRequest(new { error = "Votação não encontrada neste grupo." });
+
+            // If the new poll was already linked to a different match, clear that match's FK too
+            if (newPoll.LinkedMatchId.HasValue && newPoll.LinkedMatchId != matchId)
+            {
+                var oldMatch = await _db.Matches.FirstOrDefaultAsync(m => m.Id == newPoll.LinkedMatchId.Value, ct);
+                oldMatch?.SetLinkedPoll(null);
+            }
+
+            newPoll.SetLinkedMatch(matchId);
+        }
+
+        match.SetLinkedPoll(dto.PollId);
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(new { message = dto.PollId.HasValue ? "Votação vinculada." : "Vínculo removido.", linkedPollId = dto.PollId });
+    }
+
+    public sealed record SetLinkedPollRequest(Guid? PollId);
+
     private static MatchDto ToDto(MatchEntity e) =>
         new(
             e.Id,

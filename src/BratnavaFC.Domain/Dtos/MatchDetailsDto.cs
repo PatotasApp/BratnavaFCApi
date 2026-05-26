@@ -28,7 +28,8 @@ public sealed class MatchDetailsDto
 
     public List<GoalDto> Goals { get; set; } = [];
 
-
+    /// <summary>Id da votação vinculada a esta partida. Null quando não há vínculo.</summary>
+    public Guid? LinkedPollId { get; set; }
 }
 
 public sealed class TeamColorDto
