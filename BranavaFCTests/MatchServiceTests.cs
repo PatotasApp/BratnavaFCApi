@@ -1409,7 +1409,7 @@ public sealed class MatchServiceTests
         await SeedMatchAsync(db, group.Id, playersCount: 2, targetStatus: MatchStatus.Finalized, playedAtUtc: dateMid);
         db.ChangeTracker.Clear();
 
-        var result = await sut.GetHistoryAsync(group.Id, 200, CancellationToken.None);
+        var result = await sut.GetHistoryAsync(group.Id, 200, 0, CancellationToken.None);
 
         result.Data!.Should().HaveCount(3);
         result.Data![0].PlayedAt.Should().BeCloseTo(dateNew, TimeSpan.FromSeconds(1), "mais recente primeiro");
@@ -1439,7 +1439,7 @@ public sealed class MatchServiceTests
         await SeedMatchAsync(db, group.Id, playersCount: 2, targetStatus: MatchStatus.Started);
         db.ChangeTracker.Clear();
 
-        var result = await sut.GetHistoryAsync(group.Id, 200, CancellationToken.None);
+        var result = await sut.GetHistoryAsync(group.Id, 200, 0, CancellationToken.None);
 
         result.Data!.Should().HaveCount(1, "somente partidas Finalized devem ser retornadas");
     }
@@ -1460,7 +1460,7 @@ public sealed class MatchServiceTests
             db.ChangeTracker.Clear();
         }
 
-        var result = await sut.GetHistoryAsync(group.Id, take: 3, CancellationToken.None);
+        var result = await sut.GetHistoryAsync(group.Id, take: 3, skip: 0, CancellationToken.None);
 
         result.Data!.Should().HaveCount(3, "take=3 deve limitar o resultado a 3 partidas");
     }
@@ -1485,7 +1485,7 @@ public sealed class MatchServiceTests
             targetStatus: MatchStatus.Finalized, acceptAllInvites: true, defineTeamsIfPossible: true);
         db.ChangeTracker.Clear();
 
-        var result = await sut.GetHistoryAsync(group.Id, 200, CancellationToken.None, player1.Id);
+        var result = await sut.GetHistoryAsync(group.Id, 200, 0, CancellationToken.None, player1.Id);
 
         result.Data!.Should().HaveCount(1, "filtro por playerId deve retornar apenas a partida em que ele jogou");
         result.Data![0].PlayerIds.Should().Contain(player1.Id);
@@ -1509,7 +1509,7 @@ public sealed class MatchServiceTests
         db.Players.Add(strangerPlayer);
         await db.SaveChangesAsync();
 
-        var result = await sut.GetHistoryAsync(group.Id, 200, CancellationToken.None, strangerPlayer.Id);
+        var result = await sut.GetHistoryAsync(group.Id, 200, 0, CancellationToken.None, strangerPlayer.Id);
 
         result.Data!.Should().BeEmpty("jogador sem partidas não deve aparecer no histórico");
     }
@@ -1558,7 +1558,7 @@ public sealed class MatchServiceTests
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
 
-        var result = await sut.GetHistoryAsync(group.Id, 200, CancellationToken.None, player.Id);
+        var result = await sut.GetHistoryAsync(group.Id, 200, 0, CancellationToken.None, player.Id);
 
         result.Data!.Should().HaveCount(1,
             "só a partida onde o jogador estava escalado num time (Team > 0) deve aparecer");
@@ -1577,7 +1577,7 @@ public sealed class MatchServiceTests
             targetStatus: MatchStatus.Finalized, acceptAllInvites: true, defineTeamsIfPossible: true);
         db.ChangeTracker.Clear();
 
-        var result = await sut.GetHistoryAsync(group.Id, 200, CancellationToken.None);
+        var result = await sut.GetHistoryAsync(group.Id, 200, 0, CancellationToken.None);
 
         result.Data!.Should().HaveCount(1);
         var playerIds = result.Data![0].PlayerIds;
