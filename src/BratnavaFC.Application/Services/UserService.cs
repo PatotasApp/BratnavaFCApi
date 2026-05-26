@@ -1,6 +1,7 @@
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
+using BratnavaFC.Domain.Dtos.Authentication;
 using BratnavaFC.Domain.Dtos.Users;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
@@ -18,23 +19,32 @@ public class UserService : IUserService
     private readonly ILogger<UserService> _logger;
     private readonly PasswordHasher<UserEntity> _passwordHasher;
     private readonly IPushService _push;
+    private readonly IEmailService _emailService;
 
     public UserService(
         AppDbContext db,
         IRepositoryBase<UserEntity> repository,
         ILogger<UserService> logger,
         PasswordHasher<UserEntity> passwordHasher,
-        IPushService push)
+        IPushService push,
+        IEmailService emailService)
     {
         _repository = repository;
         _logger = logger;
         _passwordHasher = passwordHasher;
         _db = db;
         _push = push;
+        _emailService = emailService;
     }
 
     public async Task<Result> CreateUserAsync(CreateUserDto dto, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(dto.Email))
+            return Result.Fail("O email é obrigatório.", ResultStatus.BadRequest);
+
+        try { _ = new System.Net.Mail.MailAddress(dto.Email); }
+        catch { return Result.Fail("Email inválido.", ResultStatus.BadRequest); }
+
         var username = dto.UserName?.Trim().ToLower();
 
         var existing = await _db.Users
@@ -297,5 +307,64 @@ public class UserService : IUserService
         await _repository.SaveChangesAsync(cancellationToken);
 
         return Result.Ok("Usuário atualizado com sucesso.");
+    }
+
+    public async Task<Result> RequestPasswordResetAsync(string email, CancellationToken cancellationToken)
+    {
+        var user = await _db.Users
+            .FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
+
+        if (user is null)
+            return Result.Fail("E-mail informado não foi encontrado.", ResultStatus.NotFound);
+
+        var oldTokens = await _db.PasswordResetTokens
+            .Where(t => t.UserId == user.Id && !t.IsUsed)
+            .ToListAsync(cancellationToken);
+
+        foreach (var t in oldTokens)
+            t.MarkAsUsed();
+
+        var code = Random.Shared.Next(100000, 999999).ToString();
+        var token = new PasswordResetTokenEntity(user.Id, code, DateTimeOffset.UtcNow.AddMinutes(15));
+        _db.PasswordResetTokens.Add(token);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await _emailService.SendPasswordResetEmailAsync(user.Email, code);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Falha ao enviar email de recuperação para {Email}", email);
+        }
+
+        return Result.Ok();
+    }
+
+    public async Task<Result> ResetPasswordAsync(ResetPasswordDto dto, CancellationToken cancellationToken)
+    {
+        var user = await _db.Users
+            .FirstOrDefaultAsync(u => u.Email == dto.Email, cancellationToken);
+
+        if (user is null)
+            return Result.Fail("Código inválido ou expirado.", ResultStatus.BadRequest);
+
+        var token = await _db.PasswordResetTokens
+            .Where(t =>
+                t.UserId == user.Id &&
+                t.Code == dto.Code &&
+                !t.IsUsed &&
+                t.ExpiresAt > DateTimeOffset.UtcNow)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (token is null)
+            return Result.Fail("Código inválido ou expirado.", ResultStatus.BadRequest);
+
+        var hashed = _passwordHasher.HashPassword(user, dto.NewPassword);
+        user.SetPasswordHash(hashed);
+        token.MarkAsUsed();
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return Result.Ok("Senha redefinida com sucesso.");
     }
 }

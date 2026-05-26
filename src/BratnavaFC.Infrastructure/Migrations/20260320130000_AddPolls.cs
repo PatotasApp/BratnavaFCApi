@@ -43,7 +43,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                     PollId = table.Column<Guid>(type: "uuid", nullable: false),
                     Text = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: false),
                     Description = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
-                    ImageUrl = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     IsEvent = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     EventTitle = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
                     EventDate = table.Column<DateOnly>(type: "date", nullable: true),

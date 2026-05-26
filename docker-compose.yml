@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:latest
+    container_name: bratnavafc_postgres
+    environment:
+      POSTGRES_DB: bratnavafc
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - bratnavafc_postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: bratnavafc_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - bratnavafc_redis_data:/data
+
+volumes:
+  bratnavafc_postgres_data:
+  bratnavafc_redis_data:

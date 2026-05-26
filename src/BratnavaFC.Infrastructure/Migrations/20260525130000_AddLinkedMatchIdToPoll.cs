@@ -14,39 +14,13 @@ namespace BratnavaFC.Infrastructure.Migrations
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<Guid>(
-                name: "LinkedMatchId",
-                table: "Polls",
-                type: "uuid",
-                nullable: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Polls_LinkedMatchId",
-                table: "Polls",
-                column: "LinkedMatchId");
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_Polls_Matches_LinkedMatchId",
-                table: "Polls",
-                column: "LinkedMatchId",
-                principalTable: "Matches",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.SetNull);
+            // No-op: Polls.LinkedMatchId, FK, and index were already created
+            // by migration 20260525120000_AddLinkedPollToMatch.
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropForeignKey(
-                name: "FK_Polls_Matches_LinkedMatchId",
-                table: "Polls");
-
-            migrationBuilder.DropIndex(
-                name: "IX_Polls_LinkedMatchId",
-                table: "Polls");
-
-            migrationBuilder.DropColumn(
-                name: "LinkedMatchId",
-                table: "Polls");
+            // No-op: nothing was added in Up().
         }
     }
 }

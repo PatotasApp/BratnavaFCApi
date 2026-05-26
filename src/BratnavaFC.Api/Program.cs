@@ -1,6 +1,7 @@
 ﻿using System.Text;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Resend;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -193,6 +194,15 @@ builder.Services.AddScoped<IMatchReminderJob, MatchReminderJob>();
 builder.Services.AddScoped<IPollReminderJob, PollReminderJob>();
 builder.Services.AddScoped<ICalendarReminderJob, CalendarReminderJob>();
 builder.Services.AddScoped<IBirthdayNotificationJob, BirthdayNotificationJob>();
+
+// =====================
+// EMAIL (RESEND)
+// =====================
+builder.Services.AddResend(options =>
+{
+    options.ApiToken = builder.Configuration["Resend:ApiKey"]!;
+});
+builder.Services.AddScoped<IEmailService, ResendEmailService>();
 
 // =====================
 // FIREBASE ADMIN

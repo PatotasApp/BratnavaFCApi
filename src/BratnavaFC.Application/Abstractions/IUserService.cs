@@ -1,5 +1,6 @@
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
+using BratnavaFC.Domain.Dtos.Authentication;
 using BratnavaFC.Domain.Dtos.Users;
 
 namespace BratnavaFC.Application.Abstractions;
@@ -16,4 +17,8 @@ public interface IUserService
 
     Task<Result> InactivateAsync(Guid userId, CancellationToken cancellationToken);
     Task<Result> ReactivateAsync(Guid userId, CancellationToken cancellationToken);
+
+    // Password reset
+    Task<Result> RequestPasswordResetAsync(string email, CancellationToken cancellationToken);
+    Task<Result> ResetPasswordAsync(ResetPasswordDto dto, CancellationToken cancellationToken);
 }

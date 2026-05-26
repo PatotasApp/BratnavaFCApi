@@ -11,9 +11,7 @@ namespace BratnavaFC.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "ImageUrl",
-                table: "PollOptions");
+            migrationBuilder.Sql("ALTER TABLE \"PollOptions\" DROP COLUMN IF EXISTS \"ImageUrl\";");
 
             migrationBuilder.CreateTable(
                 name: "PollOptionImages",

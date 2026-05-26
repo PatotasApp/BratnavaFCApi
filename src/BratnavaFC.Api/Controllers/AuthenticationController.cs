@@ -10,10 +10,14 @@ namespace BratnavaFC.Api.Controllers;
 public sealed class AuthenticationController : BaseApiController
 {
     private readonly IAuthenticationService _authenticationService;
+    private readonly IUserService _userService;
 
-    public AuthenticationController(IAuthenticationService authenticationService)
+    public AuthenticationController(
+        IAuthenticationService authenticationService,
+        IUserService userService)
     {
         _authenticationService = authenticationService;
+        _userService = userService;
     }
 
     [HttpPost("login")]
@@ -39,5 +43,19 @@ public sealed class AuthenticationController : BaseApiController
     {
         await _authenticationService.RevokeTokenAsync(request.RefreshToken, cancellationToken);
         return NoContent();
+    }
+
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPasswordAsync([FromBody] ForgotPasswordDto request, CancellationToken cancellationToken)
+    {
+        var result = await _userService.RequestPasswordResetAsync(request.Email, cancellationToken);
+        return ToResponse(result);
+    }
+
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPasswordAsync([FromBody] ResetPasswordDto request, CancellationToken cancellationToken)
+    {
+        var result = await _userService.ResetPasswordAsync(request, cancellationToken);
+        return ToResponse(result);
     }
 }
