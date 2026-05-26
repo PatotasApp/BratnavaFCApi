@@ -20,6 +20,16 @@ public class PollEntity : BaseEntity
     public List<PollOptionEntity> Options { get; private set; } = new();
     public List<PollVoteEntity> Votes { get; private set; } = new();
 
+    /// <summary>Partida vinculada a esta votação/evento (opcional). Null quando não há vínculo.</summary>
+    public Guid? LinkedMatchId { get; private set; }
+    public MatchEntity? LinkedMatch { get; private set; }
+
+    public void SetLinkedMatch(Guid? matchId)
+    {
+        LinkedMatchId = matchId;
+        UpdateDate    = DateTime.UtcNow;
+    }
+
     private PollEntity() { }
 
     public PollEntity(Guid groupId, string title, string? description, bool allowMultipleVotes, bool showVotes, Guid? createdByUserId, DateOnly? deadlineDate = null, TimeOnly? deadlineTime = null, string type = "poll", DateOnly? eventDate = null, TimeOnly? eventTime = null, string? eventLocation = null, string? eventIcon = null, string? costType = null, decimal? costAmount = null)

@@ -39,6 +39,16 @@ public class MatchEntity : BaseEntity
     public TeamColorEntity? TeamAColor { get; private set; }
     public TeamColorEntity? TeamBColor { get; private set; }
 
+    /// <summary>Votação vinculada a esta partida (opcional). Null quando não há vínculo.</summary>
+    public Guid? LinkedPollId { get; private set; }
+    public PollEntity? LinkedPoll { get; private set; }
+
+    public void SetLinkedPoll(Guid? pollId)
+    {
+        LinkedPollId = pollId;
+        UpdateDate   = DateTime.UtcNow;
+    }
+
     public void OpenAcceptation()
     {
         EnsureStatus(MatchStatus.Created, "So e possivel abrir acceptation quando a partida esta Created.");

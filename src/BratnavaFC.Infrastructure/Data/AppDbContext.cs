@@ -101,6 +101,11 @@ public class AppDbContext : DbContext
                 .HasForeignKey(x => x.TeamBColorId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            builder.HasOne(x => x.LinkedPoll)
+                .WithMany()
+                .HasForeignKey(x => x.LinkedPollId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             builder.Property(x => x.Status)
                 .HasConversion<short>()
                 .HasDefaultValue(MatchStatus.Created)
@@ -494,6 +499,7 @@ public class AppDbContext : DbContext
             builder.HasOne<GroupEntity>().WithMany().HasForeignKey(x => x.GroupId).OnDelete(DeleteBehavior.Cascade);
             builder.HasMany(x => x.Options).WithOne(x => x.Poll).HasForeignKey(x => x.PollId).OnDelete(DeleteBehavior.Cascade);
             builder.HasMany(x => x.Votes).WithOne().HasForeignKey(x => x.PollId).OnDelete(DeleteBehavior.Cascade);
+            builder.HasOne(x => x.LinkedMatch).WithMany().HasForeignKey(x => x.LinkedMatchId).OnDelete(DeleteBehavior.SetNull);
             builder.HasIndex(x => x.GroupId);
         });
 
