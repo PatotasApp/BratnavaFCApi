@@ -158,9 +158,9 @@ public class MatchesController : GroupAuthorizedController
     }
 
     [HttpDelete("group/{groupId:guid}/{matchId:guid}")]
-    [Authorize(Roles = "GodMode")]
     public async Task<IActionResult> Delete(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
+        if (!await IsGroupAdminAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
             var result = await _service.DeleteAsync(groupId, matchId, cancellationToken);
