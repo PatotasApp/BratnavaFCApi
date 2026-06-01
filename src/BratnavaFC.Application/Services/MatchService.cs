@@ -694,6 +694,26 @@ public sealed class MatchService : IMatchService
         return Result.Ok("Partida atualizada com sucesso.");
     }
 
+    public async Task<Result> SetNoShowAsync(
+        Guid groupId, Guid matchId, Guid matchPlayerId,
+        bool didNotPlay, CancellationToken ct)
+    {
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
+
+        var match = await LoadMatchForPlayersUpdateAsync(groupId, matchId, ct);
+        if (match is null)
+            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
+
+        var player = match.Players.FirstOrDefault(p => p.Id == matchPlayerId);
+        if (player is null)
+            return Result.Fail("Jogador não encontrado na partida.", ResultStatus.NotFound);
+
+        player.SetDidNotPlay(didNotPlay);
+        await _context.SaveChangesAsync(ct);
+        return Result.Ok();
+    }
+
     public async Task<Result> SetPlayerRoleAsync(
         Guid groupId, Guid matchId, Guid matchPlayerId,
         SetPlayerRoleDto dto, CancellationToken ct)
@@ -1661,7 +1681,7 @@ public sealed class MatchService : IMatchService
             .Where(m =>
                 m.GroupId == groupId &&
                 m.Status == MatchStatus.Finalized &&
-                m.Players.Any(p => p.PlayerId == playerId && p.Team > 0))
+                m.Players.Any(p => p.PlayerId == playerId && p.Team > 0 && !p.DidNotPlay))
             .OrderByDescending(m => m.PlayedAt)
             .Take(take)
             .Select(m => new
@@ -1752,7 +1772,7 @@ public sealed class MatchService : IMatchService
             .Where(m =>
                 m.GroupId == groupId &&
                 m.Status == MatchStatus.Finalized &&
-                m.Players.Any(p => p.PlayerId == playerId && p.Team > 0));
+                m.Players.Any(p => p.PlayerId == playerId && p.Team > 0 && !p.DidNotPlay));
 
         if (year.HasValue)
             query = query.Where(m => m.PlayedAt.Year == year.Value);
@@ -1827,6 +1847,7 @@ public sealed class MatchService : IMatchService
         AbsenceDescription = BuildAbsenceDescription(
             mp.AutoRejectedByAbsenceId != null ? (int?)mp.AutoRejectedByAbsence?.AbsenceType : null,
             mp.AutoRejectedByAbsence?.Description),
+        DidNotPlay         = mp.DidNotPlay,
     };
 
     internal static string? BuildAbsenceDescription(int? absenceType, string? rawDescription)

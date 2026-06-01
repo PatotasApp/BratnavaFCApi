@@ -65,6 +65,12 @@ public sealed class PlayerInMatchDto
     public int? AbsenceType { get; set; }
     /// <summary>Ex: "Viagem - Férias em SP" ou "Viagem". Null quando rejeição manual.</summary>
     public string? AbsenceDescription { get; set; }
+
+    /// <summary>
+    /// Admin marcou que o jogador não jogou (não apareceu ou foi removido).
+    /// Exclui das estatísticas: vitória/derrota/empate, presença, MVP.
+    /// </summary>
+    public bool DidNotPlay { get; set; }
 }
 
 public sealed class VoteDto

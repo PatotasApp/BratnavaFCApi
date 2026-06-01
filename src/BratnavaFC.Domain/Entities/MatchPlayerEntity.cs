@@ -100,4 +100,11 @@ public class MatchPlayerEntity : BaseEntity
 
     public void SetVotedFor(Guid? votedForId) => VotedForId = votedForId;
     public void ClearVotedFor() => VotedForId = null;
+
+    /// <summary>
+    /// Jogador confirmou presença mas não apareceu (ou foi removido pelo admin).
+    /// Não conta para estatísticas: vitória/derrota/empate, presença, gols, MVP.
+    /// </summary>
+    public bool DidNotPlay { get; private set; }
+    public void SetDidNotPlay(bool value) => DidNotPlay = value;
 }

@@ -601,6 +601,17 @@ public class MatchesController : GroupAuthorizedController
         }
     }
 
+    [HttpPatch("group/{groupId:guid}/{matchId:guid}/players/{matchPlayerId:guid}/no-show")]
+    public async Task<IActionResult> SetNoShowAsync(
+        Guid groupId, Guid matchId, Guid matchPlayerId,
+        [FromBody] SetNoShowDto dto, CancellationToken cancellationToken)
+    {
+        if (!await IsGroupAdminAsync(groupId, _db, cancellationToken)) return Forbid();
+        var result = await _service.SetNoShowAsync(groupId, matchId, matchPlayerId, dto.DidNotPlay, cancellationToken);
+        if (!result.Success) return result.Status == ResultStatus.NotFound ? NotFound(new { error = result.Error }) : BadRequest(new { error = result.Error });
+        return NoContent();
+    }
+
     [HttpPatch("group/{groupId:guid}/{matchId:guid}/players/{matchPlayerId:guid}/role")]
     public async Task<IActionResult> SetPlayerRoleAsync(
         Guid groupId, Guid matchId, Guid matchPlayerId,

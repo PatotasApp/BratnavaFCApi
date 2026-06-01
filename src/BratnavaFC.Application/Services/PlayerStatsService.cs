@@ -171,7 +171,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
         foreach (var x in matchesFiltered)
         {
             var mpIdToPlayerId = x.Match.Players
-                .Where(mp => playerIds.Contains(mp.PlayerId))
+                .Where(mp => playerIds.Contains(mp.PlayerId) && !mp.DidNotPlay)
                 .ToDictionary(mp => mp.Id, mp => mp.PlayerId);
 
             foreach (var vote in x.Match.Votes ?? [])
@@ -347,7 +347,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
             // ── Goals / assists ──
             var mpIdToPlayerId = match.Players
-                .Where(mp => playerIds.Contains(mp.PlayerId))
+                .Where(mp => playerIds.Contains(mp.PlayerId) && !mp.DidNotPlay)
                 .ToDictionary(mp => mp.Id, mp => mp.PlayerId);
 
             foreach (var goal in match.Goals ?? [])
@@ -574,7 +574,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
         // ── Goals / assists for W_base GoalContrib component ─────────────────
         var mpIdToPlayerId = match.Players
-            .Where(mp => trackedPlayerIds.Contains(mp.PlayerId))
+            .Where(mp => trackedPlayerIds.Contains(mp.PlayerId) && !mp.DidNotPlay)
             .ToDictionary(mp => mp.Id, mp => mp.PlayerId);
 
         foreach (var goal in match.Goals ?? [])
@@ -658,9 +658,9 @@ public sealed class PlayerStatsService : IPlayerStatsService
         AddTeamSynergy(teamB, outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamB, isTieVisual, pairTotals);
 
         // ── Gols / assistências / gols-contra ─────────────────────────────
-        // mapeia MatchPlayerEntity.Id → PlayerId para os jogadores rastreados
+        // mapeia MatchPlayerEntity.Id → PlayerId para os jogadores rastreados (excluindo DidNotPlay)
         var mpIdToPlayerId = match.Players
-            .Where(mp => trackedPlayerIds.Contains(mp.PlayerId))
+            .Where(mp => trackedPlayerIds.Contains(mp.PlayerId) && !mp.DidNotPlay)
             .ToDictionary(mp => mp.Id, mp => mp.PlayerId);
 
         foreach (var goal in match.Goals ?? [])
@@ -737,21 +737,21 @@ public sealed class PlayerStatsService : IPlayerStatsService
         HashSet<Guid> trackedPlayerIds)
     {
         var teamA = (match.TeamAPlayers ?? new List<MatchPlayerEntity>())
-            .Where(mp => mp.GroupId == groupId && trackedPlayerIds.Contains(mp.PlayerId))
+            .Where(mp => mp.GroupId == groupId && trackedPlayerIds.Contains(mp.PlayerId) && !mp.DidNotPlay)
             .ToList();
 
         var teamB = (match.TeamBPlayers ?? new List<MatchPlayerEntity>())
-            .Where(mp => mp.GroupId == groupId && trackedPlayerIds.Contains(mp.PlayerId))
+            .Where(mp => mp.GroupId == groupId && trackedPlayerIds.Contains(mp.PlayerId) && !mp.DidNotPlay)
             .ToList();
 
         if (teamA.Count == 0 && teamB.Count == 0 && match.Players is not null && match.Players.Count > 0)
         {
             teamA = match.Players
-                .Where(mp => mp.GroupId == groupId && trackedPlayerIds.Contains(mp.PlayerId) && mp.Team == 1)
+                .Where(mp => mp.GroupId == groupId && trackedPlayerIds.Contains(mp.PlayerId) && mp.Team == 1 && !mp.DidNotPlay)
                 .ToList();
 
             teamB = match.Players
-                .Where(mp => mp.GroupId == groupId && trackedPlayerIds.Contains(mp.PlayerId) && mp.Team == 2)
+                .Where(mp => mp.GroupId == groupId && trackedPlayerIds.Contains(mp.PlayerId) && mp.Team == 2 && !mp.DidNotPlay)
                 .ToList();
         }
 
