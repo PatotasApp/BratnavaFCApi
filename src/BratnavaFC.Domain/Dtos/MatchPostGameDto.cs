@@ -25,5 +25,18 @@ namespace BratnavaFC.Domain.Dtos
 
         /// <summary>Jogadores que participam da partida (time A + time B).</summary>
         public List<PlayerInMatchDto> Participants { get; init; } = new();
+
+        /// <summary>
+        /// O jogador autenticado pode votar nesta partida.
+        /// Calculado pelo servidor: não é convidado, está num time, não votou ainda e não foi marcado como DidNotPlay.
+        /// Null quando o usuário não tem jogador nesta partida.
+        /// </summary>
+        public bool? CanVote { get; init; }
+
+        /// <summary>True se o jogador autenticado já registrou voto.</summary>
+        public bool? HasVoted { get; init; }
+
+        /// <summary>Id do MatchPlayer para quem o usuário autenticado votou (null se ainda não votou).</summary>
+        public Guid? MyVotedForMatchPlayerId { get; init; }
     }
 }

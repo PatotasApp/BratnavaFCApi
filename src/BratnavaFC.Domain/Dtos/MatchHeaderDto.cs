@@ -23,5 +23,11 @@ namespace BratnavaFC.Domain.Dtos
 
         /// <summary>Id da votação/evento vinculado a esta partida, se houver.</summary>
         public Guid? LinkedPollId { get; init; }
+
+        /// <summary>
+        /// Momento real (UTC) em que o admin clicou em "Iniciar Partida".
+        /// Null para partidas antigas. Usar para timeline de gols no frontend.
+        /// </summary>
+        public DateTime? ActualStartTime { get; init; }
     }
 }

@@ -55,7 +55,7 @@ public interface IMatchService
     Task<Result<MatchHeaderDto>> GetHeaderAsync(Guid groupId, Guid matchId, CancellationToken ct);
     Task<Result<MatchAcceptationDto>> GetAcceptationAsync(Guid groupId, Guid matchId, CancellationToken ct);
     Task<Result<MatchMatchMakingDto>> GetMatchMakingAsync(Guid groupId, Guid matchId, CancellationToken ct);
-    Task<Result<MatchPostGameDto>> GetPostGameAsync(Guid groupId, Guid matchId, CancellationToken ct);
+    Task<Result<MatchPostGameDto>> GetPostGameAsync(Guid groupId, Guid matchId, CancellationToken ct, Guid? requestingUserId = null);
 
     Task<Result<MatchEntity>>           GetCurrentAsync(Guid groupId, CancellationToken ct);
     Task<Result<List<MatchHeaderDto>>> GetUpcomingAsync(Guid groupId, CancellationToken ct);

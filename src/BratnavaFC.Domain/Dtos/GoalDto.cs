@@ -19,4 +19,9 @@ public sealed class GoalDto
     /// Gol contra: o ponto vai para o time adversário do marcador.
     /// </summary>
     public bool IsOwnGoal { get; set; }
+
+    /// <summary>Placar do Time A imediatamente após este gol. Calculado pelo backend.</summary>
+    public int ScoreAAfter { get; set; }
+    /// <summary>Placar do Time B imediatamente após este gol. Calculado pelo backend.</summary>
+    public int ScoreBAfter { get; set; }
 }

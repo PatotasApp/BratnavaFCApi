@@ -102,7 +102,8 @@ public class MatchesController : GroupAuthorizedController
     public async Task<IActionResult> GetPostGame(Guid groupId, Guid matchId, CancellationToken ct)
     {
         if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
-        var dto = await _service.GetPostGameAsync(groupId, matchId, ct);
+        var userId = GetCurrentUserId();
+        var dto = await _service.GetPostGameAsync(groupId, matchId, ct, userId);
         if (dto is null) return NotFound();
         return Ok(dto);
     }

@@ -116,6 +116,9 @@ public class MatchEntity : BaseEntity
         mp.InviteResponse = InviteResponse.Rejected;
     }
 
+    /// <summary>Momento real em que a partida foi iniciada (UTC). Null para partidas antigas.</summary>
+    public DateTime? ActualStartTime { get; private set; }
+
     public void Start()
     {
         EnsureStatus(MatchStatus.MatchMaking, "A partida so pode ser iniciada se estiver em MatchMaking.");
@@ -126,6 +129,7 @@ public class MatchEntity : BaseEntity
         if (!hasTeamA || !hasTeamB)
             throw new InvalidOperationException("Nao e possivel iniciar a partida sem os times estarem definidos.");
 
+        ActualStartTime = DateTime.UtcNow;
         Status = MatchStatus.Started;
     }
 

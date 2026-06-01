@@ -19,5 +19,15 @@ namespace BratnavaFC.Domain.Dtos
 
         /// <summary>Union of TeamA + TeamB — jogadores que participam da partida.</summary>
         public List<PlayerInMatchDto> Participants { get; init; } = new();
+
+        /// <summary>True quando ambos os times têm ao menos 1 jogador.</summary>
+        public bool TeamsAssigned { get; init; }
+
+        /// <summary>
+        /// O backend decidiu se é possível iniciar a partida.
+        /// Calculado como: TeamsAssigned (mesma regra do MatchEntity.Start()).
+        /// Frontend deve usar este flag em vez de verificar contagens localmente.
+        /// </summary>
+        public bool CanStartMatch { get; init; }
     }
 }

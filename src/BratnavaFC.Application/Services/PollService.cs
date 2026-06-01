@@ -180,7 +180,8 @@ public sealed class PollService : IPollService
                     SortOrder = o.SortOrder,
                     VoteCount = optionVoteCounts.GetValueOrDefault(o.Id, 0)
                 }).ToList(),
-                Members = members
+                Members = members,
+                IsAcceptingVotes = ComputeIsAcceptingVotes(poll.Status, poll.DeadlineDate, poll.DeadlineTime),
             };
 
             return Result<PollDto>.Ok(dto);
@@ -629,4 +630,17 @@ public sealed class PollService : IPollService
         SortOrder = option.SortOrder,
         VoteCount = voteCount,
     };
+
+    /// <summary>
+    /// Calcula se o poll está aceitando votos no momento da requisição (servidor).
+    /// Frontend deve usar PollDto.IsAcceptingVotes — nunca calcular deadline localmente.
+    /// </summary>
+    internal static bool ComputeIsAcceptingVotes(string status, DateOnly? deadlineDate, TimeOnly? deadlineTime)
+    {
+        if (status != "open") return false;
+        if (deadlineDate is null) return true;
+
+        var deadline = deadlineDate.Value.ToDateTime(deadlineTime ?? TimeOnly.MaxValue, DateTimeKind.Utc);
+        return DateTime.UtcNow < deadline;
+    }
 }

@@ -1027,11 +1027,12 @@ public sealed class MatchService : IMatchService
                 PlaceName    = m.PlaceName,
                 Status       = (short)m.Status,
                 StatusName   = m.Status.ToString(),
-                StepKey      = ToStepKey(m.Status),
-                CanRewind    = m.Status > MatchStatus.Created,
-                TeamAGoals   = m.TeamAGoals,
-                TeamBGoals   = m.TeamBGoals,
-                LinkedPollId = m.LinkedPollId,
+                StepKey         = ToStepKey(m.Status),
+                CanRewind       = m.Status > MatchStatus.Created,
+                TeamAGoals      = m.TeamAGoals,
+                TeamBGoals      = m.TeamBGoals,
+                LinkedPollId    = m.LinkedPollId,
+                ActualStartTime = m.ActualStartTime,
             })
             .ToListAsync(ct);
 
@@ -1260,11 +1261,12 @@ public sealed class MatchService : IMatchService
                 PlaceName    = m.PlaceName,
                 Status       = (short)m.Status,
                 StatusName   = m.Status.ToString(),
-                StepKey      = ToStepKey(m.Status),
-                CanRewind    = m.Status > MatchStatus.Created,
-                TeamAGoals   = m.TeamAGoals,
-                TeamBGoals   = m.TeamBGoals,
-                LinkedPollId = m.LinkedPollId,
+                StepKey         = ToStepKey(m.Status),
+                CanRewind       = m.Status > MatchStatus.Created,
+                TeamAGoals      = m.TeamAGoals,
+                TeamBGoals      = m.TeamBGoals,
+                LinkedPollId    = m.LinkedPollId,
+                ActualStartTime = m.ActualStartTime,
             })
             .FirstOrDefaultAsync(ct);
 
@@ -1318,20 +1320,23 @@ public sealed class MatchService : IMatchService
         var settings = await _context.GroupSettings
             .AsNoTracking()
             .Where(s => s.GroupId == groupId)
-            .Select(s => new { s.MaxPlayers })
+            .Select(s => new { s.MaxPlayers, s.MinPlayers })
             .FirstOrDefaultAsync(ct);
 
         var maxPlayers = settings?.MaxPlayers ?? 0;
+        var minPlayers = settings?.MinPlayers ?? 2;
         var accepted = matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.Accepted).ToList();
         var rejected = matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.Rejected).ToList();
         var pending = matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.None).ToList();
 
+        var overLimit = maxPlayers > 0 && accepted.Count > maxPlayers;
         var dto = new MatchAcceptationDto
         {
             MatchId = matchData.Id,
             Status = matchData.Status,
             MaxPlayers = maxPlayers,
-            AcceptedOverLimit = maxPlayers > 0 && accepted.Count > maxPlayers,
+            AcceptedOverLimit = overLimit,
+            CanAdvanceToMatchmaking = !overLimit && accepted.Count >= Math.Max(2, minPlayers),
             AcceptedPlayers = accepted,
             RejectedPlayers = rejected,
             PendingPlayers = pending,
@@ -1417,7 +1422,9 @@ public sealed class MatchService : IMatchService
                     })
                     .ToList(),
 
-                ColorsLocked = m.TeamAColorId != null || m.TeamBColorId != null,
+                ColorsLocked   = m.TeamAColorId != null || m.TeamBColorId != null,
+                TeamsAssigned  = m.Players.Any(p => p.Team == 1) && m.Players.Any(p => p.Team == 2),
+                CanStartMatch  = m.Players.Any(p => p.Team == 1) && m.Players.Any(p => p.Team == 2),
 
                 Participants = m.Players
                     .Where(p => (p.Team == 1 || p.Team == 2) && p.Player!.Status == Status.Active)
@@ -1443,7 +1450,7 @@ public sealed class MatchService : IMatchService
         return Result<MatchMatchMakingDto>.Ok(dto);
     }
 
-    public async Task<Result<MatchPostGameDto>> GetPostGameAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    public async Task<Result<MatchPostGameDto>> GetPostGameAsync(Guid groupId, Guid matchId, CancellationToken ct, Guid? requestingUserId = null)
     {
         var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
         if (!groupCheck.Success) return Result<MatchPostGameDto>.Fail(groupCheck.Error!, groupCheck.Status);
@@ -1469,7 +1476,9 @@ public sealed class MatchService : IMatchService
                     p.Team,
                     p.IsGoalkeeper,
                     IsGuest = p.Player!.IsGuest,
-                    p.IsMvp
+                    p.IsMvp,
+                    p.DidNotPlay,
+                    PlayerUserId = p.Player!.UserId,
                 }).ToList(),
 
                 Votes = m.Votes.Select(v => new
@@ -1554,10 +1563,14 @@ public sealed class MatchService : IMatchService
             })
             .ToList();
 
-        var goals = baseData.Goals
+        var teamByMpId2 = baseData.Players.ToDictionary(x => x.Id, x => x.Team);
+        var orderedGoals = baseData.Goals
             .OrderBy(g => g.TimeSeconds ?? int.MaxValue)
             .ThenBy(g => g.CreateDate)
-            .Select(g =>
+            .ToList();
+
+        int runningA = 0, runningB = 0;
+        var goals = orderedGoals.Select(g =>
             {
                 nameByMpId.TryGetValue(g.ScorerMatchPlayerId, out var scorerName);
                 playerIdByMpId.TryGetValue(g.ScorerMatchPlayerId, out var scorerPid);
@@ -1571,6 +1584,14 @@ public sealed class MatchService : IMatchService
                         assistPid = ap;
                 }
 
+                // Calcula para qual time o gol vai (gol contra inverte)
+                teamByMpId2.TryGetValue(g.ScorerMatchPlayerId, out var scorerTeam);
+                var scoringTeam = g.IsOwnGoal
+                    ? (scorerTeam == 1 ? 2 : 1)
+                    : scorerTeam;
+                if (scoringTeam == 1) runningA++;
+                else if (scoringTeam == 2) runningB++;
+
                 return new GoalDto
                 {
                     GoalId = g.Id,
@@ -1582,7 +1603,9 @@ public sealed class MatchService : IMatchService
                     AssistName = assistName,
                     TimeSeconds = g.TimeSeconds,
                     Time = MatchTimeParser.FormatFromSeconds(g.TimeSeconds),
-                    IsOwnGoal = g.IsOwnGoal
+                    IsOwnGoal = g.IsOwnGoal,
+                    ScoreAAfter = runningA,
+                    ScoreBAfter = runningB,
                 };
             })
             .ToList();
@@ -1602,6 +1625,31 @@ public sealed class MatchService : IMatchService
             })
             .ToList();
 
+        // ── CanVote / HasVoted para o usuário autenticado ────────────────────
+        bool? canVote = null;
+        bool? hasVoted = null;
+        Guid? myVotedForMatchPlayerId = null;
+
+        if (requestingUserId.HasValue)
+        {
+            var myMatchPlayer = baseData.Players
+                .FirstOrDefault(p => p.PlayerUserId == requestingUserId.Value);
+
+            if (myMatchPlayer is not null)
+            {
+                var iVoted = voterIds.Contains(myMatchPlayer.Id);
+                hasVoted = iVoted;
+                canVote  = !myMatchPlayer.IsGuest
+                           && (myMatchPlayer.Team == 1 || myMatchPlayer.Team == 2)
+                           && !myMatchPlayer.DidNotPlay
+                           && !iVoted;
+
+                if (iVoted)
+                    myVotedForMatchPlayerId = baseData.Votes
+                        .FirstOrDefault(v => v.VoterId == myMatchPlayer.Id)?.VotedForId;
+            }
+        }
+
         return Result<MatchPostGameDto>.Ok(new MatchPostGameDto
         {
             MatchId = baseData.Id,
@@ -1614,7 +1662,10 @@ public sealed class MatchService : IMatchService
             Goals = goals,
             AllVoted = allVoted,
             EligibleVoters = eligibleVoters,
-            Participants = participants
+            Participants = participants,
+            CanVote = canVote,
+            HasVoted = hasVoted,
+            MyVotedForMatchPlayerId = myVotedForMatchPlayerId,
         });
     }
 
