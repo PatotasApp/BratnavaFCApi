@@ -52,7 +52,7 @@ public record CurrentMatchBetContextDto(
     Guid               MatchId,
     DateTime           PlayedAt,
     string             StatusName,
-    bool               BetWindowOpen,  // status == MatchMaking
+    bool               BetWindowOpen,  // status == MatchMaking && hasTeams
     List<BetPlayerDto> Players,
     MatchBetDto?       MyBet           // null se ainda não apostou
 );

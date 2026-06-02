@@ -95,6 +95,16 @@ public sealed class MatchServiceTests
         return list;
     }
 
+    private static async Task<MatchBetEntity> SeedBetAsync(AppDbContext db, Guid groupId, Guid matchId, Guid userId)
+    {
+        var bet = new MatchBetEntity(groupId, matchId, userId);
+        var sel = new MatchBetSelectionEntity(bet.Id, BetCategory.WinningTeam, "TeamA", 50);
+        bet.ReplaceSelections([sel]);
+        db.Set<MatchBetEntity>().Add(bet);
+        await db.SaveChangesAsync();
+        return bet;
+    }
+
     private static async Task<(MatchEntity match, List<PlayerEntity> players)> SeedMatchAsync(
         AppDbContext db,
         Guid groupId,
@@ -532,6 +542,124 @@ public sealed class MatchServiceTests
 
         reloaded.Players.Count(p => p.Team == 1).Should().Be(2);
         reloaded.Players.Count(p => p.Team == 2).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task AssignTeamsAsync_WhenPlayerChangedAndBetsExist_ShouldClearAllBets()
+    {
+        await using var db = DbContextFactory.Create(nameof(AssignTeamsAsync_WhenPlayerChangedAndBetsExist_ShouldClearAllBets));
+        var repo = BuildRepoMock(db);
+        var sut  = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+        var (match, players) = await SeedMatchAsync(
+            db, group.Id, playersCount: 4,
+            targetStatus: MatchStatus.MatchMaking,
+            acceptAllInvites: true, defineTeamsIfPossible: true);
+        // Initial: players[0,1] → TeamA, players[2,3] → TeamB
+
+        var user1 = Guid.NewGuid();
+        var user2 = Guid.NewGuid();
+        await SeedBetAsync(db, group.Id, match.Id, user1);
+        await SeedBetAsync(db, group.Id, match.Id, user2);
+
+        // Move players[3] from TeamB to TeamA
+        var dto = new AssignTeamsDto
+        {
+            TeamAMatchPlayerIds = [players[0].Id, players[3].Id],
+            TeamBMatchPlayerIds = [players[1].Id, players[2].Id],
+        };
+
+        await sut.AssignTeamsAsync(group.Id, match.Id, dto, CancellationToken.None);
+
+        var remaining = await db.Set<MatchBetEntity>().Where(b => b.MatchId == match.Id).ToListAsync();
+        remaining.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AssignTeamsAsync_WhenSameCompositionAndBetsExist_ShouldKeepBets()
+    {
+        await using var db = DbContextFactory.Create(nameof(AssignTeamsAsync_WhenSameCompositionAndBetsExist_ShouldKeepBets));
+        var repo = BuildRepoMock(db);
+        var sut  = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+        var (match, players) = await SeedMatchAsync(
+            db, group.Id, playersCount: 4,
+            targetStatus: MatchStatus.MatchMaking,
+            acceptAllInvites: true, defineTeamsIfPossible: true);
+        // Initial: players[0,1] → TeamA, players[2,3] → TeamB
+
+        await SeedBetAsync(db, group.Id, match.Id, Guid.NewGuid());
+
+        // Resubmit exact same composition
+        var dto = new AssignTeamsDto
+        {
+            TeamAMatchPlayerIds = [players[0].Id, players[1].Id],
+            TeamBMatchPlayerIds = [players[2].Id, players[3].Id],
+        };
+
+        await sut.AssignTeamsAsync(group.Id, match.Id, dto, CancellationToken.None);
+
+        var remaining = await db.Set<MatchBetEntity>().Where(b => b.MatchId == match.Id).ToListAsync();
+        remaining.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task AssignTeamsAsync_WhenTeamsSwappedAndBetsExist_ShouldClearAllBets()
+    {
+        await using var db = DbContextFactory.Create(nameof(AssignTeamsAsync_WhenTeamsSwappedAndBetsExist_ShouldClearAllBets));
+        var repo = BuildRepoMock(db);
+        var sut  = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+        var (match, players) = await SeedMatchAsync(
+            db, group.Id, playersCount: 4,
+            targetStatus: MatchStatus.MatchMaking,
+            acceptAllInvites: true, defineTeamsIfPossible: true);
+        // Initial: players[0,1] → TeamA, players[2,3] → TeamB
+
+        await SeedBetAsync(db, group.Id, match.Id, Guid.NewGuid());
+
+        // Swap A ↔ B — same players, different sides
+        var dto = new AssignTeamsDto
+        {
+            TeamAMatchPlayerIds = [players[2].Id, players[3].Id],
+            TeamBMatchPlayerIds = [players[0].Id, players[1].Id],
+        };
+
+        await sut.AssignTeamsAsync(group.Id, match.Id, dto, CancellationToken.None);
+
+        var remaining = await db.Set<MatchBetEntity>().Where(b => b.MatchId == match.Id).ToListAsync();
+        remaining.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AssignTeamsAsync_WhenFirstTimeAssigningTeams_ShouldNotClearBets()
+    {
+        await using var db = DbContextFactory.Create(nameof(AssignTeamsAsync_WhenFirstTimeAssigningTeams_ShouldNotClearBets));
+        var repo = BuildRepoMock(db);
+        var sut  = CreateSut(db, repo);
+
+        var group = await SeedGroupAsync(db);
+        var (match, players) = await SeedMatchAsync(
+            db, group.Id, playersCount: 4,
+            targetStatus: MatchStatus.MatchMaking,
+            acceptAllInvites: true, defineTeamsIfPossible: false);
+        // No teams set yet
+
+        await SeedBetAsync(db, group.Id, match.Id, Guid.NewGuid());
+
+        var dto = new AssignTeamsDto
+        {
+            TeamAMatchPlayerIds = [players[0].Id, players[1].Id],
+            TeamBMatchPlayerIds = [players[2].Id, players[3].Id],
+        };
+
+        await sut.AssignTeamsAsync(group.Id, match.Id, dto, CancellationToken.None);
+
+        var remaining = await db.Set<MatchBetEntity>().Where(b => b.MatchId == match.Id).ToListAsync();
+        remaining.Should().HaveCount(1);
     }
 
     [Fact]

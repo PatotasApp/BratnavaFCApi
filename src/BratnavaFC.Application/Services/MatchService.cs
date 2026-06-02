@@ -647,7 +647,28 @@ public sealed class MatchService : IMatchService
         if (match is null)
             return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
+        var prevTeamA = match.Players.Where(p => p.Team == 1).Select(p => p.PlayerId).ToHashSet();
+        var prevTeamB = match.Players.Where(p => p.Team == 2).Select(p => p.PlayerId).ToHashSet();
+        var hadTeams  = prevTeamA.Count > 0 || prevTeamB.Count > 0;
+
         match.AssignTeams(dto.TeamAMatchPlayerIds, dto.TeamBMatchPlayerIds);
+
+        var teamsChanged = hadTeams &&
+            (!prevTeamA.SetEquals(dto.TeamAMatchPlayerIds) || !prevTeamB.SetEquals(dto.TeamBMatchPlayerIds));
+
+        if (teamsChanged)
+        {
+            var bets = await _context.Set<MatchBetEntity>()
+                .Include(b => b.Selections)
+                .Where(b => b.MatchId == matchId && !b.IsResolved)
+                .ToListAsync(ct);
+
+            if (bets.Count > 0)
+            {
+                _context.Set<MatchBetSelectionEntity>().RemoveRange(bets.SelectMany(b => b.Selections));
+                _context.Set<MatchBetEntity>().RemoveRange(bets);
+            }
+        }
 
         await _context.SaveChangesAsync(ct);
 
@@ -1325,9 +1346,24 @@ public sealed class MatchService : IMatchService
 
         var maxPlayers = settings?.MaxPlayers ?? 0;
         var minPlayers = settings?.MinPlayers ?? 2;
+        // Quando a partida já passou da aceitação, quem não respondeu não pode mais aceitar
+        // → retorna como recusado no DTO (sem alterar o banco)
+        var acceptationClosed = matchData.Status > (short)MatchStatus.Acceptation;
+
+        // Quando a partida já passou da aceitação, quem não respondeu não pode mais aceitar
+        // → altera o InviteResponse na instância DTO (sem tocar no banco)
+        if (acceptationClosed)
+        {
+            foreach (var p in matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.None))
+                p.InviteResponse = (short)InviteResponse.Rejected;
+        }
+
         var accepted = matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.Accepted).ToList();
         var rejected = matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.Rejected).ToList();
-        var pending = matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.None).ToList();
+        // Pendentes: apenas mensalistas (não convidados) — irrelevante após aceitação fechada
+        var pending = acceptationClosed
+            ? []
+            : matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.None && !p.IsGuest).ToList();
 
         var overLimit = maxPlayers > 0 && accepted.Count > maxPlayers;
         var dto = new MatchAcceptationDto
@@ -1711,7 +1747,10 @@ public sealed class MatchService : IMatchService
                 m.TeamBColor != null ? m.TeamBColor.HexValue : null,
                 m.Players
                     .Select(p => p.PlayerId)
-                    .ToList()
+                    .ToList(),
+                m.LinkedPollId,
+                m.LinkedPoll != null ? m.LinkedPoll.Title : null,
+                m.LinkedPoll != null ? m.LinkedPoll.Type : null
             ))
             .ToListAsync(cancellationToken);
 
