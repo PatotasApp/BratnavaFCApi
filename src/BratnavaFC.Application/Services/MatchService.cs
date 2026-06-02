@@ -1360,10 +1360,9 @@ public sealed class MatchService : IMatchService
 
         var accepted = matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.Accepted).ToList();
         var rejected = matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.Rejected).ToList();
-        // Pendentes: apenas mensalistas (não convidados) — irrelevante após aceitação fechada
         var pending = acceptationClosed
             ? []
-            : matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.None && !p.IsGuest).ToList();
+            : matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.None).ToList();
 
         var overLimit = maxPlayers > 0 && accepted.Count > maxPlayers;
         var dto = new MatchAcceptationDto
@@ -1379,6 +1378,28 @@ public sealed class MatchService : IMatchService
         };
 
         return Result<MatchAcceptationDto>.Ok(dto);
+    }
+
+    /// <summary>
+    /// Versão resumida para o dashboard — exclui convidados de todas as listas.
+    /// </summary>
+    public async Task<Result<MatchAcceptationDto>> GetAcceptationSummaryAsync(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        var result = await GetAcceptationAsync(groupId, matchId, ct);
+        if (!result.Success) return result;
+
+        var d = result.Data!;
+        return Result<MatchAcceptationDto>.Ok(new MatchAcceptationDto
+        {
+            MatchId                  = d.MatchId,
+            Status                   = d.Status,
+            MaxPlayers               = d.MaxPlayers,
+            AcceptedOverLimit        = d.AcceptedOverLimit,
+            CanAdvanceToMatchmaking  = d.CanAdvanceToMatchmaking,
+            AcceptedPlayers          = d.AcceptedPlayers.Where(p => !p.IsGuest).ToList(),
+            RejectedPlayers          = d.RejectedPlayers.Where(p => !p.IsGuest).ToList(),
+            PendingPlayers           = d.PendingPlayers .Where(p => !p.IsGuest).ToList(),
+        });
     }
 
     public async Task<Result<MatchMatchMakingDto>> GetMatchMakingAsync(Guid groupId, Guid matchId, CancellationToken ct)
@@ -2097,11 +2118,11 @@ public sealed class MatchService : IMatchService
             guest.SetGuestStarRating(dto.GuestStarRating.Value);
         _context.Players.Add(guest);
 
-        // Cria o MatchPlayer para a partida
+        // Cria o MatchPlayer para a partida (convidado já é auto-aceito)
         var mp = new MatchPlayerEntity(guest.Id);
         mp.AssignToMatch(match);   // define MatchId, GroupId
         mp.AssignToPlayer(guest);  // define navigation Player
-        // Team = 0 já configurado no construtor de MatchPlayerEntity
+        mp.InviteResponse = InviteResponse.Accepted;
         _context.MatchPlayers.Add(mp);
 
         await _context.SaveChangesAsync(ct);

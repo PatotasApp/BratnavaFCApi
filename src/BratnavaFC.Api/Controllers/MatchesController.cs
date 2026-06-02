@@ -89,6 +89,16 @@ public class MatchesController : GroupAuthorizedController
         return Ok(dto);
     }
 
+    /// <summary>Resumo de aceitação sem convidados — para uso no dashboard.</summary>
+    [HttpGet("group/{groupId:guid}/{matchId:guid}/acceptation/summary")]
+    public async Task<IActionResult> GetAcceptationSummary(Guid groupId, Guid matchId, CancellationToken ct)
+    {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
+        var dto = await _service.GetAcceptationSummaryAsync(groupId, matchId, ct);
+        if (dto is null) return NotFound();
+        return Ok(dto);
+    }
+
     [HttpGet("group/{groupId:guid}/{matchId:guid}/matchmaking")]
     public async Task<IActionResult> GetMatchMaking(Guid groupId, Guid matchId, CancellationToken ct)
     {
