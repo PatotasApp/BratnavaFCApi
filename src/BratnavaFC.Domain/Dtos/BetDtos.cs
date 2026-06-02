@@ -53,6 +53,10 @@ public record CurrentMatchBetContextDto(
     DateTime           PlayedAt,
     string             StatusName,
     bool               BetWindowOpen,  // status == MatchMaking && hasTeams
+    string?            TeamAName,
+    string?            TeamBName,
+    string?            TeamAColorHex,
+    string?            TeamBColorHex,
     List<BetPlayerDto> Players,
     MatchBetDto?       MyBet           // null se ainda não apostou
 );

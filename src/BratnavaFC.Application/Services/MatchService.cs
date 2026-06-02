@@ -162,7 +162,7 @@ public sealed class MatchService : IMatchService
 
         var teamAPlayers = match.Players.Where(p => p.Team == 1).ToList();
         var teamBPlayers = match.Players.Where(p => p.Team == 2).ToList();
-        var unassigned = match.Players.Where(p => p.Team == 0).ToList();
+        var unassigned   = match.Players.Where(p => p.Team == 0 && p.InviteResponse == InviteResponse.Accepted).ToList();
 
         var playerNameByPlayerId = match.Players.ToDictionary(
             p => p.PlayerId,
@@ -1465,7 +1465,9 @@ public sealed class MatchService : IMatchService
                     .ToList(),
 
                 UnassignedPlayers = m.Players
-                    .Where(p => p.Team == 0 && p.Player!.Status == Status.Active)
+                    .Where(p => p.Team == 0
+                             && p.Player!.Status == Status.Active
+                             && p.InviteResponse == InviteResponse.Accepted)
                     .OrderBy(p => p.Player!.Name)
                     .Select(mp => new PlayerInMatchDto
                     {
@@ -1989,7 +1991,7 @@ public sealed class MatchService : IMatchService
 
         var teamAPlayers = match.Players.Where(p => p.Team == 1).ToList();
         var teamBPlayers = match.Players.Where(p => p.Team == 2).ToList();
-        var unassigned = match.Players.Where(p => p.Team == 0).ToList();
+        var unassigned   = match.Players.Where(p => p.Team == 0 && p.InviteResponse == InviteResponse.Accepted).ToList();
 
         var mpById = match.Players.ToDictionary(p => p.Id);
 

@@ -27,6 +27,8 @@ public sealed class BetService : IBetService
     {
         var match = await _db.Matches
             .AsNoTracking()
+            .Include(m => m.TeamAColor)
+            .Include(m => m.TeamBColor)
             .Where(m => m.GroupId == groupId &&
                         m.Status != MatchStatus.Finalized &&
                         m.Status != MatchStatus.Created)
@@ -42,6 +44,8 @@ public sealed class BetService : IBetService
     {
         var match = await _db.Matches
             .AsNoTracking()
+            .Include(m => m.TeamAColor)
+            .Include(m => m.TeamBColor)
             .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct);
 
         if (match is null) return null;
@@ -159,6 +163,10 @@ public sealed class BetService : IBetService
             match.PlayedAt,
             match.Status.ToString(),
             betWindowOpen,
+            match.TeamAColor?.Name,
+            match.TeamBColor?.Name,
+            match.TeamAColor?.HexValue,
+            match.TeamBColor?.HexValue,
             players,
             myBet);
     }
