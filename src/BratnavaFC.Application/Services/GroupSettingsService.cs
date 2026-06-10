@@ -51,9 +51,11 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 Rank3Icon      = null,
                 MonthlyFee           = null,
                 GoalkeeperMonthlyFee = null,
-                MvpTieRule       = (int)MvpTieRule.AllMvp,
-                MvpTieMaxPlayers = 2,
-                ShowPlayerStats  = false,
+                MvpTieRule           = (int)MvpTieRule.AllMvp,
+                MvpTieMaxPlayers     = 2,
+                ShowPlayerStats      = false,
+                PaymentDueDay        = null,
+                AutoFinalizeMvpHours = null,
             });
         }
 
@@ -89,6 +91,8 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 entity.SetMvpTieRule((MvpTieRule)dto.MvpTieRule.Value, dto.MvpTieMaxPlayers);
             if (dto.ShowPlayerStats.HasValue)
                 entity.SetShowPlayerStats(dto.ShowPlayerStats.Value);
+            entity.SetPaymentDueDay(dto.PaymentDueDay);
+            entity.SetAutoFinalizeMvpHours(dto.AutoFinalizeMvpHours);
             await _context.GroupSettings.AddAsync(entity, ct);
         }
         else
@@ -108,6 +112,8 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 entity.SetMvpTieRule((MvpTieRule)dto.MvpTieRule.Value, dto.MvpTieMaxPlayers);
             if (dto.ShowPlayerStats.HasValue)
                 entity.SetShowPlayerStats(dto.ShowPlayerStats.Value);
+            entity.SetPaymentDueDay(dto.PaymentDueDay);
+            entity.SetAutoFinalizeMvpHours(dto.AutoFinalizeMvpHours);
         }
 
         try
@@ -136,6 +142,8 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 existing.SetMvpTieRule((MvpTieRule)dto.MvpTieRule.Value, dto.MvpTieMaxPlayers);
             if (dto.ShowPlayerStats.HasValue)
                 existing.SetShowPlayerStats(dto.ShowPlayerStats.Value);
+            existing.SetPaymentDueDay(dto.PaymentDueDay);
+            existing.SetAutoFinalizeMvpHours(dto.AutoFinalizeMvpHours);
 
             await _context.SaveChangesAsync(ct);
             entity = existing;
@@ -167,8 +175,10 @@ public sealed class GroupSettingsService : IGroupSettingsService
         MonthlyFee           = e.MonthlyFee,
         GoalkeeperMonthlyFee = e.GoalkeeperMonthlyFee,
         MvpTieRule           = (int)e.MvpTieRule,
-        MvpTieMaxPlayers = e.MvpTieMaxPlayers,
-        ShowPlayerStats  = e.ShowPlayerStats,
+        MvpTieMaxPlayers     = e.MvpTieMaxPlayers,
+        ShowPlayerStats      = e.ShowPlayerStats,
+        PaymentDueDay        = e.PaymentDueDay,
+        AutoFinalizeMvpHours = e.AutoFinalizeMvpHours,
     };
 
     private async Task<Result> EnsureGroupExistsAsync(Guid groupId, CancellationToken ct)

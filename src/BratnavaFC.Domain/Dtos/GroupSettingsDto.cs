@@ -40,4 +40,8 @@ public sealed class GroupSettingsDto
 
     // ── Visibilidade de estatísticas ──────────────────────────────────────────
     public bool ShowPlayerStats { get; init; }
+
+    // ── Notificações configuráveis ────────────────────────────────────────────
+    public int? PaymentDueDay        { get; init; }
+    public int? AutoFinalizeMvpHours { get; init; }
 }

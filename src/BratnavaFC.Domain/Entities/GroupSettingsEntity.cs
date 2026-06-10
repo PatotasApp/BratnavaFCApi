@@ -90,6 +90,27 @@ public sealed class GroupSettingsEntity : BaseEntity
 
     public void SetShowPlayerStats(bool value) => ShowPlayerStats = value;
 
+    // ── Notificações configuráveis ────────────────────────────────────────────
+    /// <summary>Dia do mês (1–28) em que a mensalidade vence. Null = sem lembrete automático.</summary>
+    public int? PaymentDueDay { get; private set; }
+
+    /// <summary>Horas após o encerramento da partida para finalizar o MVP automaticamente. Null = desativado.</summary>
+    public int? AutoFinalizeMvpHours { get; private set; }
+
+    public void SetPaymentDueDay(int? value)
+    {
+        if (value.HasValue && (value.Value < 1 || value.Value > 28))
+            throw new InvalidOperationException("PaymentDueDay deve ser entre 1 e 28.");
+        PaymentDueDay = value;
+    }
+
+    public void SetAutoFinalizeMvpHours(int? value)
+    {
+        if (value.HasValue && value.Value < 1)
+            throw new InvalidOperationException("AutoFinalizeMvpHours deve ser maior que 0.");
+        AutoFinalizeMvpHours = value;
+    }
+
     public void Update(
         int minPlayers,
         int maxPlayers,

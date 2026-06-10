@@ -35,4 +35,10 @@ public sealed class UpsertGroupSettingsDto
     // ── Visibilidade de estatísticas ──────────────────────────────────────────
     /// <summary>null = não alterar</summary>
     public bool? ShowPlayerStats { get; set; }
+
+    // ── Notificações configuráveis ────────────────────────────────────────────
+    /// <summary>Dia do mês (1–28) para vencimento da mensalidade. Null = sem lembrete.</summary>
+    public int? PaymentDueDay        { get; set; }
+    /// <summary>Horas após encerrar para finalizar MVP automaticamente. Null = desativado.</summary>
+    public int? AutoFinalizeMvpHours { get; set; }
 }
