@@ -352,8 +352,9 @@ public class PlayerService : IPlayerService
         if (player.IsGuest && player.UserId == null)
             return Result.Fail("Jogador já é convidado sem conta vinculada.", ResultStatus.BadRequest);
 
-        var playerName = player.Name;
-        var groupId    = player.GroupId;
+        var playerName      = player.Name;
+        var groupId         = player.GroupId;
+        var removedUserId   = player.UserId;
 
         player.SetIsGuest(true);
         player.ClearUser();
@@ -362,6 +363,9 @@ public class PlayerService : IPlayerService
         await _repository.SaveChangesAsync(cancellationToken);
 
         await NotifyAdminsPlayerRemovedAsync(groupId, playerName, cancellationToken);
+
+        if (removedUserId.HasValue)
+            _ = NotifyRemovedPlayerAsync(removedUserId.Value, groupId, cancellationToken);
 
         return Result.Ok("Jogador removido da patota.");
     }
@@ -383,6 +387,20 @@ public class PlayerService : IPlayerService
             body:  $"{playerName} foi removido e voltou a ser convidado.",
             data:  new Dictionary<string, string> { ["type"] = "player_removed", ["groupId"] = groupId.ToString() },
             ct);
+
+    private async Task NotifyRemovedPlayerAsync(Guid userId, Guid groupId, CancellationToken ct)
+    {
+        try
+        {
+            await _push.SendToUserAsync(
+                userId,
+                title: "Você foi removido da patota",
+                body:  "Um administrador removeu você do grupo. Entre em contato caso seja um engano.",
+                data:  new Dictionary<string, string> { ["type"] = "player_removed_self", ["groupId"] = groupId.ToString() },
+                groupId: groupId);
+        }
+        catch { /* notificação não crítica */ }
+    }
 
     // ── Toggle goleiro/linha ──────────────────────────────────────────────────
 

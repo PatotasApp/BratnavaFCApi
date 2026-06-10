@@ -572,6 +572,10 @@ public sealed class PollService : IPollService
             await _db.SaveChangesAsync(ct);
             await _scheduler.ReschedulePollRemindersAsync(
                 pollId, groupId, poll.Title, poll.DeadlineDate, poll.DeadlineTime, ct);
+
+            if (!dto.ClearDeadline && poll.DeadlineDate.HasValue)
+                _ = NotifyPollDeadlineChangedAsync(groupId, poll, ct);
+
             return Result.Ok();
         }
         catch (Exception ex)
@@ -617,6 +621,24 @@ public sealed class PollService : IPollService
             body:  $"Evento confirmado para {date:dd/MM/yyyy}{timeStr}.",
             data:  new Dictionary<string, string> { ["type"] = "event_created", ["groupId"] = groupId.ToString() },
             ct);
+    }
+
+    private async Task NotifyPollDeadlineChangedAsync(Guid groupId, PollEntity poll, CancellationToken ct)
+    {
+        try
+        {
+            var deadlineStr = poll.DeadlineDate!.Value.ToString("dd/MM");
+            if (poll.DeadlineTime.HasValue)
+                deadlineStr += $" às {poll.DeadlineTime.Value:HH:mm}";
+
+            await _push.SendToGroupAsync(
+                groupId,
+                title: "Prazo alterado 🗳️",
+                body:  $"O prazo da votação \"{poll.Title}\" foi atualizado para {deadlineStr}.",
+                data:  new Dictionary<string, string> { ["type"] = "poll_deadline_changed", ["groupId"] = groupId.ToString(), ["pollId"] = poll.Id.ToString() },
+                ct);
+        }
+        catch { /* notificação não crítica */ }
     }
 
     // ── Mapeamento ────────────────────────────────────────────────────────────

@@ -295,6 +295,7 @@ public sealed class MatchService : IMatchService
 
         await NotifyMatchInviteAsync(groupId, match.Id, ct);
         await _scheduler.ScheduleMatchRemindersAsync(match.Id, groupId, match.PlayedAt, ct);
+        await _scheduler.ScheduleMatchNoQuorumReminderAsync(match.Id, groupId, match.PlayedAt, ct);
 
         return Result<MatchEntity>.Ok(match, "Partida criada com sucesso.", ResultStatus.Created);
     }
@@ -342,6 +343,7 @@ public sealed class MatchService : IMatchService
 
         await _context.SaveChangesAsync(ct);
         await _scheduler.RescheduleMatchRemindersAsync(matchId, groupId, match.PlayedAt, ct);
+        await _scheduler.RescheduleMatchNoQuorumReminderAsync(matchId, groupId, match.PlayedAt, ct);
         return Result.Ok("Partida atualizada com sucesso.");
     }
 
@@ -356,6 +358,8 @@ public sealed class MatchService : IMatchService
         match.EnsureCanDelete();
 
         await _scheduler.CancelMatchRemindersAsync(matchId, ct);
+        await _scheduler.CancelMatchNoQuorumReminderAsync(matchId, ct);
+        await _scheduler.CancelMvpAutoFinalizeAsync(matchId, ct);
         _repository.Remove(match);
         await _repository.SaveChangesAsync(ct);
         return Result.Ok("Partida removida com sucesso.");
@@ -381,9 +385,14 @@ public sealed class MatchService : IMatchService
         if (match is null)
             return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
+        var existingPlayerIds = match.Players.Select(mp => mp.PlayerId).ToHashSet();
+
         await SyncPlayersFromGroupCoreAsync(groupId, match, ct);
 
         await _context.SaveChangesAsync(ct);
+
+        _ = NotifyNewlyAddedToMatchAsync(groupId, matchId, existingPlayerIds, ct);
+
         return Result.Ok();
     }
 
@@ -498,6 +507,15 @@ public sealed class MatchService : IMatchService
 
         await NotifyMatchEndedAsync(groupId, matchId, ct);
 
+        var autoFinalizeHours = await _context.GroupSettings
+            .AsNoTracking()
+            .Where(s => s.GroupId == groupId)
+            .Select(s => s.AutoFinalizeMvpHours)
+            .FirstOrDefaultAsync(ct);
+
+        if (autoFinalizeHours.HasValue)
+            await _scheduler.ScheduleMvpAutoFinalizeAsync(matchId, groupId, autoFinalizeHours.Value, ct);
+
         return Result.Ok("Partida atualizada com sucesso.");
     }
 
@@ -607,6 +625,9 @@ public sealed class MatchService : IMatchService
         // Resolve apostas imediatamente após finalização (evita resolução lazy com race condition)
         await _bets.ResolveMatchBetsAsync(matchId, ct);
 
+        // Cancela jobs de auto-finalize agendados (caso a finalização seja manual)
+        await _scheduler.CancelMvpAutoFinalizeAsync(matchId, ct);
+
         await NotifyMatchFinalizedAsync(groupId, matchId, ct);
         _ = NotifyMvpDefinedAsync(groupId, matchId, ct);
 
@@ -712,6 +733,7 @@ public sealed class MatchService : IMatchService
         match.SwapPlayers(mpA.Id, mpB.Id);
 
         await _context.SaveChangesAsync(ct);
+        _ = NotifyTeamsAssignedAsync(groupId, matchId, ct);
         return Result.Ok("Partida atualizada com sucesso.");
     }
 
@@ -2137,6 +2159,32 @@ public sealed class MatchService : IMatchService
     }
 
     // ── Notificações ──────────────────────────────────────────────────────────
+
+    private async Task NotifyNewlyAddedToMatchAsync(
+        Guid groupId, Guid matchId, HashSet<Guid> previousPlayerIds, CancellationToken ct)
+    {
+        try
+        {
+            var newUserIds = await _context.MatchPlayers
+                .AsNoTracking()
+                .Where(mp => mp.MatchId == matchId && !previousPlayerIds.Contains(mp.PlayerId))
+                .Join(_context.Players.Where(p => p.UserId != null && !p.IsGuest),
+                      mp => mp.PlayerId, p => p.Id,
+                      (mp, p) => p.UserId!.Value)
+                .Distinct()
+                .ToListAsync(ct);
+
+            if (newUserIds.Count == 0) return;
+
+            await _push.SendToUsersAsync(
+                newUserIds,
+                title: "Você foi adicionado a uma partida! ⚽",
+                body:  "Você foi incluído em uma partida. Confirme sua presença!",
+                data:  new Dictionary<string, string> { ["type"] = "match_invite", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
+                groupId: groupId);
+        }
+        catch { /* notificação não crítica */ }
+    }
 
     private Task NotifyMatchInviteAsync(Guid groupId, Guid matchId, CancellationToken ct) =>
         _push.SendDataOnlyToGroupAsync(

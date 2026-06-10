@@ -473,9 +473,40 @@ public sealed class PaymentService : IPaymentService
                     playerName,
                     ct);
             }
+
+            var affectedUserIds = await _context.Players
+                .AsNoTracking()
+                .Where(p => playerIds.Contains(p.Id) && p.UserId != null)
+                .Select(p => p.UserId!.Value)
+                .Distinct()
+                .ToListAsync(ct);
+
+            if (affectedUserIds.Count > 0)
+                _ = NotifyBulkDiscountAsync(groupId, chargeName, dto.Discount, affectedUserIds, ct);
         }
 
         return Result.Ok("Desconto aplicado com sucesso.");
+    }
+
+    private async Task NotifyBulkDiscountAsync(
+        Guid groupId, string chargeName, decimal discount,
+        List<Guid> userIds, CancellationToken ct)
+    {
+        try
+        {
+            var discountStr = discount.ToString("N2");
+            await _push.SendToUsersAsync(
+                userIds,
+                title: "Desconto aplicado! 🎉",
+                body:  $"Um desconto de R$ {discountStr} foi aplicado na cobrança \"{chargeName}\".",
+                data: new Dictionary<string, string>
+                {
+                    ["type"]    = "extra_charge_discount",
+                    ["groupId"] = groupId.ToString(),
+                },
+                groupId: groupId);
+        }
+        catch { /* notificação não crítica */ }
     }
 
     public async Task<Result> UpsertExtraChargePaymentAsync(
