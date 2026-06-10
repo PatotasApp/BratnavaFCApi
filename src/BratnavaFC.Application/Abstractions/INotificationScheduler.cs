@@ -36,6 +36,31 @@ public interface INotificationScheduler
     /// <summary>Cancela todos os agendamentos de uma votação (inclui o job de fechamento).</summary>
     Task CancelPollRemindersAsync(Guid pollId, CancellationToken ct = default);
 
+    // ── Sem quórum ───────────────────────────────────────────────────────────
+
+    /// <summary>Agenda um lembrete para admins 3h antes da partida se o quórum não for atingido.</summary>
+    Task ScheduleMatchNoQuorumReminderAsync(Guid matchId, Guid groupId, DateTime playedAt,
+        CancellationToken ct = default);
+
+    /// <summary>Cancela e reagenda o lembrete de quórum após alteração de data.</summary>
+    Task RescheduleMatchNoQuorumReminderAsync(Guid matchId, Guid groupId, DateTime newPlayedAt,
+        CancellationToken ct = default);
+
+    /// <summary>Cancela o lembrete de quórum de uma partida.</summary>
+    Task CancelMatchNoQuorumReminderAsync(Guid matchId, CancellationToken ct = default);
+
+    // ── MVP automático ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Agenda lembrete de votação MVP (1h antes) e finalização automática da partida.
+    /// <paramref name="autoFinalizeHours"/> horas após o momento atual.
+    /// </summary>
+    Task ScheduleMvpAutoFinalizeAsync(Guid matchId, Guid groupId, int autoFinalizeHours,
+        CancellationToken ct = default);
+
+    /// <summary>Cancela os jobs de lembrete e finalização automática do MVP.</summary>
+    Task CancelMvpAutoFinalizeAsync(Guid matchId, CancellationToken ct = default);
+
     // ── Eventos de calendário ────────────────────────────────────────────────
 
     /// <summary>

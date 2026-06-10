@@ -68,6 +68,89 @@ public sealed class NotificationScheduler : INotificationScheduler
     public Task CancelMatchRemindersAsync(Guid matchId, CancellationToken ct = default)
         => CancelJobsAsync("match", matchId, ct);
 
+    // ── Sem quórum ────────────────────────────────────────────────────────────
+
+    public async Task ScheduleMatchNoQuorumReminderAsync(
+        Guid matchId, Guid groupId, DateTime playedAt,
+        CancellationToken ct = default)
+    {
+        var targetUtc = LocalBrasilToUtc(playedAt);
+        var fireAt    = new DateTimeOffset(targetUtc, TimeSpan.Zero) - TimeSpan.FromHours(3);
+
+        if (fireAt - DateTimeOffset.UtcNow <= MinLead) return;
+
+        var jobId = _jobs.Schedule<IMatchNoQuorumReminderJob>(
+            j => j.ExecuteAsync(matchId, groupId, CancellationToken.None),
+            fireAt);
+
+        _db.ScheduledNotificationJobs.Add(
+            new ScheduledNotificationJobEntity("match_noquorum", matchId, "noquorum", jobId, fireAt.UtcDateTime));
+
+        await _db.SaveChangesAsync(ct);
+
+        _logger.LogInformation(
+            "NotificationScheduler: agendado lembrete de quórum para partida {MatchId} em {FireAt:u}.",
+            matchId, fireAt);
+    }
+
+    public async Task RescheduleMatchNoQuorumReminderAsync(
+        Guid matchId, Guid groupId, DateTime newPlayedAt,
+        CancellationToken ct = default)
+    {
+        await CancelMatchNoQuorumReminderAsync(matchId, ct);
+        await ScheduleMatchNoQuorumReminderAsync(matchId, groupId, newPlayedAt, ct);
+    }
+
+    public Task CancelMatchNoQuorumReminderAsync(Guid matchId, CancellationToken ct = default)
+        => CancelJobsAsync("match_noquorum", matchId, ct);
+
+    // ── MVP automático ────────────────────────────────────────────────────────
+
+    public async Task ScheduleMvpAutoFinalizeAsync(
+        Guid matchId, Guid groupId, int autoFinalizeHours,
+        CancellationToken ct = default)
+    {
+        var finalizeAt = DateTimeOffset.UtcNow + TimeSpan.FromHours(autoFinalizeHours);
+        var reminderAt = finalizeAt - TimeSpan.FromHours(1);
+        var saved      = false;
+
+        if (reminderAt - DateTimeOffset.UtcNow > MinLead)
+        {
+            var reminderId = _jobs.Schedule<IMvpVotingReminderJob>(
+                j => j.ExecuteAsync(matchId, groupId, CancellationToken.None),
+                reminderAt);
+
+            _db.ScheduledNotificationJobs.Add(
+                new ScheduledNotificationJobEntity("mvp", matchId, "reminder", reminderId, reminderAt.UtcDateTime));
+
+            _logger.LogInformation(
+                "NotificationScheduler: agendado lembrete MVP para partida {MatchId} em {FireAt:u}.",
+                matchId, reminderAt);
+            saved = true;
+        }
+
+        if (finalizeAt - DateTimeOffset.UtcNow > MinLead)
+        {
+            var finalizeId = _jobs.Schedule<IMatchAutoFinalizeJob>(
+                j => j.ExecuteAsync(matchId, groupId, CancellationToken.None),
+                finalizeAt);
+
+            _db.ScheduledNotificationJobs.Add(
+                new ScheduledNotificationJobEntity("mvp", matchId, "finalize", finalizeId, finalizeAt.UtcDateTime));
+
+            _logger.LogInformation(
+                "NotificationScheduler: agendado auto-finalize MVP para partida {MatchId} em {FireAt:u}.",
+                matchId, finalizeAt);
+            saved = true;
+        }
+
+        if (saved)
+            await _db.SaveChangesAsync(ct);
+    }
+
+    public Task CancelMvpAutoFinalizeAsync(Guid matchId, CancellationToken ct = default)
+        => CancelJobsAsync("mvp", matchId, ct);
+
     // ── Votações ─────────────────────────────────────────────────────────────
 
     public async Task SchedulePollRemindersAsync(

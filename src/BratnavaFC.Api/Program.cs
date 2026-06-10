@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -193,6 +194,10 @@ builder.Services.AddScoped<IMatchReminderJob, MatchReminderJob>();
 builder.Services.AddScoped<IPollReminderJob, PollReminderJob>();
 builder.Services.AddScoped<ICalendarReminderJob, CalendarReminderJob>();
 builder.Services.AddScoped<IBirthdayNotificationJob, BirthdayNotificationJob>();
+builder.Services.AddScoped<IMatchNoQuorumReminderJob, MatchNoQuorumReminderJob>();
+builder.Services.AddScoped<IMvpVotingReminderJob, MvpVotingReminderJob>();
+builder.Services.AddScoped<IMatchAutoFinalizeJob, MatchAutoFinalizeJob>();
+builder.Services.AddScoped<IMonthlyPaymentReminderJob, MonthlyPaymentReminderJob>();
 
 // =====================
 // FIREBASE ADMIN
@@ -355,10 +360,25 @@ app.UseExceptionHandler(appError =>
 {
     appError.Run(async context =>
     {
-        context.Response.StatusCode = 500;
+        var ex      = context.Features.Get<IExceptionHandlerFeature>()?.Error;
+        var logger  = context.RequestServices
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger("GlobalExceptionHandler");
+
+        logger.LogError(ex, "Unhandled exception — {Method} {Path}",
+            context.Request.Method, context.Request.Path);
+
+        context.Response.StatusCode  = 500;
         context.Response.ContentType = "application/json";
-        var response = new ApiResponse<object>(
-            false, null, null, "Erro interno no servidor.", []);
+
+        // Em Development: retorna o tipo e a mensagem da exceção.
+        // Em produção: mensagem genérica (não expõe detalhes internos).
+        var isDev = app.Environment.IsDevelopment();
+        var errorMessage = isDev && ex is not null
+            ? $"[{ex.GetType().Name}] {ex.Message}"
+            : "Erro interno no servidor.";
+
+        var response = new ApiResponse<object>(false, null, null, errorMessage, []);
         await context.Response.WriteAsJsonAsync(response);
     });
 });
@@ -405,6 +425,13 @@ recurringJobs.AddOrUpdate<IClipCleanupJob>(
 // Notificações de aniversário: todo dia às 08:00 horário de Brasília (UTC-3 = 11:00 UTC)
 recurringJobs.AddOrUpdate<IBirthdayNotificationJob>(
     recurringJobId: "birthday-daily",
+    methodCall: job => job.ExecuteAsync(CancellationToken.None),
+    cronExpression: "0 11 * * *",
+    options: new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+// Lembretes de mensalidade: todo dia às 08:00 horário de Brasília (UTC-3 = 11:00 UTC)
+recurringJobs.AddOrUpdate<IMonthlyPaymentReminderJob>(
+    recurringJobId: "monthly-payment-reminder",
     methodCall: job => job.ExecuteAsync(CancellationToken.None),
     cronExpression: "0 11 * * *",
     options: new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
