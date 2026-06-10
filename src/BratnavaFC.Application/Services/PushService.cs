@@ -180,6 +180,67 @@ public class PushService : IPushService
         }
     }
 
+    public async Task SendDataOnlyToUsersAsync(
+        List<Guid> userIds,
+        Dictionary<string, string> data,
+        Guid? groupId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (userIds.Count == 0) return;
+
+        // Persiste no sininho a partir das chaves title/body do payload
+        data.TryGetValue("title", out var inboxTitle);
+        data.TryGetValue("body",  out var inboxBody);
+        data.TryGetValue("type",  out var inboxType);
+        if (!string.IsNullOrEmpty(inboxTitle))
+            await PersistAsync(userIds, groupId, inboxTitle, inboxBody ?? string.Empty, data, cancellationToken, inboxType);
+
+        var tokens = await _context.PushTokens
+            .Where(t => userIds.Contains(t.UserId) && t.IsActive)
+            .Select(t => t.Token)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (tokens.Count == 0) return;
+
+        const int batchSize = 500;
+        var batches = tokens
+            .Select((t, i) => (t, i))
+            .GroupBy(x => x.i / batchSize)
+            .Select(g => g.Select(x => x.t).ToList());
+
+        foreach (var batch in batches)
+        {
+            var message = new MulticastMessage
+            {
+                Tokens       = batch,
+                Notification = null,
+                Data         = data,
+                Android      = new AndroidConfig { Priority = Priority.High },
+                Apns         = new ApnsConfig { Aps = new Aps { ContentAvailable = true } },
+            };
+
+            try
+            {
+                var response = await FirebaseMessaging.DefaultInstance
+                    .SendEachForMulticastAsync(message, cancellationToken);
+
+                var invalid = batch
+                    .Where((_, i) => !response.Responses[i].IsSuccess &&
+                        response.Responses[i].Exception?.MessagingErrorCode
+                            is MessagingErrorCode.Unregistered or MessagingErrorCode.InvalidArgument)
+                    .ToList();
+
+                if (invalid.Count > 0)
+                    await DeactivateTokensAsync(invalid, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao enviar batch data-only (users) via FCM.");
+            }
+        }
+    }
+
     public async Task SendToGroupAsync(
         Guid groupId, string title, string body,
         Dictionary<string, string>? data = null,

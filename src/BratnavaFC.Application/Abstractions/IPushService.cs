@@ -49,4 +49,11 @@ public interface IPushService
     /// </summary>
     Task SendDataOnlyToGroupAsync(Guid groupId, Dictionary<string, string> data,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Envia mensagem data-only para uma lista específica de usuários.
+    /// Persiste no inbox usando title/body presentes em <paramref name="data"/>.
+    /// </summary>
+    Task SendDataOnlyToUsersAsync(List<Guid> userIds, Dictionary<string, string> data,
+        Guid? groupId = null, CancellationToken cancellationToken = default);
 }
