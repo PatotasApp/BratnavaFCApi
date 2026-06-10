@@ -32,4 +32,15 @@ public sealed class MatchCardController : GroupAuthorizedController
         var result = await _cardService.GenerateCardAsync(dto, ct);
         return ToResponse(result);
     }
+
+    /// <summary>
+    /// POST /api/MatchCard/group/{groupId}/prompt
+    /// Retorna o prompt que seria enviado ao OpenAI, sem gerar imagem.
+    /// </summary>
+    [HttpPost("group/{groupId:guid}/prompt")]
+    public async Task<IActionResult> GetPrompt(Guid groupId, [FromBody] GenerateMatchCardDto dto, CancellationToken ct)
+    {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
+        return ToResponse(_cardService.GetPrompt(dto));
+    }
 }

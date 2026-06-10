@@ -73,6 +73,9 @@ public sealed class MatchCardService : IMatchCardService
         }
     }
 
+    public Result<string> GetPrompt(GenerateMatchCardDto dto)
+        => Result<string>.Ok(BuildPrompt(dto, dto.Template == "match_result"));
+
     // ─── Build Prompt ────────────────────────────────────────────────────────
 
     private static string BuildPrompt(GenerateMatchCardDto dto, bool isResult)
