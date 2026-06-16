@@ -1,7 +1,6 @@
-using BratnavaFC.Infrastructure.Data;
+using BratnavaFC.Application.Abstractions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace BratnavaFC.Api.Controllers;
@@ -11,11 +10,11 @@ namespace BratnavaFC.Api.Controllers;
 [Route("api/[controller]")]
 public sealed class NotificationsController : ControllerBase
 {
-    private readonly AppDbContext _db;
+    private readonly INotificationService _notifications;
 
-    public NotificationsController(AppDbContext db)
+    public NotificationsController(INotificationService notifications)
     {
-        _db = db;
+        _notifications = notifications;
     }
 
     private Guid? CurrentUserId()
@@ -24,8 +23,6 @@ public sealed class NotificationsController : ControllerBase
                ?? User.FindFirstValue("sub");
         return Guid.TryParse(raw, out var id) ? id : null;
     }
-
-    // ── GET /api/Notifications/mine ──────────────────────────────────────────
 
     [HttpGet("mine")]
     public async Task<IActionResult> GetMineAsync(
@@ -37,38 +34,15 @@ public sealed class NotificationsController : ControllerBase
         var userId = CurrentUserId();
         if (userId is null) return Unauthorized();
 
-        pageSize = Math.Clamp(pageSize, 1, 100);
-        page     = Math.Max(page, 1);
-
-        var query = _db.UserNotifications
-            .Where(n => n.UserId == userId.Value);
-
-        if (groupId.HasValue)
-            query = query.Where(n => n.GroupId == groupId.Value);
-
-        var total = await query.CountAsync(ct);
-
-        var items = await query
-            .OrderByDescending(n => n.CreateDate)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(n => new
-            {
-                id        = n.Id,
-                title     = n.Title,
-                body      = n.Body,
-                type      = n.Type,
-                dataJson  = n.DataJson,
-                isRead    = n.IsRead,
-                createdAt = n.CreateDate,
-                groupId   = n.GroupId,
-            })
-            .ToListAsync(ct);
-
-        return Ok(new { data = items, total, page, pageSize });
+        var result = await _notifications.GetMineAsync(userId.Value, groupId, page, pageSize, ct);
+        return Ok(new
+        {
+            data     = result.Data!.Data,
+            total    = result.Data.Total,
+            page     = result.Data.Page,
+            pageSize = result.Data.PageSize,
+        });
     }
-
-    // ── GET /api/Notifications/mine/unread-count ─────────────────────────────
 
     [HttpGet("mine/unread-count")]
     public async Task<IActionResult> GetUnreadCountAsync(
@@ -78,17 +52,9 @@ public sealed class NotificationsController : ControllerBase
         var userId = CurrentUserId();
         if (userId is null) return Unauthorized();
 
-        var query = _db.UserNotifications
-            .Where(n => n.UserId == userId.Value && !n.IsRead);
-
-        if (groupId.HasValue)
-            query = query.Where(n => n.GroupId == groupId.Value);
-
-        var count = await query.CountAsync(ct);
-        return Ok(new { data = count });
+        var result = await _notifications.GetUnreadCountAsync(userId.Value, groupId, ct);
+        return Ok(new { data = result.Data });
     }
-
-    // ── PUT /api/Notifications/{id}/read ─────────────────────────────────────
 
     [HttpPatch("{id:guid}/read")]
     public async Task<IActionResult> MarkReadAsync(Guid id, CancellationToken ct = default)
@@ -96,17 +62,10 @@ public sealed class NotificationsController : ControllerBase
         var userId = CurrentUserId();
         if (userId is null) return Unauthorized();
 
-        var n = await _db.UserNotifications
-            .FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId.Value, ct);
-
-        if (n is null) return NotFound();
-
-        n.MarkAsRead();
-        await _db.SaveChangesAsync(ct);
+        var result = await _notifications.MarkReadAsync(id, userId.Value, ct);
+        if (!result.Success && result.Status == Domain.Common.ResultStatus.NotFound) return NotFound();
         return Ok(new { data = true });
     }
-
-    // ── PUT /api/Notifications/mine/read-all ─────────────────────────────────
 
     [HttpPatch("mine/read-all")]
     public async Task<IActionResult> MarkAllReadAsync(
@@ -116,20 +75,9 @@ public sealed class NotificationsController : ControllerBase
         var userId = CurrentUserId();
         if (userId is null) return Unauthorized();
 
-        var query = _db.UserNotifications
-            .Where(n => n.UserId == userId.Value && !n.IsRead);
-
-        if (groupId.HasValue)
-            query = query.Where(n => n.GroupId == groupId.Value);
-
-        var unread = await query.ToListAsync(ct);
-        foreach (var n in unread) n.MarkAsRead();
-        await _db.SaveChangesAsync(ct);
-
+        await _notifications.MarkAllReadAsync(userId.Value, groupId, ct);
         return Ok(new { data = true });
     }
-
-    // ── DELETE /api/Notifications/{id} ───────────────────────────────────────
 
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteAsync(Guid id, CancellationToken ct = default)
@@ -137,13 +85,7 @@ public sealed class NotificationsController : ControllerBase
         var userId = CurrentUserId();
         if (userId is null) return Unauthorized();
 
-        var n = await _db.UserNotifications
-            .FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId.Value, ct);
-
-        if (n is null) return Ok(new { data = true }); // idempotente
-
-        _db.UserNotifications.Remove(n);
-        await _db.SaveChangesAsync(ct);
+        await _notifications.DeleteAsync(id, userId.Value, ct);
         return Ok(new { data = true });
     }
 }
