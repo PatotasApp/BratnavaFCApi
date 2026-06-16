@@ -416,6 +416,16 @@ public class PlayerService : IPlayerService
         return Result<PlayerDto>.Ok(MapToDto(player));
     }
 
+    // ── Consultas auxiliares ──────────────────────────────────────────────────
+
+    public async Task<Guid?> GetGroupIdAsync(Guid playerId, CancellationToken cancellationToken)
+    {
+        return await _context.Players
+            .Where(p => p.Id == playerId)
+            .Select(p => (Guid?)p.GroupId)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     // ── Mapeamento ────────────────────────────────────────────────────────────
 
     private static PlayerDto MapToDto(PlayerEntity player) => new(

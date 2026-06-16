@@ -3,7 +3,6 @@ using BratnavaFC.Domain.Dtos.Players;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace BratnavaFC.Api.Controllers;
@@ -56,7 +55,10 @@ public class PlayersController : GroupAuthorizedController
     {
         if (request == null) return BadRequest();
 
-        if (!await IsAuthorizedForGroupAsync(request.GroupId, _db, cancellationToken))
+        var groupId = await _playerService.GetGroupIdAsync(playerId, cancellationToken);
+        if (groupId == null) return NotFound();
+
+        if (!await IsAuthorizedForGroupAsync(groupId.Value, _db, cancellationToken))
             return Forbid();
 
         var result = await _playerService.UpdateAsync(playerId, request, cancellationToken);
@@ -67,11 +69,7 @@ public class PlayersController : GroupAuthorizedController
     [Authorize(Roles = "User,Admin,GodMode")]
     public async Task<IActionResult> InactivateAsync(Guid playerId, CancellationToken cancellationToken)
     {
-        var groupId = await _db.Players
-            .Where(p => p.Id == playerId)
-            .Select(p => (Guid?)p.GroupId)
-            .FirstOrDefaultAsync(cancellationToken);
-
+        var groupId = await _playerService.GetGroupIdAsync(playerId, cancellationToken);
         if (groupId == null) return NotFound();
 
         if (!await IsAuthorizedForGroupAsync(groupId.Value, _db, cancellationToken))
@@ -85,11 +83,7 @@ public class PlayersController : GroupAuthorizedController
     [Authorize(Roles = "User,Admin,GodMode")]
     public async Task<IActionResult> ReactivateAsync(Guid playerId, CancellationToken cancellationToken)
     {
-        var groupId = await _db.Players
-            .Where(p => p.Id == playerId)
-            .Select(p => (Guid?)p.GroupId)
-            .FirstOrDefaultAsync(cancellationToken);
-
+        var groupId = await _playerService.GetGroupIdAsync(playerId, cancellationToken);
         if (groupId == null) return NotFound();
 
         if (!await IsAuthorizedForGroupAsync(groupId.Value, _db, cancellationToken))
@@ -107,12 +101,7 @@ public class PlayersController : GroupAuthorizedController
     [Authorize(Roles = "User,Admin,GodMode")]
     public async Task<IActionResult> RemoveFromGroup(Guid playerId, CancellationToken cancellationToken)
     {
-        // Resolve o groupId do jogador para verificar autorização
-        var groupId = await _db.Players
-            .Where(p => p.Id == playerId)
-            .Select(p => (Guid?)p.GroupId)
-            .FirstOrDefaultAsync(cancellationToken);
-
+        var groupId = await _playerService.GetGroupIdAsync(playerId, cancellationToken);
         if (groupId == null) return NotFound();
 
         if (!await IsAuthorizedForGroupAsync(groupId.Value, _db, cancellationToken))
@@ -148,7 +137,6 @@ public class PlayersController : GroupAuthorizedController
         return ToResponse(result);
     }
 
-    // GET /api/Players/group/{groupId}/birthday-status
     [HttpGet("group/{groupId:guid}/birthday-status")]
     [Authorize(Roles = "User,Admin,GodMode")]
     public async Task<IActionResult> GetBirthdayStatus(Guid groupId, CancellationToken cancellationToken)
@@ -166,11 +154,7 @@ public class PlayersController : GroupAuthorizedController
     [Authorize(Roles = "User,Admin,GodMode")]
     public async Task<IActionResult> ToggleGoalkeeper(Guid playerId, CancellationToken cancellationToken)
     {
-        var groupId = await _db.Players
-            .Where(p => p.Id == playerId)
-            .Select(p => (Guid?)p.GroupId)
-            .FirstOrDefaultAsync(cancellationToken);
-
+        var groupId = await _playerService.GetGroupIdAsync(playerId, cancellationToken);
         if (groupId == null) return NotFound();
 
         if (!await IsAuthorizedForGroupAsync(groupId.Value, _db, cancellationToken))
@@ -182,7 +166,6 @@ public class PlayersController : GroupAuthorizedController
 
     private Guid GetUserIdOrThrow()
     {
-        // padrão
         var raw =
             User.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? User.FindFirstValue("sub")
