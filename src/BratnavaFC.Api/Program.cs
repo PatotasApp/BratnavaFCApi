@@ -188,6 +188,8 @@ builder.Services.AddScoped<IPushService, PushService>();
 builder.Services.AddScoped<IAbsenceService, AbsenceService>();
 builder.Services.AddScoped<IBetService, BetService>();
 builder.Services.AddScoped<IMatchCardService, MatchCardService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<ITeamBuilderService, TeamBuilderService>();
 builder.Services.AddScoped<IClipCleanupJob, ClipCleanupJob>();
 builder.Services.AddScoped<INotificationScheduler, NotificationScheduler>();
 builder.Services.AddScoped<IMatchReminderJob, MatchReminderJob>();
