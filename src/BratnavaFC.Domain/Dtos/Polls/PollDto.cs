@@ -23,6 +23,8 @@ public sealed class PollDto
     public int TotalVoters { get; set; }
     public List<PollMemberVoteDto>? Members { get; set; } // somente para admins: todos os membros com seus votos
     public Guid? LinkedMatchId { get; set; }
+    /// <summary>Whether players who confirmed attendance may add guests to this event.</summary>
+    public bool AllowGuests { get; set; }
 
     /// <summary>
     /// True quando o poll está aberto E o prazo ainda não venceu (calculado pelo servidor).

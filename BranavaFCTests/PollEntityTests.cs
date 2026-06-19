@@ -257,6 +257,103 @@ public class PollEntityTests
         poll.AllowMultipleVotes.Should().BeTrue();
     }
 
+    // ── AllowGuests / SetAllowGuests ──────────────────────────────────────────
+
+    [Fact]
+    public void Constructor_AllowGuests_DefaultsShouldBeFalse()
+    {
+        var poll = MakePoll();
+
+        poll.AllowGuests.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Constructor_AllowGuests_WhenPassedTrue_ShouldBeTrue()
+    {
+        var poll = new PollEntity(
+            Guid.NewGuid(), "Evento", null, false, false, null,
+            type: "event", allowGuests: true);
+
+        poll.AllowGuests.Should().BeTrue();
+    }
+
+    [Fact]
+    public void SetAllowGuests_True_ShouldEnableGuests()
+    {
+        var poll = MakePoll(type: "event");
+
+        poll.SetAllowGuests(true);
+
+        poll.AllowGuests.Should().BeTrue();
+    }
+
+    [Fact]
+    public void SetAllowGuests_False_ShouldDisableGuests()
+    {
+        var poll = new PollEntity(
+            Guid.NewGuid(), "Evento", null, false, false, null,
+            type: "event", allowGuests: true);
+
+        poll.SetAllowGuests(false);
+
+        poll.AllowGuests.Should().BeFalse();
+    }
+
+    // ── ValidateGuestChange ───────────────────────────────────────────────────
+
+    [Fact]
+    public void ValidateGuestChange_WhenAllowGuestsFalse_ShouldReturnError()
+    {
+        var poll = new PollEntity(
+            Guid.NewGuid(), "Evento", null, false, false, null,
+            type: "event", allowGuests: false);
+
+        var error = poll.ValidateGuestChange();
+
+        error.Should().NotBeNullOrEmpty();
+        error.Should().Contain("não permite convidados");
+    }
+
+    [Fact]
+    public void ValidateGuestChange_WhenAllowGuestsAndOpen_ShouldReturnNull()
+    {
+        var poll = new PollEntity(
+            Guid.NewGuid(), "Evento", null, false, false, null,
+            type: "event", allowGuests: true);
+
+        var error = poll.ValidateGuestChange();
+
+        error.Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateGuestChange_WhenAllowGuestsButClosed_ShouldReturnError()
+    {
+        var poll = new PollEntity(
+            Guid.NewGuid(), "Evento", null, false, false, null,
+            type: "event", allowGuests: true);
+        poll.Close();
+
+        var error = poll.ValidateGuestChange();
+
+        error.Should().NotBeNullOrEmpty();
+        error.Should().Contain("encerrado");
+    }
+
+    [Fact]
+    public void ValidateGuestChange_WhenAllowGuestsButDeadlineExpired_ShouldReturnError()
+    {
+        var past = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-2));
+        var poll = new PollEntity(
+            Guid.NewGuid(), "Evento", null, false, false, null,
+            deadlineDate: past, type: "event", allowGuests: true);
+
+        var error = poll.ValidateGuestChange();
+
+        error.Should().NotBeNullOrEmpty();
+        error.Should().Contain("prazo");
+    }
+
     // ── SetDeadline ───────────────────────────────────────────────────────────
 
     [Fact]

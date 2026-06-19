@@ -20,4 +20,7 @@ public interface IPollService
     Task<Result<PollDto>> RemoveVoteAsync(Guid groupId, Guid pollId, Guid playerId, bool isAdmin = false, CancellationToken ct = default);
     Task<Result<PollDto>> AdminCastVoteAsync(Guid groupId, Guid pollId, AdminCastVoteDto dto, CancellationToken ct = default);
     Task<Result> UpdateDeadlineAsync(Guid groupId, Guid pollId, UpdatePollDeadlineDto dto, CancellationToken ct = default);
+    Task<Result> SetAllowGuestsAsync(Guid groupId, Guid pollId, bool allowGuests, CancellationToken ct = default);
+    Task<Result<PollGuestDto>> AddGuestAsync(Guid groupId, Guid pollId, Guid voterPlayerId, AddPollGuestDto dto, CancellationToken ct = default);
+    Task<Result> RemoveGuestAsync(Guid groupId, Guid pollId, Guid guestId, Guid requestingPlayerId, bool isAdmin, CancellationToken ct = default);
 }

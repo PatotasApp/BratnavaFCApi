@@ -17,8 +17,11 @@ public class PollEntity : BaseEntity
     public string? EventIcon { get; private set; }
     public string? CostType { get; private set; }   // null | "individual" | "group"
     public decimal? CostAmount { get; private set; }
+    /// <summary>Whether players who confirmed attendance ("Sim") may add guests.</summary>
+    public bool AllowGuests { get; private set; }
     public List<PollOptionEntity> Options { get; private set; } = new();
-    public List<PollVoteEntity> Votes { get; private set; } = new();
+    public List<PollVoteEntity>   Votes   { get; private set; } = new();
+    public List<PollGuestEntity>  Guests  { get; private set; } = new();
 
     /// <summary>Partida vinculada a esta votação/evento (opcional). Null quando não há vínculo.</summary>
     public Guid? LinkedMatchId { get; private set; }
@@ -32,25 +35,26 @@ public class PollEntity : BaseEntity
 
     private PollEntity() { }
 
-    public PollEntity(Guid groupId, string title, string? description, bool allowMultipleVotes, bool showVotes, Guid? createdByUserId, DateOnly? deadlineDate = null, TimeOnly? deadlineTime = null, string type = "poll", DateOnly? eventDate = null, TimeOnly? eventTime = null, string? eventLocation = null, string? eventIcon = null, string? costType = null, decimal? costAmount = null)
+    public PollEntity(Guid groupId, string title, string? description, bool allowMultipleVotes, bool showVotes, Guid? createdByUserId, DateOnly? deadlineDate = null, TimeOnly? deadlineTime = null, string type = "poll", DateOnly? eventDate = null, TimeOnly? eventTime = null, string? eventLocation = null, string? eventIcon = null, string? costType = null, decimal? costAmount = null, bool allowGuests = false)
     {
         if (groupId == Guid.Empty) throw new InvalidOperationException("GroupId é obrigatório.");
         if (string.IsNullOrWhiteSpace(title)) throw new InvalidOperationException("Título é obrigatório.");
-        GroupId = groupId;
-        Title = title.Trim();
-        Description = description?.Trim();
+        GroupId            = groupId;
+        Title              = title.Trim();
+        Description        = description?.Trim();
         AllowMultipleVotes = allowMultipleVotes;
-        ShowVotes = showVotes;
-        CreatedByUserId = createdByUserId;
-        DeadlineDate = deadlineDate;
-        DeadlineTime = deadlineTime;
-        Type = type;
-        EventDate = eventDate;
-        EventTime = eventTime;
-        EventLocation = eventLocation;
-        EventIcon = eventIcon;
-        CostType = costType;
-        CostAmount = costAmount;
+        ShowVotes          = showVotes;
+        CreatedByUserId    = createdByUserId;
+        DeadlineDate       = deadlineDate;
+        DeadlineTime       = deadlineTime;
+        Type               = type;
+        EventDate          = eventDate;
+        EventTime          = eventTime;
+        EventLocation      = eventLocation;
+        EventIcon          = eventIcon;
+        CostType           = costType;
+        CostAmount         = costAmount;
+        AllowGuests        = allowGuests;
     }
 
     public void Update(string? title, string? description, bool? allowMultipleVotes, bool? showVotes, DateOnly? deadlineDate, TimeOnly? deadlineTime, bool clearDeadline = false)
@@ -72,6 +76,8 @@ public class PollEntity : BaseEntity
         UpdateDate   = DateTime.UtcNow;
     }
 
+    public void SetAllowGuests(bool allow) { AllowGuests = allow; UpdateDate = DateTime.UtcNow; }
+
     public void Close() { Status = "closed"; UpdateDate = DateTime.UtcNow; }
     public void Reopen() { Status = "open"; UpdateDate = DateTime.UtcNow; }
 
@@ -89,6 +95,15 @@ public class PollEntity : BaseEntity
         var localDt = DeadlineDate.Value.ToDateTime(DeadlineTime ?? TimeOnly.MaxValue);
         var deadlineOffset = new DateTimeOffset(localDt, TimeSpan.FromHours(-3));
         return DateTimeOffset.UtcNow > deadlineOffset;
+    }
+
+    /// <summary>Validates whether adding/removing a guest is currently allowed.</summary>
+    public string? ValidateGuestChange()
+    {
+        if (!AllowGuests) return "Este evento não permite convidados.";
+        if (Status == "closed") return "Este evento está encerrado.";
+        if (HasExpiredDeadline()) return "O prazo deste evento já encerrou.";
+        return null;
     }
 
     /// <summary>

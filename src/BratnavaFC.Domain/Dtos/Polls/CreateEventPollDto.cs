@@ -12,4 +12,6 @@ public sealed class CreateEventPollDto
     public decimal? CostAmount { get; set; }
     public string? DeadlineDate { get; set; }
     public string? DeadlineTime { get; set; }
+    /// <summary>Whether attendees can add guests. Defaults to false.</summary>
+    public bool AllowGuests { get; set; } = false;
 }

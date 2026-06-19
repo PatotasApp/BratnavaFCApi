@@ -37,7 +37,7 @@ public sealed class PollService : IPollService
                     p.Id, p.Title, p.Description, p.AllowMultipleVotes, p.ShowVotes, p.Status, p.CreateDate,
                     p.DeadlineDate, p.DeadlineTime,
                     p.Type, p.EventDate, p.EventTime, p.EventLocation, p.EventIcon, p.CostType, p.CostAmount,
-                    p.LinkedMatchId,
+                    p.LinkedMatchId, p.AllowGuests,
                     OptionCount = p.Options.Count,
                     TotalVoters = p.Votes.Select(v => v.PlayerId).Distinct().Count(),
                     HasVoted = p.Votes.Any(v => v.PlayerId == playerId)
@@ -65,7 +65,9 @@ public sealed class PollService : IPollService
                 TotalVoters = p.TotalVoters,
                 HasVoted = p.HasVoted,
                 CreateDate = p.CreateDate,
-                LinkedMatchId = p.LinkedMatchId
+                LinkedMatchId = p.LinkedMatchId,
+                AllowGuests = p.AllowGuests,
+                IsAcceptingVotes = ComputeIsAcceptingVotes(p.Status, p.DeadlineDate, p.DeadlineTime),
             }).ToList();
 
             return Result<List<PollSummaryDto>>.Ok(dtos);
@@ -90,7 +92,7 @@ public sealed class PollService : IPollService
                     p.Id, p.Title, p.Description, p.AllowMultipleVotes, p.ShowVotes,
                     p.Status, p.DeadlineDate, p.DeadlineTime, p.Type,
                     p.EventDate, p.EventTime, p.EventLocation, p.EventIcon,
-                    p.CostType, p.CostAmount, p.CreateDate, p.LinkedMatchId
+                    p.CostType, p.CostAmount, p.CreateDate, p.LinkedMatchId, p.AllowGuests
                 })
                 .FirstOrDefaultAsync(ct);
 
@@ -112,16 +114,45 @@ public sealed class PollService : IPollService
                 .ToListAsync(ct);
 
             // Votes + player names in one query
-            var votesWithPlayer = await _db.PollVotes
+            var votesRaw = await _db.PollVotes
                 .AsNoTracking()
                 .Where(v => v.PollId == pollId)
-                .Join(_db.Players.AsNoTracking(), v => v.PlayerId, p => p.Id, (v, p) => new PollVoteDto
+                .Join(_db.Players.AsNoTracking(), v => v.PlayerId, p => p.Id, (v, p) => new
                 {
-                    OptionId = v.OptionId,
-                    PlayerId = v.PlayerId,
-                    PlayerName = p.Name
+                    v.OptionId,
+                    v.PlayerId,
+                    PlayerName = p.Name,
                 })
                 .ToListAsync(ct);
+
+            // Guests keyed by voter player id
+            var guestsRaw = await _db.PollGuests
+                .AsNoTracking()
+                .Where(g => g.PollId == pollId)
+                .Join(_db.Players.AsNoTracking(), g => g.VoterPlayerId, p => p.Id, (g, p) => new
+                {
+                    g.Id, g.VoterPlayerId, VoterPlayerName = p.Name, g.GuestName, g.IsAdult,
+                })
+                .ToListAsync(ct);
+
+            var guestsByPlayer = guestsRaw
+                .GroupBy(g => g.VoterPlayerId)
+                .ToDictionary(grp => grp.Key, grp => grp.Select(g => new PollGuestDto
+                {
+                    Id              = g.Id,
+                    VoterPlayerId   = g.VoterPlayerId,
+                    VoterPlayerName = g.VoterPlayerName,
+                    GuestName       = g.GuestName,
+                    IsAdult         = g.IsAdult,
+                }).ToList());
+
+            var votesWithPlayer = votesRaw.Select(v => new PollVoteDto
+            {
+                OptionId   = v.OptionId,
+                PlayerId   = v.PlayerId,
+                PlayerName = v.PlayerName,
+                Guests     = guestsByPlayer.GetValueOrDefault(v.PlayerId, new()),
+            }).ToList();
 
             var myVotes = votesWithPlayer.Where(v => v.PlayerId == playerId).Select(v => v.OptionId).ToList();
             var totalVoters = votesWithPlayer.Select(v => v.PlayerId).Distinct().Count();
@@ -170,7 +201,11 @@ public sealed class PollService : IPollService
                 MyVotedOptionIds = myVotes,
                 TotalVoters = totalVoters,
                 LinkedMatchId = poll.LinkedMatchId,
-                Votes = (poll.ShowVotes || isAdmin) ? votesWithPlayer : null,
+                Votes = (poll.ShowVotes || isAdmin)
+                    ? votesWithPlayer
+                    : votesWithPlayer.Where(v => v.PlayerId == playerId).ToList() is { Count: > 0 } myVoteList
+                        ? myVoteList
+                        : null,
                 Options = options.Select(o => new PollOptionDto
                 {
                     Id = o.Id,
@@ -180,7 +215,8 @@ public sealed class PollService : IPollService
                     SortOrder = o.SortOrder,
                     VoteCount = optionVoteCounts.GetValueOrDefault(o.Id, 0)
                 }).ToList(),
-                Members = members,
+                Members          = members,
+                AllowGuests      = poll.AllowGuests,
                 IsAcceptingVotes = ComputeIsAcceptingVotes(poll.Status, poll.DeadlineDate, poll.DeadlineTime),
             };
 
@@ -254,7 +290,7 @@ public sealed class PollService : IPollService
                 userId, deadlineDate, deadlineTime,
                 type: "event", eventDate: eventDate, eventTime: eventTime,
                 eventLocation: dto.EventLocation, eventIcon: dto.EventIcon,
-                costType: dto.CostType, costAmount: dto.CostAmount);
+                costType: dto.CostType, costAmount: dto.CostAmount, allowGuests: dto.AllowGuests);
 
             _db.Polls.Add(poll);
             _db.PollOptions.Add(new PollOptionEntity(poll.Id, "Sim", null, null, 0));
@@ -581,6 +617,104 @@ public sealed class PollService : IPollService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro em UpdateDeadlineAsync.");
+            return Result.Fail("Erro interno. Tente novamente.");
+        }
+    }
+
+    public async Task<Result> SetAllowGuestsAsync(Guid groupId, Guid pollId, bool allowGuests, CancellationToken ct = default)
+    {
+        try
+        {
+            var poll = await _db.Polls.FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
+            if (poll is null) return Result.Fail("Votação não encontrada.");
+            if (!poll.IsEventType()) return Result.Fail("Convidados só são permitidos em eventos.");
+            poll.SetAllowGuests(allowGuests);
+            await _db.SaveChangesAsync(ct);
+            return Result.Ok();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro em SetAllowGuestsAsync.");
+            return Result.Fail("Erro interno. Tente novamente.");
+        }
+    }
+
+    public async Task<Result<PollGuestDto>> AddGuestAsync(Guid groupId, Guid pollId, Guid voterPlayerId, AddPollGuestDto dto, CancellationToken ct = default)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(dto.GuestName))
+                return Result<PollGuestDto>.Fail("Nome do convidado é obrigatório.");
+
+            var poll = await _db.Polls.FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
+            if (poll is null) return Result<PollGuestDto>.Fail("Evento não encontrado.");
+
+            var error = poll.ValidateGuestChange();
+            if (error is not null) return Result<PollGuestDto>.Fail(error);
+
+            // Voter must have a "going" vote on the poll (first option = "Sim")
+            var goingOptionId = await _db.PollOptions
+                .AsNoTracking()
+                .Where(o => o.PollId == pollId)
+                .OrderBy(o => o.SortOrder)
+                .Select(o => o.Id)
+                .FirstOrDefaultAsync(ct);
+
+            var hasGoingVote = await _db.PollVotes
+                .AsNoTracking()
+                .AnyAsync(v => v.PollId == pollId && v.PlayerId == voterPlayerId && v.OptionId == goingOptionId, ct);
+
+            if (!hasGoingVote)
+                return Result<PollGuestDto>.Fail("Você precisa confirmar presença antes de adicionar convidados.");
+
+            var guest = new PollGuestEntity(pollId, voterPlayerId, dto.GuestName, dto.IsAdult);
+            _db.PollGuests.Add(guest);
+            await _db.SaveChangesAsync(ct);
+
+            var voterName = await _db.Players.AsNoTracking()
+                .Where(p => p.Id == voterPlayerId)
+                .Select(p => p.Name)
+                .FirstOrDefaultAsync(ct) ?? "";
+
+            return Result<PollGuestDto>.Ok(new PollGuestDto
+            {
+                Id              = guest.Id,
+                VoterPlayerId   = voterPlayerId,
+                VoterPlayerName = voterName,
+                GuestName       = guest.GuestName,
+                IsAdult         = guest.IsAdult,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro em AddGuestAsync.");
+            return Result<PollGuestDto>.Fail("Erro interno. Tente novamente.");
+        }
+    }
+
+    public async Task<Result> RemoveGuestAsync(Guid groupId, Guid pollId, Guid guestId, Guid requestingPlayerId, bool isAdmin, CancellationToken ct = default)
+    {
+        try
+        {
+            var poll = await _db.Polls.FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
+            if (poll is null) return Result.Fail("Evento não encontrado.");
+
+            var error = poll.ValidateGuestChange();
+            if (error is not null) return Result.Fail(error);
+
+            var guest = await _db.PollGuests.FirstOrDefaultAsync(g => g.Id == guestId && g.PollId == pollId, ct);
+            if (guest is null) return Result.Ok(); // idempotent
+
+            if (!isAdmin && guest.VoterPlayerId != requestingPlayerId)
+                return Result.Fail("Você só pode remover seus próprios convidados.");
+
+            _db.PollGuests.Remove(guest);
+            await _db.SaveChangesAsync(ct);
+            return Result.Ok();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro em RemoveGuestAsync.");
             return Result.Fail("Erro interno. Tente novamente.");
         }
     }

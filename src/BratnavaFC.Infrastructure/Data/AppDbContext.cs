@@ -34,6 +34,7 @@ public class AppDbContext : DbContext
     public DbSet<PollOptionEntity> PollOptions => Set<PollOptionEntity>();
     public DbSet<PollVoteEntity> PollVotes => Set<PollVoteEntity>();
     public DbSet<PollOptionImageEntity> PollOptionImages => Set<PollOptionImageEntity>();
+    public DbSet<PollGuestEntity> PollGuests => Set<PollGuestEntity>();
     public DbSet<PushTokenEntity> PushTokens => Set<PushTokenEntity>();
     public DbSet<UserAbsenceEntity> UserAbsences => Set<UserAbsenceEntity>();
     public DbSet<ReplayClipEntity> ReplayClips => Set<ReplayClipEntity>();
@@ -525,6 +526,22 @@ public class AppDbContext : DbContext
             builder.HasKey(x => x.Id);
             builder.HasIndex(x => new { x.PollId, x.PlayerId });
             builder.HasOne(x => x.Option).WithMany().HasForeignKey(x => x.OptionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PollGuestEntity>(builder =>
+        {
+            builder.HasKey(x => x.Id);
+            builder.Property(x => x.GuestName).IsRequired();
+            builder.HasOne<PollEntity>()
+                .WithMany(x => x.Guests)
+                .HasForeignKey(x => x.PollId)
+                .OnDelete(DeleteBehavior.Cascade);
+            builder.HasOne<PlayerEntity>()
+                .WithMany()
+                .HasForeignKey(x => x.VoterPlayerId)
+                .OnDelete(DeleteBehavior.Cascade);
+            builder.HasIndex(x => x.PollId);
+            builder.HasIndex(x => x.VoterPlayerId);
         });
 
         modelBuilder.Entity<MonthlyPaymentEntity>(builder =>

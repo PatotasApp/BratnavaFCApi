@@ -1,6 +1,7 @@
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos.Polls;
 using BratnavaFC.Infrastructure.Data;
+using BratnavaFC.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -167,6 +168,36 @@ public sealed class PollsController : GroupAuthorizedController
         return ToResponse(result);
     }
 
+    // PATCH /api/Polls/group/{groupId}/{pollId}/allow-guests
+    [HttpPatch("group/{groupId:guid}/{pollId:guid}/allow-guests")]
+    public async Task<IActionResult> SetAllowGuests(Guid groupId, Guid pollId, [FromBody] SetAllowGuestsDto dto, CancellationToken ct)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        var result = await _polls.SetAllowGuestsAsync(groupId, pollId, dto.AllowGuests, ct);
+        return ToResponse(result);
+    }
+
+    // POST /api/Polls/group/{groupId}/{pollId}/guests
+    [HttpPost("group/{groupId:guid}/{pollId:guid}/guests")]
+    public async Task<IActionResult> AddGuest(Guid groupId, Guid pollId, [FromBody] AddPollGuestDto dto, CancellationToken ct)
+    {
+        var playerId = await GetPlayerIdForGroup(groupId, ct);
+        if (playerId == Guid.Empty) return Forbid();
+        var result = await _polls.AddGuestAsync(groupId, pollId, playerId, dto, ct);
+        return ToResponse(result);
+    }
+
+    // DELETE /api/Polls/group/{groupId}/{pollId}/guests/{guestId}
+    [HttpDelete("group/{groupId:guid}/{pollId:guid}/guests/{guestId:guid}")]
+    public async Task<IActionResult> RemoveGuest(Guid groupId, Guid pollId, Guid guestId, CancellationToken ct)
+    {
+        var playerId = await GetPlayerIdForGroup(groupId, ct);
+        if (playerId == Guid.Empty) return Forbid();
+        var isAdmin = await IsAuthorizedForGroupAsync(groupId, _db, ct);
+        var result = await _polls.RemoveGuestAsync(groupId, pollId, guestId, playerId, isAdmin, ct);
+        return ToResponse(result);
+    }
+
     private async Task<Guid> GetPlayerIdForGroup(Guid groupId, CancellationToken ct)
     {
         var userId = GetCurrentUserId();
@@ -183,4 +214,9 @@ public sealed class PollsController : GroupAuthorizedController
 public class SetShowVotesDto
 {
     public bool ShowVotes { get; set; }
+}
+
+public class SetAllowGuestsDto
+{
+    public bool AllowGuests { get; set; }
 }

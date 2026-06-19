@@ -21,4 +21,6 @@ public sealed class PollSummaryDto
     public bool HasVoted { get; set; }
     public DateTime CreateDate { get; set; }
     public Guid? LinkedMatchId { get; set; }
+    public bool AllowGuests { get; set; }
+    public bool IsAcceptingVotes { get; set; }
 }
