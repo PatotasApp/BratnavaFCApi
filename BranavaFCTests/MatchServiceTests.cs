@@ -1539,10 +1539,10 @@ public sealed class MatchServiceTests
 
         var result = await sut.GetHistoryAsync(group.Id, 200, 0, CancellationToken.None);
 
-        result.Data!.Should().HaveCount(3);
-        result.Data![0].PlayedAt.Should().BeCloseTo(dateNew, TimeSpan.FromSeconds(1), "mais recente primeiro");
-        result.Data![1].PlayedAt.Should().BeCloseTo(dateMid, TimeSpan.FromSeconds(1));
-        result.Data![2].PlayedAt.Should().BeCloseTo(dateOld, TimeSpan.FromSeconds(1), "mais antiga por último");
+        result.Data!.Items.Should().HaveCount(3);
+        result.Data!.Items[0].PlayedAt.Should().BeCloseTo(dateNew, TimeSpan.FromSeconds(1), "mais recente primeiro");
+        result.Data!.Items[1].PlayedAt.Should().BeCloseTo(dateMid, TimeSpan.FromSeconds(1));
+        result.Data!.Items[2].PlayedAt.Should().BeCloseTo(dateOld, TimeSpan.FromSeconds(1), "mais antiga por último");
     }
 
     [Fact]
@@ -1569,7 +1569,7 @@ public sealed class MatchServiceTests
 
         var result = await sut.GetHistoryAsync(group.Id, 200, 0, CancellationToken.None);
 
-        result.Data!.Should().HaveCount(1, "somente partidas Finalized devem ser retornadas");
+        result.Data!.Items.Should().HaveCount(1, "somente partidas Finalized devem ser retornadas");
     }
 
     [Fact]
@@ -1590,7 +1590,7 @@ public sealed class MatchServiceTests
 
         var result = await sut.GetHistoryAsync(group.Id, take: 3, skip: 0, CancellationToken.None);
 
-        result.Data!.Should().HaveCount(3, "take=3 deve limitar o resultado a 3 partidas");
+        result.Data!.Items.Should().HaveCount(3, "take=3 deve limitar o resultado a 3 partidas");
     }
 
     [Fact]
@@ -1615,8 +1615,8 @@ public sealed class MatchServiceTests
 
         var result = await sut.GetHistoryAsync(group.Id, 200, 0, CancellationToken.None, player1.Id);
 
-        result.Data!.Should().HaveCount(1, "filtro por playerId deve retornar apenas a partida em que ele jogou");
-        result.Data![0].PlayerIds.Should().Contain(player1.Id);
+        result.Data!.Items.Should().HaveCount(1, "filtro por playerId deve retornar apenas a partida em que ele jogou");
+        result.Data!.Items[0].PlayerIds.Should().Contain(player1.Id);
     }
 
     [Fact]
@@ -1639,7 +1639,7 @@ public sealed class MatchServiceTests
 
         var result = await sut.GetHistoryAsync(group.Id, 200, 0, CancellationToken.None, strangerPlayer.Id);
 
-        result.Data!.Should().BeEmpty("jogador sem partidas não deve aparecer no histórico");
+        result.Data!.Items.Should().BeEmpty("jogador sem partidas não deve aparecer no histórico");
     }
 
     [Fact]
@@ -1688,7 +1688,7 @@ public sealed class MatchServiceTests
 
         var result = await sut.GetHistoryAsync(group.Id, 200, 0, CancellationToken.None, player.Id);
 
-        result.Data!.Should().HaveCount(1,
+        result.Data!.Items.Should().HaveCount(1,
             "só a partida onde o jogador estava escalado num time (Team > 0) deve aparecer");
     }
 
@@ -1707,8 +1707,8 @@ public sealed class MatchServiceTests
 
         var result = await sut.GetHistoryAsync(group.Id, 200, 0, CancellationToken.None);
 
-        result.Data!.Should().HaveCount(1);
-        var playerIds = result.Data![0].PlayerIds;
+        result.Data!.Items.Should().HaveCount(1);
+        var playerIds = result.Data!.Items[0].PlayerIds;
         playerIds.Should().HaveCount(players.Count);
 
         foreach (var p in players)

@@ -9,3 +9,6 @@
 # Build output — todos os projetos
 **/bin/
 **/obj/
+
+# Saída de cobertura de testes
+**/TestResults/

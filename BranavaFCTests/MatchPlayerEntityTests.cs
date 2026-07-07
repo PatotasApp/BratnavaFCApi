@@ -1,4 +1,5 @@
 ﻿using BratnavaFC.Domain.Entities;
+using BratnavaFC.Domain.Enums;
 
 namespace BranavaFC.Tests;
 
@@ -78,5 +79,45 @@ public class MatchPlayerEntityTests
 
         // Assert
         Assert.Null(mp.VotedForId);
+    }
+
+    [Fact]
+    public void AutoRejectByAbsence_ShouldRejectAndLinkAbsence()
+    {
+        // Arrange
+        var mp = new MatchPlayerEntity(Guid.NewGuid());
+        var absenceId = Guid.NewGuid();
+
+        // Act
+        mp.AutoRejectByAbsence(absenceId);
+
+        // Assert
+        Assert.Equal(InviteResponse.Rejected, mp.InviteResponse);
+        Assert.Equal(absenceId, mp.AutoRejectedByAbsenceId);
+    }
+
+    [Fact]
+    public void AutoRejectByAbsence_WithEmptyGuid_ShouldThrow()
+    {
+        // Arrange
+        var mp = new MatchPlayerEntity(Guid.NewGuid());
+
+        // Act + Assert
+        Assert.Throws<InvalidOperationException>(() => mp.AutoRejectByAbsence(Guid.Empty));
+    }
+
+    [Fact]
+    public void ClearAutoRejection_ShouldResetInviteToNoneAndUnlinkAbsence()
+    {
+        // Arrange
+        var mp = new MatchPlayerEntity(Guid.NewGuid());
+        mp.AutoRejectByAbsence(Guid.NewGuid());
+
+        // Act
+        mp.ClearAutoRejection();
+
+        // Assert
+        Assert.Equal(InviteResponse.None, mp.InviteResponse);
+        Assert.Null(mp.AutoRejectedByAbsenceId);
     }
 }

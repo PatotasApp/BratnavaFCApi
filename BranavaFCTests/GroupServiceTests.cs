@@ -1,4 +1,4 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Groups;
@@ -334,13 +334,13 @@ public class GroupServiceTests
         var sut = CreateSut(db);
 
         // Act
-        var result = await sut.GetAllGroupsAsync(CancellationToken.None);
+        var result = await sut.GetAllGroupsAsync(1, 50, CancellationToken.None);
 
         // Assert
         result.Success.Should().BeTrue();
-        result.Data.Should().HaveCount(2);
-        result.Data.Should().Contain(g => g.Name == "Ativa"   && g.Status == Status.Active);
-        result.Data.Should().Contain(g => g.Name == "Inativa" && g.Status == Status.Inactive);
+        result.Data!.Items.Should().HaveCount(2);
+        result.Data.Items.Should().Contain(g => g.Name == "Ativa"   && g.Status == Status.Active);
+        result.Data.Items.Should().Contain(g => g.Name == "Inativa" && g.Status == Status.Inactive);
     }
 
     [Fact]
@@ -362,12 +362,12 @@ public class GroupServiceTests
         var sut = CreateSut(db);
 
         // Act
-        var result = await sut.GetAllGroupsAsync(CancellationToken.None);
+        var result = await sut.GetAllGroupsAsync(1, 50, CancellationToken.None);
 
         // Assert
         result.Success.Should().BeTrue();
-        var g1 = result.Data.Should().ContainSingle(g => g.Name == "G1").Subject;
-        var g2 = result.Data.Should().ContainSingle(g => g.Name == "G2").Subject;
+        var g1 = result.Data!.Items.Should().ContainSingle(g => g.Name == "G1").Subject;
+        var g2 = result.Data.Items.Should().ContainSingle(g => g.Name == "G2").Subject;
 
         g1.Players.Should().HaveCount(2);
         g2.Players.Should().HaveCount(1).And.Contain(p => p.Name == "P3");
@@ -385,12 +385,12 @@ public class GroupServiceTests
         var sut = CreateSut(db);
 
         // Act
-        var result = await sut.GetAllGroupsAsync(CancellationToken.None);
+        var result = await sut.GetAllGroupsAsync(1, 50, CancellationToken.None);
 
         // Assert — ordenados por nome
         result.Success.Should().BeTrue();
-        result.Data.First().Name.Should().Be("Alpha");
-        result.Data.Last().Name.Should().Be("Zebra");
+        result.Data!.Items.First().Name.Should().Be("Alpha");
+        result.Data.Items.Last().Name.Should().Be("Zebra");
     }
 
     [Fact]
@@ -412,11 +412,11 @@ public class GroupServiceTests
         var sut = CreateSut(db);
 
         // Act
-        var result = await sut.GetAllGroupsAsync(CancellationToken.None);
+        var result = await sut.GetAllGroupsAsync(1, 50, CancellationToken.None);
 
         // Assert — deve incluir inativos (IgnoreQueryFilters)
         result.Success.Should().BeTrue();
-        var g = result.Data.Should().ContainSingle().Subject;
+        var g = result.Data!.Items.Should().ContainSingle().Subject;
         g.Players.Should().HaveCount(2);
     }
 
@@ -441,11 +441,11 @@ public class GroupServiceTests
         var sut = CreateSut(db);
 
         // Act
-        var result = await sut.GetAllGroupsAsync(CancellationToken.None);
+        var result = await sut.GetAllGroupsAsync(1, 50, CancellationToken.None);
 
         // Assert
         result.Success.Should().BeTrue();
-        var g = result.Data.Should().ContainSingle().Subject;
+        var g = result.Data!.Items.Should().ContainSingle().Subject;
         g.Players.Should().HaveCount(2);
 
         var linkedDto = g.Players.Should().ContainSingle(p => p.Name == "João FC").Subject;

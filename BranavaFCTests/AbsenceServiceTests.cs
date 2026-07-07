@@ -265,7 +265,7 @@ public class AbsenceServiceTests
     {
         await using var db = DbContextFactory.Create(nameof(GetByGroupAsync_WhenGroupNotFound_ShouldReturnNotFound));
         var sut    = CreateSut(db);
-        var result = await sut.GetByGroupAsync(Guid.NewGuid(), CancellationToken.None);
+        var result = await sut.GetByGroupAsync(Guid.NewGuid(), ct: CancellationToken.None);
 
         result.Success.Should().BeFalse();
         result.Status.Should().Be(ResultStatus.NotFound);
@@ -283,16 +283,17 @@ public class AbsenceServiceTests
         await db.SaveChangesAsync();
 
         var sut    = CreateSut(db);
-        var result = await sut.GetByGroupAsync(group.Id, CancellationToken.None);
+        var result = await sut.GetByGroupAsync(group.Id, ct: CancellationToken.None);
 
         result.Success.Should().BeTrue();
-        result.Data.Should().BeEmpty();
+        result.Data!.Items.Should().BeEmpty();
+        result.Data.Total.Should().Be(0);
     }
 
     [Fact]
-    public async Task GetByGroupAsync_ShouldReturnMembersWithTheirAbsences()
+    public async Task GetByGroupAsync_ShouldReturnFlatAbsencesWithPlayerName()
     {
-        await using var db = DbContextFactory.Create(nameof(GetByGroupAsync_ShouldReturnMembersWithTheirAbsences));
+        await using var db = DbContextFactory.Create(nameof(GetByGroupAsync_ShouldReturnFlatAbsencesWithPlayerName));
 
         var user  = MakeUser();
         var group = MakeGroup(user.Id);
@@ -309,13 +310,13 @@ public class AbsenceServiceTests
         await db.SaveChangesAsync();
 
         var sut    = CreateSut(db);
-        var result = await sut.GetByGroupAsync(group.Id, CancellationToken.None);
+        var result = await sut.GetByGroupAsync(group.Id, ct: CancellationToken.None);
 
         result.Success.Should().BeTrue();
-        result.Data.Should().HaveCount(1);
-        result.Data[0].PlayerName.Should().Be("Ronaldo");
-        result.Data[0].Absences.Should().HaveCount(1);
-        result.Data[0].Absences[0].Description.Should().Be("férias");
+        result.Data!.Total.Should().Be(1);
+        result.Data.Items.Should().HaveCount(1);
+        result.Data.Items[0].PlayerName.Should().Be("Ronaldo");
+        result.Data.Items[0].Description.Should().Be("férias");
     }
 
     [Fact]
@@ -336,12 +337,97 @@ public class AbsenceServiceTests
         db.Players.AddRange(regularPlayer, guestPlayer);
         await db.SaveChangesAsync();
 
+        var absence = new UserAbsenceEntity(user.Id, new DateOnly(2025, 8, 1), new DateOnly(2025, 8, 5), AbsenceType.Travel, null);
+        db.UserAbsences.Add(absence);
+        await db.SaveChangesAsync();
+
         var sut    = CreateSut(db);
-        var result = await sut.GetByGroupAsync(group.Id, CancellationToken.None);
+        var result = await sut.GetByGroupAsync(group.Id, ct: CancellationToken.None);
 
         result.Success.Should().BeTrue();
-        result.Data.Should().HaveCount(1);
-        result.Data[0].PlayerName.Should().Be("Titular");
+        result.Data!.Items.Should().HaveCount(1);
+        result.Data.Items[0].PlayerName.Should().Be("Titular");
+    }
+
+    [Fact]
+    public async Task GetByGroupAsync_WithUpcomingStatus_ShouldReturnOnlyCurrentAndFutureOrderedByStart()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetByGroupAsync_WithUpcomingStatus_ShouldReturnOnlyCurrentAndFutureOrderedByStart));
+
+        var user  = MakeUser();
+        var group = MakeGroup(user.Id);
+        db.Users.Add(user);
+        db.Groups.Add(group);
+        db.Players.Add(MakePlayer("Ronaldo", user.Id, group.Id));
+        await db.SaveChangesAsync();
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        db.UserAbsences.AddRange(
+            new UserAbsenceEntity(user.Id, today.AddDays(-10), today.AddDays(-5), AbsenceType.Travel, "passada"),
+            new UserAbsenceEntity(user.Id, today.AddDays(10),  today.AddDays(12), AbsenceType.Travel, "distante"),
+            new UserAbsenceEntity(user.Id, today.AddDays(-1),  today.AddDays(1),  AbsenceType.Travel, "em andamento"));
+        await db.SaveChangesAsync();
+
+        var sut    = CreateSut(db);
+        var result = await sut.GetByGroupAsync(group.Id, status: "upcoming", ct: CancellationToken.None);
+
+        result.Data!.Total.Should().Be(2);
+        result.Data.Items.Select(i => i.Description).Should().ContainInOrder("em andamento", "distante");
+    }
+
+    [Fact]
+    public async Task GetByGroupAsync_WithPastStatus_ShouldReturnOnlyEndedOrderedByStartDesc()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetByGroupAsync_WithPastStatus_ShouldReturnOnlyEndedOrderedByStartDesc));
+
+        var user  = MakeUser();
+        var group = MakeGroup(user.Id);
+        db.Users.Add(user);
+        db.Groups.Add(group);
+        db.Players.Add(MakePlayer("Ronaldo", user.Id, group.Id));
+        await db.SaveChangesAsync();
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        db.UserAbsences.AddRange(
+            new UserAbsenceEntity(user.Id, today.AddDays(-30), today.AddDays(-25), AbsenceType.Travel, "antiga"),
+            new UserAbsenceEntity(user.Id, today.AddDays(-10), today.AddDays(-5),  AbsenceType.Travel, "recente"),
+            new UserAbsenceEntity(user.Id, today.AddDays(5),   today.AddDays(7),   AbsenceType.Travel, "futura"));
+        await db.SaveChangesAsync();
+
+        var sut    = CreateSut(db);
+        var result = await sut.GetByGroupAsync(group.Id, status: "past", ct: CancellationToken.None);
+
+        result.Data!.Total.Should().Be(2);
+        result.Data.Items.Select(i => i.Description).Should().ContainInOrder("recente", "antiga");
+    }
+
+    [Fact]
+    public async Task GetByGroupAsync_ShouldPaginateAndReportTotal()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetByGroupAsync_ShouldPaginateAndReportTotal));
+
+        var user  = MakeUser();
+        var group = MakeGroup(user.Id);
+        db.Users.Add(user);
+        db.Groups.Add(group);
+        db.Players.Add(MakePlayer("Ronaldo", user.Id, group.Id));
+        await db.SaveChangesAsync();
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        for (var i = 1; i <= 5; i++)
+            db.UserAbsences.Add(new UserAbsenceEntity(user.Id, today.AddDays(i * 10), today.AddDays(i * 10 + 2), AbsenceType.Travel, $"a{i}"));
+        await db.SaveChangesAsync();
+
+        var sut = CreateSut(db);
+
+        var page1 = await sut.GetByGroupAsync(group.Id, status: "upcoming", page: 1, pageSize: 2, ct: CancellationToken.None);
+        page1.Data!.Total.Should().Be(5);
+        page1.Data.Items.Should().HaveCount(2);
+        page1.Data.Items.Select(i => i.Description).Should().ContainInOrder("a1", "a2");
+
+        var page3 = await sut.GetByGroupAsync(group.Id, status: "upcoming", page: 3, pageSize: 2, ct: CancellationToken.None);
+        page3.Data!.Items.Should().HaveCount(1);
+        page3.Data.Items[0].Description.Should().Be("a5");
     }
 
     // ─── GetTypeName ──────────────────────────────────────────────────────────

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat code coverage">
+        <Configuration>
+          <Format>cobertura</Format>
+          <!--
+            Exclusões de cobertura — código sem regra de negócio testável em unidade:
+
+            - BratnavaFC.Api: controllers são pass-throughs finos (recebem, chamam 1 service,
+              retornam) + Program/middleware. Cobertura exigiria testes de integração HTTP.
+            - Migrations: geradas pelo EF.
+            - Dtos: classes de dados puras, sem comportamento.
+            - Integrações externas: PushService (FCM), R2ReplayUrlService (S3/R2),
+              RedisMatchEventPublisher (Redis), MatchCardService (OpenAI),
+              HolidayService (BrasilAPI HTTP).
+            - Jobs de lembrete (Hangfire/hosted): efeitos são disparos de push agendados;
+              a lógica de agendamento fica no NotificationScheduler, que É testado.
+          -->
+          <Exclude>
+            [BratnavaFC.Api]*,
+            [BratnavaFC.Infrastructure]BratnavaFC.Infrastructure.Migrations.*,
+            [BratnavaFC.Domain]BratnavaFC.Domain.Dtos.*,
+            [BratnavaFC.Application]BratnavaFC.Application.Services.PushService,
+            [BratnavaFC.Application]BratnavaFC.Application.Services.R2ReplayUrlService,
+            [BratnavaFC.Application]BratnavaFC.Application.Services.RedisMatchEventPublisher,
+            [BratnavaFC.Application]BratnavaFC.Application.Services.MatchCardService,
+            [BratnavaFC.Application]BratnavaFC.Application.Services.HolidayService,
+            [BratnavaFC.Application]BratnavaFC.Application.Services.MatchReminderJob,
+            [BratnavaFC.Application]BratnavaFC.Application.Services.MvpVotingReminderJob,
+            [BratnavaFC.Application]BratnavaFC.Application.Services.MatchNoQuorumReminderJob,
+            [BratnavaFC.Application]BratnavaFC.Application.Services.MonthlyPaymentReminderJob,
+            [BratnavaFC.Application]BratnavaFC.Application.Services.BirthdayNotificationJob,
+            [BratnavaFC.Application]BratnavaFC.Application.Services.PollReminderJob,
+            [BratnavaFC.Application]BratnavaFC.Application.Services.CalendarReminderJob,
+            [BratnavaFC.Application]BratnavaFC.Application.Services.MatchAutoFinalizeJob,
+          </Exclude>
+          <ExcludeByAttribute>Obsolete,GeneratedCodeAttribute,ExcludeFromCodeCoverageAttribute</ExcludeByAttribute>
+          <SkipAutoProps>true</SkipAutoProps>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

@@ -1,17 +1,17 @@
+using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Services;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Infrastructure.Data;
+using BratnavaFC.Infrastructure.Repositories;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 
 namespace BranavaFC.Tests;
 
 /// <summary>
 /// Tests the atomic bidirectional Poll↔Match linking logic implemented in
-/// MatchesController.SetLinkedPoll.
-///
-/// The logic is replicated here as <see cref="Execute"/> to keep tests fast
-/// (no HTTP stack, no auth middleware) while exercising the exact same
-/// EF Core sequence and SaveChanges boundary.
+/// MatchService.SetLinkedPollAsync (exposed via MatchesController.SetLinkedPoll).
 /// </summary>
 public sealed class LinkedPollAtomicTests
 {
@@ -23,10 +23,7 @@ public sealed class LinkedPollAtomicTests
     private static PollEntity MakePoll(Guid groupId) =>
         new(groupId, "Votação", null, false, false, null);
 
-    /// <summary>
-    /// Mirrors the exact EF Core sequence in MatchesController.SetLinkedPoll.
-    /// Returns false when the match or (when linking) the poll is not found.
-    /// </summary>
+    /// <summary>Executa o método real do service; retorna Success.</summary>
     private static async Task<bool> Execute(
         AppDbContext db,
         Guid         groupId,
@@ -34,38 +31,12 @@ public sealed class LinkedPollAtomicTests
         Guid?        pollId,
         CancellationToken ct = default)
     {
-        var match = await db.Matches
-            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct);
-        if (match is null) return false;
+        var sut = new MatchService(db, new RepositoryBase<MatchEntity>(db),
+            Mock.Of<IPushService>(), Mock.Of<IReplayUrlService>(),
+            Mock.Of<IBetService>(), Mock.Of<INotificationScheduler>());
 
-        // Clear the old poll's back-reference when replacing
-        if (match.LinkedPollId.HasValue && match.LinkedPollId != pollId)
-        {
-            var oldPoll = await db.Polls
-                .FirstOrDefaultAsync(p => p.Id == match.LinkedPollId.Value, ct);
-            oldPoll?.SetLinkedMatch(null);
-        }
-
-        if (pollId.HasValue)
-        {
-            var newPoll = await db.Polls
-                .FirstOrDefaultAsync(p => p.Id == pollId.Value && p.GroupId == groupId, ct);
-            if (newPoll is null) return false;
-
-            // If the new poll was already owned by a different match, clear that match's FK
-            if (newPoll.LinkedMatchId.HasValue && newPoll.LinkedMatchId != matchId)
-            {
-                var oldMatch = await db.Matches
-                    .FirstOrDefaultAsync(m => m.Id == newPoll.LinkedMatchId.Value, ct);
-                oldMatch?.SetLinkedPoll(null);
-            }
-
-            newPoll.SetLinkedMatch(matchId);
-        }
-
-        match.SetLinkedPoll(pollId);
-        await db.SaveChangesAsync(ct);
-        return true;
+        var result = await sut.SetLinkedPollAsync(groupId, matchId, pollId, ct);
+        return result.Success;
     }
 
     // ── Not-found guards ──────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Infrastructure.Data;
@@ -85,19 +85,21 @@ public class PollService_IsAcceptingVotesTests
     [Fact]
     public void ComputeIsAcceptingVotes_WhenOpen_DeadlineTodayWithFutureTime_ShouldReturnTrue()
     {
-        var today    = DateOnly.FromDateTime(DateTime.UtcNow);
-        var future   = TimeOnly.FromDateTime(DateTime.UtcNow.AddHours(2));
-        var result   = PollService.ComputeIsAcceptingVotes("open", today, future);
-        result.Should().BeTrue("prazo é hoje mas o horário ainda não chegou.");
+        // Usa data e hora do MESMO instante futuro para não quebrar na virada do dia UTC
+        var futureInstant = DateTime.UtcNow.AddHours(2);
+        var result = PollService.ComputeIsAcceptingVotes(
+            "open", DateOnly.FromDateTime(futureInstant), TimeOnly.FromDateTime(futureInstant));
+        result.Should().BeTrue("o prazo ainda não chegou.");
     }
 
     [Fact]
     public void ComputeIsAcceptingVotes_WhenOpen_DeadlineTodayWithPastTime_ShouldReturnFalse()
     {
-        var today  = DateOnly.FromDateTime(DateTime.UtcNow);
-        var past   = TimeOnly.FromDateTime(DateTime.UtcNow.AddHours(-2));
-        var result = PollService.ComputeIsAcceptingVotes("open", today, past);
-        result.Should().BeFalse("prazo é hoje mas o horário já passou.");
+        // Usa data e hora do MESMO instante passado para não quebrar na virada do dia UTC
+        var pastInstant = DateTime.UtcNow.AddHours(-2);
+        var result = PollService.ComputeIsAcceptingVotes(
+            "open", DateOnly.FromDateTime(pastInstant), TimeOnly.FromDateTime(pastInstant));
+        result.Should().BeFalse("o prazo já passou.");
     }
 
     [Fact]

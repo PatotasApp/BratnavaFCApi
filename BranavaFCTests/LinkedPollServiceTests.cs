@@ -1,4 +1,4 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Infrastructure.Data;
@@ -52,7 +52,7 @@ public sealed class LinkedPollServiceTests
 
         // Assert
         result.Success.Should().BeTrue();
-        result.Data.Should().ContainSingle()
+        result.Data!.Items.Should().ContainSingle()
             .Which.LinkedMatchId.Should().Be(matchId);
     }
 
@@ -75,7 +75,7 @@ public sealed class LinkedPollServiceTests
 
         // Assert
         result.Success.Should().BeTrue();
-        result.Data.Should().ContainSingle()
+        result.Data!.Items.Should().ContainSingle()
             .Which.LinkedMatchId.Should().BeNull();
     }
 
@@ -100,7 +100,7 @@ public sealed class LinkedPollServiceTests
 
         // Assert
         result.Success.Should().BeTrue();
-        var dto = result.Data!.Single();
+        var dto = result.Data!.Items.Single();
         dto.Type.Should().Be("event");
         dto.LinkedMatchId.Should().Be(matchId);
     }
@@ -128,9 +128,9 @@ public sealed class LinkedPollServiceTests
         var result = await sut.GetPollsAsync(groupId, Guid.NewGuid());
 
         // Assert
-        result.Data.Should().HaveCount(2);
-        result.Data!.Single(p => p.Id == linked.Id).LinkedMatchId.Should().Be(matchId);
-        result.Data!.Single(p => p.Id == unlinked.Id).LinkedMatchId.Should().BeNull();
+        result.Data!.Items.Should().HaveCount(2);
+        result.Data!.Items.Single(p => p.Id == linked.Id).LinkedMatchId.Should().Be(matchId);
+        result.Data!.Items.Single(p => p.Id == unlinked.Id).LinkedMatchId.Should().BeNull();
     }
 
     [Fact]
@@ -153,7 +153,7 @@ public sealed class LinkedPollServiceTests
         var result = await sut.GetPollsAsync(groupId, Guid.NewGuid());
 
         // Assert
-        result.Data!.Single().LinkedMatchId.Should().BeNull();
+        result.Data!.Items.Single().LinkedMatchId.Should().BeNull();
     }
 
     // ── GetPollAsync — LinkedMatchId in PollDto ───────────────────────────────
