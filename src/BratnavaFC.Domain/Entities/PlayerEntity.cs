@@ -1,4 +1,4 @@
-namespace BratnavaFC.Domain.Entities;
+﻿namespace BratnavaFC.Domain.Entities;
 
 public class PlayerEntity : InactivatableEntity
 {
@@ -31,6 +31,11 @@ public class PlayerEntity : InactivatableEntity
         SetSkillPoints(skillPoints);
         SetGoalkeeper(isGoalkeeper);
         SetIsGuest(isGuest);
+
+        // Honra o status pedido (antes o parâmetro era aceito mas ignorado)
+        if (status == Enums.Status.Inactive)
+            Inactivate();
+
         // Jogador criado diretamente já é mensalista — data de entrada = data de criação
         if (!isGuest && userId.HasValue)
             JoinedAt = DateTime.UtcNow;

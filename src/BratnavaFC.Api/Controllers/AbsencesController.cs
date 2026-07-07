@@ -64,13 +64,21 @@ public sealed class AbsencesController : GroupAuthorizedController
         return ToResponse(result);
     }
 
-    /// <summary>Lista ausências de todos os jogadores do grupo. Qualquer membro do grupo.</summary>
+    /// <summary>
+    /// Lista ausências de todos os jogadores do grupo, achatada e paginada por data.
+    /// status=upcoming (em andamento/futuras, cronológica) | past (encerradas, recentes primeiro).
+    /// </summary>
     [HttpGet("group/{groupId:guid}")]
-    public async Task<IActionResult> GetByGroup(Guid groupId, CancellationToken ct)
+    public async Task<IActionResult> GetByGroup(
+        Guid groupId,
+        [FromQuery] string? status = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
     {
         if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
 
-        var result = await _service.GetByGroupAsync(groupId, ct);
+        var result = await _service.GetByGroupAsync(groupId, status, page, pageSize, ct);
         return ToResponse(result);
     }
 }

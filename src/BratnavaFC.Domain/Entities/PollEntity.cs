@@ -78,6 +78,24 @@ public class PollEntity : BaseEntity
 
     public void SetAllowGuests(bool allow) { AllowGuests = allow; UpdateDate = DateTime.UtcNow; }
 
+    /// <summary>
+    /// Updates description and, for event polls, cost fields.
+    /// Pass null to leave a field unchanged; pass "" to clear it.
+    /// </summary>
+    public void UpdateDetails(string? description, decimal? costAmount, string? costType)
+    {
+        if (description is not null)
+            Description = description.Trim() == string.Empty ? null : description.Trim();
+
+        if (costAmount.HasValue)
+            CostAmount = costAmount.Value <= 0 ? null : costAmount;
+
+        if (costType is not null)
+            CostType = costType.Trim() == string.Empty ? null : costType.Trim();
+
+        UpdateDate = DateTime.UtcNow;
+    }
+
     public void Close() { Status = "closed"; UpdateDate = DateTime.UtcNow; }
     public void Reopen() { Status = "open"; UpdateDate = DateTime.UtcNow; }
 

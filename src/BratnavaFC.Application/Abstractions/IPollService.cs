@@ -1,11 +1,12 @@
 using BratnavaFC.Domain.Common;
+using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Dtos.Polls;
 
 namespace BratnavaFC.Application.Abstractions;
 
 public interface IPollService
 {
-    Task<Result<List<PollSummaryDto>>> GetPollsAsync(Guid groupId, Guid playerId, CancellationToken ct = default);
+    Task<Result<PagedResultDto<PollSummaryDto>>> GetPollsAsync(Guid groupId, Guid playerId, int page = 1, int pageSize = 20, string? type = null, string? status = null, CancellationToken ct = default);
     Task<Result<PollDto>> GetPollAsync(Guid groupId, Guid pollId, Guid playerId, bool isAdmin, CancellationToken ct = default, bool skipImages = false);
     Task<Result<PollDto>> CreatePollAsync(Guid groupId, Guid userId, CreatePollDto dto, CancellationToken ct = default);
     Task<Result<PollDto>> CreateEventPollAsync(Guid groupId, Guid userId, CreateEventPollDto dto, CancellationToken ct = default);
@@ -20,6 +21,7 @@ public interface IPollService
     Task<Result<PollDto>> RemoveVoteAsync(Guid groupId, Guid pollId, Guid playerId, bool isAdmin = false, CancellationToken ct = default);
     Task<Result<PollDto>> AdminCastVoteAsync(Guid groupId, Guid pollId, AdminCastVoteDto dto, CancellationToken ct = default);
     Task<Result> UpdateDeadlineAsync(Guid groupId, Guid pollId, UpdatePollDeadlineDto dto, CancellationToken ct = default);
+    Task<Result<PollSummaryDto>> UpdatePollDetailsAsync(Guid groupId, Guid pollId, UpdatePollDetailsDto dto, CancellationToken ct = default);
     Task<Result> SetAllowGuestsAsync(Guid groupId, Guid pollId, bool allowGuests, CancellationToken ct = default);
     Task<Result<PollGuestDto>> AddGuestAsync(Guid groupId, Guid pollId, Guid voterPlayerId, AddPollGuestDto dto, CancellationToken ct = default);
     Task<Result> RemoveGuestAsync(Guid groupId, Guid pollId, Guid guestId, Guid requestingPlayerId, bool isAdmin, CancellationToken ct = default);

@@ -1,4 +1,5 @@
-using BratnavaFC.Domain.Common;
+﻿using BratnavaFC.Domain.Common;
+using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Dtos.Payments;
 
 namespace BratnavaFC.Application.Abstractions;
@@ -16,7 +17,10 @@ public interface IPaymentService
         CancellationToken ct = default);
 
     // ── Cobranças extras ──────────────────────────────────────────────────────
-    Task<Result<IReadOnlyList<ExtraChargeDto>>> GetExtraChargesAsync(Guid groupId, CancellationToken ct = default);
+    Task<Result<PagedResultDto<ExtraChargeDto>>> GetExtraChargesAsync(Guid groupId, int? year = null, int? month = null, int page = 1, int pageSize = 20, CancellationToken ct = default);
+
+    /// <summary>Status agregado por mês das cobranças extras de um ano (badges do seletor de meses).</summary>
+    Task<Result<IReadOnlyList<ExtraChargeMonthSummaryDto>>> GetExtraChargesSummaryAsync(Guid groupId, int year, Guid? userId = null, CancellationToken ct = default);
 
     Task<Result<ExtraChargeDto>> CreateExtraChargeAsync(
         Guid groupId,
@@ -25,6 +29,8 @@ public interface IPaymentService
         CancellationToken ct = default);
 
     Task<Result> CancelExtraChargeAsync(Guid groupId, Guid chargeId, CancellationToken ct = default);
+    Task<Result<ExtraChargeDto>> ReactivateExtraChargeAsync(Guid groupId, Guid chargeId, CancellationToken ct = default);
+    Task<Result<ExtraChargeDto>> UpdateExtraChargeDetailsAsync(Guid groupId, Guid chargeId, UpdateExtraChargeDetailsDto dto, CancellationToken ct = default);
 
     /// <summary>Aplica desconto fixo a vários jogadores de uma cobrança extra de uma só vez.</summary>
     Task<Result> BulkDiscountExtraChargeAsync(
@@ -59,7 +65,7 @@ public interface IPaymentService
     Task<Result<PlayerMonthlyRowDto?>> GetMyMonthlyRowAsync(Guid groupId, Guid userId, int year, CancellationToken ct = default);
 
     /// <summary>Retorna cobranças extras em que o jogador vinculado ao userId está incluído.</summary>
-    Task<Result<IReadOnlyList<ExtraChargeDto>>> GetMyExtraChargesAsync(Guid groupId, Guid userId, CancellationToken ct = default);
+    Task<Result<PagedResultDto<ExtraChargeDto>>> GetMyExtraChargesAsync(Guid groupId, Guid userId, int? year = null, int? month = null, int page = 1, int pageSize = 20, CancellationToken ct = default);
 
     // ── Resumo de pendências (usado no Dashboard e tela de usuários) ──────────
 

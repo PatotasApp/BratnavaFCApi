@@ -15,7 +15,7 @@ public interface IBetService
     Task<List<BettableMatchDto>>       GetBettableMatchesAsync(Guid groupId, CancellationToken ct);
     Task<Result>                       PlaceOrUpdateBetAsync(Guid groupId, Guid matchId, Guid userId, PlaceMatchBetDto dto, CancellationToken ct);
     Task<MatchBetResultsDto?>          GetMatchResultsAsync(Guid groupId, Guid matchId, CancellationToken ct);
-    Task<List<MatchBetHistoryDto>>     GetHistoryAsync(Guid groupId, CancellationToken ct);
+    Task<PagedResultDto<MatchBetHistoryDto>> GetHistoryAsync(Guid groupId, int page, int pageSize, CancellationToken ct);
     Task<List<BetLeaderboardEntryDto>> GetLeaderboardAsync(Guid groupId, CancellationToken ct);
     Task<int>                          GetMyBalanceAsync(Guid groupId, Guid userId, CancellationToken ct);
     Task<Result>                       DeleteBetAsync(Guid groupId, Guid matchId, Guid userId, CancellationToken ct);

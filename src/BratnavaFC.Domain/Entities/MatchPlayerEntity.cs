@@ -29,7 +29,13 @@ public class MatchPlayerEntity : BaseEntity
     public List<VoteEntity> ReceivedVotes { get; private set; } = new();
     public Guid? VotedForId { get; private set; }
 
-    public InviteResponse InviteResponse { get; set; } = InviteResponse.None;
+    public InviteResponse InviteResponse { get; private set; } = InviteResponse.None;
+
+    public void AcceptInvite() => InviteResponse = InviteResponse.Accepted;
+    public void RejectInvite() => InviteResponse = InviteResponse.Rejected;
+
+    /// <summary>Restaura uma resposta salva (usado ao recriar MatchPlayers em re-sync/rewind).</summary>
+    public void RestoreInviteResponse(InviteResponse response) => InviteResponse = response;
 
     public Guid? AutoRejectedByAbsenceId { get; private set; }
     public UserAbsenceEntity? AutoRejectedByAbsence { get; private set; }
@@ -39,6 +45,14 @@ public class MatchPlayerEntity : BaseEntity
         if (absenceId == Guid.Empty) throw new InvalidOperationException("AbsenceId é obrigatório.");
         InviteResponse = InviteResponse.Rejected;
         AutoRejectedByAbsenceId = absenceId;
+    }
+
+    /// <summary>Reverte uma auto-rejeição por ausência, voltando o convite para pendente.</summary>
+    public void ClearAutoRejection()
+    {
+        AutoRejectedByAbsenceId = null;
+        AutoRejectedByAbsence   = null;
+        InviteResponse          = InviteResponse.None;
     }
 
     public List<GoalEntity> GoalsScored { get; private set; } = new();

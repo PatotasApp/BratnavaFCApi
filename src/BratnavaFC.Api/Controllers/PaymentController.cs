@@ -88,14 +88,40 @@ public sealed class PaymentController : GroupAuthorizedController
 
     // ── Cobranças extras ──────────────────────────────────────────────────────
 
-    /// <summary>Lista todas as cobranças extras da patota (apenas admin).</summary>
+    /// <summary>Lista cobranças extras da patota, paginadas e opcionalmente filtradas por ano/mês (apenas admin).</summary>
     [HttpGet("extra-charges")]
-    public async Task<IActionResult> GetExtraCharges(Guid groupId, CancellationToken ct)
+    public async Task<IActionResult> GetExtraCharges(
+        Guid groupId,
+        [FromQuery] int? year = null,
+        [FromQuery] int? month = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
     {
         if (!await IsFinanceiroForGroupAsync(groupId, _db, ct))
             return Forbid();
 
-        var result = await _payments.GetExtraChargesAsync(groupId, ct);
+        var result = await _payments.GetExtraChargesAsync(groupId, year, month, page, pageSize, ct);
+        return ToResponse(result);
+    }
+
+    /// <summary>Status agregado por mês das cobranças extras de um ano (badges do seletor de meses).</summary>
+    [HttpGet("extra-charges/summary")]
+    public async Task<IActionResult> GetExtraChargesSummary(
+        Guid groupId, [FromQuery] int year, CancellationToken ct)
+    {
+        var isAdmin = await IsFinanceiroForGroupAsync(groupId, _db, ct);
+        if (isAdmin)
+        {
+            var adminResult = await _payments.GetExtraChargesSummaryAsync(groupId, year, null, ct);
+            return ToResponse(adminResult);
+        }
+
+        // Membro comum: resumo restrito às cobranças em que está incluído
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        var result = await _payments.GetExtraChargesSummaryAsync(groupId, year, userId.Value, ct);
         return ToResponse(result);
     }
 
@@ -125,6 +151,30 @@ public sealed class PaymentController : GroupAuthorizedController
             return Forbid();
 
         var result = await _payments.CancelExtraChargeAsync(groupId, chargeId, ct);
+        return ToResponse(result);
+    }
+
+    /// <summary>Reativa uma cobrança extra cancelada (apenas admin).</summary>
+    [HttpPut("extra-charges/{chargeId:guid}/reactivate")]
+    public async Task<IActionResult> ReactivateExtraCharge(
+        Guid groupId, Guid chargeId, CancellationToken ct)
+    {
+        if (!await IsFinanceiroForGroupAsync(groupId, _db, ct))
+            return Forbid();
+
+        var result = await _payments.ReactivateExtraChargeAsync(groupId, chargeId, ct);
+        return ToResponse(result);
+    }
+
+    /// <summary>Atualiza nome/descrição/valor de uma cobrança extra (apenas admin).</summary>
+    [HttpPatch("extra-charges/{chargeId:guid}/details")]
+    public async Task<IActionResult> UpdateExtraChargeDetails(
+        Guid groupId, Guid chargeId, [FromBody] UpdateExtraChargeDetailsDto dto, CancellationToken ct)
+    {
+        if (!await IsFinanceiroForGroupAsync(groupId, _db, ct))
+            return Forbid();
+
+        var result = await _payments.UpdateExtraChargeDetailsAsync(groupId, chargeId, dto, ct);
         return ToResponse(result);
     }
 
@@ -174,14 +224,20 @@ public sealed class PaymentController : GroupAuthorizedController
         return ToResponse(result);
     }
 
-    /// <summary>Retorna cobranças extras em que o jogador do usuário logado está incluído.</summary>
+    /// <summary>Retorna cobranças extras em que o jogador do usuário logado está incluído (paginadas, filtro por ano/mês).</summary>
     [HttpGet("extra-charges/me")]
-    public async Task<IActionResult> GetMyExtraCharges(Guid groupId, CancellationToken ct)
+    public async Task<IActionResult> GetMyExtraCharges(
+        Guid groupId,
+        [FromQuery] int? year = null,
+        [FromQuery] int? month = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
     {
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
 
-        var result = await _payments.GetMyExtraChargesAsync(groupId, userId.Value, ct);
+        var result = await _payments.GetMyExtraChargesAsync(groupId, userId.Value, year, month, page, pageSize, ct);
         return ToResponse(result);
     }
 

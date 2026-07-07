@@ -1,4 +1,5 @@
-using BratnavaFC.Domain.Common;
+﻿using BratnavaFC.Domain.Common;
+using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Dtos.Groups;
 
 namespace BratnavaFC.Application.Abstractions;
@@ -10,7 +11,7 @@ public interface IGroupService
     Task<Result> DeleteAsync(Guid groupId, CancellationToken cancellationToken);
     Task<Result<GroupDto>> GetByIdAsync(Guid groupId, CancellationToken cancellationToken);
     Task<Result<List<GroupDto>>> GetByAdminIdAsync(Guid adminId, CancellationToken cancellationToken);
-    Task<Result<List<GroupDto>>> GetAllGroupsAsync(CancellationToken cancellationToken);
+    Task<Result<PagedResultDto<GroupDto>>> GetAllGroupsAsync(int page, int pageSize, CancellationToken cancellationToken);
     Task<Result> InactivateAsync(Guid groupId, CancellationToken cancellationToken);
     Task<Result> ReactivateAsync(Guid groupId, CancellationToken cancellationToken);
     Task<Result> AddAdminToGroupAsync(Guid groupId, AddAdminToGroupDto request, CancellationToken cancellationToken);

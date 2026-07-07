@@ -1,4 +1,4 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos.Groups;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
@@ -77,9 +77,12 @@ public class GroupsController : GroupAuthorizedController
 
     [HttpGet]
     [Authorize(Roles = "GodMode")]
-    public async Task<IActionResult> GetAllGroupsAsync(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAllGroupsAsync(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
     {
-        var result = await _groupService.GetAllGroupsAsync(cancellationToken);
+        var result = await _groupService.GetAllGroupsAsync(page, pageSize, cancellationToken);
         return ToResponse(result);
     }
 

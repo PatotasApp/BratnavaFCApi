@@ -1,5 +1,6 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Common;
+using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Dtos.Polls;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
@@ -24,14 +25,30 @@ public sealed class PollService : IPollService
         _logger    = logger;
     }
 
-    public async Task<Result<List<PollSummaryDto>>> GetPollsAsync(Guid groupId, Guid playerId, CancellationToken ct = default)
+    public async Task<Result<PagedResultDto<PollSummaryDto>>> GetPollsAsync(
+        Guid groupId, Guid playerId, int page = 1, int pageSize = 20, string? type = null, string? status = null, CancellationToken ct = default)
     {
         try
         {
-            var polls = await _db.Polls
+            (page, pageSize) = Pagination.Normalize(page, pageSize);
+
+            var query = _db.Polls
                 .AsNoTracking()
-                .Where(p => p.GroupId == groupId)
+                .Where(p => p.GroupId == groupId);
+
+            if (!string.IsNullOrWhiteSpace(type))
+                query = query.Where(p => p.Type == type);
+
+            // "open" | "closed" — permite paginar cada card separadamente.
+            if (!string.IsNullOrWhiteSpace(status))
+                query = query.Where(p => p.Status == status);
+
+            var total = await query.CountAsync(ct);
+
+            var polls = await query
                 .OrderByDescending(p => p.CreateDate)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(p => new
                 {
                     p.Id, p.Title, p.Description, p.AllowMultipleVotes, p.ShowVotes, p.Status, p.CreateDate,
@@ -70,12 +87,15 @@ public sealed class PollService : IPollService
                 IsAcceptingVotes = ComputeIsAcceptingVotes(p.Status, p.DeadlineDate, p.DeadlineTime),
             }).ToList();
 
-            return Result<List<PollSummaryDto>>.Ok(dtos);
+            return Result<PagedResultDto<PollSummaryDto>>.Ok(new PagedResultDto<PollSummaryDto>
+            {
+                Page = page, PageSize = pageSize, Total = total, Items = dtos,
+            });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro em GetPollsAsync.");
-            return Result<List<PollSummaryDto>>.Fail("Erro interno. Tente novamente.");
+            return Result<PagedResultDto<PollSummaryDto>>.Fail("Erro interno. Tente novamente.");
         }
     }
 
@@ -367,6 +387,40 @@ public sealed class PollService : IPollService
         {
             _logger.LogError(ex, "Erro em ReopenPollAsync.");
             return Result.Fail("Erro interno. Tente novamente.");
+        }
+    }
+
+    public async Task<Result<PollSummaryDto>> UpdatePollDetailsAsync(Guid groupId, Guid pollId, UpdatePollDetailsDto dto, CancellationToken ct = default)
+    {
+        try
+        {
+            var poll = await _db.Polls.FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
+            if (poll is null) return Result<PollSummaryDto>.Fail("Votação não encontrada.");
+
+            poll.UpdateDetails(dto.Description, dto.CostAmount, dto.CostType);
+            await _db.SaveChangesAsync(ct);
+
+            var summary = new PollSummaryDto
+            {
+                Id = poll.Id, Title = poll.Title, Description = poll.Description,
+                AllowMultipleVotes = poll.AllowMultipleVotes, ShowVotes = poll.ShowVotes,
+                Status = poll.Status,
+                DeadlineDate = poll.DeadlineDate?.ToString("yyyy-MM-dd"),
+                DeadlineTime = poll.DeadlineTime?.ToString("HH:mm"),
+                Type = poll.Type,
+                EventDate = poll.EventDate?.ToString("yyyy-MM-dd"),
+                EventTime = poll.EventTime?.ToString("HH:mm"),
+                EventLocation = poll.EventLocation, EventIcon = poll.EventIcon,
+                CostType = poll.CostType, CostAmount = poll.CostAmount,
+                LinkedMatchId = poll.LinkedMatchId, AllowGuests = poll.AllowGuests,
+                IsAcceptingVotes = ComputeIsAcceptingVotes(poll.Status, poll.DeadlineDate, poll.DeadlineTime),
+            };
+            return Result<PollSummaryDto>.Ok(summary);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro em UpdatePollDetailsAsync.");
+            return Result<PollSummaryDto>.Fail("Erro interno. Tente novamente.");
         }
     }
 

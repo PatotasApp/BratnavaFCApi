@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -68,7 +68,7 @@ public interface IMatchService
     Task<Result> SyncPlayerIntoActiveMatchesAsync(Guid groupId, Guid playerId, CancellationToken ct);
 
     Task<Result> RewindOneStepAsync(Guid groupId, Guid matchId, CancellationToken ct);
-    Task<Result<IReadOnlyList<MatchHistoryItemDto>>> GetHistoryAsync(Guid groupId, int take, int skip, CancellationToken cancellationToken, Guid? playerId = null);
+    Task<Result<PagedResultDto<MatchHistoryItemDto>>> GetHistoryAsync(Guid groupId, int take, int skip, CancellationToken cancellationToken, Guid? playerId = null);
 
     Task<Result> AddGuestToMatchAsync(Guid groupId, Guid matchId, AddGuestToMatchDto dto, CancellationToken ct);
 
@@ -87,11 +87,13 @@ public interface IMatchService
     Task<Result<List<ReplayClipDto>>> GetReplaysAsync(Guid groupId, Guid matchId, Guid? userId, CancellationToken ct);
     Task<(bool IsLiked, int LikeCount)> ToggleLikeAsync(Guid clipId, Guid userId, CancellationToken ct);
     Task<bool> ToggleFavoriteAsync(Guid clipId, Guid userId, CancellationToken ct);
-    Task<Result<List<LikedReplayClipDto>>> GetLikedReplaysAsync(Guid groupId, Guid? userId, CancellationToken ct);
-    Task<Result<List<LikedReplayClipDto>>> GetAllGroupReplaysAsync(Guid groupId, Guid userId, CancellationToken ct);
-    Task<Result<List<LikedReplayClipDto>>> GetMyLikesAsync(Guid groupId, Guid userId, CancellationToken ct);
-    Task<Result<List<LikedReplayClipDto>>> GetMyFavoritesAsync(Guid groupId, Guid userId, CancellationToken ct);
+    Task<Result<PagedResultDto<LikedReplayClipDto>>> GetLikedReplaysAsync(Guid groupId, Guid? userId, int page, int pageSize, CancellationToken ct);
+    Task<Result<PagedResultDto<LikedReplayClipDto>>> GetAllGroupReplaysAsync(Guid groupId, Guid userId, int page, int pageSize, CancellationToken ct);
+    Task<Result<PagedResultDto<LikedReplayClipDto>>> GetMyLikesAsync(Guid groupId, Guid userId, int page, int pageSize, CancellationToken ct);
+    Task<Result<PagedResultDto<LikedReplayClipDto>>> GetMyFavoritesAsync(Guid groupId, Guid userId, int page, int pageSize, CancellationToken ct);
+    Task<Result<Guid?>> SetLinkedPollAsync(Guid groupId, Guid matchId, Guid? pollId, CancellationToken ct);
     Task<Result<List<ClipLikerDto>>>        GetClipLikersAsync(Guid clipId, CancellationToken ct);
+    Task<ReplayClipEntity?> GetReplayClipAsync(Guid groupId, Guid clipId, CancellationToken ct);
     Task DeleteReplayAsync(Guid groupId, Guid clipId, CancellationToken ct);
     Task<Result<ReplayClipDto>> UploadReplayAsync(Guid groupId, Guid matchId, Guid userId, Stream content, string contentType, string fileName, string eventType, CancellationToken ct);
 }

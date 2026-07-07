@@ -848,7 +848,11 @@ public class AppDbContext : DbContext
         {
             if (entry.State == EntityState.Added)
             {
-                entry.Property(nameof(BaseEntity.CreateDate)).CurrentValue = utcNow;
+                // O construtor de BaseEntity já inicializa CreateDate; só preenche se estiver zerado,
+                // preservando valores definidos explicitamente (ex.: seeds e testes).
+                var createDate = entry.Property(nameof(BaseEntity.CreateDate));
+                if (createDate.CurrentValue is not DateTime dt || dt == default)
+                    createDate.CurrentValue = utcNow;
             }
             else if (entry.State == EntityState.Modified)
             {

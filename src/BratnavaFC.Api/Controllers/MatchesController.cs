@@ -1,4 +1,4 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
@@ -400,35 +400,41 @@ public class MatchesController : GroupAuthorizedController
     [HttpGet("group/{groupId:guid}/replays/all")]
     public async Task<IActionResult> GetAllGroupReplays(
         [FromRoute] Guid groupId,
-        CancellationToken ct)
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
     {
         if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
-        var result = await _service.GetAllGroupReplaysAsync(groupId, userId.Value, ct);
+        var result = await _service.GetAllGroupReplaysAsync(groupId, userId.Value, page, pageSize, ct);
         return ToResponse(result);
     }
 
     [HttpGet("group/{groupId:guid}/replays/liked")]
     public async Task<IActionResult> GetLikedReplays(
         [FromRoute] Guid groupId,
-        CancellationToken ct)
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
     {
         if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
         var userId = GetCurrentUserId();
-        var result = await _service.GetLikedReplaysAsync(groupId, userId, ct);
+        var result = await _service.GetLikedReplaysAsync(groupId, userId, page, pageSize, ct);
         return ToResponse(result);
     }
 
     [HttpGet("group/{groupId:guid}/replays/my-likes")]
     public async Task<IActionResult> GetMyLikes(
         [FromRoute] Guid groupId,
-        CancellationToken ct)
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
     {
         if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
-        var result = await _service.GetMyLikesAsync(groupId, userId.Value, ct);
+        var result = await _service.GetMyLikesAsync(groupId, userId.Value, page, pageSize, ct);
         return ToResponse(result);
     }
 
@@ -446,12 +452,14 @@ public class MatchesController : GroupAuthorizedController
     [HttpGet("group/{groupId:guid}/replays/my-favorites")]
     public async Task<IActionResult> GetMyFavorites(
         [FromRoute] Guid groupId,
-        CancellationToken ct)
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
     {
         if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
-        var result = await _service.GetMyFavoritesAsync(groupId, userId.Value, ct);
+        var result = await _service.GetMyFavoritesAsync(groupId, userId.Value, page, pageSize, ct);
         return ToResponse(result);
     }
 
@@ -463,8 +471,7 @@ public class MatchesController : GroupAuthorizedController
     {
         if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
 
-        var clip = await _db.Set<ReplayClipEntity>()
-            .FirstOrDefaultAsync(c => c.Id == clipId && c.GroupId == groupId, ct);
+        var clip = await _service.GetReplayClipAsync(groupId, clipId, ct);
 
         if (clip is null) return NotFound();
 
@@ -491,9 +498,7 @@ public class MatchesController : GroupAuthorizedController
             return;
         }
 
-        var clip = await _db.Set<ReplayClipEntity>()
-            .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Id == clipId && c.GroupId == groupId, ct);
+        var clip = await _service.GetReplayClipAsync(groupId, clipId, ct);
 
         if (clip is null)
         {
@@ -845,47 +850,19 @@ public class MatchesController : GroupAuthorizedController
     public async Task<IActionResult> SetLinkedPoll(
         Guid groupId,
         Guid matchId,
-        [FromBody] SetLinkedPollRequest dto,
+        [FromBody] SetLinkedPollRequestDto dto,
         CancellationToken ct)
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
 
-        var match = await _db.Matches
-            .FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct);
+        var result = await _service.SetLinkedPollAsync(groupId, matchId, dto.PollId, ct);
+        if (!result.Success)
+            return result.Status == Domain.Common.ResultStatus.NotFound
+                ? NotFound(new { error = result.Error })
+                : BadRequest(new { error = result.Error });
 
-        if (match is null) return NotFound(new { error = "Partida não encontrada." });
-
-        // ── Clear the old poll's back-reference (if any) ─────────────────────
-        if (match.LinkedPollId.HasValue && match.LinkedPollId != dto.PollId)
-        {
-            var oldPoll = await _db.Polls.FirstOrDefaultAsync(p => p.Id == match.LinkedPollId.Value, ct);
-            oldPoll?.SetLinkedMatch(null);
-        }
-
-        if (dto.PollId.HasValue)
-        {
-            var newPoll = await _db.Polls
-                .FirstOrDefaultAsync(p => p.Id == dto.PollId.Value && p.GroupId == groupId, ct);
-            if (newPoll is null)
-                return BadRequest(new { error = "Votação não encontrada neste grupo." });
-
-            // If the new poll was already linked to a different match, clear that match's FK too
-            if (newPoll.LinkedMatchId.HasValue && newPoll.LinkedMatchId != matchId)
-            {
-                var oldMatch = await _db.Matches.FirstOrDefaultAsync(m => m.Id == newPoll.LinkedMatchId.Value, ct);
-                oldMatch?.SetLinkedPoll(null);
-            }
-
-            newPoll.SetLinkedMatch(matchId);
-        }
-
-        match.SetLinkedPoll(dto.PollId);
-        await _db.SaveChangesAsync(ct);
-
-        return Ok(new { message = dto.PollId.HasValue ? "Votação vinculada." : "Vínculo removido.", linkedPollId = dto.PollId });
+        return Ok(new { message = result.Message, linkedPollId = result.Data });
     }
-
-    public sealed record SetLinkedPollRequest(Guid? PollId);
 
     private static MatchDto ToDto(MatchEntity e) =>
         new(

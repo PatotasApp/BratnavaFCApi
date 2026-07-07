@@ -104,7 +104,7 @@ public class MatchEntity : BaseEntity
         if (playerId == Guid.Empty) throw new InvalidOperationException("PlayerId e obrigatorio.");
 
         var mp = FindMatchPlayer(playerId);
-        mp.InviteResponse = InviteResponse.Accepted;
+        mp.AcceptInvite();
     }
 
     public void RejectInvite(Guid playerId)
@@ -113,7 +113,7 @@ public class MatchEntity : BaseEntity
         if (playerId == Guid.Empty) throw new InvalidOperationException("PlayerId e obrigatorio.");
 
         var mp = FindMatchPlayer(playerId);
-        mp.InviteResponse = InviteResponse.Rejected;
+        mp.RejectInvite();
     }
 
     /// <summary>Momento real em que a partida foi iniciada (UTC). Null para partidas antigas.</summary>

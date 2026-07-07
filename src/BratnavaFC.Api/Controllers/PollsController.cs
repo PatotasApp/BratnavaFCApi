@@ -22,12 +22,18 @@ public sealed class PollsController : GroupAuthorizedController
         _db = db;
     }
 
-    // GET /api/Polls/group/{groupId}
+    // GET /api/Polls/group/{groupId}?page=&pageSize=&type=&status=
     [HttpGet("group/{groupId:guid}")]
-    public async Task<IActionResult> GetPolls(Guid groupId, CancellationToken ct)
+    public async Task<IActionResult> GetPolls(
+        Guid groupId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? type = null,
+        [FromQuery] string? status = null,
+        CancellationToken ct = default)
     {
         var playerId = await GetPlayerIdForGroup(groupId, ct);
-        var result = await _polls.GetPollsAsync(groupId, playerId, ct);
+        var result = await _polls.GetPollsAsync(groupId, playerId, page, pageSize, type, status, ct);
         return ToResponse(result);
     }
 
@@ -89,6 +95,15 @@ public sealed class PollsController : GroupAuthorizedController
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         var result = await _polls.ReopenPollAsync(groupId, pollId, ct);
+        return ToResponse(result);
+    }
+
+    // PATCH /api/Polls/group/{groupId}/{pollId}/details
+    [HttpPatch("group/{groupId:guid}/{pollId:guid}/details")]
+    public async Task<IActionResult> UpdatePollDetails(Guid groupId, Guid pollId, [FromBody] UpdatePollDetailsDto dto, CancellationToken ct)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        var result = await _polls.UpdatePollDetailsAsync(groupId, pollId, dto, ct);
         return ToResponse(result);
     }
 
@@ -209,14 +224,4 @@ public sealed class PollsController : GroupAuthorizedController
             .FirstOrDefaultAsync(ct);
         return player?.Id ?? Guid.Empty;
     }
-}
-
-public class SetShowVotesDto
-{
-    public bool ShowVotes { get; set; }
-}
-
-public class SetAllowGuestsDto
-{
-    public bool AllowGuests { get; set; }
 }

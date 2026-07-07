@@ -1,4 +1,4 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Constants;
 using BratnavaFC.Domain.Dtos;
@@ -406,27 +406,33 @@ public sealed class BetService : IBetService
 
     // ── Histórico ─────────────────────────────────────────────────────────────
 
-    public async Task<List<MatchBetHistoryDto>> GetHistoryAsync(Guid groupId, CancellationToken ct)
+    public async Task<PagedResultDto<MatchBetHistoryDto>> GetHistoryAsync(Guid groupId, int page, int pageSize, CancellationToken ct)
     {
+        (page, pageSize) = Pagination.Normalize(page, pageSize);
+
         // Resolve any bets for finalized matches that were never explicitly resolved.
         // This prevents history from appearing empty just because GetMatchResults
         // was never called for those matches.
         await EnsureResolvedForGroupAsync(groupId, ct);
 
-        var matchIds = await _db.Set<MatchBetEntity>()
+        // Pagina por partida (cada item do histórico agrupa as apostas de uma partida)
+        var matchesQuery = _db.Matches
             .AsNoTracking()
-            .Where(b => b.GroupId == groupId && b.IsResolved)
-            .Select(b => b.MatchId)
-            .Distinct()
-            .ToListAsync(ct);
+            .Where(m => _db.Set<MatchBetEntity>()
+                .Any(b => b.GroupId == groupId && b.IsResolved && b.MatchId == m.Id));
 
-        if (matchIds.Count == 0) return [];
+        var total = await matchesQuery.CountAsync(ct);
 
-        var matches = await _db.Matches
-            .AsNoTracking()
-            .Where(m => matchIds.Contains(m.Id))
+        var matches = await matchesQuery
             .OrderByDescending(m => m.PlayedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(ct);
+
+        var matchIds = matches.Select(m => m.Id).ToList();
+
+        if (matchIds.Count == 0)
+            return new PagedResultDto<MatchBetHistoryDto> { Page = page, PageSize = pageSize, Total = total, Items = [] };
 
         var allBets = await _db.Set<MatchBetEntity>()
             .AsNoTracking()
@@ -457,7 +463,7 @@ public sealed class BetService : IBetService
                 .ToDictionaryAsync(mp => mp.Id, mp => mp.Name, ct)
             : new Dictionary<string, string>();
 
-        return matches.Select(match =>
+        var items = matches.Select(match =>
         {
             var bets     = allBets.Where(b => b.MatchId == match.Id).ToList();
             var userBets = bets.Select(bet =>
@@ -483,6 +489,8 @@ public sealed class BetService : IBetService
                 userBets
             );
         }).ToList();
+
+        return new PagedResultDto<MatchBetHistoryDto> { Page = page, PageSize = pageSize, Total = total, Items = items };
     }
 
     // ── Leaderboard ──────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Common;
+using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Dtos.Payments;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
@@ -314,13 +315,27 @@ public sealed class PaymentService : IPaymentService
 
     // ── Cobranças extras ──────────────────────────────────────────────────────
 
-    public async Task<Result<IReadOnlyList<ExtraChargeDto>>> GetExtraChargesAsync(Guid groupId, CancellationToken ct = default)
+    public async Task<Result<PagedResultDto<ExtraChargeDto>>> GetExtraChargesAsync(
+        Guid groupId, int? year = null, int? month = null, int page = 1, int pageSize = 20, CancellationToken ct = default)
     {
-        var charges = await _context.ExtraCharges
+        (page, pageSize) = Pagination.Normalize(page, pageSize);
+
+        var query = _context.ExtraCharges
             .AsNoTracking()
-            .Where(c => c.GroupId == groupId)
+            .Where(c => c.GroupId == groupId);
+
+        if (year.HasValue)
+            query = query.Where(c => c.CreateDate.Year == year.Value);
+        if (month.HasValue)
+            query = query.Where(c => c.CreateDate.Month == month.Value);
+
+        var total = await query.CountAsync(ct);
+
+        var charges = await query
             .Include(c => c.Payments)
             .OrderByDescending(c => c.CreateDate)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(ct);
 
         // Busca nomes dos jogadores envolvidos
@@ -336,8 +351,61 @@ public sealed class PaymentService : IPaymentService
                 .ToDictionaryAsync(p => p.Id, p => p.Name, ct)
             : new Dictionary<Guid, string>();
 
-        IReadOnlyList<ExtraChargeDto> result = charges.Select(c => ToExtraChargeDto(c, playerNames)).ToList();
-        return Result<IReadOnlyList<ExtraChargeDto>>.Ok(result);
+        var items = charges.Select(c => ToExtraChargeDto(c, playerNames)).ToList();
+        return Result<PagedResultDto<ExtraChargeDto>>.Ok(new PagedResultDto<ExtraChargeDto>
+        {
+            Page = page, PageSize = pageSize, Total = total, Items = items,
+        });
+    }
+
+    public async Task<Result<IReadOnlyList<ExtraChargeMonthSummaryDto>>> GetExtraChargesSummaryAsync(
+        Guid groupId, int year, Guid? userId = null, CancellationToken ct = default)
+    {
+        var query = _context.ExtraCharges
+            .AsNoTracking()
+            .Where(c => c.GroupId == groupId && c.CreateDate.Year == year);
+
+        // Visão do próprio jogador: considera só cobranças em que ele está incluído
+        if (userId.HasValue)
+        {
+            var playerId = await _context.Players
+                .AsNoTracking()
+                .Where(p => p.GroupId == groupId && p.UserId == userId.Value && !p.IsGuest)
+                .Select(p => (Guid?)p.Id)
+                .FirstOrDefaultAsync(ct);
+
+            if (playerId is null)
+                return Result<IReadOnlyList<ExtraChargeMonthSummaryDto>>.Ok([]);
+
+            query = query.Where(c => c.Payments.Any(p => p.PlayerId == playerId.Value));
+        }
+
+        var months = await query
+            .Select(c => new
+            {
+                Month       = c.CreateDate.Month,
+                c.IsCancelled,
+                AllPaid     = c.Payments.Count > 0 && c.Payments.All(p => p.Status == PaymentStatus.Paid),
+            })
+            .ToListAsync(ct);
+
+        IReadOnlyList<ExtraChargeMonthSummaryDto> result = months
+            .GroupBy(m => m.Month)
+            .Select(g =>
+            {
+                var active = g.Where(x => !x.IsCancelled).ToList();
+                return new ExtraChargeMonthSummaryDto
+                {
+                    Month      = g.Key,
+                    Count      = g.Count(),
+                    AllPaid    = active.Count > 0 && active.All(x => x.AllPaid),
+                    HasPending = active.Any(x => !x.AllPaid),
+                };
+            })
+            .OrderBy(s => s.Month)
+            .ToList();
+
+        return Result<IReadOnlyList<ExtraChargeMonthSummaryDto>>.Ok(result);
     }
 
     public async Task<Result<ExtraChargeDto>> CreateExtraChargeAsync(
@@ -400,6 +468,50 @@ public sealed class PaymentService : IPaymentService
         await _context.SaveChangesAsync(ct);
 
         return Result.Ok("Cobrança extra removida com sucesso.");
+    }
+
+    public async Task<Result<ExtraChargeDto>> ReactivateExtraChargeAsync(Guid groupId, Guid chargeId, CancellationToken ct = default)
+    {
+        var charge = await _context.ExtraCharges
+            .Include(c => c.Payments)
+            .FirstOrDefaultAsync(c => c.Id == chargeId && c.GroupId == groupId, ct);
+
+        if (charge is null)
+            return Result<ExtraChargeDto>.Fail("Cobrança extra não encontrada.", ResultStatus.NotFound);
+
+        if (!charge.IsCancelled)
+            return Result<ExtraChargeDto>.Fail("Cobrança extra não está cancelada.", ResultStatus.BadRequest);
+
+        charge.Reactivate();
+        await _context.SaveChangesAsync(ct);
+
+        var playerNames = await _context.Players
+            .Where(p => p.GroupId == groupId)
+            .ToDictionaryAsync(p => p.Id, p => p.Name, ct);
+
+        return Result<ExtraChargeDto>.Ok(ToExtraChargeDto(charge, playerNames), "Cobrança extra reativada com sucesso.");
+    }
+
+    public async Task<Result<ExtraChargeDto>> UpdateExtraChargeDetailsAsync(Guid groupId, Guid chargeId, UpdateExtraChargeDetailsDto dto, CancellationToken ct = default)
+    {
+        var charge = await _context.ExtraCharges
+            .Include(c => c.Payments)
+            .FirstOrDefaultAsync(c => c.Id == chargeId && c.GroupId == groupId, ct);
+
+        if (charge is null)
+            return Result<ExtraChargeDto>.Fail("Cobrança extra não encontrada.", ResultStatus.NotFound);
+
+        try { charge.UpdateDetails(dto.Name, dto.Description, dto.Amount); }
+        catch (InvalidOperationException ex)
+        { return Result<ExtraChargeDto>.Fail(ex.Message, ResultStatus.BadRequest); }
+
+        await _context.SaveChangesAsync(ct);
+
+        var playerNames = await _context.Players
+            .Where(p => p.GroupId == groupId)
+            .ToDictionaryAsync(p => p.Id, p => p.Name, ct);
+
+        return Result<ExtraChargeDto>.Ok(ToExtraChargeDto(charge, playerNames), "Cobrança extra atualizada com sucesso.");
     }
 
     public async Task<Result> BulkDiscountExtraChargeAsync(
@@ -685,9 +797,13 @@ public sealed class PaymentService : IPaymentService
         });
     }
 
-    public async Task<Result<IReadOnlyList<ExtraChargeDto>>> GetMyExtraChargesAsync(
-        Guid groupId, Guid userId, CancellationToken ct = default)
+    public async Task<Result<PagedResultDto<ExtraChargeDto>>> GetMyExtraChargesAsync(
+        Guid groupId, Guid userId, int? year = null, int? month = null, int page = 1, int pageSize = 20, CancellationToken ct = default)
     {
+        (page, pageSize) = Pagination.Normalize(page, pageSize);
+
+        var empty = new PagedResultDto<ExtraChargeDto> { Page = page, PageSize = pageSize, Total = 0, Items = [] };
+
         var playerId = await _context.Players
             .AsNoTracking()
             .Where(p => p.GroupId == groupId
@@ -696,16 +812,29 @@ public sealed class PaymentService : IPaymentService
             .Select(p => (Guid?)p.Id)
             .FirstOrDefaultAsync(ct);
 
-        if (playerId is null) return Result<IReadOnlyList<ExtraChargeDto>>.Ok([]);
+        if (playerId is null) return Result<PagedResultDto<ExtraChargeDto>>.Ok(empty);
 
-        var payments = await _context.ExtraChargePayments
+        var paymentsQuery = _context.ExtraChargePayments
             .AsNoTracking()
             .Where(ep => ep.GroupId  == groupId
-                      && ep.PlayerId == playerId.Value)
+                      && ep.PlayerId == playerId.Value);
+
+        if (year.HasValue)
+            paymentsQuery = paymentsQuery.Where(ep => ep.ExtraCharge!.CreateDate.Year == year.Value);
+        if (month.HasValue)
+            paymentsQuery = paymentsQuery.Where(ep => ep.ExtraCharge!.CreateDate.Month == month.Value);
+
+        var total = await paymentsQuery.CountAsync(ct);
+
+        var payments = await paymentsQuery
             .Include(ep => ep.ExtraCharge)
+            .OrderByDescending(ep => ep.ExtraCharge!.CreateDate)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(ct);
 
-        if (payments.Count == 0) return Result<IReadOnlyList<ExtraChargeDto>>.Ok([]);
+        if (payments.Count == 0) return Result<PagedResultDto<ExtraChargeDto>>.Ok(
+            new PagedResultDto<ExtraChargeDto> { Page = page, PageSize = pageSize, Total = total, Items = [] });
 
         var playerName = await _context.Players
             .AsNoTracking()
@@ -715,7 +844,7 @@ public sealed class PaymentService : IPaymentService
 
         var names = new Dictionary<Guid, string> { [playerId.Value] = playerName };
 
-        IReadOnlyList<ExtraChargeDto> result = payments
+        IReadOnlyList<ExtraChargeDto> items = payments
             .Where(ep => ep.ExtraCharge is not null)
             .GroupBy(ep => ep.ExtraChargeId)
             .Select(g =>
@@ -748,7 +877,10 @@ public sealed class PaymentService : IPaymentService
             .OrderByDescending(c => c.CreatedAt)
             .ToList();
 
-        return Result<IReadOnlyList<ExtraChargeDto>>.Ok(result);
+        return Result<PagedResultDto<ExtraChargeDto>>.Ok(new PagedResultDto<ExtraChargeDto>
+        {
+            Page = page, PageSize = pageSize, Total = total, Items = items,
+        });
     }
 
     // ── Resumo ────────────────────────────────────────────────────────────────

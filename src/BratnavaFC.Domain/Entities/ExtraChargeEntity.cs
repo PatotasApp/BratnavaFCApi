@@ -37,5 +37,22 @@ public sealed class ExtraChargeEntity : BaseEntity
     public GroupEntity?                   Group    { get; private set; }
     public List<ExtraChargePaymentEntity> Payments { get; private set; } = [];
 
-    public void Cancel() => IsCancelled = true;
+    public void Cancel()     => IsCancelled = true;
+    public void Reactivate() => IsCancelled = false;
+
+    public void UpdateDetails(string? name, string? description, decimal? amount)
+    {
+        if (name is not null)
+        {
+            if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("Nome é obrigatório.");
+            Name = name.Trim();
+        }
+        if (description is not null)
+            Description = description.Trim() == string.Empty ? null : description.Trim();
+        if (amount.HasValue)
+        {
+            if (amount.Value <= 0) throw new InvalidOperationException("Valor deve ser maior que zero.");
+            Amount = amount.Value;
+        }
+    }
 }

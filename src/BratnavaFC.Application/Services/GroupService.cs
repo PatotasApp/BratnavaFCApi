@@ -1,5 +1,6 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Common;
+using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Dtos.Groups;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
@@ -276,14 +277,21 @@ public class GroupService : IGroupService
         return Result<List<GroupDto>>.Ok(list);
     }
 
-    public async Task<Result<List<GroupDto>>> GetAllGroupsAsync(CancellationToken cancellationToken)
+    public async Task<Result<PagedResultDto<GroupDto>>> GetAllGroupsAsync(int page, int pageSize, CancellationToken cancellationToken)
     {
-        var groups = await _context.Groups
+        (page, pageSize) = Pagination.Normalize(page, pageSize);
+
+        var query = _context.Groups.AsQueryable();
+        var total = await query.CountAsync(cancellationToken);
+
+        var groups = await query
             .Include(g => g.Players)
                 .ThenInclude(p => p.User)
             .Include(g => g.Admins)
             .Include(g => g.Financeiros)
             .OrderBy(g => g.Name)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(cancellationToken);
 
         var list = groups.Select(g => new GroupDto(
@@ -300,7 +308,10 @@ public class GroupService : IGroupService
             g.CreatedByUserId
         )).ToList();
 
-        return Result<List<GroupDto>>.Ok(list);
+        return Result<PagedResultDto<GroupDto>>.Ok(new PagedResultDto<GroupDto>
+        {
+            Page = page, PageSize = pageSize, Total = total, Items = list,
+        });
     }
 
     public async Task<Result> AddAdminToGroupAsync(Guid groupId, AddAdminToGroupDto request, CancellationToken cancellationToken)

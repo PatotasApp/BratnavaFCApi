@@ -171,14 +171,17 @@ public class BetController : GroupAuthorizedController
         return Ok(preview);
     }
 
-    /// <summary>Histórico de apostas de todas as partidas resolvidas do grupo.</summary>
+    /// <summary>Histórico de apostas de todas as partidas resolvidas do grupo (paginado por partida).</summary>
     [HttpGet("group/{groupId:guid}/history")]
     public async Task<IActionResult> GetHistory(
-        [FromRoute] Guid groupId, CancellationToken ct)
+        [FromRoute] Guid groupId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
     {
         if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
 
-        var history = await _bets.GetHistoryAsync(groupId, ct);
+        var history = await _bets.GetHistoryAsync(groupId, page, pageSize, ct);
         return Ok(history);
     }
 }
