@@ -1408,7 +1408,7 @@ public sealed class MatchService : IMatchService
     }
 
     /// <summary>
-    /// Versão resumida para o dashboard — exclui convidados de todas as listas.
+    /// Versão resumida para o dashboard.
     /// </summary>
     public async Task<Result<MatchAcceptationDto>> GetAcceptationSummaryAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
@@ -1423,7 +1423,7 @@ public sealed class MatchService : IMatchService
             MaxPlayers               = d.MaxPlayers,
             AcceptedOverLimit        = d.AcceptedOverLimit,
             CanAdvanceToMatchmaking  = d.CanAdvanceToMatchmaking,
-            AcceptedPlayers          = d.AcceptedPlayers.Where(p => !p.IsGuest).ToList(),
+            AcceptedPlayers          = d.AcceptedPlayers,
             RejectedPlayers          = d.RejectedPlayers.Where(p => !p.IsGuest).ToList(),
             PendingPlayers           = d.PendingPlayers .Where(p => !p.IsGuest).ToList(),
         });

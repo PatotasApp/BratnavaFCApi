@@ -1176,9 +1176,9 @@ public sealed class MatchServiceCoverageTests
     }
 
     [Fact]
-    public async Task GetAcceptationSummaryAsync_ShouldExcludeGuests()
+    public async Task GetAcceptationSummaryAsync_ShouldIncludeGuests()
     {
-        await using var db = DbContextFactory.Create(nameof(GetAcceptationSummaryAsync_ShouldExcludeGuests));
+        await using var db = DbContextFactory.Create(nameof(GetAcceptationSummaryAsync_ShouldIncludeGuests));
         var sut = CreateSut(db);
 
         var group = await SeedGroupAsync(db);
@@ -1190,10 +1190,12 @@ public sealed class MatchServiceCoverageTests
         var summary = await sut.GetAcceptationSummaryAsync(group.Id, match.Id, CancellationToken.None);
 
         full.Data!.AcceptedPlayers.Should().HaveCount(3); // 2 + convidado auto-aceito
-        summary.Data!.AcceptedPlayers.Should().HaveCount(2);
-        summary.Data!.AcceptedPlayers.Should().OnlyContain(p => !p.IsGuest);
+        summary.Data!.AcceptedPlayers.Should().HaveCount(3);
+        summary.Data!.AcceptedPlayers.Should().ContainSingle(p => p.IsGuest && p.PlayerName == "Convidado");
+        summary.Data!.RejectedPlayers.Should().OnlyContain(p => !p.IsGuest);
+        summary.Data!.PendingPlayers.Should().OnlyContain(p => !p.IsGuest);
         summary.Data!.AcceptedPlayers.Select(p => p.PlayerId)
-            .Should().BeEquivalentTo(players.Select(p => p.Id));
+            .Should().BeEquivalentTo(players.Select(p => p.Id).Append(summary.Data!.AcceptedPlayers.Single(p => p.IsGuest).PlayerId));
     }
 
     [Fact]
