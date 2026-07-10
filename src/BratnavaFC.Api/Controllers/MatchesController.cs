@@ -674,9 +674,9 @@ public class MatchesController : GroupAuthorizedController
     }
 
     [HttpDelete("group/{groupId:guid}/{matchId:guid}/goals/{goalId:guid}")]
-    [Authorize(Roles = "GodMode")]
     public async Task<IActionResult> RemoveGoal(Guid groupId, Guid matchId, Guid goalId, CancellationToken ct)
     {
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
         try
         {
             await _service.RemoveGoalAsync(groupId, matchId, goalId, ct);
