@@ -327,10 +327,10 @@ public class CalendarServiceTests
     }
 
     [Fact]
-    public async Task GetEventsAsync_ShouldIncludeMatchesConvertedToBrazilTime()
+    public async Task GetEventsAsync_ShouldKeepMatchWallClockTime()
     {
-        // Arrange — 15:00 UTC = 12:00 em Brasília (UTC-3)
-        await using var db = DbContextFactory.Create(nameof(GetEventsAsync_ShouldIncludeMatchesConvertedToBrazilTime));
+        // Arrange — match times are displayed as saved, without timezone conversion.
+        await using var db = DbContextFactory.Create(nameof(GetEventsAsync_ShouldKeepMatchWallClockTime));
         var group = await SeedGroupAsync(db);
         var playedAt = DateTime.SpecifyKind(new DateTime(2030, 5, 10, 15, 0, 0), DateTimeKind.Utc);
         var match = new MatchEntity(group.Id, playedAt, "Arena Bratnava");
@@ -348,7 +348,7 @@ public class CalendarServiceTests
         dto.Type.Should().Be("match");
         dto.Title.Should().Be("Arena Bratnava");
         dto.Date.Should().Be("2030-05-10");
-        dto.Time.Should().Be("12:00");
+        dto.Time.Should().Be("15:00");
         dto.TimeTBD.Should().BeFalse();
         dto.CategoryName.Should().Be("Jogo");
         dto.CategoryIcon.Should().Be("⚽");
