@@ -5,23 +5,43 @@ using System.Text.Json.Serialization;
 namespace BratnavaFC.Api;
 
 /// <summary>
-/// Serializa DateTime sempre com sufixo "Z" (UTC ISO-8601).
-/// Datas armazenadas como UTC no banco chegam com Kind=Unspecified via Npgsql;
-/// este converter as trata como UTC, garantindo que o cliente receba o fuso correto.
+/// Serializa DateTime como horário de parede, sem sufixo de timezone.
+/// Para dados do domínio como horário de partida, 21:00 deve ser exibido como
+/// 21:00 em todos os clientes, independente do fuso do dispositivo/navegador.
 /// </summary>
 public sealed class UtcDateTimeConverter : JsonConverter<DateTime>
 {
     public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-        => DateTime.Parse(reader.GetString()!, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+    {
+        var raw = StripTimezone(reader.GetString()!);
+        var parsed = DateTime.Parse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None);
+        return DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
+    }
 
     public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options)
     {
-        var utc = value.Kind switch
+        writer.WriteStringValue(value.ToString("yyyy-MM-ddTHH:mm:ss.fff", CultureInfo.InvariantCulture));
+    }
+
+    private static string StripTimezone(string value)
+    {
+        if (value.EndsWith('Z') || value.EndsWith('z'))
+            return value[..^1];
+
+        if (value.Length >= 6)
         {
-            DateTimeKind.Utc     => value,
-            DateTimeKind.Local   => value.ToUniversalTime(),
-            _                    => DateTime.SpecifyKind(value, DateTimeKind.Utc) // Unspecified → UTC
-        };
-        writer.WriteStringValue(utc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture));
+            var offset = value[^6..];
+            if ((offset[0] == '+' || offset[0] == '-') &&
+                char.IsDigit(offset[1]) &&
+                char.IsDigit(offset[2]) &&
+                offset[3] == ':' &&
+                char.IsDigit(offset[4]) &&
+                char.IsDigit(offset[5]))
+            {
+                return value[..^6];
+            }
+        }
+
+        return value;
     }
 }

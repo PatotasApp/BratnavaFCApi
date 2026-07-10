@@ -44,11 +44,11 @@ public class BetServiceTests
         match.OpenAcceptation();
 
         mp1 = new MatchPlayerEntity(Guid.NewGuid());
-        mp1.InviteResponse = InviteResponse.Accepted;
+        mp1.AcceptInvite();
         mp1.AssignToMatch(match);
 
         mp2 = new MatchPlayerEntity(Guid.NewGuid());
-        mp2.InviteResponse = InviteResponse.Accepted;
+        mp2.AcceptInvite();
         mp2.AssignToMatch(match);
 
         match.Players.Add(mp1);
@@ -210,11 +210,11 @@ public class BetServiceTests
         match.OpenAcceptation();
 
         var mp1 = new MatchPlayerEntity(Guid.NewGuid());
-        mp1.InviteResponse = InviteResponse.Accepted;
+        mp1.AcceptInvite();
         mp1.AssignToMatch(match);
 
         var mp2 = new MatchPlayerEntity(Guid.NewGuid());
-        mp2.InviteResponse = InviteResponse.Accepted;
+        mp2.AcceptInvite();
         mp2.AssignToMatch(match);
 
         match.Players.Add(mp1);

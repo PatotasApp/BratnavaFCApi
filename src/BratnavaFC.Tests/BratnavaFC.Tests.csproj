@@ -31,4 +31,8 @@
     <ProjectReference Include="..\BratnavaFC.Infrastructure\BratnavaFC.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\BratnavaFC.Api\UtcDateTimeConverter.cs" Link="UtcDateTimeConverter.cs" />
+  </ItemGroup>
+
 </Project>

@@ -442,8 +442,8 @@ public sealed class CalendarService : ICalendarService
     {
         // Expande 4h em cada lado para cobrir a diferença de fuso do Brasil (UTC-3 / UTC-2).
         // BuildMatchEvents filtra em memória pelo horário local após a conversão.
-        var startRaw = start.ToDateTime(TimeOnly.MinValue).AddHours(-4);
-        var endRaw   = end.ToDateTime(TimeOnly.MaxValue).AddHours(4);
+        var startRaw = start.ToDateTime(TimeOnly.MinValue);
+        var endRaw   = end.ToDateTime(TimeOnly.MaxValue);
         return (
             DateTime.SpecifyKind(startRaw, DateTimeKind.Utc),
             DateTime.SpecifyKind(endRaw,   DateTimeKind.Utc)
@@ -499,8 +499,7 @@ public sealed class CalendarService : ICalendarService
         foreach (var match in matches)
         {
             // PlayedAt é UTC (Npgsql). Converte para horário de Brasília antes de exibir.
-            var localDt   = TimeZoneInfo.ConvertTimeFromUtc(match.PlayedAt, BrazilTz);
-            var matchDate = DateOnly.FromDateTime(localDt);
+            var matchDate = DateOnly.FromDateTime(match.PlayedAt);
 
             // O range UTC foi expandido para não perder jogos na virada do dia;
             // filtramos aqui pelo intervalo de datas locais solicitado.
@@ -513,7 +512,7 @@ public sealed class CalendarService : ICalendarService
                 Type = CalendarEventTypes.Match,
                 Title = string.IsNullOrWhiteSpace(match.PlaceName) ? "Jogo" : match.PlaceName,
                 Date = matchDate.ToString("yyyy-MM-dd"),
-                Time = localDt.ToString("HH:mm"),
+                Time = match.PlayedAt.ToString("HH:mm"),
                 TimeTBD = false,
                 CategoryId = null,
                 CategoryName = "Jogo",
