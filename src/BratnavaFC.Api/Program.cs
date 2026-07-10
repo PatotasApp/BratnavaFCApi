@@ -66,9 +66,8 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-
 // =====================
-// 🔥 CORS LIBERADO TOTAL
+// CORS LIBERADO TOTAL
 // =====================
 builder.Services.AddCors(options =>
 {
@@ -78,15 +77,16 @@ builder.Services.AddCors(options =>
             .AllowAnyOrigin()
             .AllowAnyMethod()
             .AllowAnyHeader()
-            .WithExposedHeaders("Content-Range", "Accept-Ranges", "Content-Length", "Content-Type");
+            .WithExposedHeaders(
+                "Content-Range",
+                "Accept-Ranges",
+                "Content-Length",
+                "Content-Type");
     });
 });
 
-
 // =====================
 // RATE LIMITING
-// Protege contra scraping automatizado de dados via API.
-// Limite por usuário autenticado (sub do JWT); fallback por IP para anônimos.
 // =====================
 builder.Services.AddRateLimiter(options =>
 {
@@ -95,53 +95,52 @@ builder.Services.AddRateLimiter(options =>
     options.OnRejected = async (context, ct) =>
     {
         context.HttpContext.Response.ContentType = "application/json";
+
         await context.HttpContext.Response.WriteAsync(
-            "{\"success\":false,\"message\":\"Muitas requisições. Tente novamente em instantes.\",\"errors\":[]}", ct);
+            "{\"success\":false,\"message\":\"Muitas requisições. Tente novamente em instantes.\",\"errors\":[]}",
+            ct);
     };
 
-    // Autenticados: 120 req / 60 s (janela deslizante, 6 segmentos de 10 s)
-    // Equivale a ~2 req/s em média — suficiente para uso normal,
-    // inviável para varredura automática.
     options.AddPolicy("PerUser", context =>
     {
         var userId = context.User?.FindFirstValue("sub");
+
         if (!string.IsNullOrEmpty(userId))
         {
             return RateLimitPartition.GetSlidingWindowLimiter(
                 partitionKey: $"user:{userId}",
                 factory: _ => new SlidingWindowRateLimiterOptions
                 {
-                    PermitLimit          = 120,
-                    Window               = TimeSpan.FromSeconds(60),
-                    SegmentsPerWindow    = 6,
+                    PermitLimit = 120,
+                    Window = TimeSpan.FromSeconds(60),
+                    SegmentsPerWindow = 6,
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                    QueueLimit           = 0,
+                    QueueLimit = 0
                 });
         }
 
-        // Anônimos: limite mais restrito por IP
         var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
         return RateLimitPartition.GetSlidingWindowLimiter(
             partitionKey: $"ip:{ip}",
             factory: _ => new SlidingWindowRateLimiterOptions
             {
-                PermitLimit          = 30,
-                Window               = TimeSpan.FromSeconds(60),
-                SegmentsPerWindow    = 6,
+                PermitLimit = 30,
+                Window = TimeSpan.FromSeconds(60),
+                SegmentsPerWindow = 6,
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                QueueLimit           = 0,
+                QueueLimit = 0
             });
     });
 });
-
 
 // =====================
 // DATABASE
 // =====================
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
-
 
 // =====================
 // HANGFIRE
@@ -154,17 +153,16 @@ builder.Services.AddHangfire(config => config
         options => options.UseNpgsqlConnection(connectionString!),
         new PostgreSqlStorageOptions
         {
-            SchemaName        = "hangfire",
+            SchemaName = "hangfire",
             QueuePollInterval = TimeSpan.FromHours(1)
         }));
 
 builder.Services.AddHangfireServer(options =>
 {
-    options.WorkerCount             = 2;
-    options.Queues                  = ["default"];
+    options.WorkerCount = 2;
+    options.Queues = ["default"];
     options.SchedulePollingInterval = TimeSpan.FromMinutes(5);
 });
-
 
 // =====================
 // DEPENDENCY INJECTION
@@ -204,17 +202,21 @@ builder.Services.AddScoped<IMonthlyPaymentReminderJob, MonthlyPaymentReminderJob
 // =====================
 // FIREBASE ADMIN
 // =====================
-// Prioridade 1: Base64 via FIREBASE_SERVICE_ACCOUNT_B64  (recomendado — sem problemas de quoting)
-// Prioridade 2: JSON via FIREBASE_SERVICE_ACCOUNT_JSON ou Firebase:ServiceAccountJson
-// Prioridade 3: Arquivo via Firebase:ServiceAccountPath
-// Prioridade 4: Application Default Credentials (GCP/Cloud Run)
 var startupLogger = LoggerFactory.Create(l => l.AddConsole()).CreateLogger("Startup");
 
 static string? DecodeB64(string? b64)
 {
-    if (string.IsNullOrWhiteSpace(b64)) return null;
-    try   { return System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(b64)); }
-    catch { return null; }
+    if (string.IsNullOrWhiteSpace(b64))
+        return null;
+
+    try
+    {
+        return Encoding.UTF8.GetString(Convert.FromBase64String(b64));
+    }
+    catch
+    {
+        return null;
+    }
 }
 
 var firebaseJson =
@@ -230,30 +232,34 @@ try
     {
         FirebaseApp.Create(new AppOptions
         {
-            Credential = GoogleCredential.FromJson(firebaseJson),
+            Credential = GoogleCredential.FromJson(firebaseJson)
         });
+
         startupLogger.LogInformation("[Firebase] Inicializado via ServiceAccountJson.");
     }
     else if (!string.IsNullOrWhiteSpace(firebasePath) && File.Exists(firebasePath))
     {
         FirebaseApp.Create(new AppOptions
         {
-            Credential = GoogleCredential.FromFile(firebasePath),
+            Credential = GoogleCredential.FromFile(firebasePath)
         });
+
         startupLogger.LogInformation("[Firebase] Inicializado via ServiceAccountPath.");
     }
     else
     {
         FirebaseApp.Create(new AppOptions
         {
-            Credential = GoogleCredential.GetApplicationDefault(),
+            Credential = GoogleCredential.GetApplicationDefault()
         });
+
         startupLogger.LogInformation("[Firebase] Inicializado via Application Default Credentials.");
     }
 }
 catch (Exception ex)
 {
-    startupLogger.LogWarning(ex,
+    startupLogger.LogWarning(
+        ex,
         "[Firebase] Não pôde ser inicializado. Push notifications estarão indisponíveis. " +
         "Verifique FIREBASE_SERVICE_ACCOUNT_B64, FIREBASE_SERVICE_ACCOUNT_JSON ou Firebase:ServiceAccountPath.");
 }
@@ -267,18 +273,18 @@ var redisConnectionString =
     ?? "localhost:6379";
 
 var redisOptions = ConfigurationOptions.Parse(redisConnectionString);
-redisOptions.ConnectTimeout = 10_000;  // 10s para estabelecer conexão
-redisOptions.SyncTimeout    = 40_000;  // 40s — comporta o BLOCK de 30s + margem de 10s
+redisOptions.ConnectTimeout = 10_000;
+redisOptions.SyncTimeout = 40_000;
 
 builder.Services.AddSingleton<IConnectionMultiplexer>(
     ConnectionMultiplexer.Connect(redisOptions));
+
 builder.Services.AddScoped<IMatchEventPublisher, RedisMatchEventPublisher>();
 builder.Services.AddSingleton<IReplayUrlService, R2ReplayUrlService>();
 builder.Services.AddHostedService<ReplayStreamConsumerService>();
 
-
 // =====================
-// HOLIDAY SERVICE (BrasilAPI)
+// HOLIDAY SERVICE
 // =====================
 builder.Services.AddHttpClient("BrasilApi", c =>
 {
@@ -287,15 +293,16 @@ builder.Services.AddHttpClient("BrasilApi", c =>
     c.DefaultRequestHeaders.Add("User-Agent", "BratnavaFC/1.0");
     c.Timeout = TimeSpan.FromSeconds(10);
 });
+
 builder.Services.AddHttpClient("OpenAI", c =>
 {
     c.BaseAddress = new Uri("https://api.openai.com/");
     c.DefaultRequestHeaders.Add("Accept", "application/json");
-    c.Timeout = TimeSpan.FromSeconds(120); // Image generation can be slow
+    c.Timeout = TimeSpan.FromSeconds(120);
 });
+
 builder.Services.AddMemoryCache(o => o.SizeLimit = 10_000);
 builder.Services.AddSingleton<IHolidayService, HolidayService>();
-
 
 // =====================
 // JWT
@@ -312,7 +319,6 @@ builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        // 🔥 evita trocar "role" -> ClaimTypes.Role automaticamente
         options.MapInboundClaims = false;
 
         options.TokenValidationParameters = new TokenValidationParameters
@@ -323,23 +329,26 @@ builder.Services
             ValidateIssuerSigningKey = true,
             ValidIssuer = jwtIssuer,
             ValidAudience = jwtAudience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
-
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(jwtSecret)),
             RoleClaimType = "role",
             NameClaimType = "name"
         };
 
-        // Permite que <video src="...?t=TOKEN"> autentique sem header Authorization
         options.Events = new JwtBearerEvents
         {
             OnMessageReceived = context =>
             {
-                if (context.Request.Path.Value?.Contains("/stream", StringComparison.OrdinalIgnoreCase) == true)
+                if (context.Request.Path.Value?.Contains(
+                        "/stream",
+                        StringComparison.OrdinalIgnoreCase) == true)
                 {
                     var token = context.Request.Query["t"].FirstOrDefault();
+
                     if (!string.IsNullOrEmpty(token))
                         context.Token = token;
                 }
+
                 return Task.CompletedTask;
             }
         };
@@ -347,63 +356,71 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
-
 // =====================
 // BUILD APP
 // =====================
 var app = builder.Build();
 
-
 // =====================
 // MIDDLEWARE PIPELINE
 // =====================
-// 🔥 Exception handler must be FIRST to catch exceptions from all middleware
 app.UseExceptionHandler(appError =>
 {
     appError.Run(async context =>
     {
-        var ex      = context.Features.Get<IExceptionHandlerFeature>()?.Error;
-        var logger  = context.RequestServices
+        var ex = context.Features.Get<IExceptionHandlerFeature>()?.Error;
+
+        var logger = context.RequestServices
             .GetRequiredService<ILoggerFactory>()
             .CreateLogger("GlobalExceptionHandler");
 
-        logger.LogError(ex, "Unhandled exception — {Method} {Path}",
-            context.Request.Method, context.Request.Path);
+        logger.LogError(
+            ex,
+            "Unhandled exception — {Method} {Path}",
+            context.Request.Method,
+            context.Request.Path);
 
-        context.Response.StatusCode  = 500;
+        context.Response.StatusCode = 500;
         context.Response.ContentType = "application/json";
 
-        // Em Development: retorna o tipo e a mensagem da exceção.
-        // Em produção: mensagem genérica (não expõe detalhes internos).
         var isDev = app.Environment.IsDevelopment();
+
         var errorMessage = isDev && ex is not null
             ? $"[{ex.GetType().Name}] {ex.Message}"
             : "Erro interno no servidor.";
 
-        var response = new ApiResponse<object>(false, null, null, errorMessage, []);
+        var response = new ApiResponse<object>(
+            false,
+            null,
+            null,
+            errorMessage,
+            []);
+
         await context.Response.WriteAsJsonAsync(response);
     });
 });
 
 app.UseSwagger();
+
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "BratnavaFC API v1");
 });
 
-app.UseHttpsRedirection();
+// Não redireciona HTTP para HTTPS no ambiente local.
+// Isso permite o celular acessar a API pelo IP da rede.
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
-// 🔥 CORS TEM QUE VIR ANTES DO AUTH
 app.UseCors("AllowAll");
 
-// Rate limiting (antes do auth para bloquear IPs suspeitos cedo)
 app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Audit trail — registra todas as chamadas autenticadas com userId + IP
-// Deve vir APÓS UseAuthentication para que User.FindFirstValue("sub") funcione
 app.UseMiddleware<AuditMiddleware>();
 
 // =====================
@@ -414,29 +431,42 @@ app.UseHangfireDashboard("/hangfire", new DashboardOptions
     Authorization = [new BratnavaFC.Api.Auth.HangfireGodModeAuthFilter()]
 });
 
-// AddOrUpdate is called on every startup — idempotent.
-// Creates the job on first deploy; updates cron/method on subsequent deploys if changed.
-// IRecurringJobManager must be used instead of the static RecurringJob API in ASP.NET Core.
 var recurringJobs = app.Services.GetRequiredService<IRecurringJobManager>();
+
 recurringJobs.AddOrUpdate<IClipCleanupJob>(
     recurringJobId: "clip-r2-cleanup",
     methodCall: job => job.ExecuteAsync(CancellationToken.None),
     cronExpression: "0 3 1,15 * *",
-    options: new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+    options: new RecurringJobOptions
+    {
+        TimeZone = TimeZoneInfo.Utc
+    });
 
-// Notificações de aniversário: todo dia às 08:00 horário de Brasília (UTC-3 = 11:00 UTC)
 recurringJobs.AddOrUpdate<IBirthdayNotificationJob>(
     recurringJobId: "birthday-daily",
     methodCall: job => job.ExecuteAsync(CancellationToken.None),
     cronExpression: "0 11 * * *",
-    options: new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+    options: new RecurringJobOptions
+    {
+        TimeZone = TimeZoneInfo.Utc
+    });
 
-// Lembretes de mensalidade: todo dia às 08:00 horário de Brasília (UTC-3 = 11:00 UTC)
 recurringJobs.AddOrUpdate<IMonthlyPaymentReminderJob>(
     recurringJobId: "monthly-payment-reminder",
     methodCall: job => job.ExecuteAsync(CancellationToken.None),
     cronExpression: "0 11 * * *",
-    options: new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+    options: new RecurringJobOptions
+    {
+        TimeZone = TimeZoneInfo.Utc
+    });
+
+// Teste direto no celular:
+// http://SEU-IP:5000/health
+app.MapGet("/health", () => Results.Ok(new
+{
+    ok = true,
+    environment = app.Environment.EnvironmentName
+}));
 
 app.MapControllers();
 
