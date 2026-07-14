@@ -1,4 +1,5 @@
 ﻿using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Api.Realtime;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
@@ -21,8 +22,9 @@ public class MatchesController : GroupAuthorizedController
     private readonly IReplayUrlService _replayUrl;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IBetService _bets;
+    private readonly IRealtimeNotifier _realtime;
 
-    public MatchesController(IMatchService service, AppDbContext db, IMatchEventPublisher eventPublisher, IReplayUrlService replayUrl, IHttpClientFactory httpClientFactory, IBetService bets)
+    public MatchesController(IMatchService service, AppDbContext db, IMatchEventPublisher eventPublisher, IReplayUrlService replayUrl, IHttpClientFactory httpClientFactory, IBetService bets, IRealtimeNotifier realtime)
     {
         _service            = service;
         _db                 = db;
@@ -30,6 +32,7 @@ public class MatchesController : GroupAuthorizedController
         _replayUrl          = replayUrl;
         _httpClientFactory  = httpClientFactory;
         _bets               = bets;
+        _realtime           = realtime;
     }
 
     [HttpGet("group/{groupId:guid}")]
@@ -130,6 +133,7 @@ public class MatchesController : GroupAuthorizedController
             if (!created.Success || created.Data is null)
                 return BadRequest(new { error = created.Error ?? "Falha ao criar partida." });
 
+            await _realtime.MatchChangedAsync(groupId, created.Data.Id, "match.created", cancellationToken);
             return CreatedAtAction(nameof(Get), new { groupId, matchId = created.Data.Id }, ToDto(created.Data));
         }
         catch (InvalidOperationException ex)
@@ -145,6 +149,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             await _service.SyncPlayersFromGroupAsync(groupId, matchId, cancellationToken);
+            await _realtime.MatchChangedAsync(groupId, matchId, "match.players.synced", cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -160,6 +165,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             var result = await _service.UpdateAsync(groupId, matchId, dto, cancellationToken);
+            await NotifyMatchChangedIfSuccess(result, groupId, matchId, "match.details.changed", cancellationToken);
             return ToResponse(result);
         }
         catch (InvalidOperationException ex)
@@ -175,6 +181,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             var result = await _service.DeleteAsync(groupId, matchId, cancellationToken);
+            await NotifyMatchChangedIfSuccess(result, groupId, matchId, "match.deleted", cancellationToken);
             return ToResponse(result);
         }
         catch (InvalidOperationException ex)
@@ -191,6 +198,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             var result = await _service.AcceptMyInviteAsync(groupId, matchId, userId.Value, cancellationToken);
+            await NotifyMatchChangedIfSuccess(result, groupId, matchId, "match.invite.accepted", cancellationToken);
             return ToResponse(result);
         }
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
@@ -204,6 +212,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             var result = await _service.RejectMyInviteAsync(groupId, matchId, userId.Value, cancellationToken);
+            await NotifyMatchChangedIfSuccess(result, groupId, matchId, "match.invite.rejected", cancellationToken);
             return ToResponse(result);
         }
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
@@ -215,6 +224,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             await _service.AcceptInviteAsync(groupId, matchId, dto.PlayerId, cancellationToken);
+            await _realtime.MatchChangedAsync(groupId, matchId, "match.invite.accepted", cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -229,6 +239,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             await _service.RejectInviteAsync(groupId, matchId, dto.PlayerId, cancellationToken);
+            await _realtime.MatchChangedAsync(groupId, matchId, "match.invite.rejected", cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -244,6 +255,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             await _service.StartMatchAsync(groupId, matchId, cancellationToken);
+            await _realtime.MatchChangedAsync(groupId, matchId, "match.started", cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -259,6 +271,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             await _service.EndMatchAsync(groupId, matchId, cancellationToken);
+            await _realtime.MatchChangedAsync(groupId, matchId, "match.ended", cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -273,6 +286,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             await _service.VoteAsync(groupId, matchId, dto.VoterPlayerId, dto.VotedPlayerId, cancellationToken);
+            await _realtime.MatchChangedAsync(groupId, matchId, "match.mvp-vote.changed", cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -297,6 +311,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             await _service.SetScoreAsync(groupId, matchId, dto.TeamAGoals, dto.TeamBGoals, cancellationToken);
+            await _realtime.MatchChangedAsync(groupId, matchId, "match.score.changed", cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -312,6 +327,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             await _service.SetTeamColorsAsync(groupId, matchId, dto.TeamAColorId, dto.TeamBColorId, dto.Randomize, cancellationToken);
+            await _realtime.MatchChangedAsync(groupId, matchId, "match.colors.changed", cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -327,6 +343,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             await _service.FinalizeMatchAsync(groupId, matchId, cancellationToken);
+            await _realtime.MatchChangedAsync(groupId, matchId, "match.finalized", cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -340,6 +357,7 @@ public class MatchesController : GroupAuthorizedController
     {
         if (!await IsGroupAdminAsync(groupId, _db, cancellationToken)) return Forbid();
         var result = await _service.ReapplyMvpTieRuleAsync(groupId, matchId, cancellationToken);
+        await NotifyMatchChangedIfSuccess(result, groupId, matchId, "match.mvp.changed", cancellationToken);
         return ToResponse(result);
     }
 
@@ -595,6 +613,7 @@ public class MatchesController : GroupAuthorizedController
         // players may have changed sides, making old selections invalid.
         await _bets.ResetBetsForMatchAsync(matchId, cancellationToken);
 
+        await _realtime.MatchChangedAsync(groupId, matchId, "match.teams.changed", cancellationToken);
         return NoContent();
     }
 
@@ -609,6 +628,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             await _service.SwapPlayersByPlayerIdAsync(groupId, matchId, dto.PlayerAId, dto.PlayerBId, ct);
+            await _realtime.MatchChangedAsync(groupId, matchId, "match.teams.changed", ct);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -625,6 +645,7 @@ public class MatchesController : GroupAuthorizedController
         if (!await IsGroupAdminAsync(groupId, _db, cancellationToken)) return Forbid();
         var result = await _service.SetNoShowAsync(groupId, matchId, matchPlayerId, dto.DidNotPlay, cancellationToken);
         if (!result.Success) return result.Status == ResultStatus.NotFound ? NotFound(new { error = result.Error }) : BadRequest(new { error = result.Error });
+        await _realtime.MatchChangedAsync(groupId, matchId, "match.player.no-show.changed", cancellationToken);
         return NoContent();
     }
 
@@ -637,6 +658,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             await _service.SetPlayerRoleAsync(groupId, matchId, matchPlayerId, dto, cancellationToken);
+            await _realtime.MatchChangedAsync(groupId, matchId, "match.player.role.changed", cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
@@ -650,6 +672,7 @@ public class MatchesController : GroupAuthorizedController
         CancellationToken ct)
     {
         var result = await _service.AddGoalAsync(groupId, matchId, dto, ct);
+        await NotifyMatchChangedIfSuccess(result, groupId, matchId, "match.goal.added", ct);
         return ToResponse(result);
     }
 
@@ -665,6 +688,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             await _service.UpdateGoalAsync(groupId, matchId, goalId, dto, ct);
+            await _realtime.MatchChangedAsync(groupId, matchId, "match.goal.changed", ct);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -680,6 +704,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             await _service.RemoveGoalAsync(groupId, matchId, goalId, ct);
+            await _realtime.MatchChangedAsync(groupId, matchId, "match.goal.removed", ct);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -695,6 +720,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             await _service.GoToMatchMakingAsync(groupId, matchId, ct);
+            await _realtime.MatchChangedAsync(groupId, matchId, "match.step.changed", ct);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -710,6 +736,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             await _service.GoToPostGameAsync(groupId, matchId, ct);
+            await _realtime.MatchChangedAsync(groupId, matchId, "match.step.changed", ct);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -729,6 +756,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             await _service.AddGoalsBulkAsync(groupId, matchId, dto, ct);
+            await _realtime.MatchChangedAsync(groupId, matchId, "match.goals.changed", ct);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -744,6 +772,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             await _service.RewindOneStepAsync(groupId, matchId, ct);
+            await _realtime.MatchChangedAsync(groupId, matchId, "match.step.changed", ct);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -820,6 +849,7 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             await _service.AddGuestToMatchAsync(groupId, matchId, dto, ct);
+            await _realtime.MatchChangedAsync(groupId, matchId, "match.guest.added", ct);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -837,6 +867,7 @@ public class MatchesController : GroupAuthorizedController
     {
         if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
         await _eventPublisher.PublishAsync(groupId, matchId, dto.Type, dto.SecondsBeforeStart, dto.DurationSeconds, ct);
+        await _realtime.MatchChangedAsync(groupId, matchId, "match.replay-event.published", ct);
         return NoContent();
     }
 
@@ -861,7 +892,17 @@ public class MatchesController : GroupAuthorizedController
                 ? NotFound(new { error = result.Error })
                 : BadRequest(new { error = result.Error });
 
+        await _realtime.MatchChangedAsync(groupId, matchId, "match.linked-poll.changed", ct);
+        if (dto.PollId.HasValue)
+            await _realtime.PollChangedAsync(groupId, dto.PollId.Value, "poll.linked-match.changed", ct);
+
         return Ok(new { message = result.Message, linkedPollId = result.Data });
+    }
+
+    private async Task NotifyMatchChangedIfSuccess(ResultBase result, Guid groupId, Guid matchId, string reason, CancellationToken ct)
+    {
+        if (result.Success)
+            await _realtime.MatchChangedAsync(groupId, matchId, reason, ct);
     }
 
     private static MatchDto ToDto(MatchEntity e) =>

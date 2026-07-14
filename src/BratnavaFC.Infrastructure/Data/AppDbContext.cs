@@ -354,6 +354,14 @@ public class AppDbContext : DbContext
 
             builder.Property(x => x.DefaultDayOfWeek);
             builder.Property(x => x.DefaultKickoffTime);
+            builder.Property(x => x.MatchSchedulingEnabled)
+                .HasDefaultValue(false);
+            builder.Property(x => x.MatchSchedulingMode)
+                .HasDefaultValue((short)0);
+            builder.Property(x => x.MatchScheduleDayOfWeek);
+            builder.Property(x => x.MatchScheduleTime);
+            builder.Property(x => x.ManualMatchSchedulesJson)
+                .HasColumnType("text");
 
             builder.Property(x => x.PaymentMode)
                 .HasConversion<short>()

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Text.Json;
 using BratnavaFC.Domain.Enums;
 
 namespace BratnavaFC.Domain.Entities;
@@ -35,6 +36,12 @@ public sealed class GroupSettingsEntity : BaseEntity
 
     public DayOfWeek? DefaultDayOfWeek { get; private set; }
     public TimeSpan? DefaultKickoffTime { get; private set; }
+
+    public bool MatchSchedulingEnabled { get; private set; }
+    public short MatchSchedulingMode { get; private set; }
+    public DayOfWeek? MatchScheduleDayOfWeek { get; private set; }
+    public TimeSpan? MatchScheduleTime { get; private set; }
+    public string? ManualMatchSchedulesJson { get; private set; }
 
     // ── Ícones configuráveis por patota ───────────────────────────────────────
     public string? GoalIcon       { get; private set; }
@@ -111,6 +118,43 @@ public sealed class GroupSettingsEntity : BaseEntity
         AutoFinalizeMvpHours = value;
     }
 
+    public IReadOnlyList<ManualMatchScheduleEntry> GetManualMatchSchedules()
+    {
+        if (string.IsNullOrWhiteSpace(ManualMatchSchedulesJson))
+            return [];
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<ManualMatchScheduleEntry>>(ManualMatchSchedulesJson) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    public void SetMatchScheduling(
+        bool enabled,
+        short mode,
+        DayOfWeek? scheduleDayOfWeek,
+        TimeSpan? scheduleTime,
+        IReadOnlyCollection<ManualMatchScheduleEntry>? manualSchedules)
+    {
+        if (mode is not (0 or 1))
+            throw new InvalidOperationException("MatchSchedulingMode invalido.");
+
+        if (scheduleTime.HasValue && (scheduleTime.Value < TimeSpan.Zero || scheduleTime.Value >= TimeSpan.FromDays(1)))
+            throw new InvalidOperationException("MatchScheduleTime invalido.");
+
+        MatchSchedulingEnabled = enabled;
+        MatchSchedulingMode = mode;
+        MatchScheduleDayOfWeek = scheduleDayOfWeek;
+        MatchScheduleTime = scheduleTime;
+        ManualMatchSchedulesJson = manualSchedules is { Count: > 0 }
+            ? JsonSerializer.Serialize(manualSchedules.OrderBy(x => x.PlayedAt).ToList())
+            : null;
+    }
+
     public void Update(
         int minPlayers,
         int maxPlayers,
@@ -179,4 +223,11 @@ public sealed class GroupSettingsEntity : BaseEntity
         DefaultDayOfWeek = dayOfWeek;
         DefaultKickoffTime = kickoffTime;
     }
+}
+
+public sealed class ManualMatchScheduleEntry
+{
+    public DateTime PlayedAt { get; set; }
+    public bool Created { get; set; }
+    public Guid? MatchId { get; set; }
 }

@@ -56,6 +56,11 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 ShowPlayerStats      = false,
                 PaymentDueDay        = null,
                 AutoFinalizeMvpHours = null,
+                MatchSchedulingEnabled = false,
+                MatchSchedulingMode = 0,
+                MatchScheduleDayOfWeek = null,
+                MatchScheduleTime = null,
+                ManualMatchSchedules = new(),
             });
         }
 
@@ -93,6 +98,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 entity.SetShowPlayerStats(dto.ShowPlayerStats.Value);
             entity.SetPaymentDueDay(dto.PaymentDueDay);
             entity.SetAutoFinalizeMvpHours(dto.AutoFinalizeMvpHours);
+            ApplyMatchScheduling(entity, dto);
             await _context.GroupSettings.AddAsync(entity, ct);
         }
         else
@@ -114,6 +120,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 entity.SetShowPlayerStats(dto.ShowPlayerStats.Value);
             entity.SetPaymentDueDay(dto.PaymentDueDay);
             entity.SetAutoFinalizeMvpHours(dto.AutoFinalizeMvpHours);
+            ApplyMatchScheduling(entity, dto);
         }
 
         try
@@ -144,6 +151,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 existing.SetShowPlayerStats(dto.ShowPlayerStats.Value);
             existing.SetPaymentDueDay(dto.PaymentDueDay);
             existing.SetAutoFinalizeMvpHours(dto.AutoFinalizeMvpHours);
+            ApplyMatchScheduling(existing, dto);
 
             await _context.SaveChangesAsync(ct);
             entity = existing;
@@ -179,7 +187,52 @@ public sealed class GroupSettingsService : IGroupSettingsService
         ShowPlayerStats      = e.ShowPlayerStats,
         PaymentDueDay        = e.PaymentDueDay,
         AutoFinalizeMvpHours = e.AutoFinalizeMvpHours,
+        MatchSchedulingEnabled = e.MatchSchedulingEnabled,
+        MatchSchedulingMode = e.MatchSchedulingMode,
+        MatchScheduleDayOfWeek = e.MatchScheduleDayOfWeek,
+        MatchScheduleTime = e.MatchScheduleTime,
+        ManualMatchSchedules = e.GetManualMatchSchedules()
+            .Select(x => new ManualMatchScheduleDto
+            {
+                PlayedAt = x.PlayedAt,
+                Created = x.Created,
+                MatchId = x.MatchId,
+            })
+            .ToList(),
     };
+
+    private static void ApplyMatchScheduling(GroupSettingsEntity entity, UpsertGroupSettingsDto dto)
+    {
+        if (!dto.MatchSchedulingEnabled.HasValue &&
+            !dto.MatchSchedulingMode.HasValue &&
+            !dto.MatchScheduleDayOfWeek.HasValue &&
+            !dto.MatchScheduleTime.HasValue &&
+            dto.ManualMatchSchedules is null)
+        {
+            return;
+        }
+
+        var replacingSchedule = dto.MatchSchedulingEnabled.HasValue ||
+                                dto.MatchSchedulingMode.HasValue ||
+                                dto.ManualMatchSchedules is not null;
+
+        var manualSchedules = dto.ManualMatchSchedules?
+            .Select(x => new ManualMatchScheduleEntry
+            {
+                PlayedAt = DateTime.SpecifyKind(x.PlayedAt, DateTimeKind.Utc),
+                Created = x.Created,
+                MatchId = x.MatchId,
+            })
+            .ToList()
+            ?? entity.GetManualMatchSchedules().ToList();
+
+        entity.SetMatchScheduling(
+            dto.MatchSchedulingEnabled ?? entity.MatchSchedulingEnabled,
+            (short)(dto.MatchSchedulingMode ?? entity.MatchSchedulingMode),
+            replacingSchedule ? dto.MatchScheduleDayOfWeek : entity.MatchScheduleDayOfWeek,
+            replacingSchedule ? dto.MatchScheduleTime : entity.MatchScheduleTime,
+            manualSchedules);
+    }
 
     private async Task<Result> EnsureGroupExistsAsync(Guid groupId, CancellationToken ct)
     {

@@ -340,11 +340,34 @@ public sealed class MatchService : IMatchService
             return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
         match.UpdateDetails(groupId, dto.PlayedAt, dto.PlaceName, matchIdFromRoute: matchId, dtoId: dto.Id);
+        await SyncManualScheduleEntryAsync(groupId, matchId, match.PlayedAt, ct);
 
         await _context.SaveChangesAsync(ct);
         await _scheduler.RescheduleMatchRemindersAsync(matchId, groupId, match.PlayedAt, ct);
         await _scheduler.RescheduleMatchNoQuorumReminderAsync(matchId, groupId, match.PlayedAt, ct);
         return Result.Ok("Partida atualizada com sucesso.");
+    }
+
+    private async Task SyncManualScheduleEntryAsync(Guid groupId, Guid matchId, DateTime playedAt, CancellationToken ct)
+    {
+        var settings = await _context.GroupSettings
+            .FirstOrDefaultAsync(x => x.GroupId == groupId, ct);
+
+        if (settings is null)
+            return;
+
+        var entries = settings.GetManualMatchSchedules().ToList();
+        var entry = entries.FirstOrDefault(x => x.MatchId == matchId);
+        if (entry is null)
+            return;
+
+        entry.PlayedAt = DateTime.SpecifyKind(playedAt, DateTimeKind.Utc);
+        settings.SetMatchScheduling(
+            settings.MatchSchedulingEnabled,
+            settings.MatchSchedulingMode,
+            settings.MatchScheduleDayOfWeek,
+            settings.MatchScheduleTime,
+            entries);
     }
 
     public async Task<Result> DeleteAsync(Guid groupId, Guid matchId, CancellationToken ct)

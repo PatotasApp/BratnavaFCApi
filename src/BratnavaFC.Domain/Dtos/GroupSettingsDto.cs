@@ -44,4 +44,19 @@ public sealed class GroupSettingsDto
     // ── Notificações configuráveis ────────────────────────────────────────────
     public int? PaymentDueDay        { get; init; }
     public int? AutoFinalizeMvpHours { get; init; }
+
+    // ── Agendamento automático de partidas ───────────────────────────────────
+    /// <summary>0 = Manual, 1 = Recurring</summary>
+    public bool MatchSchedulingEnabled { get; init; }
+    public int MatchSchedulingMode { get; init; }
+    public DayOfWeek? MatchScheduleDayOfWeek { get; init; }
+    public TimeSpan? MatchScheduleTime { get; init; }
+    public List<ManualMatchScheduleDto> ManualMatchSchedules { get; init; } = new();
+}
+
+public sealed class ManualMatchScheduleDto
+{
+    public DateTime PlayedAt { get; init; }
+    public bool Created { get; init; }
+    public Guid? MatchId { get; init; }
 }

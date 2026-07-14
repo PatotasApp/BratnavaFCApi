@@ -396,9 +396,32 @@ public sealed class PollService : IPollService
         {
             var poll = await _db.Polls.FirstOrDefaultAsync(p => p.Id == pollId && p.GroupId == groupId, ct);
             if (poll is null) return Result<PollSummaryDto>.Fail("Votação não encontrada.");
+            if (dto.Title is not null && string.IsNullOrWhiteSpace(dto.Title))
+                return Result<PollSummaryDto>.Fail("Título é obrigatório.");
 
-            poll.UpdateDetails(dto.Description, dto.CostAmount, dto.CostType);
+            DateOnly? eventDate = dto.EventDate is not null && DateOnly.TryParse(dto.EventDate, out var ed) ? ed : null;
+            TimeOnly? eventTime = dto.EventTime is not null && TimeOnly.TryParse(dto.EventTime, out var et) ? et : null;
+
+            var titleChanged = dto.Title is not null && dto.Title.Trim() != poll.Title;
+
+            poll.UpdateDetails(
+                dto.Title,
+                dto.Description,
+                eventDate,
+                dto.EventDate == string.Empty,
+                eventTime,
+                dto.EventTime == string.Empty,
+                dto.EventLocation,
+                dto.EventIcon,
+                dto.CostAmount,
+                dto.CostType);
             await _db.SaveChangesAsync(ct);
+
+            if (titleChanged)
+            {
+                await _scheduler.ReschedulePollRemindersAsync(
+                    pollId, groupId, poll.Title, poll.DeadlineDate, poll.DeadlineTime, ct);
+            }
 
             var summary = new PollSummaryDto
             {

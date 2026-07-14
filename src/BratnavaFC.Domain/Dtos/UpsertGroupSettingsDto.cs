@@ -41,4 +41,12 @@ public sealed class UpsertGroupSettingsDto
     public int? PaymentDueDay        { get; set; }
     /// <summary>Horas após encerrar para finalizar MVP automaticamente. Null = desativado.</summary>
     public int? AutoFinalizeMvpHours { get; set; }
+
+    // ── Agendamento automático de partidas ───────────────────────────────────
+    /// <summary>0 = Manual, 1 = Recurring. Null = Manual.</summary>
+    public bool? MatchSchedulingEnabled { get; set; }
+    public int? MatchSchedulingMode { get; set; }
+    public DayOfWeek? MatchScheduleDayOfWeek { get; set; }
+    public TimeSpan? MatchScheduleTime { get; set; }
+    public List<ManualMatchScheduleDto>? ManualMatchSchedules { get; set; }
 }

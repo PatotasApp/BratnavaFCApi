@@ -82,10 +82,42 @@ public class PollEntity : BaseEntity
     /// Updates description and, for event polls, cost fields.
     /// Pass null to leave a field unchanged; pass "" to clear it.
     /// </summary>
-    public void UpdateDetails(string? description, decimal? costAmount, string? costType)
+    public void UpdateDetails(
+        string? title,
+        string? description,
+        DateOnly? eventDate,
+        bool clearEventDate,
+        TimeOnly? eventTime,
+        bool clearEventTime,
+        string? eventLocation,
+        string? eventIcon,
+        decimal? costAmount,
+        string? costType)
     {
+        if (title is not null)
+        {
+            var trimmed = title.Trim();
+            if (trimmed == string.Empty) throw new InvalidOperationException("Título é obrigatório.");
+            Title = trimmed;
+        }
+
         if (description is not null)
             Description = description.Trim() == string.Empty ? null : description.Trim();
+
+        if (Type == "event")
+        {
+            if (clearEventDate) EventDate = null;
+            else if (eventDate.HasValue) EventDate = eventDate.Value;
+
+            if (clearEventTime) EventTime = null;
+            else if (eventTime.HasValue) EventTime = eventTime.Value;
+
+            if (eventLocation is not null)
+                EventLocation = eventLocation.Trim() == string.Empty ? null : eventLocation.Trim();
+
+            if (eventIcon is not null)
+                EventIcon = eventIcon.Trim() == string.Empty ? null : eventIcon.Trim();
+        }
 
         if (costAmount.HasValue)
             CostAmount = costAmount.Value <= 0 ? null : costAmount;

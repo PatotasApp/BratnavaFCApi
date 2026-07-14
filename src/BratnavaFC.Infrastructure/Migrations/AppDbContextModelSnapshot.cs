@@ -411,6 +411,25 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<Guid>("GroupId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ManualMatchSchedulesJson")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("MatchScheduleDayOfWeek")
+                        .HasColumnType("integer");
+
+                    b.Property<TimeSpan?>("MatchScheduleTime")
+                        .HasColumnType("interval");
+
+                    b.Property<bool>("MatchSchedulingEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<short>("MatchSchedulingMode")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0);
+
                     b.Property<int>("MaxPlayers")
                         .HasColumnType("integer");
 

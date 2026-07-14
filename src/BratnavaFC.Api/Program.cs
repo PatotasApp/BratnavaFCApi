@@ -18,6 +18,7 @@ using Microsoft.OpenApi.Models;
 using System.IdentityModel.Tokens.Jwt;
 using BratnavaFC.Api;
 using BratnavaFC.Api.Middleware;
+using BratnavaFC.Api.Realtime;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 using Hangfire;
@@ -198,6 +199,9 @@ builder.Services.AddScoped<IMatchNoQuorumReminderJob, MatchNoQuorumReminderJob>(
 builder.Services.AddScoped<IMvpVotingReminderJob, MvpVotingReminderJob>();
 builder.Services.AddScoped<IMatchAutoFinalizeJob, MatchAutoFinalizeJob>();
 builder.Services.AddScoped<IMonthlyPaymentReminderJob, MonthlyPaymentReminderJob>();
+builder.Services.AddScoped<IMatchSchedulerJob, MatchSchedulerJob>();
+builder.Services.AddScoped<IRealtimeNotifier, SignalRRealtimeNotifier>();
+builder.Services.AddSignalR();
 
 // =====================
 // FIREBASE ADMIN
@@ -339,11 +343,18 @@ builder.Services
         {
             OnMessageReceived = context =>
             {
-                if (context.Request.Path.Value?.Contains(
-                        "/stream",
-                        StringComparison.OrdinalIgnoreCase) == true)
+                var path = context.Request.Path.Value ?? string.Empty;
+
+                if (path.Contains("/stream", StringComparison.OrdinalIgnoreCase))
                 {
                     var token = context.Request.Query["t"].FirstOrDefault();
+
+                    if (!string.IsNullOrEmpty(token))
+                        context.Token = token;
+                }
+                else if (path.Contains("/hubs/realtime", StringComparison.OrdinalIgnoreCase))
+                {
+                    var token = context.Request.Query["access_token"].FirstOrDefault();
 
                     if (!string.IsNullOrEmpty(token))
                         context.Token = token;
@@ -460,6 +471,15 @@ recurringJobs.AddOrUpdate<IMonthlyPaymentReminderJob>(
         TimeZone = TimeZoneInfo.Utc
     });
 
+recurringJobs.AddOrUpdate<IMatchSchedulerJob>(
+    recurringJobId: "match-scheduler",
+    methodCall: job => job.ExecuteAsync(CancellationToken.None),
+    cronExpression: "* * * * *",
+    options: new RecurringJobOptions
+    {
+        TimeZone = TimeZoneInfo.Utc
+    });
+
 // Teste direto no celular:
 // http://SEU-IP:5000/health
 app.MapGet("/health", () => Results.Ok(new
@@ -469,5 +489,6 @@ app.MapGet("/health", () => Results.Ok(new
 }));
 
 app.MapControllers();
+app.MapHub<RealtimeHub>("/hubs/realtime");
 
 app.Run();

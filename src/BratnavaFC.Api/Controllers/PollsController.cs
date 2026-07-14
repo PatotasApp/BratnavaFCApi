@@ -1,4 +1,6 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Api.Realtime;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Polls;
 using BratnavaFC.Infrastructure.Data;
 using BratnavaFC.Domain.Entities;
@@ -15,11 +17,13 @@ public sealed class PollsController : GroupAuthorizedController
 {
     private readonly IPollService _polls;
     private readonly AppDbContext _db;
+    private readonly IRealtimeNotifier _realtime;
 
-    public PollsController(IPollService polls, AppDbContext db)
+    public PollsController(IPollService polls, AppDbContext db, IRealtimeNotifier realtime)
     {
         _polls = polls;
         _db = db;
+        _realtime = realtime;
     }
 
     // GET /api/Polls/group/{groupId}?page=&pageSize=&type=&status=
@@ -55,6 +59,8 @@ public sealed class PollsController : GroupAuthorizedController
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
         var result = await _polls.CreatePollAsync(groupId, userId.Value, dto, ct);
+        if (result.Success && result.Data is not null)
+            await _realtime.PollChangedAsync(groupId, result.Data.Id, "poll.created", ct);
         return ToResponse(result);
     }
 
@@ -66,6 +72,8 @@ public sealed class PollsController : GroupAuthorizedController
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
         var result = await _polls.CreateEventPollAsync(groupId, userId.Value, dto, ct);
+        if (result.Success && result.Data is not null)
+            await _realtime.PollChangedAsync(groupId, result.Data.Id, "event.created", ct);
         return ToResponse(result);
     }
 
@@ -77,6 +85,7 @@ public sealed class PollsController : GroupAuthorizedController
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
         var result = await _polls.ClosePollAsync(groupId, pollId, userId.Value, dto, ct);
+        await NotifyPollChangedIfSuccess(result, groupId, pollId, "poll.closed", ct);
         return ToResponse(result);
     }
 
@@ -86,6 +95,7 @@ public sealed class PollsController : GroupAuthorizedController
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         var result = await _polls.SetShowVotesAsync(groupId, pollId, dto.ShowVotes, ct);
+        await NotifyPollChangedIfSuccess(result, groupId, pollId, "poll.show-votes.changed", ct);
         return ToResponse(result);
     }
 
@@ -95,6 +105,7 @@ public sealed class PollsController : GroupAuthorizedController
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         var result = await _polls.ReopenPollAsync(groupId, pollId, ct);
+        await NotifyPollChangedIfSuccess(result, groupId, pollId, "poll.reopened", ct);
         return ToResponse(result);
     }
 
@@ -104,6 +115,7 @@ public sealed class PollsController : GroupAuthorizedController
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         var result = await _polls.UpdatePollDetailsAsync(groupId, pollId, dto, ct);
+        await NotifyPollChangedIfSuccess(result, groupId, pollId, "poll.details.changed", ct);
         return ToResponse(result);
     }
 
@@ -113,6 +125,7 @@ public sealed class PollsController : GroupAuthorizedController
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         var result = await _polls.UpdateDeadlineAsync(groupId, pollId, dto, ct);
+        await NotifyPollChangedIfSuccess(result, groupId, pollId, "poll.deadline.changed", ct);
         return ToResponse(result);
     }
 
@@ -122,6 +135,7 @@ public sealed class PollsController : GroupAuthorizedController
     public async Task<IActionResult> DeletePoll(Guid groupId, Guid pollId, CancellationToken ct)
     {
         var result = await _polls.DeletePollAsync(groupId, pollId, ct);
+        await NotifyPollChangedIfSuccess(result, groupId, pollId, "poll.deleted", ct);
         return ToResponse(result);
     }
 
@@ -131,6 +145,7 @@ public sealed class PollsController : GroupAuthorizedController
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         var result = await _polls.AddOptionAsync(groupId, pollId, dto, ct);
+        await NotifyPollChangedIfSuccess(result, groupId, pollId, "poll.option.added", ct);
         return ToResponse(result);
     }
 
@@ -140,6 +155,7 @@ public sealed class PollsController : GroupAuthorizedController
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         var result = await _polls.UpdateOptionAsync(groupId, pollId, optionId, dto, ct);
+        await NotifyPollChangedIfSuccess(result, groupId, pollId, "poll.option.changed", ct);
         return ToResponse(result);
     }
 
@@ -149,6 +165,7 @@ public sealed class PollsController : GroupAuthorizedController
     public async Task<IActionResult> DeleteOption(Guid groupId, Guid pollId, Guid optionId, CancellationToken ct)
     {
         var result = await _polls.DeleteOptionAsync(groupId, pollId, optionId, ct);
+        await NotifyPollChangedIfSuccess(result, groupId, pollId, "poll.option.deleted", ct);
         return ToResponse(result);
     }
 
@@ -160,6 +177,7 @@ public sealed class PollsController : GroupAuthorizedController
         if (playerId == Guid.Empty) return Forbid();
         var isAdmin = await IsAuthorizedForGroupAsync(groupId, _db, ct);
         var result = await _polls.CastVoteAsync(groupId, pollId, playerId, dto, isAdmin, ct);
+        await NotifyPollChangedIfSuccess(result, groupId, pollId, "poll.vote.changed", ct);
         return ToResponse(result);
     }
 
@@ -169,6 +187,7 @@ public sealed class PollsController : GroupAuthorizedController
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         var result = await _polls.AdminCastVoteAsync(groupId, pollId, dto, ct);
+        await NotifyPollChangedIfSuccess(result, groupId, pollId, "poll.vote.changed", ct);
         return ToResponse(result);
     }
 
@@ -180,6 +199,7 @@ public sealed class PollsController : GroupAuthorizedController
         if (playerId == Guid.Empty) return Forbid();
         var isAdmin = await IsAuthorizedForGroupAsync(groupId, _db, ct);
         var result = await _polls.RemoveVoteAsync(groupId, pollId, playerId, isAdmin, ct);
+        await NotifyPollChangedIfSuccess(result, groupId, pollId, "poll.vote.removed", ct);
         return ToResponse(result);
     }
 
@@ -189,6 +209,7 @@ public sealed class PollsController : GroupAuthorizedController
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
         var result = await _polls.SetAllowGuestsAsync(groupId, pollId, dto.AllowGuests, ct);
+        await NotifyPollChangedIfSuccess(result, groupId, pollId, "poll.allow-guests.changed", ct);
         return ToResponse(result);
     }
 
@@ -199,6 +220,7 @@ public sealed class PollsController : GroupAuthorizedController
         var playerId = await GetPlayerIdForGroup(groupId, ct);
         if (playerId == Guid.Empty) return Forbid();
         var result = await _polls.AddGuestAsync(groupId, pollId, playerId, dto, ct);
+        await NotifyPollChangedIfSuccess(result, groupId, pollId, "poll.guest.added", ct);
         return ToResponse(result);
     }
 
@@ -210,7 +232,14 @@ public sealed class PollsController : GroupAuthorizedController
         if (playerId == Guid.Empty) return Forbid();
         var isAdmin = await IsAuthorizedForGroupAsync(groupId, _db, ct);
         var result = await _polls.RemoveGuestAsync(groupId, pollId, guestId, playerId, isAdmin, ct);
+        await NotifyPollChangedIfSuccess(result, groupId, pollId, "poll.guest.removed", ct);
         return ToResponse(result);
+    }
+
+    private async Task NotifyPollChangedIfSuccess(ResultBase result, Guid groupId, Guid pollId, string reason, CancellationToken ct)
+    {
+        if (result.Success)
+            await _realtime.PollChangedAsync(groupId, pollId, reason, ct);
     }
 
     private async Task<Guid> GetPlayerIdForGroup(Guid groupId, CancellationToken ct)

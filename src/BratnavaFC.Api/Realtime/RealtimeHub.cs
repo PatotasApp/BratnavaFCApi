@@ -1,0 +1,48 @@
+using System.Security.Claims;
+using BratnavaFC.Infrastructure.Data;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
+
+namespace BratnavaFC.Api.Realtime;
+
+[Authorize(Roles = "User,Admin,GodMode")]
+public sealed class RealtimeHub : Hub
+{
+    private readonly AppDbContext _db;
+
+    public RealtimeHub(AppDbContext db)
+    {
+        _db = db;
+    }
+
+    public async Task JoinGroup(Guid groupId)
+    {
+        if (!await CanAccessGroupAsync(groupId))
+            throw new HubException("Acesso negado ao grupo.");
+
+        await Groups.AddToGroupAsync(Context.ConnectionId, GroupChannel(groupId));
+    }
+
+    public Task LeaveGroup(Guid groupId) =>
+        Groups.RemoveFromGroupAsync(Context.ConnectionId, GroupChannel(groupId));
+
+    internal static string GroupChannel(Guid groupId) => $"group:{groupId}";
+
+    private async Task<bool> CanAccessGroupAsync(Guid groupId)
+    {
+        var userIdText = Context.User?.FindFirstValue("sub");
+        if (!Guid.TryParse(userIdText, out var userId))
+            return false;
+
+        var roles = Context.User?.FindAll("role").Select(c => c.Value).ToHashSet(StringComparer.OrdinalIgnoreCase)
+            ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (roles.Contains("Admin") || roles.Contains("GodMode"))
+            return true;
+
+        return await _db.Players
+            .AsNoTracking()
+            .AnyAsync(p => p.GroupId == groupId && p.UserId == userId && !p.IsGuest);
+    }
+}
