@@ -206,7 +206,8 @@ public sealed class ReplayStreamConsumerService : BackgroundService
 
     private static MatchEventType ParseEventType(string tipo) => tipo.ToLowerInvariant() switch
     {
-        "gol" => MatchEventType.Gol,
+        "gol" or "goltimea" or "gol_time_a" => tipo.Equals("gol", StringComparison.OrdinalIgnoreCase) ? MatchEventType.Gol : MatchEventType.GolTimeA,
+        "goltimeb" or "gol_time_b" => MatchEventType.GolTimeB,
         "jogada" => MatchEventType.Jogada,
         _ => throw new ArgumentException($"Tipo desconhecido no stream: '{tipo}'")
     };

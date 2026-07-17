@@ -13,6 +13,13 @@ namespace BratnavaFC.Api.Controllers;
 [AllowAnonymous]
 public sealed class PublicReplaysController : ControllerBase
 {
+    private static readonly MatchEventType[] GoalTypes =
+    [
+        MatchEventType.Gol,
+        MatchEventType.GolTimeA,
+        MatchEventType.GolTimeB,
+    ];
+
     private readonly AppDbContext _db;
     private readonly IReplayUrlService _replayUrls;
 
@@ -32,14 +39,26 @@ public sealed class PublicReplaysController : ControllerBase
 
         if (clip is null) return NotFound();
 
+        var matchColors = await _db.Matches
+            .AsNoTracking()
+            .Where(m => m.Id == clip.MatchId)
+            .Select(m => new
+            {
+                TeamAColorName = m.TeamAColor != null ? m.TeamAColor.Name : null,
+                TeamAColorHex = m.TeamAColor != null ? m.TeamAColor.HexValue : null,
+                TeamBColorName = m.TeamBColor != null ? m.TeamBColor.Name : null,
+                TeamBColorHex = m.TeamBColor != null ? m.TeamBColor.HexValue : null,
+            })
+            .FirstOrDefaultAsync(ct);
+
         int? goalNumber = null;
         int? totalGoals = null;
 
-        if (clip.EventType == MatchEventType.Gol)
+        if (IsGoal(clip.EventType))
         {
             var goalIds = await _db.ReplayClips
                 .AsNoTracking()
-                .Where(c => c.MatchId == clip.MatchId && c.EventType == MatchEventType.Gol)
+                .Where(c => c.MatchId == clip.MatchId && GoalTypes.Contains(c.EventType))
                 .OrderBy(c => c.RecordedAt)
                 .Select(c => c.Id)
                 .ToListAsync(ct);
@@ -54,7 +73,11 @@ public sealed class PublicReplaysController : ControllerBase
             clip.EventType.ToString(),
             clip.RecordedAt,
             goalNumber,
-            totalGoals));
+            totalGoals,
+            matchColors?.TeamAColorName,
+            matchColors?.TeamAColorHex,
+            matchColors?.TeamBColorName,
+            matchColors?.TeamBColorHex));
     }
 
     // GET /api/public/matches/{matchId}/replays
@@ -76,7 +99,7 @@ public sealed class PublicReplaysController : ControllerBase
             .ToListAsync(ct);
 
         var goalIds = clips
-            .Where(c => c.EventType == MatchEventType.Gol)
+            .Where(c => IsGoal(c.EventType))
             .Select(c => c.Id)
             .ToList();
 
@@ -85,8 +108,12 @@ public sealed class PublicReplaysController : ControllerBase
             _replayUrls.GeneratePresignedUrl(c.ObjectKey),
             c.EventType.ToString(),
             c.RecordedAt,
-            c.EventType == MatchEventType.Gol ? goalIds.IndexOf(c.Id) + 1 : null,
-            c.EventType == MatchEventType.Gol ? goalIds.Count : null
+            IsGoal(c.EventType) ? goalIds.IndexOf(c.Id) + 1 : null,
+            IsGoal(c.EventType) ? goalIds.Count : null,
+            match.TeamAColor?.Name,
+            match.TeamAColor?.HexValue,
+            match.TeamBColor?.Name,
+            match.TeamBColor?.HexValue
         )).ToList();
 
         return Ok(new PublicMatchReplaysDto(
@@ -101,4 +128,7 @@ public sealed class PublicReplaysController : ControllerBase
             match.TeamBColor?.HexValue,
             publicClips));
     }
+
+    private static bool IsGoal(MatchEventType type) =>
+        type is MatchEventType.Gol or MatchEventType.GolTimeA or MatchEventType.GolTimeB;
 }

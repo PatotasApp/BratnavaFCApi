@@ -32,6 +32,19 @@
         "CLOUDFLARE_R2_BUCKET_NAME": "goal-replays"
       }
     },
+    "network": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "CLOUDFLARE_R2_ENDPOINT_URL": "https://ffd50cba750401588fd71a3b688d462f.r2.cloudflarestorage.com",
+        "CLOUDFLARE_R2_ACCESS_KEY_ID": "d080482e371a91ebcc7ca59ebd7dc58c",
+        "CLOUDFLARE_R2_SECRET_ACCESS_KEY": "569c9df0b99f699e7c3052d6b7c73fbdc34ef7eb08bfe537fbe2fa63ad6f523d",
+        "CLOUDFLARE_R2_BUCKET_NAME": "goal-replays"
+      },
+      "dotnetRunMessages": true,
+      "applicationUrl": "http://0.0.0.0:5000"
+    },
     "Container (Dockerfile)": {
       "commandName": "Docker",
       "launchBrowser": true,

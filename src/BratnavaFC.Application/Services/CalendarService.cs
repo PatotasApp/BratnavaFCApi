@@ -442,11 +442,11 @@ public sealed class CalendarService : ICalendarService
     {
         // Expande 4h em cada lado para cobrir a diferença de fuso do Brasil (UTC-3 / UTC-2).
         // BuildMatchEvents filtra em memória pelo horário local após a conversão.
-        var startRaw = start.ToDateTime(TimeOnly.MinValue);
-        var endRaw   = end.ToDateTime(TimeOnly.MaxValue);
+        var startRaw = DateTime.SpecifyKind(start.ToDateTime(TimeOnly.MinValue), DateTimeKind.Unspecified);
+        var endRaw   = DateTime.SpecifyKind(end.ToDateTime(TimeOnly.MaxValue), DateTimeKind.Unspecified);
         return (
-            DateTime.SpecifyKind(startRaw, DateTimeKind.Utc),
-            DateTime.SpecifyKind(endRaw,   DateTimeKind.Utc)
+            TimeZoneInfo.ConvertTimeToUtc(startRaw, BrazilTz),
+            TimeZoneInfo.ConvertTimeToUtc(endRaw,   BrazilTz)
         );
     }
 
@@ -499,7 +499,9 @@ public sealed class CalendarService : ICalendarService
         foreach (var match in matches)
         {
             // PlayedAt é UTC (Npgsql). Converte para horário de Brasília antes de exibir.
-            var matchDate = DateOnly.FromDateTime(match.PlayedAt);
+            var playedAtUtc = DateTime.SpecifyKind(match.PlayedAt, DateTimeKind.Utc);
+            var playedAtBrazil = TimeZoneInfo.ConvertTimeFromUtc(playedAtUtc, BrazilTz);
+            var matchDate = DateOnly.FromDateTime(playedAtBrazil);
 
             // O range UTC foi expandido para não perder jogos na virada do dia;
             // filtramos aqui pelo intervalo de datas locais solicitado.
@@ -512,7 +514,7 @@ public sealed class CalendarService : ICalendarService
                 Type = CalendarEventTypes.Match,
                 Title = string.IsNullOrWhiteSpace(match.PlaceName) ? "Jogo" : match.PlaceName,
                 Date = matchDate.ToString("yyyy-MM-dd"),
-                Time = match.PlayedAt.ToString("HH:mm"),
+                Time = playedAtBrazil.ToString("HH:mm"),
                 TimeTBD = false,
                 CategoryId = null,
                 CategoryName = "Jogo",

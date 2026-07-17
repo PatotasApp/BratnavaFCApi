@@ -283,7 +283,17 @@ redisOptions.SyncTimeout = 40_000;
 builder.Services.AddSingleton<IConnectionMultiplexer>(
     ConnectionMultiplexer.Connect(redisOptions));
 
-builder.Services.AddScoped<IMatchEventPublisher, RedisMatchEventPublisher>();
+builder.Services.AddScoped<IMatchEventPublisher>(sp =>
+{
+    var streamKey =
+        Environment.GetEnvironmentVariable("REPLAY_EVENTS_STREAM")
+        ?? builder.Configuration["ReplayEvents:StreamKey"]
+        ?? "replay_events";
+
+    return new RedisMatchEventPublisher(
+        sp.GetRequiredService<IConnectionMultiplexer>(),
+        streamKey);
+});
 builder.Services.AddSingleton<IReplayUrlService, R2ReplayUrlService>();
 builder.Services.AddHostedService<ReplayStreamConsumerService>();
 

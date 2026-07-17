@@ -6,5 +6,9 @@ public record PublicClipDto(
     string EventType,
     DateTimeOffset RecordedAt,
     int? GoalNumber,
-    int? TotalGoals
+    int? TotalGoals,
+    string? TeamAColorName = null,
+    string? TeamAColorHex = null,
+    string? TeamBColorName = null,
+    string? TeamBColorHex = null
 );

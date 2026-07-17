@@ -866,9 +866,9 @@ public class MatchesController : GroupAuthorizedController
         CancellationToken ct)
     {
         if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
-        await _eventPublisher.PublishAsync(groupId, matchId, dto.Type, dto.SecondsBeforeStart, dto.DurationSeconds, ct);
+        var queueId = await _eventPublisher.PublishAsync(groupId, matchId, dto.Type, dto.SecondsBeforeStart, dto.DurationSeconds, dto.EventTime, ct);
         await _realtime.MatchChangedAsync(groupId, matchId, "match.replay-event.published", ct);
-        return NoContent();
+        return Ok(new { queueId });
     }
 
     // ── Linked poll ───────────────────────────────────────────────────────────

@@ -348,7 +348,7 @@ public class CalendarServiceTests
         dto.Type.Should().Be("match");
         dto.Title.Should().Be("Arena Bratnava");
         dto.Date.Should().Be("2030-05-10");
-        dto.Time.Should().Be("15:00");
+        dto.Time.Should().Be("12:00");
         dto.TimeTBD.Should().BeFalse();
         dto.CategoryName.Should().Be("Jogo");
         dto.CategoryIcon.Should().Be("⚽");
@@ -393,6 +393,29 @@ public class CalendarServiceTests
         // Assert
         result.Success.Should().BeTrue();
         result.Data.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetEventsAsync_MatchAtMidnightUtc_ShouldAppearOnPreviousBrazilDate()
+    {
+        // Arrange: 2030-05-15 00:00 UTC = 2030-05-14 21:00 in Brazil.
+        await using var db = DbContextFactory.Create(nameof(GetEventsAsync_MatchAtMidnightUtc_ShouldAppearOnPreviousBrazilDate));
+        var group = await SeedGroupAsync(db);
+        var playedAt = DateTime.SpecifyKind(new DateTime(2030, 5, 15, 0, 0, 0), DateTimeKind.Utc);
+        db.Matches.Add(new MatchEntity(group.Id, playedAt, "Boca Jrs"));
+        await db.SaveChangesAsync();
+
+        var sut = MakeSut(db);
+
+        // Act
+        var result = await sut.GetEventsAsync(group.Id, new DateOnly(2030, 5, 14), new DateOnly(2030, 5, 14));
+
+        // Assert
+        result.Success.Should().BeTrue();
+        var dto = result.Data!.Single();
+        dto.Type.Should().Be("match");
+        dto.Date.Should().Be("2030-05-14");
+        dto.Time.Should().Be("21:00");
     }
 
     [Fact]

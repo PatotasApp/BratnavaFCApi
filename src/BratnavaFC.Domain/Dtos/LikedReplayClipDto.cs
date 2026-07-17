@@ -9,5 +9,9 @@ public record LikedReplayClipDto(
     DateTimeOffset RecordedAt,
     int LikeCount,
     bool IsLikedByMe,
-    bool IsFavoritedByMe
+    bool IsFavoritedByMe,
+    string? TeamAColorName = null,
+    string? TeamAColorHex = null,
+    string? TeamBColorName = null,
+    string? TeamBColorHex = null
 );

@@ -2476,6 +2476,7 @@ public sealed class MatchService : IMatchService
         if (clips.Count == 0) return [];
 
         var clipIds = clips.Select(c => c.Id).ToList();
+        var matchIds = clips.Select(c => c.MatchId).Distinct().ToList();
 
         var likeCounts = await _context.ReplayLikes
             .AsNoTracking()
@@ -2502,6 +2503,19 @@ public sealed class MatchService : IMatchService
                 .ToListAsync(ct)).ToHashSet();
         }
 
+        var matchColors = await _context.Matches
+            .AsNoTracking()
+            .Where(m => matchIds.Contains(m.Id))
+            .Select(m => new
+            {
+                m.Id,
+                TeamAColorName = m.TeamAColor != null ? m.TeamAColor.Name : null,
+                TeamAColorHex = m.TeamAColor != null ? m.TeamAColor.HexValue : null,
+                TeamBColorName = m.TeamBColor != null ? m.TeamBColor.Name : null,
+                TeamBColorHex = m.TeamBColor != null ? m.TeamBColor.HexValue : null,
+            })
+            .ToDictionaryAsync(m => m.Id, ct);
+
         return clips.Select(c => new LikedReplayClipDto(
             c.Id,
             c.MatchId,
@@ -2511,7 +2525,11 @@ public sealed class MatchService : IMatchService
             c.RecordedAt,
             likeCounts.GetValueOrDefault(c.Id, 0),
             myLikes.Contains(c.Id),
-            myFavorites.Contains(c.Id)
+            myFavorites.Contains(c.Id),
+            matchColors.GetValueOrDefault(c.MatchId)?.TeamAColorName,
+            matchColors.GetValueOrDefault(c.MatchId)?.TeamAColorHex,
+            matchColors.GetValueOrDefault(c.MatchId)?.TeamBColorName,
+            matchColors.GetValueOrDefault(c.MatchId)?.TeamBColorHex
         )).ToList();
     }
 
@@ -2719,11 +2737,13 @@ public sealed class MatchService : IMatchService
             return Result<ReplayClipDto>.Fail("Partida não encontrada.");
 
         if (!Enum.TryParse<MatchEventType>(eventType, ignoreCase: true, out var parsedEventType))
-            return Result<ReplayClipDto>.Fail("Tipo de evento inválido. Use 'Gol' ou 'Jogada'.");
+            return Result<ReplayClipDto>.Fail("Tipo de evento inválido. Use 'Gol', 'GolTimeA', 'GolTimeB' ou 'Jogada'.");
 
         var ext      = Path.GetExtension(fileName).ToLowerInvariant();
         var safeExt  = ext is ".mp4" or ".mov" or ".webm" or ".avi" ? ext : ".mp4";
-        var subpasta = parsedEventType == MatchEventType.Gol ? "gols" : "jogadas";
+        var subpasta = parsedEventType is MatchEventType.Gol or MatchEventType.GolTimeA or MatchEventType.GolTimeB
+            ? "gols"
+            : "jogadas";
         var objectKey = $"{groupId}/{matchId}/{subpasta}/{Guid.NewGuid()}{safeExt}";
 
         string etag;
