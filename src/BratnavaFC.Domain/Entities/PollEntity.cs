@@ -1,3 +1,5 @@
+using BratnavaFC.Domain.Time;
+
 namespace BratnavaFC.Domain.Entities;
 public class PollEntity : BaseEntity
 {
@@ -140,11 +142,9 @@ public class PollEntity : BaseEntity
     public bool HasExpiredDeadline()
     {
         if (!DeadlineDate.HasValue) return false;
-        // DeadlineDate/DeadlineTime are stored in Brazil local time (UTC-3) as entered by the user.
-        // Brazil abolished DST in 2019, so the offset is permanently -3h.
         var localDt = DeadlineDate.Value.ToDateTime(DeadlineTime ?? TimeOnly.MaxValue);
-        var deadlineOffset = new DateTimeOffset(localDt, TimeSpan.FromHours(-3));
-        return DateTimeOffset.UtcNow > deadlineOffset;
+        var deadlineUtc = BratnavaDateTime.SaoPauloLocalToUtc(localDt);
+        return DateTime.UtcNow > deadlineUtc;
     }
 
     /// <summary>Validates whether adding/removing a guest is currently allowed.</summary>

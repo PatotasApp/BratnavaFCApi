@@ -116,6 +116,39 @@ public sealed class AbsenceServiceMatchSyncTests
     }
 
     [Fact]
+    public async Task CreateAsync_WhenMatchUtcFallsOnAbsenceDateInSaoPaulo_ShouldAutoRejectPlayer()
+    {
+        await using var db = DbContextFactory.Create(nameof(CreateAsync_WhenMatchUtcFallsOnAbsenceDateInSaoPaulo_ShouldAutoRejectPlayer));
+        var group = await SeedGroupAsync(db);
+        var (user, player) = await SeedPlayerAsync(db, group.Id);
+        var match = await SeedMatchAsync(
+            db,
+            group.Id,
+            new DateTime(2026, 7, 18, 2, 0, 0, DateTimeKind.Utc),
+            player);
+
+        var sut = CreateSut(db);
+        var result = await sut.CreateAsync(
+            user.Id,
+            Dto(new DateOnly(2026, 7, 17), new DateOnly(2026, 7, 17)),
+            CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        var mp = await GetMp(db, match.Id, player.Id);
+        mp.InviteResponse.Should().Be(InviteResponse.Rejected);
+        mp.AutoRejectedByAbsenceId.Should().Be(result.Data.Id);
+    }
+
+    [Fact]
+    public void ToSaoPauloDateBoundaryUtc_ShouldReturnUtcDateTime()
+    {
+        var boundary = AbsenceService.ToSaoPauloDateBoundaryUtc(new DateOnly(2026, 7, 17));
+
+        boundary.Kind.Should().Be(DateTimeKind.Utc);
+        boundary.Should().Be(new DateTime(2026, 7, 17, 3, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
     public async Task CreateAsync_WhenMatchAlreadyStarted_ShouldNotTouchInvite()
     {
         await using var db = DbContextFactory.Create(nameof(CreateAsync_WhenMatchAlreadyStarted_ShouldNotTouchInvite));

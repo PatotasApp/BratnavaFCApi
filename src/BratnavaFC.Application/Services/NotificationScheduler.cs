@@ -1,5 +1,6 @@
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Entities;
+using BratnavaFC.Domain.Time;
 using BratnavaFC.Infrastructure.Data;
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
@@ -10,8 +11,6 @@ namespace BratnavaFC.Application.Services;
 public sealed class NotificationScheduler : INotificationScheduler
 {
     // Brasil aboliu o horário de verão em 2019 — offset permanentemente UTC-3.
-    private static readonly TimeSpan BrasilOffset = TimeSpan.FromHours(-3);
-
     // Margem mínima: não agenda se o disparo seria em menos de 5 minutos.
     private static readonly TimeSpan MinLead = TimeSpan.FromMinutes(5);
 
@@ -36,7 +35,7 @@ public sealed class NotificationScheduler : INotificationScheduler
         CancellationToken ct = default)
     {
         // playedAt é tratado como horário de Brasília (UTC-3)
-        var targetUtc = LocalBrasilToUtc(playedAt);
+        var targetUtc = NormalizeMatchScheduleTime(playedAt);
         var triggers  = BuildReminderTriggers(targetUtc);
 
         foreach (var (type, fireAt) in triggers)
@@ -74,7 +73,7 @@ public sealed class NotificationScheduler : INotificationScheduler
         Guid matchId, Guid groupId, DateTime playedAt,
         CancellationToken ct = default)
     {
-        var targetUtc = LocalBrasilToUtc(playedAt);
+        var targetUtc = NormalizeMatchScheduleTime(playedAt);
         var fireAt    = new DateTimeOffset(targetUtc, TimeSpan.Zero) - TimeSpan.FromHours(3);
 
         if (fireAt - DateTimeOffset.UtcNow <= MinLead) return;
@@ -260,19 +259,19 @@ public sealed class NotificationScheduler : INotificationScheduler
     /// <summary>
     /// Converte um DateTime sem fuso (tratado como Brasília UTC-3) para UTC.
     /// </summary>
-    private static DateTime LocalBrasilToUtc(DateTime dt)
-        => new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Unspecified), BrasilOffset)
-            .UtcDateTime;
-
     /// <summary>
     /// Converte DateOnly + TimeOnly (Brasília UTC-3) para UTC.
     /// Sem TimeOnly, usa fim-do-dia (23:59:59).
     /// </summary>
     private static DateTime DateOnlyToUtc(DateOnly date, TimeOnly? time)
     {
-        var localDt = date.ToDateTime(time ?? new TimeOnly(23, 59, 59));
-        return new DateTimeOffset(localDt, BrasilOffset).UtcDateTime;
+        return BratnavaDateTime.SaoPauloDateTimeToUtc(date, time);
     }
+
+    private static DateTime NormalizeMatchScheduleTime(DateTime playedAt)
+        => playedAt.Kind == DateTimeKind.Unspecified
+            ? BratnavaDateTime.SaoPauloLocalToUtc(playedAt)
+            : BratnavaDateTime.EnsureUtc(playedAt);
 
     /// <summary>
     /// Retorna os gatilhos 24h e 2h antes de <paramref name="targetUtc"/>

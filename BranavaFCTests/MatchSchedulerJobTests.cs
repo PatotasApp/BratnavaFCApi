@@ -20,7 +20,8 @@ public sealed class MatchSchedulerJobTests
         var settings = new GroupSettingsEntity(group.Id, 5, 10, "Boca Jrs", DayOfWeek.Sunday, new TimeSpan(21, 0, 0));
         var playedAt = DateTime.SpecifyKind(
             DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-3)).DateTime.AddMinutes(-5),
-            DateTimeKind.Utc);
+            DateTimeKind.Unspecified);
+        var expectedPlayedAtUtc = new DateTimeOffset(playedAt, TimeSpan.FromHours(-3)).UtcDateTime;
         settings.SetMatchScheduling(
             enabled: true,
             mode: 0,
@@ -60,7 +61,7 @@ public sealed class MatchSchedulerJobTests
         captured.Should().NotBeNull();
         captured!.GroupId.Should().Be(group.Id);
         captured.PlaceName.Should().Be("Boca Jrs");
-        captured.PlayedAt.Should().Be(playedAt);
+        captured.PlayedAt.Should().Be(expectedPlayedAtUtc);
 
         var saved = await db.GroupSettings.AsNoTracking().SingleAsync(x => x.GroupId == group.Id);
         var entry = saved.GetManualMatchSchedules().Single();

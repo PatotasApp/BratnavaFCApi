@@ -3,6 +3,7 @@ using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Calendar;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
+using BratnavaFC.Domain.Time;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,7 +17,7 @@ public sealed class CalendarService : ICalendarService
     /// Fuso horário de Brasília (UTC-3 / UTC-2 no horário de verão).
     /// Tenta o ID do Windows primeiro, depois o IANA (Linux/macOS/Docker).
     /// </summary>
-    private static readonly TimeZoneInfo BrazilTz = ResolveBrazilTimeZone();
+    private static readonly TimeZoneInfo BrazilTz = BratnavaDateTime.SaoPauloTimeZone;
 
     private static TimeZoneInfo ResolveBrazilTimeZone()
     {
@@ -27,7 +28,7 @@ public sealed class CalendarService : ICalendarService
         }
         // Fallback: UTC-3 fixo (sem horário de verão)
         return TimeZoneInfo.CreateCustomTimeZone(
-            "BRT", TimeSpan.FromHours(-3), "Brasília Time", "BRT");
+            "BRT", BratnavaDateTime.SaoPauloTimeZone.BaseUtcOffset, "Brasília Time", "BRT");
     }
 
     private readonly AppDbContext _context;

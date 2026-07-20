@@ -4,6 +4,7 @@ using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Dtos.Absences;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
+using BratnavaFC.Domain.Time;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,7 +13,6 @@ namespace BratnavaFC.Application.Services;
 public sealed class AbsenceService : IAbsenceService
 {
     private readonly AppDbContext _context;
-
     public AbsenceService(AppDbContext context) => _context = context;
 
     public async Task<Result<List<AbsenceDto>>> GetMineAsync(Guid userId, CancellationToken ct = default)
@@ -163,8 +163,8 @@ public sealed class AbsenceService : IAbsenceService
     /// </summary>
     private async Task<int> ApplyAbsenceToUpcomingMatchesAsync(UserAbsenceEntity absence, CancellationToken ct)
     {
-        var rangeStart = absence.StartDate.ToDateTime(TimeOnly.MinValue);
-        var rangeEnd   = absence.EndDate.AddDays(1).ToDateTime(TimeOnly.MinValue);
+        var rangeStart = ToSaoPauloDateBoundaryUtc(absence.StartDate);
+        var rangeEnd   = ToSaoPauloDateBoundaryUtc(absence.EndDate.AddDays(1));
 
         var matchPlayers = await _context.MatchPlayers
             .Include(mp => mp.Match)
@@ -199,8 +199,8 @@ public sealed class AbsenceService : IAbsenceService
 
         if (exceptRange is { } range)
         {
-            var keepStart = range.Start.ToDateTime(TimeOnly.MinValue);
-            var keepEnd   = range.End.AddDays(1).ToDateTime(TimeOnly.MinValue);
+            var keepStart = ToSaoPauloDateBoundaryUtc(range.Start);
+            var keepEnd   = ToSaoPauloDateBoundaryUtc(range.End.AddDays(1));
             query = query.Where(mp => mp.Match!.PlayedAt < keepStart || mp.Match!.PlayedAt >= keepEnd);
         }
 
@@ -234,4 +234,7 @@ public sealed class AbsenceService : IAbsenceService
         AbsenceType.Other             => "Outros",
         _                             => "Outros",
     };
+
+    internal static DateTime ToSaoPauloDateBoundaryUtc(DateOnly date)
+        => BratnavaDateTime.SaoPauloDateTimeToUtc(date, TimeOnly.MinValue);
 }

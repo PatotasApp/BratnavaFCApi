@@ -8,6 +8,16 @@ namespace BranavaFC.Tests;
 
 public sealed class MatchEntityTests
 {
+    [Fact]
+    public void Constructor_WhenPlayedAtHasNoKind_ShouldTreatAsBrazilLocalAndStoreUtc()
+    {
+        var localPlayedAt = DateTime.SpecifyKind(new DateTime(2026, 7, 14, 21, 0, 0), DateTimeKind.Unspecified);
+        var match = new MatchEntity(Guid.NewGuid(), localPlayedAt, "Boca Jrs");
+
+        Assert.Equal(DateTimeKind.Utc, match.PlayedAt.Kind);
+        Assert.Equal(new DateTime(2026, 7, 15, 0, 0, 0, DateTimeKind.Utc), match.PlayedAt);
+    }
+
     private static (MatchEntity match, PlayerEntity p1, PlayerEntity p2, MatchPlayerEntity mp1, MatchPlayerEntity mp2)
         CreateMatchWithTwoPlayers_Created()
     {
