@@ -1,5 +1,6 @@
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Enums;
+using BratnavaFC.Domain.Time;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -9,8 +10,6 @@ namespace BratnavaFC.Application.Services;
 public sealed class MonthlyPaymentReminderJob : IMonthlyPaymentReminderJob
 {
     // Brasil UTC-3 permanente
-    private static readonly TimeSpan BrasilOffset = TimeSpan.FromHours(-3);
-
     private readonly AppDbContext _db;
     private readonly IPushService _push;
     private readonly ILogger<MonthlyPaymentReminderJob> _logger;
@@ -24,7 +23,7 @@ public sealed class MonthlyPaymentReminderJob : IMonthlyPaymentReminderJob
 
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
-        var today = DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(BrasilOffset).DateTime);
+        var today = BratnavaDateTime.TodayInSaoPaulo();
         var isFirstOfMonth = today.Day == 1;
 
         // Grupos com PaymentDueDay configurado

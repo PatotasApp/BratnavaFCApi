@@ -1,5 +1,6 @@
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Entities;
+using BratnavaFC.Domain.Time;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -8,7 +9,6 @@ namespace BratnavaFC.Application.Services;
 
 public sealed class MatchSchedulerJob : IMatchSchedulerJob
 {
-    private static readonly TimeSpan BrazilOffset = TimeSpan.FromHours(-3);
     private static readonly TimeSpan RecurringWindow = TimeSpan.FromMinutes(10);
 
     private readonly AppDbContext _db;
@@ -24,7 +24,7 @@ public sealed class MatchSchedulerJob : IMatchSchedulerJob
 
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
-        var now = DateTimeOffset.UtcNow.ToOffset(BrazilOffset).DateTime;
+        var now = BratnavaDateTime.UtcToSaoPauloLocal(DateTime.UtcNow);
         var settings = await _db.GroupSettings
             .Where(x => x.MatchSchedulingEnabled)
             .ToListAsync(ct);
@@ -46,9 +46,9 @@ public sealed class MatchSchedulerJob : IMatchSchedulerJob
         var entries = setting.GetManualMatchSchedules().ToList();
         var changed = false;
 
-        foreach (var entry in entries.Where(x => !x.Created && x.PlayedAt <= now))
+        foreach (var entry in entries.Where(x => !x.Created && AsBrazilLocal(x.PlayedAt) <= now))
         {
-            var matchId = await CreateMatchIfMissingAsync(setting, entry.PlayedAt, ct);
+            var matchId = await CreateMatchIfMissingAsync(setting, BrazilLocalToUtc(entry.PlayedAt), ct);
             if (!matchId.HasValue) continue;
 
             entry.Created = true;
@@ -87,7 +87,7 @@ public sealed class MatchSchedulerJob : IMatchSchedulerJob
     private static DateTime ResolveRecurringMatchTime(GroupSettingsEntity setting, DateTime now)
     {
         if (!setting.DefaultDayOfWeek.HasValue || !setting.DefaultKickoffTime.HasValue)
-            return DateTime.SpecifyKind(now.Date.Add(setting.MatchScheduleTime!.Value), DateTimeKind.Utc);
+            return BrazilLocalToUtc(now.Date.Add(setting.MatchScheduleTime!.Value));
 
         var daysUntilMatch = ((int)setting.DefaultDayOfWeek.Value - (int)now.DayOfWeek + 7) % 7;
         var date = now.Date.AddDays(daysUntilMatch);
@@ -96,12 +96,12 @@ public sealed class MatchSchedulerJob : IMatchSchedulerJob
         if (playedAt < now)
             playedAt = playedAt.AddDays(7);
 
-        return DateTime.SpecifyKind(playedAt, DateTimeKind.Utc);
+        return BrazilLocalToUtc(playedAt);
     }
 
     private async Task<Guid?> CreateMatchIfMissingAsync(GroupSettingsEntity setting, DateTime playedAt, CancellationToken ct)
     {
-        playedAt = DateTime.SpecifyKind(playedAt, DateTimeKind.Utc);
+        playedAt = EnsureUtc(playedAt);
 
         var exists = await _db.Matches
             .AsNoTracking()
@@ -128,4 +128,18 @@ public sealed class MatchSchedulerJob : IMatchSchedulerJob
 
         return null;
     }
+
+    private static DateTime AsBrazilLocal(DateTime value)
+    {
+        if (value.Kind != DateTimeKind.Utc)
+            return DateTime.SpecifyKind(value, DateTimeKind.Unspecified);
+
+        return BratnavaDateTime.UtcToSaoPauloLocal(value);
+    }
+
+    internal static DateTime BrazilLocalToUtc(DateTime local)
+        => BratnavaDateTime.SaoPauloLocalToUtc(local);
+
+    private static DateTime EnsureUtc(DateTime value)
+        => BratnavaDateTime.EnsureUtc(value);
 }

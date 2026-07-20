@@ -1,8 +1,11 @@
 ﻿using BratnavaFC.Domain.Enums;
 
+using BratnavaFC.Domain.Time;
+
 namespace BratnavaFC.Domain.Entities;
 public class MatchEntity : BaseEntity
 {
+
     private MatchEntity() { } // EF
 
     public MatchEntity(Guid groupId, DateTime playedAt, string placeName)
@@ -10,7 +13,7 @@ public class MatchEntity : BaseEntity
         if (groupId == Guid.Empty) throw new InvalidOperationException("GroupId e obrigatorio.");
 
         GroupId = groupId;
-        PlayedAt = playedAt;
+        PlayedAt = NormalizePlayedAt(playedAt);
         PlaceName = placeName ?? throw new ArgumentNullException(nameof(placeName));
 
         Status = MatchStatus.Created;
@@ -88,9 +91,12 @@ public class MatchEntity : BaseEntity
         if (string.IsNullOrWhiteSpace(placeName))
             throw new InvalidOperationException("Local da partida e obrigatorio.");
 
-        PlayedAt = playedAt;
+        PlayedAt = NormalizePlayedAt(playedAt);
         PlaceName = placeName;
     }
+
+    private static DateTime NormalizePlayedAt(DateTime playedAt)
+        => BratnavaDateTime.SaoPauloLocalToUtc(playedAt);
 
     public void EnsureCanDelete()
     {

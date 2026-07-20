@@ -1,5 +1,6 @@
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Enums;
+using BratnavaFC.Domain.Time;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -14,8 +15,6 @@ namespace BratnavaFC.Application.Services;
 public sealed class BirthdayNotificationJob : IBirthdayNotificationJob
 {
     // Brasil permanentemente UTC-3 desde o fim do horário de verão em 2019
-    private static readonly TimeSpan BrasilOffset = TimeSpan.FromHours(-3);
-
     private readonly AppDbContext _db;
     private readonly IPushService _push;
     private readonly ILogger<BirthdayNotificationJob> _logger;
@@ -32,7 +31,7 @@ public sealed class BirthdayNotificationJob : IBirthdayNotificationJob
 
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
-        var nowBrasil = DateTimeOffset.UtcNow.ToOffset(BrasilOffset);
+        var nowBrasil = BratnavaDateTime.UtcToSaoPauloLocal(DateTime.UtcNow);
         int month = nowBrasil.Month;
         int day   = nowBrasil.Day;
 

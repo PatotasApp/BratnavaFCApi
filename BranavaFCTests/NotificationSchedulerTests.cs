@@ -35,7 +35,8 @@ public class NotificationSchedulerTests
         => new(db, jobs, Mock.Of<ILogger<NotificationScheduler>>());
 
     /// <summary>UTC "now" expressed as a naive Brasília (UTC-3) wall-clock DateTime.</summary>
-    private static DateTime BrasilNow() => DateTime.UtcNow.AddHours(-3);
+    private static DateTime BrasilNow() =>
+        DateTime.SpecifyKind(DateTime.UtcNow.AddHours(-3), DateTimeKind.Unspecified);
 
     // ─── ScheduleMatchRemindersAsync ─────────────────────────────────────────
 

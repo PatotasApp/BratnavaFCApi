@@ -24,6 +24,9 @@ public class PollService_IsAcceptingVotesTests
                Mock.Of<INotificationScheduler>(),
                Mock.Of<ILogger<PollService>>());
 
+    private static DateTime BrasilNow()
+        => DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-3)).DateTime;
+
     private static PollEntity MakePoll(
         Guid      groupId,
         string    status       = "open",
@@ -85,8 +88,8 @@ public class PollService_IsAcceptingVotesTests
     [Fact]
     public void ComputeIsAcceptingVotes_WhenOpen_DeadlineTodayWithFutureTime_ShouldReturnTrue()
     {
-        // Usa data e hora do MESMO instante futuro para não quebrar na virada do dia UTC
-        var futureInstant = DateTime.UtcNow.AddHours(2);
+        // Usa data e hora de Brasília, pois DeadlineDate/DeadlineTime são configurados pelo usuário nesse fuso.
+        var futureInstant = BrasilNow().AddHours(2);
         var result = PollService.ComputeIsAcceptingVotes(
             "open", DateOnly.FromDateTime(futureInstant), TimeOnly.FromDateTime(futureInstant));
         result.Should().BeTrue("o prazo ainda não chegou.");
@@ -95,8 +98,8 @@ public class PollService_IsAcceptingVotesTests
     [Fact]
     public void ComputeIsAcceptingVotes_WhenOpen_DeadlineTodayWithPastTime_ShouldReturnFalse()
     {
-        // Usa data e hora do MESMO instante passado para não quebrar na virada do dia UTC
-        var pastInstant = DateTime.UtcNow.AddHours(-2);
+        // Usa data e hora de Brasília, pois DeadlineDate/DeadlineTime são configurados pelo usuário nesse fuso.
+        var pastInstant = BrasilNow().AddHours(-2);
         var result = PollService.ComputeIsAcceptingVotes(
             "open", DateOnly.FromDateTime(pastInstant), TimeOnly.FromDateTime(pastInstant));
         result.Should().BeFalse("o prazo já passou.");

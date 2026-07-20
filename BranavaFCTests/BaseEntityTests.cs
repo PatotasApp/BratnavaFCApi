@@ -1,5 +1,7 @@
 ﻿namespace BranavaFC.Tests;
 
+using BratnavaFC.Domain.Entities;
+using BratnavaFC.Infrastructure.Data;
 public class BaseEntityTests
 {
     [Fact]
@@ -15,5 +17,16 @@ public class BaseEntityTests
         Assert.NotEqual(Guid.Empty, entity.Id);
         Assert.True(entity.CreateDate >= before);
         Assert.Null(entity.UpdateDate);
+    }
+
+    [Fact]
+    public void EnsureUtc_WhenDateTimeIsUnspecified_ShouldMarkAsUtcWithoutChangingClock()
+    {
+        var unspecified = DateTime.SpecifyKind(new DateTime(2026, 7, 18, 10, 0, 0), DateTimeKind.Unspecified);
+
+        var result = AppDbContext.EnsureUtc(unspecified);
+
+        Assert.Equal(DateTimeKind.Utc, result.Kind);
+        Assert.Equal(DateTime.SpecifyKind(unspecified, DateTimeKind.Utc), result);
     }
 }
