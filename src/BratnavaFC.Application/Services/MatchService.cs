@@ -4,7 +4,6 @@ using BratnavaFC.Domain.Constants;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
-using BratnavaFC.Domain.Time;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -363,7 +362,7 @@ public sealed class MatchService : IMatchService
         if (entry is null)
             return;
 
-        entry.PlayedAt = UtcToBrazilLocal(playedAt);
+        entry.PlayedAt = DateTime.SpecifyKind(playedAt, DateTimeKind.Utc);
         settings.SetMatchScheduling(
             settings.MatchSchedulingEnabled,
             settings.MatchSchedulingMode,
@@ -371,9 +370,6 @@ public sealed class MatchService : IMatchService
             settings.MatchScheduleTime,
             entries);
     }
-
-    private static DateTime UtcToBrazilLocal(DateTime value)
-        => BratnavaDateTime.UtcToSaoPauloLocal(value);
 
     public async Task<Result> DeleteAsync(Guid groupId, Guid matchId, CancellationToken ct)
     {
