@@ -1851,7 +1851,7 @@ public sealed class MatchServiceCoverageTests
             stream, "video/mp4", "clip.mp4", "Golaço", CancellationToken.None);
 
         result.Success.Should().BeFalse();
-        result.Error.Should().Be("Tipo de evento inválido. Use 'Gol' ou 'Jogada'.");
+        result.Error.Should().Be("Tipo de evento inválido. Use 'Gol', 'GolTimeA', 'GolTimeB' ou 'Jogada'.");
     }
 
     [Fact]
