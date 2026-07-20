@@ -267,7 +267,9 @@ public class PaymentServiceCoverageTests
         var record = await db.MonthlyPayments.SingleAsync();
         record.Amount.Should().Be(80m);
         record.Status.Should().Be(PaymentStatus.Paid);
+        record.PaidAt.Should().NotBeNull();
         record.MarkedByAdminId.Should().BeNull("non-admin self payment");
+        record.MarkedByUserId.Should().Be(seed.User.Id);
         record.ProofBase64.Should().Be("b64");
 
         txMock.Verify(s => s.RecordOrRemovePaymentEntryAsync(
@@ -336,6 +338,8 @@ public class PaymentServiceCoverageTests
         result.Success.Should().BeTrue();
         record.Status.Should().Be(PaymentStatus.Pending);
         record.PaidAt.Should().BeNull();
+        record.MarkedByUserId.Should().BeNull();
+        record.MarkedByAdminId.Should().BeNull();
 
         pushMock.Verify(p => p.SendToUserAsync(
             seed.User.Id, It.IsAny<string>(), It.IsAny<string>(),
@@ -571,21 +575,76 @@ public class PaymentServiceCoverageTests
         await db.SaveChangesAsync();
 
         var txMock = new Mock<IFinancialTransactionService>();
+        var adminId = Guid.NewGuid();
         var dto    = new BulkExtraChargeDiscountDto
         {
             Discount = 50m, DiscountReason = "cortesia", PlayerIds = [seed.Player.Id],
         };
 
         var result = await MakeSut(db, txMock.Object).BulkDiscountExtraChargeAsync(
-            seed.Group.Id, charge.Id, dto, Guid.NewGuid());
+            seed.Group.Id, charge.Id, dto, adminId);
 
         result.Success.Should().BeTrue();
         payment.Status.Should().Be(PaymentStatus.Paid, "desconto integral auto-paga");
         payment.Discount.Should().Be(50m);
+        payment.PaidAt.Should().NotBeNull();
+        payment.MarkedByUserId.Should().Be(adminId);
+        payment.MarkedByAdminId.Should().Be(adminId);
 
         txMock.Verify(s => s.RecordOrRemovePaymentEntryAsync(
             seed.Group.Id, TransactionSourceType.ExtraCharge, payment.Id,
             50m, It.IsAny<string>(), It.IsAny<DateOnly>(),
+            true, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task BulkDiscount_WhenRemainingAmountBecomesZero_AutoPaysAndMarksActor()
+    {
+        await using var db = DbContextFactory.Create(nameof(BulkDiscount_WhenRemainingAmountBecomesZero_AutoPaysAndMarksActor));
+        var seed    = await SeedGroupWithPlayerAsync(db);
+        var charge  = new ExtraChargeEntity(seed.Group.Id, "C", null, 50m, null, Guid.NewGuid());
+        var payment = new ExtraChargePaymentEntity(charge.Id, seed.Player.Id, seed.Group.Id, 50m);
+        payment.ApplyDiscount(30m, "parcial", Guid.NewGuid());
+        var user2 = new UserEntity("u" + Guid.NewGuid().ToString("N")[..6], "F2", "L2",
+            $"{Guid.NewGuid():N}@test.com", "h", null, null);
+        var player2 = new PlayerEntity("P2", user2.Id, seed.Group.Id, 5m, false, false, Status.Active);
+        var payment2 = new ExtraChargePaymentEntity(charge.Id, player2.Id, seed.Group.Id, 40m);
+        payment2.ApplyDiscount(10m, "parcial", Guid.NewGuid());
+        db.Users.Add(user2);
+        db.Players.Add(player2);
+        db.ExtraCharges.Add(charge);
+        db.ExtraChargePayments.AddRange(payment, payment2);
+        await db.SaveChangesAsync();
+
+        var txMock = new Mock<IFinancialTransactionService>();
+        var adminId = Guid.NewGuid();
+        var dto = new BulkExtraChargeDiscountDto
+        {
+            Discount = 30m, DiscountReason = "restante", PlayerIds = [seed.Player.Id, player2.Id],
+        };
+
+        var result = await MakeSut(db, txMock.Object).BulkDiscountExtraChargeAsync(
+            seed.Group.Id, charge.Id, dto, adminId);
+
+        result.Success.Should().BeTrue();
+        payment.Status.Should().Be(PaymentStatus.Paid);
+        payment.Discount.Should().Be(60m);
+        payment.PaidAt.Should().NotBeNull();
+        payment.MarkedByUserId.Should().Be(adminId);
+        payment.MarkedByAdminId.Should().Be(adminId);
+        payment2.Status.Should().Be(PaymentStatus.Paid);
+        payment2.Discount.Should().Be(40m);
+        payment2.PaidAt.Should().NotBeNull();
+        payment2.MarkedByUserId.Should().Be(adminId);
+        payment2.MarkedByAdminId.Should().Be(adminId);
+
+        txMock.Verify(s => s.RecordOrRemovePaymentEntryAsync(
+            seed.Group.Id, TransactionSourceType.ExtraCharge, payment.Id,
+            20m, It.IsAny<string>(), It.IsAny<DateOnly>(),
+            true, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        txMock.Verify(s => s.RecordOrRemovePaymentEntryAsync(
+            seed.Group.Id, TransactionSourceType.ExtraCharge, payment2.Id,
+            30m, It.IsAny<string>(), It.IsAny<DateOnly>(),
             true, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -601,16 +660,20 @@ public class PaymentServiceCoverageTests
         await db.SaveChangesAsync();
 
         var txMock = new Mock<IFinancialTransactionService>();
+        var adminId = Guid.NewGuid();
         var dto    = new BulkExtraChargeDiscountDto
         {
             Discount = 20m, PlayerIds = [seed.Player.Id], MarkAsPaid = true,
         };
 
         var result = await MakeSut(db, txMock.Object).BulkDiscountExtraChargeAsync(
-            seed.Group.Id, charge.Id, dto, Guid.NewGuid());
+            seed.Group.Id, charge.Id, dto, adminId);
 
         result.Success.Should().BeTrue();
         payment.Status.Should().Be(PaymentStatus.Paid);
+        payment.PaidAt.Should().NotBeNull();
+        payment.MarkedByUserId.Should().Be(adminId);
+        payment.MarkedByAdminId.Should().Be(adminId);
 
         txMock.Verify(s => s.RecordOrRemovePaymentEntryAsync(
             seed.Group.Id, TransactionSourceType.ExtraCharge, payment.Id,
@@ -742,8 +805,10 @@ public class PaymentServiceCoverageTests
 
         result.Success.Should().BeTrue();
         payment.Status.Should().Be(PaymentStatus.Paid);
+        payment.PaidAt.Should().NotBeNull();
         payment.ProofBase64.Should().Be("b64");
         payment.MarkedByAdminId.Should().BeNull();
+        payment.MarkedByUserId.Should().Be(seed.User.Id);
 
         // Notifica financeiros do pagamento + meta atingida (único pagamento da cobrança)
         pushMock.Verify(p => p.SendToGroupFinanceirosAsync(
@@ -773,6 +838,9 @@ public class PaymentServiceCoverageTests
 
         result.Success.Should().BeTrue();
         payment.Status.Should().Be(PaymentStatus.Pending);
+        payment.PaidAt.Should().BeNull();
+        payment.MarkedByUserId.Should().BeNull();
+        payment.MarkedByAdminId.Should().BeNull();
 
         pushMock.Verify(p => p.SendToUserAsync(
             seed.User.Id, It.IsAny<string>(), It.IsAny<string>(),
@@ -1129,6 +1197,8 @@ public class PaymentServiceCoverageTests
         var record = await db.MonthlyPayments.SingleAsync();
         record.Amount.Should().Be(90m);
         record.Status.Should().Be(PaymentStatus.Paid);
+        record.MarkedByAdminId.Should().BeNull();
+        record.MarkedByUserId.Should().Be(seed.User.Id);
     }
 
     [Fact]
@@ -1232,5 +1302,197 @@ public class PaymentServiceCoverageTests
         month.Count.Should().Be(2, "apenas as duas cobranças em que o jogador está incluído");
         month.AllPaid.Should().BeTrue("cancelada é ignorada; a ativa está paga");
         month.HasPending.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetExitPendingPaymentsForPlayerAsync_IncludesPendingExtraCharges()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetExitPendingPaymentsForPlayerAsync_IncludesPendingExtraCharges));
+        var seed = await SeedGroupWithPlayerAsync(db);
+        var charge = new ExtraChargeEntity(seed.Group.Id, "Churrasco", null, 42m, null, Guid.NewGuid());
+        var payment = new ExtraChargePaymentEntity(charge.Id, seed.Player.Id, seed.Group.Id, 42m);
+        db.ExtraCharges.Add(charge);
+        db.ExtraChargePayments.Add(payment);
+        await db.SaveChangesAsync();
+
+        var result = await MakeSut(db).GetExitPendingPaymentsForPlayerAsync(
+            seed.Player.Id,
+            seed.User.Id,
+            CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Data!.Count.Should().Be(1);
+        result.Data.Total.Should().Be(42m);
+        var group = result.Data.Groups.Single();
+        group.GroupId.Should().Be(seed.Group.Id);
+        group.Items.Single().Description.Should().Contain("Churrasco");
+    }
+
+    [Fact]
+    public async Task CreateExitDebtAlertsAsync_CreatesAlertsForAdminFinanceiroAndCreator()
+    {
+        await using var db = DbContextFactory.Create(nameof(CreateExitDebtAlertsAsync_CreatesAlertsForAdminFinanceiroAndCreator));
+        var seed = await SeedGroupWithPlayerAsync(db);
+        var admin = new UserEntity("admin", "Admin", "Teste", $"{Guid.NewGuid():N}@test.com", "h", null, null);
+        var financeiro = new UserEntity("fin", "Fin", "Teste", $"{Guid.NewGuid():N}@test.com", "h", null, null);
+        db.Users.AddRange(admin, financeiro);
+        db.GroupAdmins.Add(new GroupAdminEntity { GroupId = seed.Group.Id, UserId = admin.Id });
+        db.GroupFinanceiros.Add(new GroupFinanceiroEntity { GroupId = seed.Group.Id, UserId = financeiro.Id });
+        await db.SaveChangesAsync();
+
+        var pending = new ExitPendingPaymentsDto
+        {
+            Groups =
+            [
+                new GroupPendingPaymentsDto
+                {
+                    GroupId = seed.Group.Id,
+                    GroupName = seed.Group.Name,
+                    PlayerId = seed.Player.Id,
+                    PlayerName = seed.Player.Name,
+                    Total = 20m,
+                    Items =
+                    [
+                        new PendingPaymentItemDto
+                        {
+                            Id = "extra:x",
+                            Description = "Extra",
+                            Type = PendingPaymentType.Extra,
+                            ChargeId = Guid.NewGuid(),
+                            FinalAmount = 20m
+                        }
+                    ]
+                }
+            ],
+            Count = 1,
+            Total = 20m
+        };
+
+        await MakeSut(db).CreateExitDebtAlertsAsync(pending, CancellationToken.None);
+
+        var notifications = await db.UserNotifications
+            .Where(n => n.Type == "member_left_with_debt" && n.GroupId == seed.Group.Id)
+            .ToListAsync();
+        notifications.Select(n => n.UserId).Should().BeEquivalentTo([admin.Id, financeiro.Id, seed.Group.CreatedByUserId]);
+        notifications.Should().OnlyContain(n => n.Body.Contains("1 pend"));
+        (await db.ExitDebtAlerts.AsNoTracking().SingleAsync()).PlayerId.Should().Be(seed.Player.Id);
+    }
+
+    [Fact]
+    public async Task MarkExitDebtAlertAsPaidAsync_MarksPendingItemsPaidAndResolvesAlert()
+    {
+        await using var db = DbContextFactory.Create(nameof(MarkExitDebtAlertAsPaidAsync_MarksPendingItemsPaidAndResolvesAlert));
+        var seed = await SeedGroupWithPlayerAsync(db);
+        var admin = new UserEntity("admin2", "Admin", "Teste", $"{Guid.NewGuid():N}@test.com", "h", null, null);
+        db.Users.Add(admin);
+        db.GroupAdmins.Add(new GroupAdminEntity { GroupId = seed.Group.Id, UserId = admin.Id });
+        var charge = new ExtraChargeEntity(seed.Group.Id, "Churrasco", null, 55m, null, admin.Id);
+        var payment = new ExtraChargePaymentEntity(charge.Id, seed.Player.Id, seed.Group.Id, 55m);
+        db.ExtraCharges.Add(charge);
+        db.ExtraChargePayments.Add(payment);
+        await db.SaveChangesAsync();
+
+        var pending = (await MakeSut(db).GetExitPendingPaymentsForPlayerAsync(seed.Player.Id, seed.User.Id)).Data!;
+        await MakeSut(db).CreateExitDebtAlertsAsync(pending, CancellationToken.None);
+        var alert = await db.ExitDebtAlerts.SingleAsync();
+
+        var result = await MakeSut(db).MarkExitDebtAlertAsPaidAsync(
+            seed.Group.Id,
+            alert.Id,
+            admin.Id,
+            CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        (await db.ExtraChargePayments.FindAsync(payment.Id))!.Status.Should().Be(PaymentStatus.Paid);
+        (await db.ExtraChargePayments.FindAsync(payment.Id))!.MarkedByAdminId.Should().Be(admin.Id);
+        (await db.ExtraChargePayments.FindAsync(payment.Id))!.MarkedByUserId.Should().Be(admin.Id);
+        (await db.ExitDebtAlerts.AsNoTracking().SingleAsync(n => n.Id == alert.Id)).ResolvedAt.Should().NotBeNull();
+        (await db.UserNotifications.AsNoTracking().AnyAsync(n => n.Type == "member_left_with_debt")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetExitDebtAlertsAsync_ReturnsReadButUnresolvedAlertForAllFinanceiros()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetExitDebtAlertsAsync_ReturnsReadButUnresolvedAlertForAllFinanceiros));
+        var seed = await SeedGroupWithPlayerAsync(db);
+        var admin = new UserEntity("admin3", "Admin", "Teste", $"{Guid.NewGuid():N}@test.com", "h", null, null);
+        var financeiro = new UserEntity("fin3", "Fin", "Teste", $"{Guid.NewGuid():N}@test.com", "h", null, null);
+        db.Users.AddRange(admin, financeiro);
+        db.GroupAdmins.Add(new GroupAdminEntity { GroupId = seed.Group.Id, UserId = admin.Id });
+        db.GroupFinanceiros.Add(new GroupFinanceiroEntity { GroupId = seed.Group.Id, UserId = financeiro.Id });
+        var charge = new ExtraChargeEntity(seed.Group.Id, "Churrasco", null, 35m, null, admin.Id);
+        var payment = new ExtraChargePaymentEntity(charge.Id, seed.Player.Id, seed.Group.Id, 35m);
+        db.ExtraCharges.Add(charge);
+        db.ExtraChargePayments.Add(payment);
+        await db.SaveChangesAsync();
+
+        var pending = (await MakeSut(db).GetExitPendingPaymentsForPlayerAsync(seed.Player.Id, seed.User.Id)).Data!;
+        await MakeSut(db).CreateExitDebtAlertsAsync(pending, CancellationToken.None);
+        var alert = await db.UserNotifications.SingleAsync(n => n.UserId == admin.Id && n.Type == "member_left_with_debt");
+        alert.MarkAsRead();
+        await db.SaveChangesAsync();
+
+        var adminResult = await MakeSut(db).GetExitDebtAlertsAsync(seed.Group.Id, admin.Id, CancellationToken.None);
+        var financeiroResult = await MakeSut(db).GetExitDebtAlertsAsync(seed.Group.Id, financeiro.Id, CancellationToken.None);
+
+        adminResult.Success.Should().BeTrue();
+        financeiroResult.Success.Should().BeTrue();
+        adminResult.Data.Should().ContainSingle();
+        financeiroResult.Data.Should().ContainSingle(a => a.NotificationId == adminResult.Data!.Single().NotificationId);
+    }
+
+    [Fact]
+    public async Task KeepExitDebtAlertAsync_ResolvesAlertWithoutChangingPayments()
+    {
+        await using var db = DbContextFactory.Create(nameof(KeepExitDebtAlertAsync_ResolvesAlertWithoutChangingPayments));
+        var seed = await SeedGroupWithPlayerAsync(db);
+        var admin = new UserEntity("admin4", "Admin", "Teste", $"{Guid.NewGuid():N}@test.com", "h", null, null);
+        db.Users.Add(admin);
+        db.GroupAdmins.Add(new GroupAdminEntity { GroupId = seed.Group.Id, UserId = admin.Id });
+        var charge = new ExtraChargeEntity(seed.Group.Id, "Churrasco", null, 65m, null, admin.Id);
+        var payment = new ExtraChargePaymentEntity(charge.Id, seed.Player.Id, seed.Group.Id, 65m);
+        db.ExtraCharges.Add(charge);
+        db.ExtraChargePayments.Add(payment);
+        await db.SaveChangesAsync();
+
+        var pending = (await MakeSut(db).GetExitPendingPaymentsForPlayerAsync(seed.Player.Id, seed.User.Id)).Data!;
+        await MakeSut(db).CreateExitDebtAlertsAsync(pending, CancellationToken.None);
+        var alert = await db.ExitDebtAlerts.SingleAsync();
+
+        var result = await MakeSut(db).KeepExitDebtAlertAsync(seed.Group.Id, alert.Id, admin.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        (await db.ExtraChargePayments.FindAsync(payment.Id))!.Status.Should().Be(PaymentStatus.Pending);
+        (await db.ExitDebtAlerts.AsNoTracking().SingleAsync(n => n.Id == alert.Id)).Resolution.Should().Be("keep");
+        (await db.UserNotifications.AsNoTracking().AnyAsync(n => n.Type == "member_left_with_debt")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task KeepExitDebtAlertAsync_WhenOneFinanceiroResolves_HidesAlertForOtherFinanceiro()
+    {
+        await using var db = DbContextFactory.Create(nameof(KeepExitDebtAlertAsync_WhenOneFinanceiroResolves_HidesAlertForOtherFinanceiro));
+        var seed = await SeedGroupWithPlayerAsync(db);
+        var admin = new UserEntity("admin5", "Admin", "Teste", $"{Guid.NewGuid():N}@test.com", "h", null, null);
+        var financeiro = new UserEntity("fin5", "Fin", "Teste", $"{Guid.NewGuid():N}@test.com", "h", null, null);
+        db.Users.AddRange(admin, financeiro);
+        db.GroupAdmins.Add(new GroupAdminEntity { GroupId = seed.Group.Id, UserId = admin.Id });
+        db.GroupFinanceiros.Add(new GroupFinanceiroEntity { GroupId = seed.Group.Id, UserId = financeiro.Id });
+        var charge = new ExtraChargeEntity(seed.Group.Id, "Churrasco", null, 45m, null, admin.Id);
+        var payment = new ExtraChargePaymentEntity(charge.Id, seed.Player.Id, seed.Group.Id, 45m);
+        db.ExtraCharges.Add(charge);
+        db.ExtraChargePayments.Add(payment);
+        await db.SaveChangesAsync();
+
+        var pending = (await MakeSut(db).GetExitPendingPaymentsForPlayerAsync(seed.Player.Id, seed.User.Id)).Data!;
+        await MakeSut(db).CreateExitDebtAlertsAsync(pending, CancellationToken.None);
+        var alert = await db.ExitDebtAlerts.SingleAsync();
+
+        var keep = await MakeSut(db).KeepExitDebtAlertAsync(seed.Group.Id, alert.Id, admin.Id, CancellationToken.None);
+        var otherView = await MakeSut(db).GetExitDebtAlertsAsync(seed.Group.Id, financeiro.Id, CancellationToken.None);
+
+        keep.Success.Should().BeTrue();
+        otherView.Success.Should().BeTrue();
+        otherView.Data.Should().BeEmpty();
+        (await db.UserNotifications.CountAsync(n => n.Type == "member_left_with_debt")).Should().Be(3);
     }
 }

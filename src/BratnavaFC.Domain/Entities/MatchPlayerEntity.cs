@@ -30,20 +30,35 @@ public class MatchPlayerEntity : BaseEntity
     public Guid? VotedForId { get; private set; }
 
     public InviteResponse InviteResponse { get; private set; } = InviteResponse.None;
+    public DateTime? InviteRespondedAt { get; private set; }
 
-    public void AcceptInvite() => InviteResponse = InviteResponse.Accepted;
-    public void RejectInvite() => InviteResponse = InviteResponse.Rejected;
+    public void AcceptInvite()
+    {
+        InviteResponse = InviteResponse.Accepted;
+        InviteRespondedAt = DateTime.UtcNow;
+    }
+
+    public void RejectInvite()
+    {
+        InviteResponse = InviteResponse.Rejected;
+        InviteRespondedAt = DateTime.UtcNow;
+    }
 
     /// <summary>Restaura uma resposta salva (usado ao recriar MatchPlayers em re-sync/rewind).</summary>
-    public void RestoreInviteResponse(InviteResponse response) => InviteResponse = response;
+    public void RestoreInviteResponse(InviteResponse response, DateTime? respondedAt = null)
+    {
+        InviteResponse = response;
+        InviteRespondedAt = response == InviteResponse.None ? null : respondedAt;
+    }
 
     public Guid? AutoRejectedByAbsenceId { get; private set; }
     public UserAbsenceEntity? AutoRejectedByAbsence { get; private set; }
 
-    public void AutoRejectByAbsence(Guid absenceId)
+    public void AutoRejectByAbsence(Guid absenceId, DateTime? respondedAt = null)
     {
         if (absenceId == Guid.Empty) throw new InvalidOperationException("AbsenceId é obrigatório.");
         InviteResponse = InviteResponse.Rejected;
+        InviteRespondedAt = respondedAt ?? DateTime.UtcNow;
         AutoRejectedByAbsenceId = absenceId;
     }
 
@@ -53,6 +68,7 @@ public class MatchPlayerEntity : BaseEntity
         AutoRejectedByAbsenceId = null;
         AutoRejectedByAbsence   = null;
         InviteResponse          = InviteResponse.None;
+        InviteRespondedAt       = null;
     }
 
     public List<GoalEntity> GoalsScored { get; private set; } = new();

@@ -1,8 +1,11 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
+using BratnavaFC.Domain.Dtos.Payments;
 using BratnavaFC.Domain.Dtos.Users;
 using BratnavaFC.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace BratnavaFC.Api.Controllers;
 
@@ -12,10 +15,12 @@ namespace BratnavaFC.Api.Controllers;
 public sealed class UsersController : BaseApiController
 {
     private readonly IUserService _userService;
+    private readonly IPaymentService _paymentService;
 
-    public UsersController(IUserService userService)
+    public UsersController(IUserService userService, IPaymentService paymentService)
     {
         _userService = userService;
+        _paymentService = paymentService;
     }
 
     [AllowAnonymous]
@@ -74,6 +79,52 @@ public sealed class UsersController : BaseApiController
         if (dto == null) return BadRequest();
 
         var result = await _userService.ChangePasswordAsync(userId, dto, cancellationToken);
+        return ToResponse(result);
+    }
+
+    [HttpDelete("me")]
+    public async Task<IActionResult> DeleteMyAccountAsync([FromBody] DeleteAccountDto dto, CancellationToken cancellationToken)
+    {
+        if (dto == null) return BadRequest();
+
+        var raw =
+            User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")
+            ?? User.FindFirstValue("userId");
+
+        if (!Guid.TryParse(raw, out var userId) || userId == Guid.Empty)
+            return Unauthorized();
+
+        var pending = await _paymentService.GetExitPendingPaymentsAsync(userId, cancellationToken);
+        if (!pending.Success) return ToResponse(pending);
+
+        if (pending.Data?.HasPending == true && !dto.ForceWithoutPayment)
+            return BadRequest(new ApiResponse<ExitPendingPaymentsDto>(
+                false,
+                pending.Data,
+                null,
+                "Existem pendências financeiras antes de excluir a conta.",
+                []));
+
+        var result = await _userService.DeleteAccountAsync(userId, dto, cancellationToken);
+        if (result.Success && pending.Data?.HasPending == true)
+            await _paymentService.CreateExitDebtAlertsAsync(pending.Data, cancellationToken);
+
+        return ToResponse(result);
+    }
+
+    [HttpGet("me/exit-pending")]
+    public async Task<IActionResult> GetMyExitPendingPayments(CancellationToken cancellationToken)
+    {
+        var raw =
+            User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")
+            ?? User.FindFirstValue("userId");
+
+        if (!Guid.TryParse(raw, out var userId) || userId == Guid.Empty)
+            return Unauthorized();
+
+        var result = await _paymentService.GetExitPendingPaymentsAsync(userId, cancellationToken);
         return ToResponse(result);
     }
 

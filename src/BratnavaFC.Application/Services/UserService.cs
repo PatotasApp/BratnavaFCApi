@@ -18,19 +18,25 @@ public class UserService : IUserService
     private readonly ILogger<UserService> _logger;
     private readonly PasswordHasher<UserEntity> _passwordHasher;
     private readonly IPushService _push;
+    private readonly IPlayerMembershipService _membershipService;
 
     public UserService(
         AppDbContext db,
         IRepositoryBase<UserEntity> repository,
         ILogger<UserService> logger,
         PasswordHasher<UserEntity> passwordHasher,
-        IPushService push)
+        IPushService push,
+        IPlayerMembershipService? membershipService = null)
     {
         _repository = repository;
         _logger = logger;
         _passwordHasher = passwordHasher;
         _db = db;
         _push = push;
+        _membershipService = membershipService ?? new PlayerMembershipService(
+            db,
+            push,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<PlayerMembershipService>.Instance);
     }
 
     public async Task<Result> CreateUserAsync(CreateUserDto dto, CancellationToken cancellationToken)
@@ -254,6 +260,108 @@ public class UserService : IUserService
         _ = NotifyPasswordChangedAsync(userId, cancellationToken);
 
         return Result.Ok("Senha atualizada com sucesso.");
+    }
+
+    public async Task<Result> DeleteAccountAsync(Guid userId, DeleteAccountDto dto, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(dto.Password))
+            return Result.Fail("Password is required.", ResultStatus.BadRequest);
+
+        if (!string.Equals(dto.Confirmation?.Trim(), "EXCLUIR", StringComparison.OrdinalIgnoreCase))
+            return Result.Fail("Digite EXCLUIR para confirmar a exclusão da conta.", ResultStatus.BadRequest);
+
+        var user = await _db.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+
+        if (user is null)
+            return Result.Fail("Usuário não encontrado.", ResultStatus.NotFound);
+
+        var verify = _passwordHasher.VerifyHashedPassword(user, user.Password, dto.Password);
+        if (verify == PasswordVerificationResult.Failed)
+            return Result.Fail("Senha inválida.", ResultStatus.BadRequest);
+
+        var ownedGroups = await _db.Groups
+            .AsNoTracking()
+            .Where(g => g.CreatedByUserId == userId && g.Status != Status.Inactive)
+            .Select(g => g.Name)
+            .ToListAsync(cancellationToken);
+
+        if (ownedGroups.Count > 0)
+        {
+            var names = string.Join(", ", ownedGroups.Take(3));
+            if (ownedGroups.Count > 3) names += $" e mais {ownedGroups.Count - 3}";
+            return Result.Fail(
+                $"Transfira ou exclua os grupos que você criou antes de excluir sua conta: {names}.",
+                ResultStatus.BadRequest);
+        }
+
+        await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
+
+        var unlinkResult = await _membershipService.UnlinkUserFromAllGroupsAsync(
+            userId,
+            PlayerUnlinkReason.AccountDeletion,
+            cancellationToken);
+
+        if (!unlinkResult.Success)
+            return Result.Fail(unlinkResult.Error ?? "Erro ao desvincular usuÃ¡rio das patotas.", unlinkResult.Status);
+
+        _db.GroupAdmins.RemoveRange(await _db.GroupAdmins
+            .Where(x => x.UserId == userId)
+            .ToListAsync(cancellationToken));
+
+        _db.GroupFinanceiros.RemoveRange(await _db.GroupFinanceiros
+            .Where(x => x.UserId == userId)
+            .ToListAsync(cancellationToken));
+
+        _db.GroupInvites.RemoveRange(await _db.GroupInvites
+            .Where(x => x.TargetUserId == userId)
+            .ToListAsync(cancellationToken));
+
+        _db.RefreshTokens.RemoveRange(await _db.RefreshTokens
+            .Where(x => x.UserId == userId)
+            .ToListAsync(cancellationToken));
+
+        _db.PushTokens.RemoveRange(await _db.PushTokens
+            .Where(x => x.UserId == userId)
+            .ToListAsync(cancellationToken));
+
+        _db.UserNotifications.RemoveRange(await _db.UserNotifications
+            .Where(x => x.UserId == userId)
+            .ToListAsync(cancellationToken));
+
+        _db.UserAbsences.RemoveRange(await _db.UserAbsences
+            .Where(x => x.UserId == userId)
+            .ToListAsync(cancellationToken));
+
+        _db.ReplayLikes.RemoveRange(await _db.ReplayLikes
+            .Where(x => x.UserId == userId)
+            .ToListAsync(cancellationToken));
+
+        _db.ReplayFavorites.RemoveRange(await _db.ReplayFavorites
+            .Where(x => x.UserId == userId)
+            .ToListAsync(cancellationToken));
+
+        _db.MatchBets.RemoveRange(await _db.MatchBets
+            .Where(x => x.UserId == userId)
+            .ToListAsync(cancellationToken));
+
+        _db.UserBetBalances.RemoveRange(await _db.UserBetBalances
+            .Where(x => x.UserId == userId)
+            .ToListAsync(cancellationToken));
+
+        var transactions = await _db.GroupTransactions
+            .Where(x => x.CreatedByUserId == userId)
+            .ToListAsync(cancellationToken);
+        foreach (var transaction in transactions)
+            transaction.ClearCreator();
+
+        _db.Users.Remove(user);
+
+        await _db.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+
+        return Result.Ok("Conta excluída com sucesso.");
     }
 
     private async Task NotifyPasswordChangedAsync(Guid userId, CancellationToken ct)

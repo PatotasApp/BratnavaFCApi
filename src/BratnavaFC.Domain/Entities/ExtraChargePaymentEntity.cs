@@ -44,19 +44,25 @@ public sealed class ExtraChargePaymentEntity : BaseEntity
     public string? ProofMimeType { get; private set; }
 
     public Guid? MarkedByAdminId { get; private set; }
+    public Guid? MarkedByUserId { get; private set; }
 
     // Navegação
     public ExtraChargeEntity? ExtraCharge { get; private set; }
     public PlayerEntity?      Player      { get; private set; }
     public GroupEntity?       Group       { get; private set; }
+    public UserEntity?        MarkedByUser { get; private set; }
 
     // ── Métodos de domínio ────────────────────────────────────────────────────
 
-    public void MarkAsPaid(Guid? adminId, string? proofBase64, string? proofFileName, string? proofMimeType)
+    public void MarkAsPaid(Guid? markedByUserId, string? proofBase64, string? proofFileName, string? proofMimeType)
+        => MarkAsPaid(markedByUserId, markedByUserId, proofBase64, proofFileName, proofMimeType);
+
+    public void MarkAsPaid(Guid? markedByUserId, Guid? markedByAdminId, string? proofBase64, string? proofFileName, string? proofMimeType)
     {
         Status          = PaymentStatus.Paid;
         PaidAt          = DateTime.UtcNow;
-        MarkedByAdminId = adminId;
+        MarkedByAdminId = markedByAdminId;
+        MarkedByUserId  = markedByUserId;
         SetProof(proofBase64, proofFileName, proofMimeType);
     }
 
@@ -64,6 +70,8 @@ public sealed class ExtraChargePaymentEntity : BaseEntity
     {
         Status = PaymentStatus.Pending;
         PaidAt = null;
+        MarkedByAdminId = null;
+        MarkedByUserId = null;
     }
 
     public void ApplyDiscount(decimal discount, string? reason, Guid adminId)
@@ -73,6 +81,7 @@ public sealed class ExtraChargePaymentEntity : BaseEntity
         Discount        += discount;
         if (reason is not null) DiscountReason = reason;
         MarkedByAdminId = adminId;
+        MarkedByUserId = adminId;
 
         // Desconto cobre o total → marca como pago automaticamente
         if (Discount >= Amount)
