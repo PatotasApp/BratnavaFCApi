@@ -396,6 +396,64 @@ public class UserServiceCoverageTests
     // ─── Inactivate / Reactivate ─────────────────────────────────────────────
 
     [Fact]
+    public async Task DeleteAccountAsync_WhenValid_RemovesUserAndKeepsPlayerAsGuest()
+    {
+        await using var db = DbContextFactory.Create(nameof(DeleteAccountAsync_WhenValid_RemovesUserAndKeepsPlayerAsGuest));
+        var hasher = new PasswordHasher<UserEntity>();
+        var user = User("delete_me", "Delete", "Me", "delete@test.com");
+        user.SetPasswordHash(hasher.HashPassword(user, "old_pw"));
+        var group = new GroupEntity("G", null, Guid.NewGuid());
+        var player = new PlayerEntity("Delete Me", user.Id, group.Id, 3m, false);
+
+        db.Users.Add(user);
+        db.Groups.Add(group);
+        db.Players.Add(player);
+        await db.SaveChangesAsync();
+
+        var sut = Sut(db);
+
+        var result = await sut.DeleteAccountAsync(user.Id, new DeleteAccountDto
+        {
+            Password = "old_pw",
+            Confirmation = "EXCLUIR"
+        }, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        (await db.Users.IgnoreQueryFilters().AnyAsync(x => x.Id == user.Id)).Should().BeFalse();
+
+        var reloadedPlayer = await db.Players.IgnoreQueryFilters().SingleAsync(x => x.Id == player.Id);
+        reloadedPlayer.UserId.Should().BeNull();
+        reloadedPlayer.IsGuest.Should().BeTrue();
+        reloadedPlayer.Name.Should().Be("Delete Me");
+    }
+
+    [Fact]
+    public async Task DeleteAccountAsync_WhenUserOwnsActiveGroup_ReturnsBadRequest()
+    {
+        await using var db = DbContextFactory.Create(nameof(DeleteAccountAsync_WhenUserOwnsActiveGroup_ReturnsBadRequest));
+        var hasher = new PasswordHasher<UserEntity>();
+        var user = User("owner", "Group", "Owner", "owner@test.com");
+        user.SetPasswordHash(hasher.HashPassword(user, "old_pw"));
+        var group = new GroupEntity("Patota", null, user.Id);
+
+        db.Users.Add(user);
+        db.Groups.Add(group);
+        await db.SaveChangesAsync();
+
+        var sut = Sut(db);
+
+        var result = await sut.DeleteAccountAsync(user.Id, new DeleteAccountDto
+        {
+            Password = "old_pw",
+            Confirmation = "EXCLUIR"
+        }, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.BadRequest);
+        (await db.Users.IgnoreQueryFilters().AnyAsync(x => x.Id == user.Id)).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task InactivateAsync_WhenNotFound_ReturnsNotFound()
     {
         await using var db = DbContextFactory.Create(nameof(InactivateAsync_WhenNotFound_ReturnsNotFound));

@@ -17,19 +17,25 @@ public class PlayerService : IPlayerService
     private readonly AppDbContext _context;
     private readonly IPushService _push;
     private readonly IMatchService _matchService;
+    private readonly IPlayerMembershipService _membershipService;
 
     public PlayerService(
         IRepositoryBase<PlayerEntity> repository,
         ILogger<PlayerService> logger,
         AppDbContext context,
         IPushService push,
-        IMatchService matchService)
+        IMatchService matchService,
+        IPlayerMembershipService? membershipService = null)
     {
         _repository   = repository;
         _logger       = logger;
         _context      = context;
         _push         = push;
         _matchService = matchService;
+        _membershipService = membershipService ?? new PlayerMembershipService(
+            context,
+            push,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<PlayerMembershipService>.Instance);
     }
 
     public async Task<Result<PlayerDto>> CreateAsync(CreatePlayerDto request, CancellationToken cancellationToken)
@@ -265,25 +271,15 @@ public class PlayerService : IPlayerService
 
     public async Task<Result> LeaveGroupAsync(Guid playerId, Guid requestingUserId, CancellationToken cancellationToken)
     {
-        var player = await _repository.GetByIdIncludingInactiveAsync(playerId, cancellationToken);
-        if (player == null)
-            return Result.Fail("Jogador não encontrado.", ResultStatus.NotFound);
+        var result = await _membershipService.UnlinkPlayerFromGroupAsync(
+            playerId,
+            PlayerUnlinkReason.SelfLeave,
+            requestingUserId,
+            cancellationToken);
 
-        if (player.UserId != requestingUserId)
-            return Result.Fail("Sem permissão para esta operação.", ResultStatus.Forbidden);
-
-        var playerName = player.Name;
-        var groupId    = player.GroupId;
-
-        player.SetIsGuest(true);
-        player.ClearUser();
-
-        _repository.Update(player);
-        await _repository.SaveChangesAsync(cancellationToken);
-
-        await NotifyAdminsPlayerLeftAsync(groupId, playerName, cancellationToken);
-
-        return Result.Ok("Jogador atualizado com sucesso.");
+        return result.Success
+            ? Result.Ok("Jogador atualizado com sucesso.")
+            : Result.Fail(result.Error ?? "Erro ao sair da patota.", result.Status);
     }
 
     public async Task<Result<IReadOnlyList<BirthdayStatusDto>>> GetBirthdayStatusAsync(
@@ -345,29 +341,15 @@ public class PlayerService : IPlayerService
 
     public async Task<Result> RemoveFromGroupAsync(Guid playerId, CancellationToken cancellationToken)
     {
-        var player = await _repository.GetByIdIncludingInactiveAsync(playerId, cancellationToken);
-        if (player == null)
-            return Result.Fail("Jogador não encontrado.", ResultStatus.NotFound);
+        var result = await _membershipService.UnlinkPlayerFromGroupAsync(
+            playerId,
+            PlayerUnlinkReason.AdminRemove,
+            requestingUserId: null,
+            cancellationToken);
 
-        if (player.IsGuest && player.UserId == null)
-            return Result.Fail("Jogador já é convidado sem conta vinculada.", ResultStatus.BadRequest);
-
-        var playerName      = player.Name;
-        var groupId         = player.GroupId;
-        var removedUserId   = player.UserId;
-
-        player.SetIsGuest(true);
-        player.ClearUser();
-
-        _repository.Update(player);
-        await _repository.SaveChangesAsync(cancellationToken);
-
-        await NotifyAdminsPlayerRemovedAsync(groupId, playerName, cancellationToken);
-
-        if (removedUserId.HasValue)
-            _ = NotifyRemovedPlayerAsync(removedUserId.Value, groupId, cancellationToken);
-
-        return Result.Ok("Jogador removido da patota.");
+        return result.Success
+            ? Result.Ok("Jogador removido da patota.")
+            : Result.Fail(result.Error ?? "Erro ao remover jogador da patota.", result.Status);
     }
 
     // ── Notificações ──────────────────────────────────────────────────────────

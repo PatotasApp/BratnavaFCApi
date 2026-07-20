@@ -59,6 +59,7 @@ public sealed class PlayerInMatchDto
     public bool IsGuest { get; set; }
     public short Team { get; set; }
     public short InviteResponse { get; set; } // enum convertido (Accepted/Rejected/None)
+    public DateTime? InviteRespondedAt { get; set; }
     public bool IsMvp { get; set; }
 
     /// <summary>Preenchido apenas quando a rejeição foi automática (BackgroundService). Null = rejeição manual.</summary>

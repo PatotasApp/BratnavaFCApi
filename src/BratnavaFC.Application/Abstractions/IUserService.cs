@@ -13,6 +13,7 @@ public interface IUserService
 
     Task<Result> UpdateAsync(Guid userId, UpdateUserDto dto, CancellationToken cancellationToken);
     Task<Result> ChangePasswordAsync(Guid userId, ChangePasswordDto dto, CancellationToken cancellationToken);
+    Task<Result> DeleteAccountAsync(Guid userId, DeleteAccountDto dto, CancellationToken cancellationToken);
 
     Task<Result> InactivateAsync(Guid userId, CancellationToken cancellationToken);
     Task<Result> ReactivateAsync(Guid userId, CancellationToken cancellationToken);

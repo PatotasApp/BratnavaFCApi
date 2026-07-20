@@ -1,4 +1,6 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
+using BratnavaFC.Domain.Dtos.Payments;
 using BratnavaFC.Domain.Dtos.Players;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
@@ -12,11 +14,13 @@ namespace BratnavaFC.Api.Controllers;
 public class PlayersController : GroupAuthorizedController
 {
     private readonly IPlayerService _playerService;
+    private readonly IPaymentService _paymentService;
     private readonly AppDbContext _db;
 
-    public PlayersController(IPlayerService playerService, AppDbContext db)
+    public PlayersController(IPlayerService playerService, IPaymentService paymentService, AppDbContext db)
     {
         _playerService = playerService;
+        _paymentService = paymentService;
         _db = db;
     }
 
@@ -113,10 +117,25 @@ public class PlayersController : GroupAuthorizedController
 
     [HttpPost("{playerId:guid}/leave")]
     [Authorize(Roles = "User,Admin,GodMode")]
-    public async Task<IActionResult> LeaveGroup(Guid playerId, CancellationToken cancellationToken)
+    public async Task<IActionResult> LeaveGroup(Guid playerId, [FromBody] LeaveGroupDto? dto, CancellationToken cancellationToken)
     {
         var userId = GetUserIdOrThrow();
+
+        var pending = await _paymentService.GetExitPendingPaymentsForPlayerAsync(playerId, userId, cancellationToken);
+        if (!pending.Success) return ToResponse(pending);
+
+        if (pending.Data?.HasPending == true && dto?.ForceWithoutPayment != true)
+            return BadRequest(new ApiResponse<ExitPendingPaymentsDto>(
+                false,
+                pending.Data,
+                null,
+                "Existem pendências financeiras antes de sair da patota.",
+                []));
+
         var result = await _playerService.LeaveGroupAsync(playerId, userId, cancellationToken);
+        if (result.Success && pending.Data?.HasPending == true)
+            await _paymentService.CreateExitDebtAlertsAsync(pending.Data, cancellationToken);
+
         return ToResponse(result);
     }
 

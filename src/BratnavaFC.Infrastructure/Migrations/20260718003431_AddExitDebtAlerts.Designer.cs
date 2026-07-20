@@ -3,6 +3,7 @@ using System;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BratnavaFC.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260718003431_AddExitDebtAlerts")]
+    partial class AddExitDebtAlerts
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -242,9 +245,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<Guid?>("MarkedByAdminId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("MarkedByUserId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTime?>("PaidAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -271,8 +271,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("GroupId");
-
-                    b.HasIndex("MarkedByUserId");
 
                     b.HasIndex("PlayerId");
 
@@ -762,9 +760,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<Guid>("GroupId")
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime?>("InviteRespondedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<int>("InviteResponse")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -837,9 +832,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<Guid?>("MarkedByAdminId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("MarkedByUserId")
-                        .HasColumnType("uuid");
-
                     b.Property<int>("Month")
                         .HasColumnType("integer");
 
@@ -870,8 +862,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("MarkedByUserId");
 
                     b.HasIndex("PlayerId");
 
@@ -1703,11 +1693,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("BratnavaFC.Domain.Entities.UserEntity", "MarkedByUser")
-                        .WithMany()
-                        .HasForeignKey("MarkedByUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("BratnavaFC.Domain.Entities.PlayerEntity", "Player")
                         .WithMany()
                         .HasForeignKey("PlayerId")
@@ -1717,8 +1702,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Navigation("ExtraCharge");
 
                     b.Navigation("Group");
-
-                    b.Navigation("MarkedByUser");
 
                     b.Navigation("Player");
                 });
@@ -1924,11 +1907,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("BratnavaFC.Domain.Entities.UserEntity", "MarkedByUser")
-                        .WithMany()
-                        .HasForeignKey("MarkedByUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("BratnavaFC.Domain.Entities.PlayerEntity", "Player")
                         .WithMany()
                         .HasForeignKey("PlayerId")
@@ -1936,8 +1914,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Group");
-
-                    b.Navigation("MarkedByUser");
 
                     b.Navigation("Player");
                 });

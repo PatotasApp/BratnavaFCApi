@@ -46,9 +46,34 @@ public class AppDbContext : DbContext
     public DbSet<ScheduledNotificationJobEntity> ScheduledNotificationJobs => Set<ScheduledNotificationJobEntity>();
     public DbSet<UserNotificationEntity> UserNotifications => Set<UserNotificationEntity>();
     public DbSet<GroupTransactionEntity> GroupTransactions => Set<GroupTransactionEntity>();
+    public DbSet<ExitDebtAlertEntity> ExitDebtAlerts => Set<ExitDebtAlertEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<ExitDebtAlertEntity>(builder =>
+        {
+            builder.HasKey(x => x.Id);
+            builder.Property(x => x.PlayerName).IsRequired().HasMaxLength(160);
+            builder.Property(x => x.Total).HasPrecision(18, 2);
+            builder.Property(x => x.Resolution).HasMaxLength(30);
+            builder.HasIndex(x => new { x.GroupId, x.ResolvedAt, x.CreateDate });
+
+            builder.HasOne(x => x.Group)
+                .WithMany()
+                .HasForeignKey(x => x.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(x => x.Player)
+                .WithMany()
+                .HasForeignKey(x => x.PlayerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasOne(x => x.ResolvedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.ResolvedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
         modelBuilder.Entity<UserNotificationEntity>(builder =>
         {
             builder.HasKey(x => x.Id);
@@ -56,6 +81,22 @@ public class AppDbContext : DbContext
             builder.Property(x => x.Body).IsRequired().HasMaxLength(500);
             builder.Property(x => x.Type).HasMaxLength(60);
             builder.HasIndex(x => new { x.UserId, x.IsRead, x.CreateDate });
+        });
+
+        modelBuilder.Entity<MonthlyPaymentEntity>(builder =>
+        {
+            builder.HasOne(x => x.MarkedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.MarkedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<ExtraChargePaymentEntity>(builder =>
+        {
+            builder.HasOne(x => x.MarkedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.MarkedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<ScheduledNotificationJobEntity>(builder =>
@@ -861,6 +902,12 @@ public class AppDbContext : DbContext
                 var createDate = entry.Property(nameof(BaseEntity.CreateDate));
                 if (createDate.CurrentValue is not DateTime dt || dt == default)
                     createDate.CurrentValue = utcNow;
+                else
+                    createDate.CurrentValue = EnsureUtc(dt);
+
+                var updateDate = entry.Property(nameof(BaseEntity.UpdateDate));
+                if (updateDate.CurrentValue is DateTime updatedAt)
+                    updateDate.CurrentValue = EnsureUtc(updatedAt);
             }
             else if (entry.State == EntityState.Modified)
             {
@@ -869,4 +916,12 @@ public class AppDbContext : DbContext
             }
         }
     }
+
+    internal static DateTime EnsureUtc(DateTime value)
+        => value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc),
+        };
 }
