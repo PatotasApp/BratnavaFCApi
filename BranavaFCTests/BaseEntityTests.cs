@@ -1,7 +1,7 @@
 ﻿namespace BranavaFC.Tests;
 
 using BratnavaFC.Domain.Entities;
-using BratnavaFC.Infrastructure.Data;
+using BratnavaFC.Domain.Time;
 public class BaseEntityTests
 {
     [Fact]
@@ -24,7 +24,7 @@ public class BaseEntityTests
     {
         var unspecified = DateTime.SpecifyKind(new DateTime(2026, 7, 18, 10, 0, 0), DateTimeKind.Unspecified);
 
-        var result = AppDbContext.EnsureUtc(unspecified);
+        var result = BratnavaDateTime.EnsureUtc(unspecified);
 
         Assert.Equal(DateTimeKind.Utc, result.Kind);
         Assert.Equal(DateTime.SpecifyKind(unspecified, DateTimeKind.Utc), result);

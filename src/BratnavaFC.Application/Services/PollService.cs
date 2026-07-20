@@ -142,7 +142,6 @@ public sealed class PollService : IPollService
                 {
                     v.OptionId,
                     v.PlayerId,
-                    VotedAt = v.CreateDate,
                     PlayerName = p.Name,
                 })
                 .ToListAsync(ct);
@@ -173,7 +172,6 @@ public sealed class PollService : IPollService
                 OptionId   = v.OptionId,
                 PlayerId   = v.PlayerId,
                 PlayerName = v.PlayerName,
-                VotedAt    = v.VotedAt,
                 Guests     = guestsByPlayer.GetValueOrDefault(v.PlayerId, new()),
             }).ToList();
 
@@ -194,16 +192,11 @@ public sealed class PollService : IPollService
                 var votesByPlayer = votesWithPlayer
                     .GroupBy(v => v.PlayerId)
                     .ToDictionary(g => g.Key, g => g.Select(v => v.OptionId).ToList());
-                var votedAtByPlayer = votesWithPlayer
-                    .GroupBy(v => v.PlayerId)
-                    .ToDictionary(g => g.Key, g => g.Max(v => v.VotedAt));
-
                 members = allPlayers.Select(p => new PollMemberVoteDto
                 {
                     PlayerId = p.Id,
                     PlayerName = p.Name,
-                    VotedOptionIds = votesByPlayer.TryGetValue(p.Id, out var ids) ? ids : new List<Guid>(),
-                    VotedAt = votedAtByPlayer.TryGetValue(p.Id, out var votedAt) ? votedAt : null,
+                    VotedOptionIds = votesByPlayer.TryGetValue(p.Id, out var ids) ? ids : new List<Guid>()
                 }).ToList();
             }
 
