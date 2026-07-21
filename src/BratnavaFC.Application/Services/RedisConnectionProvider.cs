@@ -40,16 +40,16 @@ public sealed class RedisConnectionProvider : IRedisConnectionProvider, IAsyncDi
 
             if (!_connection.IsConnected)
             {
-                _logger.LogWarning("[Redis] Conexão criada, mas ainda sem endpoints conectados.");
+                SafeLogWarning("[Redis] Conexão criada, mas ainda sem endpoints conectados.");
                 return null;
             }
 
-            _logger.LogInformation("[Redis] Conexão estabelecida.");
+            SafeLogInformation("[Redis] Conexão estabelecida.");
             return _connection;
         }
         catch (Exception ex) when (ex is RedisConnectionException or RedisTimeoutException or RedisException or ArgumentException)
         {
-            _logger.LogWarning(ex, "[Redis] Indisponível. Recursos de replay/fila serão retomados quando a conexão voltar.");
+            SafeLogWarning(ex, "[Redis] Indisponível. Recursos de replay/fila serão retomados quando a conexão voltar.");
             return null;
         }
         finally
@@ -64,5 +64,23 @@ public sealed class RedisConnectionProvider : IRedisConnectionProvider, IAsyncDi
             await _connection.DisposeAsync();
 
         _gate.Dispose();
+    }
+
+    private void SafeLogInformation(string message)
+    {
+        try { _logger.LogInformation(message); }
+        catch { }
+    }
+
+    private void SafeLogWarning(string message)
+    {
+        try { _logger.LogWarning(message); }
+        catch { }
+    }
+
+    private void SafeLogWarning(Exception ex, string message)
+    {
+        try { _logger.LogWarning(ex, message); }
+        catch { }
     }
 }

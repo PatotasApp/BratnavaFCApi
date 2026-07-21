@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using System.Security.Claims;
+using System.Net.Sockets;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
@@ -23,8 +24,21 @@ using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 using Hangfire;
 using Hangfire.PostgreSql;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
+var startupLogger = LoggerFactory.Create(l => l.AddConsole()).CreateLogger("Startup");
+
+startupLogger.LogInformation(
+    "[Startup] 01 - Host builder criado. Environment={Environment}",
+    builder.Environment.EnvironmentName);
+
+builder.Services.Configure<HostOptions>(options =>
+{
+    options.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore;
+});
+
+startupLogger.LogInformation("[Startup] 02 - BackgroundServiceExceptionBehavior configurado como Ignore.");
 
 builder.Services.AddControllers()
     .AddJsonOptions(opts =>
@@ -138,31 +152,45 @@ builder.Services.AddRateLimiter(options =>
 // DATABASE
 // =====================
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+startupLogger.LogInformation(
+    "[Startup] 03 - Configuração de banco carregada. HasDefaultConnection={HasDefaultConnection}",
+    !string.IsNullOrWhiteSpace(connectionString));
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
 
+var hangfireEnabled = CanUseHangfireStorage(connectionString, startupLogger);
+
 // =====================
 // HANGFIRE
 // =====================
-builder.Services.AddHangfire(config => config
-    .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
-    .UseSimpleAssemblyNameTypeSerializer()
-    .UseRecommendedSerializerSettings()
-    .UsePostgreSqlStorage(
-        options => options.UseNpgsqlConnection(connectionString!),
-        new PostgreSqlStorageOptions
-        {
-            SchemaName = "hangfire",
-            QueuePollInterval = TimeSpan.FromHours(1)
-        }));
-
-builder.Services.AddHangfireServer(options =>
+if (hangfireEnabled)
 {
-    options.WorkerCount = 2;
-    options.Queues = ["default"];
-    options.SchedulePollingInterval = TimeSpan.FromMinutes(5);
-});
+    startupLogger.LogInformation("[Startup] 04 - Registrando Hangfire com PostgreSQL.");
+
+    builder.Services.AddHangfire(config => config
+        .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+        .UseSimpleAssemblyNameTypeSerializer()
+        .UseRecommendedSerializerSettings()
+        .UsePostgreSqlStorage(
+            options => options.UseNpgsqlConnection(connectionString!),
+            new PostgreSqlStorageOptions
+            {
+                SchemaName = "hangfire",
+                QueuePollInterval = TimeSpan.FromHours(1)
+            }));
+
+    builder.Services.AddHangfireServer(options =>
+    {
+        options.WorkerCount = 2;
+        options.Queues = ["default"];
+        options.SchedulePollingInterval = TimeSpan.FromMinutes(5);
+    });
+}
+else
+{
+    startupLogger.LogWarning("[Startup] 04 - Hangfire não registrado neste startup.");
+}
 
 // =====================
 // DEPENDENCY INJECTION
@@ -189,7 +217,10 @@ builder.Services.AddScoped<IMatchCardService, MatchCardService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<ITeamBuilderService, TeamBuilderService>();
 builder.Services.AddScoped<IClipCleanupJob, ClipCleanupJob>();
-builder.Services.AddScoped<INotificationScheduler, NotificationScheduler>();
+if (hangfireEnabled)
+    builder.Services.AddScoped<INotificationScheduler, NotificationScheduler>();
+else
+    builder.Services.AddScoped<INotificationScheduler, NoOpNotificationScheduler>();
 builder.Services.AddScoped<IMatchReminderJob, MatchReminderJob>();
 builder.Services.AddScoped<IPollReminderJob, PollReminderJob>();
 builder.Services.AddScoped<ICalendarReminderJob, CalendarReminderJob>();
@@ -201,12 +232,13 @@ builder.Services.AddScoped<IMonthlyPaymentReminderJob, MonthlyPaymentReminderJob
 builder.Services.AddScoped<IMatchSchedulerJob, MatchSchedulerJob>();
 builder.Services.AddScoped<IRealtimeNotifier, SignalRRealtimeNotifier>();
 builder.Services.AddSignalR();
+startupLogger.LogInformation(
+    "[Startup] 05 - Serviços de aplicação registrados. HangfireEnabled={HangfireEnabled}",
+    hangfireEnabled);
 
 // =====================
 // FIREBASE ADMIN
 // =====================
-var startupLogger = LoggerFactory.Create(l => l.AddConsole()).CreateLogger("Startup");
-
 static string? DecodeB64(string? b64)
 {
     if (string.IsNullOrWhiteSpace(b64))
@@ -222,12 +254,45 @@ static string? DecodeB64(string? b64)
     }
 }
 
+static bool CanUseHangfireStorage(string? connectionString, ILogger logger)
+{
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        logger.LogWarning("[Hangfire] DefaultConnection não configurada. Hangfire desabilitado neste startup.");
+        return false;
+    }
+
+    try
+    {
+        var builder = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            Timeout = 5,
+            CommandTimeout = 5
+        };
+
+        using var connection = new NpgsqlConnection(builder.ConnectionString);
+        connection.Open();
+
+        logger.LogInformation("[Hangfire] Storage PostgreSQL disponível.");
+        return true;
+    }
+    catch (Exception ex) when (ex is NpgsqlException or TimeoutException or SocketException or InvalidOperationException)
+    {
+        logger.LogWarning(ex, "[Hangfire] Storage PostgreSQL indisponível. API seguirá sem Hangfire neste startup.");
+        return false;
+    }
+}
+
 var firebaseJson =
     DecodeB64(Environment.GetEnvironmentVariable("FIREBASE_SERVICE_ACCOUNT_B64"))
     ?? Environment.GetEnvironmentVariable("FIREBASE_SERVICE_ACCOUNT_JSON")
     ?? builder.Configuration["Firebase:ServiceAccountJson"];
 
 var firebasePath = builder.Configuration["Firebase:ServiceAccountPath"];
+startupLogger.LogInformation(
+    "[Startup] 06 - Configuração Firebase carregada. HasJson={HasJson} HasPath={HasPath}",
+    !string.IsNullOrWhiteSpace(firebaseJson),
+    !string.IsNullOrWhiteSpace(firebasePath));
 
 try
 {
@@ -274,6 +339,9 @@ var redisConnectionString =
     Environment.GetEnvironmentVariable("REDIS_URL")
     ?? builder.Configuration["Redis:ConnectionString"]
     ?? "localhost:6379";
+startupLogger.LogInformation(
+    "[Startup] 07 - Configuração Redis carregada. Source={RedisSource}",
+    !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("REDIS_URL")) ? "REDIS_URL" : "ConfigurationOrDefault");
 
 builder.Services.AddSingleton<IRedisConnectionProvider>(sp =>
     new RedisConnectionProvider(
@@ -289,10 +357,12 @@ builder.Services.AddScoped<IMatchEventPublisher>(sp =>
 
     return new RedisMatchEventPublisher(
         sp.GetRequiredService<IRedisConnectionProvider>(),
+        sp.GetRequiredService<ILogger<RedisMatchEventPublisher>>(),
         streamKey);
 });
 builder.Services.AddSingleton<IReplayUrlService, R2ReplayUrlService>();
 builder.Services.AddHostedService<ReplayStreamConsumerService>();
+startupLogger.LogInformation("[Startup] 08 - Serviços de replay/Redis registrados.");
 
 // =====================
 // HOLIDAY SERVICE
@@ -314,6 +384,7 @@ builder.Services.AddHttpClient("OpenAI", c =>
 
 builder.Services.AddMemoryCache(o => o.SizeLimit = 10_000);
 builder.Services.AddSingleton<IHolidayService, HolidayService>();
+startupLogger.LogInformation("[Startup] 09 - HttpClients, cache e HolidayService registrados.");
 
 // =====================
 // JWT
@@ -323,6 +394,10 @@ var jwtSecret = builder.Configuration["Jwt:SecretKey"]
 
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "TeamManagement";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "account";
+startupLogger.LogInformation(
+    "[Startup] 10 - Configuração JWT carregada. Issuer={Issuer} Audience={Audience}",
+    jwtIssuer,
+    jwtAudience);
 
 JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
 
@@ -373,15 +448,19 @@ builder.Services
     });
 
 builder.Services.AddAuthorization();
+startupLogger.LogInformation("[Startup] 11 - Autenticação e autorização registradas.");
 
 // =====================
 // BUILD APP
 // =====================
+startupLogger.LogInformation("[Startup] 12 - Iniciando builder.Build().");
 var app = builder.Build();
+startupLogger.LogInformation("[Startup] 13 - builder.Build() concluído.");
 
 // =====================
 // MIDDLEWARE PIPELINE
 // =====================
+startupLogger.LogInformation("[Startup] 14 - Configurando middleware pipeline.");
 app.UseExceptionHandler(appError =>
 {
     appError.Run(async context =>
@@ -444,48 +523,59 @@ app.UseMiddleware<AuditMiddleware>();
 // =====================
 // HANGFIRE DASHBOARD + JOBS
 // =====================
-app.UseHangfireDashboard("/hangfire", new DashboardOptions
+if (hangfireEnabled)
 {
-    Authorization = [new BratnavaFC.Api.Auth.HangfireGodModeAuthFilter()]
-});
+    startupLogger.LogInformation("[Startup] 15 - Registrando Hangfire Dashboard e jobs recorrentes.");
 
-var recurringJobs = app.Services.GetRequiredService<IRecurringJobManager>();
-
-recurringJobs.AddOrUpdate<IClipCleanupJob>(
-    recurringJobId: "clip-r2-cleanup",
-    methodCall: job => job.ExecuteAsync(CancellationToken.None),
-    cronExpression: "0 3 1,15 * *",
-    options: new RecurringJobOptions
+    app.UseHangfireDashboard("/hangfire", new DashboardOptions
     {
-        TimeZone = TimeZoneInfo.Utc
+        Authorization = [new BratnavaFC.Api.Auth.HangfireGodModeAuthFilter()]
     });
 
-recurringJobs.AddOrUpdate<IBirthdayNotificationJob>(
-    recurringJobId: "birthday-daily",
-    methodCall: job => job.ExecuteAsync(CancellationToken.None),
-    cronExpression: "0 11 * * *",
-    options: new RecurringJobOptions
-    {
-        TimeZone = TimeZoneInfo.Utc
-    });
+    var recurringJobs = app.Services.GetRequiredService<IRecurringJobManager>();
 
-recurringJobs.AddOrUpdate<IMonthlyPaymentReminderJob>(
-    recurringJobId: "monthly-payment-reminder",
-    methodCall: job => job.ExecuteAsync(CancellationToken.None),
-    cronExpression: "0 11 * * *",
-    options: new RecurringJobOptions
-    {
-        TimeZone = TimeZoneInfo.Utc
-    });
+    recurringJobs.AddOrUpdate<IClipCleanupJob>(
+        recurringJobId: "clip-r2-cleanup",
+        methodCall: job => job.ExecuteAsync(CancellationToken.None),
+        cronExpression: "0 3 1,15 * *",
+        options: new RecurringJobOptions
+        {
+            TimeZone = TimeZoneInfo.Utc
+        });
 
-recurringJobs.AddOrUpdate<IMatchSchedulerJob>(
-    recurringJobId: "match-scheduler",
-    methodCall: job => job.ExecuteAsync(CancellationToken.None),
-    cronExpression: "* * * * *",
-    options: new RecurringJobOptions
-    {
-        TimeZone = TimeZoneInfo.Utc
-    });
+    recurringJobs.AddOrUpdate<IBirthdayNotificationJob>(
+        recurringJobId: "birthday-daily",
+        methodCall: job => job.ExecuteAsync(CancellationToken.None),
+        cronExpression: "0 11 * * *",
+        options: new RecurringJobOptions
+        {
+            TimeZone = TimeZoneInfo.Utc
+        });
+
+    recurringJobs.AddOrUpdate<IMonthlyPaymentReminderJob>(
+        recurringJobId: "monthly-payment-reminder",
+        methodCall: job => job.ExecuteAsync(CancellationToken.None),
+        cronExpression: "0 11 * * *",
+        options: new RecurringJobOptions
+        {
+            TimeZone = TimeZoneInfo.Utc
+        });
+
+    recurringJobs.AddOrUpdate<IMatchSchedulerJob>(
+        recurringJobId: "match-scheduler",
+        methodCall: job => job.ExecuteAsync(CancellationToken.None),
+        cronExpression: "* * * * *",
+        options: new RecurringJobOptions
+        {
+            TimeZone = TimeZoneInfo.Utc
+        });
+
+    startupLogger.LogInformation("[Startup] 16 - Hangfire Dashboard e jobs recorrentes registrados.");
+}
+else
+{
+    startupLogger.LogWarning("[Startup] 15 - Hangfire Dashboard e jobs recorrentes não registrados neste startup.");
+}
 
 // Teste direto no celular:
 // http://SEU-IP:5000/health
@@ -498,4 +588,5 @@ app.MapGet("/health", () => Results.Ok(new
 app.MapControllers();
 app.MapHub<RealtimeHub>("/hubs/realtime");
 
+startupLogger.LogInformation("[Startup] 17 - Endpoints mapeados. Iniciando app.Run().");
 app.Run();

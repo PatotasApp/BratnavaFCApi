@@ -40,15 +40,17 @@ public sealed class ReplayStreamConsumerService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        try
+        {
         var redis = await WaitForRedisAsync(stoppingToken);
         if (redis is null)
             return;
 
         await EnsureConsumerGroupAsync(redis);
 
-        _logger.LogInformation(
-            "[ReplayStream] Consumidor iniciado. Stream={Stream} Group={Group} Consumer={Consumer}",
-            StreamKey, GroupName, _consumerName);
+            SafeLogInformation(
+                "[ReplayStream] Consumidor iniciado. Stream={Stream} Group={Group} Consumer={Consumer}",
+                StreamKey, GroupName, _consumerName);
 
         // Pendentes processados UMA VEZ só no startup (ex: restart da app)
         await DrainPendingAsync(redis, stoppingToken);
@@ -75,12 +77,27 @@ public sealed class ReplayStreamConsumerService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[ReplayStream] Erro no loop. Aguardando antes de retomar...");
+                    SafeLogError(ex, "[ReplayStream] Erro no loop. Aguardando antes de retomar...");
                 await Task.Delay(5_000, stoppingToken);
             }
         }
 
-        _logger.LogInformation("[ReplayStream] Consumidor encerrado.");
+            SafeLogInformation("[ReplayStream] Consumidor encerrado.");
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                SafeLogError(ex, "[ReplayStream] Consumidor interrompido sem derrubar a API.");
+            }
+            catch
+            {
+                // Logging can fail in restricted hosts; never let replay logging stop the API.
+            }
+        }
     }
 
     // Drena mensagens pendentes (PEL) apenas no startup
@@ -106,7 +123,7 @@ public sealed class ReplayStreamConsumerService : BackgroundService
         while (entries.Length == BatchSize);
 
         if (total > 0)
-            _logger.LogInformation("[ReplayStream] {Count} mensagens pendentes reprocessadas.", total);
+            SafeLogInformation("[ReplayStream] {Count} mensagens pendentes reprocessadas.", total);
     }
 
     // Usa XREADGROUP BLOCK — não polica, apenas acorda quando há mensagem nova
@@ -174,7 +191,7 @@ public sealed class ReplayStreamConsumerService : BackgroundService
             var minId = $"{DateTimeOffset.UtcNow.AddDays(-TtlDays).ToUnixTimeMilliseconds()}-0";
             await db.ExecuteAsync("XTRIM", StreamKey, "MINID", "~", minId);
 
-            _logger.LogInformation(
+            SafeLogInformation(
                 "[ReplayStream] Clip salvo. Id={Id} Match={Match} EventType={Type} Key={Key}",
                 clip.Id, clip.MatchId, clip.EventType, clip.ObjectKey);
         }
@@ -186,11 +203,11 @@ public sealed class ReplayStreamConsumerService : BackgroundService
             {
                 await db.StreamAcknowledgeAsync(StreamKey, GroupName, entry.Id);
                 _failureCounts.TryRemove(entryId, out _);
-                _logger.LogError(ex, "[ReplayStream] Entry {EntryId} falhou {Attempts}x — descartada.", entryId, attempts);
+                SafeLogError(ex, "[ReplayStream] Entry {EntryId} falhou {Attempts}x — descartada.", entryId, attempts);
             }
             else
             {
-                _logger.LogWarning(ex,
+                SafeLogWarning(ex,
                     "[ReplayStream] Entry {EntryId} falhou (tentativa {Attempt}/{Max}). Será reprocessada.",
                     entryId, attempts, MaxAttempts);
             }
@@ -234,7 +251,7 @@ public sealed class ReplayStreamConsumerService : BackgroundService
             if (redis is not null)
                 return redis;
 
-            _logger.LogWarning("[ReplayStream] Redis indisponível. Nova tentativa em 30s.");
+            SafeLogWarning("[ReplayStream] Redis indisponível. Nova tentativa em 30s.");
             await Task.Delay(TimeSpan.FromSeconds(30), ct);
         }
 
@@ -247,11 +264,35 @@ public sealed class ReplayStreamConsumerService : BackgroundService
         try
         {
             await db.StreamCreateConsumerGroupAsync(StreamKey, GroupName, "$", createStream: true);
-            _logger.LogInformation("[ReplayStream] Consumer group '{Group}' criado.", GroupName);
+            SafeLogInformation("[ReplayStream] Consumer group '{Group}' criado.", GroupName);
         }
         catch (RedisServerException ex) when (ex.Message.Contains("BUSYGROUP"))
         {
-            _logger.LogInformation("[ReplayStream] Consumer group '{Group}' já existe.", GroupName);
+            SafeLogInformation("[ReplayStream] Consumer group '{Group}' já existe.", GroupName);
         }
+    }
+
+    private void SafeLogInformation(string message, params object?[] args)
+    {
+        try { _logger.LogInformation(message, args); }
+        catch { }
+    }
+
+    private void SafeLogWarning(string message, params object?[] args)
+    {
+        try { _logger.LogWarning(message, args); }
+        catch { }
+    }
+
+    private void SafeLogWarning(Exception ex, string message, params object?[] args)
+    {
+        try { _logger.LogWarning(ex, message, args); }
+        catch { }
+    }
+
+    private void SafeLogError(Exception ex, string message, params object?[] args)
+    {
+        try { _logger.LogError(ex, message, args); }
+        catch { }
     }
 }
