@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Diagnostics;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Calendar;
 using Microsoft.Extensions.Caching.Memory;
@@ -9,8 +10,8 @@ using Microsoft.Extensions.Logging;
 namespace BratnavaFC.Application.Services;
 
 /// <summary>
-/// Busca feriados nacionais do Brasil na BrasilAPI e armazena em cache de memória.
-/// Registrado como Singleton — injetar apenas dependências Singleton/Transient seguras.
+/// Busca feriados nacionais do Brasil na BrasilAPI e armazena em cache de memoria.
+/// Registrado como Singleton; injete apenas dependencias Singleton/Transient seguras.
 /// </summary>
 public sealed class HolidayService : IHolidayService
 {
@@ -50,7 +51,6 @@ public sealed class HolidayService : IHolidayService
                     .Select(h => new HolidayDto(h.Date!, h.Name!))
                     .ToArray();
 
-            // Cache por 24h; feriados raramente mudam dentro do mesmo ano
             var expiry = new MemoryCacheEntryOptions
             {
                 AbsoluteExpirationRelativeToNow = CacheDuration,
@@ -63,12 +63,14 @@ public sealed class HolidayService : IHolidayService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Falha ao buscar feriados da BrasilAPI para o ano {Year}. O calendário será exibido sem feriados.", year);
+            DependencyStatusMonitor.RecordWarning(
+                "brasil-api",
+                $"Falha ao buscar feriados da BrasilAPI para o ano {year}. O calendario sera exibido sem feriados.",
+                ex);
+            _logger.LogWarning(ex, "Falha ao buscar feriados da BrasilAPI para o ano {Year}. O calendario sera exibido sem feriados.", year);
             return Result<IReadOnlyList<HolidayDto>>.Ok(Array.Empty<HolidayDto>());
         }
     }
-
-    // ─── DTO privado apenas para desserialização da BrasilAPI ──────────────────
 
     private sealed class BrasilApiHoliday
     {

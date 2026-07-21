@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Diagnostics;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Infrastructure.Data;
 using FirebaseAdmin;
@@ -41,13 +42,12 @@ public sealed class StatusController : ControllerBase
         var checks = new List<EnvironmentCheckDto>
         {
             await CheckDatabaseAsync(ct),
-            await CheckHangfireAsync(ct),
-            await CheckRedisAsync(ct),
-            CheckReplayStream(),
-            CheckFirebase(),
+            WithWarnings(await CheckHangfireAsync(ct), "hangfire"),
+            WithWarnings(await CheckRedisAsync(ct), "redis"),
+            WithWarnings(CheckFirebase(), "firebase"),
             CheckR2(),
             CheckOpenAi(),
-            await CheckBrasilApiAsync(ct),
+            WithWarnings(await CheckBrasilApiAsync(ct), "brasil-api"),
         };
 
         var overall = checks.Any(c => c.Status == "down")
@@ -60,7 +60,10 @@ public sealed class StatusController : ControllerBase
             overall,
             _environment.EnvironmentName,
             DateTimeOffset.UtcNow,
-            checks);
+            checks,
+            DependencyStatusMonitor.GetAllWarnings()
+                .Select(w => new EnvironmentWarningDto(w.Dependency, w.Message, w.Error, w.OccurredAt))
+                .ToArray());
 
         return Ok(new ApiResponse<SystemStatusDto>(
             overall != "down",
@@ -97,36 +100,32 @@ public sealed class StatusController : ControllerBase
             return hasSchema
                 ? ("ok", "Storage do Hangfire disponivel.")
                 : ("degraded", "Conexao OK, mas schema do Hangfire nao foi encontrado.");
-        }, ct);
+        }, ct, failureStatus: "degraded");
     }
 
     private async Task<EnvironmentCheckDto> CheckRedisAsync(CancellationToken ct)
     {
         return await MeasureAsync("Redis / Upstash", "cache-stream", async token =>
         {
+            var streamKey = GetReplayStreamKey();
             var redis = await _redis.GetConnectionAsync(token);
             if (redis is null)
-                return ("down", "Redis indisponivel ou sem endpoints conectados.");
+                return ("degraded", "Redis indisponivel ou sem endpoints conectados. API segue online, mas replays/fila ficam indisponiveis.");
 
+            // Valida a operacao real usada pelo sistema de replays, sem gravar nada no Redis.
             var ping = await redis.GetDatabase().PingAsync();
-            return ("ok", $"Ping Redis OK em {ping.TotalMilliseconds:n0} ms.");
-        }, ct);
+            var streamLength = await redis.GetDatabase().StreamLengthAsync(streamKey);
+
+            return ("ok", $"Ping Redis OK em {ping.TotalMilliseconds:n0} ms. Stream '{streamKey}' acessivel com {streamLength} eventos.");
+        }, ct, failureStatus: "degraded");
     }
 
-    private EnvironmentCheckDto CheckReplayStream()
+    private string GetReplayStreamKey()
     {
-        var streamKey =
+        return
             Environment.GetEnvironmentVariable("REPLAY_EVENTS_STREAM")
             ?? _configuration["ReplayEvents:StreamKey"]
             ?? "replay_events";
-
-        return new EnvironmentCheckDto(
-            "Replay events stream",
-            "cache-stream",
-            "ok",
-            $"Stream Redis configurado como '{streamKey}'.",
-            null,
-            DateTimeOffset.UtcNow);
     }
 
     private EnvironmentCheckDto CheckFirebase()
@@ -199,6 +198,15 @@ public sealed class StatusController : ControllerBase
             DateTimeOffset.UtcNow);
     }
 
+    private static EnvironmentCheckDto WithWarnings(EnvironmentCheckDto check, string dependency)
+    {
+        var warnings = DependencyStatusMonitor.GetWarnings(dependency)
+            .Select(w => new EnvironmentWarningDto(w.Dependency, w.Message, w.Error, w.OccurredAt))
+            .ToArray();
+
+        return check with { Warnings = warnings };
+    }
+
     private async Task<EnvironmentCheckDto> CheckBrasilApiAsync(CancellationToken ct)
     {
         return await MeasureAsync("Brasil API", "external-api", async token =>
@@ -208,14 +216,15 @@ public sealed class StatusController : ControllerBase
             return response.IsSuccessStatusCode
                 ? ("ok", $"Brasil API respondeu HTTP {(int)response.StatusCode}.")
                 : ("degraded", $"Brasil API respondeu HTTP {(int)response.StatusCode}.");
-        }, ct);
+        }, ct, failureStatus: "degraded");
     }
 
     private static async Task<EnvironmentCheckDto> MeasureAsync(
         string name,
         string kind,
         Func<CancellationToken, Task<(string Status, string Detail)>> action,
-        CancellationToken ct)
+        CancellationToken ct,
+        string failureStatus = "down")
     {
         var sw = Stopwatch.StartNew();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -230,12 +239,12 @@ public sealed class StatusController : ControllerBase
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             sw.Stop();
-            return new EnvironmentCheckDto(name, kind, "down", "Timeout apos 5 segundos.", sw.ElapsedMilliseconds, DateTimeOffset.UtcNow);
+            return new EnvironmentCheckDto(name, kind, failureStatus, "Timeout apos 5 segundos.", sw.ElapsedMilliseconds, DateTimeOffset.UtcNow);
         }
         catch (Exception ex)
         {
             sw.Stop();
-            return new EnvironmentCheckDto(name, kind, "down", $"{ex.GetType().Name}: {ex.Message}", sw.ElapsedMilliseconds, DateTimeOffset.UtcNow);
+            return new EnvironmentCheckDto(name, kind, failureStatus, $"{ex.GetType().Name}: {ex.Message}", sw.ElapsedMilliseconds, DateTimeOffset.UtcNow);
         }
     }
 }
@@ -244,7 +253,8 @@ public sealed record SystemStatusDto(
     string Overall,
     string Environment,
     DateTimeOffset CheckedAt,
-    IReadOnlyList<EnvironmentCheckDto> Checks);
+    IReadOnlyList<EnvironmentCheckDto> Checks,
+    IReadOnlyList<EnvironmentWarningDto> IgnoredProblems);
 
 public sealed record EnvironmentCheckDto(
     string Name,
@@ -252,4 +262,13 @@ public sealed record EnvironmentCheckDto(
     string Status,
     string Detail,
     long? DurationMs,
-    DateTimeOffset CheckedAt);
+    DateTimeOffset CheckedAt)
+{
+    public IReadOnlyList<EnvironmentWarningDto> Warnings { get; init; } = [];
+}
+
+public sealed record EnvironmentWarningDto(
+    string Dependency,
+    string Message,
+    string? Error,
+    DateTimeOffset OccurredAt);

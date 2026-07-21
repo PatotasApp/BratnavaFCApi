@@ -1,4 +1,5 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Diagnostics;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 
@@ -40,16 +41,23 @@ public sealed class RedisConnectionProvider : IRedisConnectionProvider, IAsyncDi
 
             if (!_connection.IsConnected)
             {
-                SafeLogWarning("[Redis] Conexão criada, mas ainda sem endpoints conectados.");
+                DependencyStatusMonitor.RecordWarning(
+                    "redis",
+                    "Conexao Redis criada, mas ainda sem endpoints conectados.");
+                SafeLogWarning("[Redis] Conexao criada, mas ainda sem endpoints conectados.");
                 return null;
             }
 
-            SafeLogInformation("[Redis] Conexão estabelecida.");
+            SafeLogInformation("[Redis] Conexao estabelecida.");
             return _connection;
         }
         catch (Exception ex) when (ex is RedisConnectionException or RedisTimeoutException or RedisException or ArgumentException)
         {
-            SafeLogWarning(ex, "[Redis] Indisponível. Recursos de replay/fila serão retomados quando a conexão voltar.");
+            DependencyStatusMonitor.RecordWarning(
+                "redis",
+                "Redis indisponivel. Recursos de replay/fila serao retomados quando a conexao voltar.",
+                ex);
+            SafeLogWarning(ex, "[Redis] Indisponivel. Recursos de replay/fila serao retomados quando a conexao voltar.");
             return null;
         }
         finally

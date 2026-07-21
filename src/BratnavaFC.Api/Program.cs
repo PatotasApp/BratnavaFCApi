@@ -11,6 +11,7 @@ using BratnavaFC.Infrastructure.Data;
 using BratnavaFC.Infrastructure.Repositories;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Diagnostics;
 using BratnavaFC.Application.TeamGeneration;
 using Microsoft.AspNetCore.Identity;
 using BratnavaFC.Domain.Entities;
@@ -258,6 +259,9 @@ static bool CanUseHangfireStorage(string? connectionString, ILogger logger)
 {
     if (string.IsNullOrWhiteSpace(connectionString))
     {
+        DependencyStatusMonitor.RecordWarning(
+            "hangfire",
+            "DefaultConnection nao configurada. Hangfire foi desabilitado neste startup.");
         logger.LogWarning("[Hangfire] DefaultConnection não configurada. Hangfire desabilitado neste startup.");
         return false;
     }
@@ -278,6 +282,10 @@ static bool CanUseHangfireStorage(string? connectionString, ILogger logger)
     }
     catch (Exception ex) when (ex is NpgsqlException or TimeoutException or SocketException or InvalidOperationException)
     {
+        DependencyStatusMonitor.RecordWarning(
+            "hangfire",
+            "Storage PostgreSQL do Hangfire indisponivel. API seguiu sem Hangfire neste startup.",
+            ex);
         logger.LogWarning(ex, "[Hangfire] Storage PostgreSQL indisponível. API seguirá sem Hangfire neste startup.");
         return false;
     }
