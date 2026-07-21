@@ -732,4 +732,48 @@ public sealed class MatchEntityTests
 
         Assert.False(result);
     }
+
+    [Fact]
+    public void IncrementReplayGoal_WhenGoalTimeA_ShouldIncrementOnlyTeamA()
+    {
+        var (match, _, _, _, _) = CreateMatchWithTwoPlayers_Started();
+
+        match.IncrementReplayGoal(MatchEventType.GolTimeA);
+        match.IncrementReplayGoal(MatchEventType.GolTimeA);
+
+        Assert.Equal(2, match.TeamAGoals);
+        Assert.Equal(0, match.TeamBGoals);
+    }
+
+    [Fact]
+    public void IncrementReplayGoal_WhenGoalTimeB_ShouldIncrementOnlyTeamB()
+    {
+        var (match, _, _, _, _) = CreateMatchWithTwoPlayers_Started();
+
+        match.IncrementReplayGoal(MatchEventType.GolTimeB);
+
+        Assert.Equal(0, match.TeamAGoals);
+        Assert.Equal(1, match.TeamBGoals);
+    }
+
+    [Fact]
+    public void IncrementReplayGoal_WhenJogada_ShouldNotChangeScore()
+    {
+        var (match, _, _, _, _) = CreateMatchWithTwoPlayers_Started();
+
+        match.IncrementReplayGoal(MatchEventType.Jogada);
+
+        Assert.Null(match.TeamAGoals);
+        Assert.Null(match.TeamBGoals);
+    }
+
+    [Fact]
+    public void IncrementReplayGoal_WhenPostGame_ShouldThrow()
+    {
+        var (match, _, _, _, _) = CreateMatchWithTwoPlayers_PostGame();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => match.IncrementReplayGoal(MatchEventType.GolTimeA));
+        Assert.Equal("So e possivel incrementar placar por replay quando a partida esta em Started.", ex.Message);
+    }
+
 }

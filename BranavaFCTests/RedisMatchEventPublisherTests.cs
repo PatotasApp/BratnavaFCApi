@@ -44,7 +44,7 @@ public class RedisMatchEventPublisherTests
         outbox.GroupId.Should().Be(groupId);
         outbox.MatchId.Should().Be(matchId);
         outbox.Type.Should().Be(MatchEventType.GolTimeA);
-        outbox.EventTime.Should().Be(eventTime);
+        outbox.EventTime.Should().Be(eventTime.ToUniversalTime());
         outbox.SecondsBeforeStart.Should().Be(8);
         outbox.DurationSeconds.Should().Be(20);
         outbox.Status.Should().Be("Pending");
@@ -62,8 +62,38 @@ public class RedisMatchEventPublisherTests
         streamFields.RootElement.GetProperty("groupId").GetString().Should().Be(groupId.ToString());
         streamFields.RootElement.GetProperty("matchId").GetString().Should().Be(matchId.ToString());
         streamFields.RootElement.GetProperty("type").GetString().Should().Be("GolTimeA");
-        streamFields.RootElement.GetProperty("eventTime").GetString().Should().Be(eventTime.ToString("O"));
+        streamFields.RootElement.GetProperty("eventTime").GetString().Should().Be(eventTime.ToUniversalTime().ToString("O"));
         streamFields.RootElement.GetProperty("secondsBeforeStart").GetInt32().Should().Be(8);
         streamFields.RootElement.GetProperty("durationSeconds").GetInt32().Should().Be(20);
+    }
+
+    [Fact]
+    public async Task PublishAsync_WithBrazilOffsetEventTime_ShouldPersistUtcOutbox()
+    {
+        await using var db = DbContextFactory.Create(nameof(PublishAsync_WithBrazilOffsetEventTime_ShouldPersistUtcOutbox));
+        var redis = new Mock<IRedisConnectionProvider>();
+
+        var sut = new RedisMatchEventPublisher(
+            redis.Object,
+            db,
+            Mock.Of<ILogger<RedisMatchEventPublisher>>(),
+            "replay_events");
+
+        var eventTime = new DateTimeOffset(2026, 7, 21, 21, 0, 0, TimeSpan.FromHours(-3));
+
+        var result = await sut.PublishAsync(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            MatchEventType.GolTimeA,
+            secondsBeforeStart: 15,
+            durationSeconds: 15,
+            eventTime);
+
+        result.Should().StartWith("db:");
+
+        var outbox = await db.ReplayEventOutbox.SingleAsync();
+        outbox.Type.Should().Be(MatchEventType.GolTimeA);
+        outbox.EventTime.Offset.Should().Be(TimeSpan.Zero);
+        outbox.EventTime.Should().Be(eventTime.ToUniversalTime());
     }
 }

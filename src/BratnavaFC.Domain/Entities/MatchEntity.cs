@@ -150,6 +150,25 @@ public class MatchEntity : BaseEntity
         TeamBGoals = teamBGoals;
     }
 
+    public void IncrementReplayGoal(Domain.Enums.MatchEventType type)
+    {
+        if (Status != MatchStatus.Started)
+            throw new InvalidOperationException("So e possivel incrementar placar por replay quando a partida esta em Started.");
+
+        if (type == Domain.Enums.MatchEventType.GolTimeA)
+        {
+            TeamAGoals = (TeamAGoals ?? 0) + 1;
+            TeamBGoals ??= 0;
+            return;
+        }
+
+        if (type == Domain.Enums.MatchEventType.GolTimeB)
+        {
+            TeamBGoals = (TeamBGoals ?? 0) + 1;
+            TeamAGoals ??= 0;
+        }
+    }
+
     public void SetTeamColors(Guid? teamAColorId, Guid? teamBColorId)
     {
         EnsureStatus(MatchStatus.MatchMaking, "So e possivel setar cores quando a partida esta em MatchMaking.");

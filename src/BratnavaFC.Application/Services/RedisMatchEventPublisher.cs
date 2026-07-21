@@ -23,8 +23,6 @@ public class RedisMatchEventPublisher : IMatchEventPublisher
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
-    private static readonly TimeZoneInfo _saoPauloTz = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
-
     public RedisMatchEventPublisher(
         IRedisConnectionProvider redis,
         AppDbContext db,
@@ -39,7 +37,7 @@ public class RedisMatchEventPublisher : IMatchEventPublisher
 
     public async Task<string> PublishAsync(Guid groupId, Guid matchId, MatchEventType type, int secondsBeforeStart, int durationSeconds, DateTimeOffset? eventTime = null, CancellationToken ct = default)
     {
-        var replayEventTime = TimeZoneInfo.ConvertTime(eventTime ?? DateTimeOffset.UtcNow, _saoPauloTz);
+        var replayEventTime = (eventTime ?? DateTimeOffset.UtcNow).ToUniversalTime();
 
         var payload = JsonSerializer.Serialize(new
         {

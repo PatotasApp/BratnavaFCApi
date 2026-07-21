@@ -869,6 +869,14 @@ public class MatchesController : GroupAuthorizedController
         try
         {
             var queueId = await _eventPublisher.PublishAsync(groupId, matchId, dto.Type, dto.SecondsBeforeStart, dto.DurationSeconds, dto.EventTime, ct);
+            if (dto.Type is Domain.Enums.MatchEventType.GolTimeA or Domain.Enums.MatchEventType.GolTimeB)
+            {
+                var match = await _db.Matches.FirstOrDefaultAsync(m => m.Id == matchId && m.GroupId == groupId, ct);
+                if (match is null) return NotFound(new { error = "Partida não encontrada." });
+
+                match.IncrementReplayGoal(dto.Type);
+                await _db.SaveChangesAsync(ct);
+            }
             await _realtime.MatchChangedAsync(groupId, matchId, "match.replay-event.published", ct);
             return Ok(new { queueId });
         }
