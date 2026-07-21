@@ -14,7 +14,7 @@ public class AuditMiddleware(RequestDelegate next, ILogger<AuditMiddleware> logg
     {
         // Skip static files, swagger, health checks
         var path = context.Request.Path.Value ?? "";
-        if (path.StartsWith("/swagger") || path.StartsWith("/health"))
+        if (path.StartsWith("/swagger") || path.StartsWith("/health") || path.StartsWith("/api/status"))
         {
             await next(context);
             return;
