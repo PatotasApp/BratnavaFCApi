@@ -43,6 +43,51 @@ public sealed class PlayerStatsServiceTests
         return player;
     }
 
+    [Fact]
+    public async Task GetVisualReportAsync_ShouldReturnBackendCalculatedPointsAndRanks()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetVisualReportAsync_ShouldReturnBackendCalculatedPointsAndRanks));
+
+        var group = await SeedGroupAsync(db);
+        var p1 = await SeedPlayerAsync(db, group.Id);
+        var p2 = await SeedPlayerAsync(db, group.Id);
+        var p3 = await SeedPlayerAsync(db, group.Id);
+
+        var (match1, map1) = await SeedMatchUpToPostGameAsync(db, group.Id, new[] { p1.Id }, new[] { p2.Id });
+        match1.AddGoalByMatchPlayer(map1[p1.Id].Id, null, null);
+        match1.FinalizeByVotes();
+
+        var (match2, _) = await SeedMatchUpToPostGameAsync(db, group.Id, new[] { p1.Id }, new[] { p3.Id });
+        match2.SetScore(1, 1);
+        match2.FinalizeByVotes();
+
+        var (match3, map3) = await SeedMatchUpToPostGameAsync(db, group.Id, new[] { p2.Id }, new[] { p3.Id });
+        match3.AddGoalByMatchPlayer(map3[p2.Id].Id, null, null);
+        match3.FinalizeByVotes();
+
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var sut = CreateSut(db);
+        var result = await sut.GetVisualReportAsync(group.Id);
+
+        var s1 = result.Players.Single(p => p.PlayerId == p1.Id);
+        var s2 = result.Players.Single(p => p.PlayerId == p2.Id);
+        var s3 = result.Players.Single(p => p.PlayerId == p3.Id);
+
+        s1.Points.Should().Be(4);
+        s2.Points.Should().Be(3);
+        s3.Points.Should().Be(1);
+
+        s1.ClassificationRank.Should().Be(1);
+        s2.ClassificationRank.Should().Be(2);
+        s3.ClassificationRank.Should().Be(3);
+
+        s1.GoalsRank.Should().Be(1);
+        s2.GoalsRank.Should().Be(1);
+        s1.OwnGoalsRank.Should().BeNull();
+    }
+
     /// <summary>
     /// Seed de uma partida completamente finalizada com p1 no Time A e p2 no Time B.
     /// Usado para acumular MatchesPlayed no PlayerStatsService.

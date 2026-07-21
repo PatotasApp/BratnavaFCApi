@@ -20,13 +20,20 @@ namespace BratnavaFC.Domain.Models
         public int Ties { get; init; }
         public int Losses { get; init; }
         public double WinRate { get; init; }
+        public int Points { get; init; }
+        public int ClassificationRank { get; init; }
 
         public int Mvps { get; init; }
         public int MvpVotes { get; init; }
+        public int MvpsRank { get; init; }
+        public int MvpVotesRank { get; init; }
 
         public int Goals { get; init; }
         public int Assists { get; init; }
         public int OwnGoals { get; init; }
+        public int GoalsRank { get; init; }
+        public int AssistsRank { get; init; }
+        public int? OwnGoalsRank { get; init; }
 
         // Synergy “visual”: com nomes + quantidade de jogos juntos + winrate juntos
         public List<PlayerSynergyItem> Synergies { get; init; } = new();

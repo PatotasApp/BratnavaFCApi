@@ -142,6 +142,35 @@ public class GroupSettingsServiceTests
         // Assert
         result.Success.Should().BeTrue();
         result.Data!.ShowPlayerStats.Should().BeFalse();
+        result.Data!.ShowStatsGeneralTab.Should().BeTrue();
+        result.Data!.ShowStatsPerMatchTab.Should().BeTrue();
+        result.Data!.ShowStatsClassificationTab.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task UpsertAsync_WhenAllStatsTabsDisabled_ShouldFail()
+    {
+        await using var db = DbContextFactory.Create(nameof(UpsertAsync_WhenAllStatsTabsDisabled_ShouldFail));
+
+        var group = new GroupEntity("G", null, Guid.NewGuid());
+        db.Groups.Add(group);
+        await db.SaveChangesAsync();
+
+        var sut = new GroupSettingsService(db);
+
+        var req = new UpsertGroupSettingsDto
+        {
+            MinPlayers = 5,
+            MaxPlayers = 10,
+            ShowStatsGeneralTab = false,
+            ShowStatsPerMatchTab = false,
+            ShowStatsClassificationTab = false,
+        };
+
+        Func<Task> act = () => sut.UpsertAsync(group.Id, req, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*aba de estatisticas*");
     }
 
     [Fact]

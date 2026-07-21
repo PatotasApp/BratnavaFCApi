@@ -220,6 +220,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
                 Ties = acc.Ties,
                 Losses = acc.Losses,
                 WinRate = winRate,
+                Points = acc.Wins * 3 + acc.Ties,
 
                 Mvps = mvpCounts.TryGetValue(pl.Id, out var mvps) ? mvps : 0,
                 MvpVotes = mvpVoteCounts.TryGetValue(pl.Id, out var votes) ? votes : 0,
@@ -234,6 +235,8 @@ public sealed class PlayerStatsService : IPlayerStatsService
                     .ToList()
             });
         }
+
+        items = ApplyVisualRanks(items);
 
         items = items
             .OrderByDescending(p => p.WinRate)
@@ -894,6 +897,70 @@ public sealed class PlayerStatsService : IPlayerStatsService
         }
 
         return list;
+    }
+
+    private static List<PlayerVisualStatsItem> ApplyVisualRanks(List<PlayerVisualStatsItem> items)
+    {
+        var classificationRanks = BuildRanks(items, p => p.Points, p => p.Wins, p => p.GamesPlayed);
+        var goalsRanks = BuildRanks(items, p => p.Goals);
+        var assistsRanks = BuildRanks(items, p => p.Assists);
+        var mvpsRanks = BuildRanks(items, p => p.Mvps);
+        var mvpVotesRanks = BuildRanks(items, p => p.MvpVotes);
+        var ownGoalsRanks = BuildRanks(items, p => p.OwnGoals);
+
+        return items.Select(p => new PlayerVisualStatsItem
+        {
+            PlayerId = p.PlayerId,
+            Name = p.Name,
+            Status = p.Status,
+            IsGoalkeeper = p.IsGoalkeeper,
+            GamesPlayed = p.GamesPlayed,
+            Wins = p.Wins,
+            Ties = p.Ties,
+            Losses = p.Losses,
+            WinRate = p.WinRate,
+            Points = p.Points,
+            ClassificationRank = classificationRanks[p.PlayerId],
+            Mvps = p.Mvps,
+            MvpVotes = p.MvpVotes,
+            MvpsRank = mvpsRanks[p.PlayerId],
+            MvpVotesRank = mvpVotesRanks[p.PlayerId],
+            Goals = p.Goals,
+            Assists = p.Assists,
+            OwnGoals = p.OwnGoals,
+            GoalsRank = goalsRanks[p.PlayerId],
+            AssistsRank = assistsRanks[p.PlayerId],
+            OwnGoalsRank = p.OwnGoals > 0 ? ownGoalsRanks[p.PlayerId] : null,
+            Synergies = p.Synergies
+        }).ToList();
+    }
+
+    private static Dictionary<Guid, int> BuildRanks(
+        IReadOnlyCollection<PlayerVisualStatsItem> items,
+        Func<PlayerVisualStatsItem, int> primary,
+        Func<PlayerVisualStatsItem, int>? secondary = null,
+        Func<PlayerVisualStatsItem, int>? tertiary = null)
+    {
+        var ordered = items
+            .OrderByDescending(primary)
+            .ThenByDescending(secondary ?? (_ => 0))
+            .ThenByDescending(tertiary ?? (_ => 0))
+            .ThenBy(p => p.Name)
+            .ToList();
+
+        var ranks = new Dictionary<Guid, int>(ordered.Count);
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            var current = ordered[i];
+            var tied = i > 0
+                && primary(current) == primary(ordered[i - 1])
+                && (secondary?.Invoke(current) ?? 0) == (secondary?.Invoke(ordered[i - 1]) ?? 0)
+                && (tertiary?.Invoke(current) ?? 0) == (tertiary?.Invoke(ordered[i - 1]) ?? 0);
+
+            ranks[current.PlayerId] = tied ? ranks[ordered[i - 1].PlayerId] : i + 1;
+        }
+
+        return ranks;
     }
 
     private readonly record struct PairKey(Guid A, Guid B)

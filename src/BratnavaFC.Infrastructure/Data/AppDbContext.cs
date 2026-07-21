@@ -389,6 +389,15 @@ public class AppDbContext : DbContext
             builder.Property(x => x.MvpTieMaxPlayers)
                 .HasDefaultValue(2);
 
+            builder.Property(x => x.ShowStatsGeneralTab)
+                .HasDefaultValue(true);
+
+            builder.Property(x => x.ShowStatsPerMatchTab)
+                .HasDefaultValue(true);
+
+            builder.Property(x => x.ShowStatsClassificationTab)
+                .HasDefaultValue(true);
+
             builder.HasIndex(x => x.GroupId).IsUnique();
         });
 

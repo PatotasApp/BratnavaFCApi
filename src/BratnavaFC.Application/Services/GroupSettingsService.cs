@@ -54,6 +54,9 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 MvpTieRule           = (int)MvpTieRule.AllMvp,
                 MvpTieMaxPlayers     = 2,
                 ShowPlayerStats      = false,
+                ShowStatsGeneralTab = true,
+                ShowStatsPerMatchTab = true,
+                ShowStatsClassificationTab = true,
                 PaymentDueDay        = null,
                 AutoFinalizeMvpHours = null,
                 MatchSchedulingEnabled = false,
@@ -96,6 +99,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 entity.SetMvpTieRule((MvpTieRule)dto.MvpTieRule.Value, dto.MvpTieMaxPlayers);
             if (dto.ShowPlayerStats.HasValue)
                 entity.SetShowPlayerStats(dto.ShowPlayerStats.Value);
+            ApplyStatsTabs(entity, dto);
             entity.SetPaymentDueDay(dto.PaymentDueDay);
             entity.SetAutoFinalizeMvpHours(dto.AutoFinalizeMvpHours);
             ApplyMatchScheduling(entity, dto);
@@ -118,6 +122,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 entity.SetMvpTieRule((MvpTieRule)dto.MvpTieRule.Value, dto.MvpTieMaxPlayers);
             if (dto.ShowPlayerStats.HasValue)
                 entity.SetShowPlayerStats(dto.ShowPlayerStats.Value);
+            ApplyStatsTabs(entity, dto);
             entity.SetPaymentDueDay(dto.PaymentDueDay);
             entity.SetAutoFinalizeMvpHours(dto.AutoFinalizeMvpHours);
             ApplyMatchScheduling(entity, dto);
@@ -149,6 +154,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 existing.SetMvpTieRule((MvpTieRule)dto.MvpTieRule.Value, dto.MvpTieMaxPlayers);
             if (dto.ShowPlayerStats.HasValue)
                 existing.SetShowPlayerStats(dto.ShowPlayerStats.Value);
+            ApplyStatsTabs(existing, dto);
             existing.SetPaymentDueDay(dto.PaymentDueDay);
             existing.SetAutoFinalizeMvpHours(dto.AutoFinalizeMvpHours);
             ApplyMatchScheduling(existing, dto);
@@ -185,6 +191,9 @@ public sealed class GroupSettingsService : IGroupSettingsService
         MvpTieRule           = (int)e.MvpTieRule,
         MvpTieMaxPlayers     = e.MvpTieMaxPlayers,
         ShowPlayerStats      = e.ShowPlayerStats,
+        ShowStatsGeneralTab = e.ShowStatsGeneralTab,
+        ShowStatsPerMatchTab = e.ShowStatsPerMatchTab,
+        ShowStatsClassificationTab = e.ShowStatsClassificationTab,
         PaymentDueDay        = e.PaymentDueDay,
         AutoFinalizeMvpHours = e.AutoFinalizeMvpHours,
         MatchSchedulingEnabled = e.MatchSchedulingEnabled,
@@ -200,6 +209,21 @@ public sealed class GroupSettingsService : IGroupSettingsService
             })
             .ToList(),
     };
+
+    private static void ApplyStatsTabs(GroupSettingsEntity entity, UpsertGroupSettingsDto dto)
+    {
+        if (!dto.ShowStatsGeneralTab.HasValue &&
+            !dto.ShowStatsPerMatchTab.HasValue &&
+            !dto.ShowStatsClassificationTab.HasValue)
+        {
+            return;
+        }
+
+        entity.SetStatsTabs(
+            dto.ShowStatsGeneralTab ?? entity.ShowStatsGeneralTab,
+            dto.ShowStatsPerMatchTab ?? entity.ShowStatsPerMatchTab,
+            dto.ShowStatsClassificationTab ?? entity.ShowStatsClassificationTab);
+    }
 
     private static void ApplyMatchScheduling(GroupSettingsEntity entity, UpsertGroupSettingsDto dto)
     {

@@ -94,8 +94,21 @@ public sealed class GroupSettingsEntity : BaseEntity
 
     // ── Visibilidade de estatísticas para jogadores ───────────────────────────
     public bool ShowPlayerStats { get; private set; } = false;
+    public bool ShowStatsGeneralTab { get; private set; } = true;
+    public bool ShowStatsPerMatchTab { get; private set; } = true;
+    public bool ShowStatsClassificationTab { get; private set; } = true;
 
     public void SetShowPlayerStats(bool value) => ShowPlayerStats = value;
+
+    public void SetStatsTabs(bool general, bool perMatch, bool classification)
+    {
+        if (!general && !perMatch && !classification)
+            throw new InvalidOperationException("Pelo menos uma aba de estatisticas deve ficar ativa.");
+
+        ShowStatsGeneralTab = general;
+        ShowStatsPerMatchTab = perMatch;
+        ShowStatsClassificationTab = classification;
+    }
 
     // ── Notificações configuráveis ────────────────────────────────────────────
     /// <summary>Dia do mês (1–28) em que a mensalidade vence. Null = sem lembrete automático.</summary>

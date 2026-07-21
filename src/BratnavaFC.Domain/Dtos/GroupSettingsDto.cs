@@ -40,6 +40,9 @@ public sealed class GroupSettingsDto
 
     // ── Visibilidade de estatísticas ──────────────────────────────────────────
     public bool ShowPlayerStats { get; init; }
+    public bool ShowStatsGeneralTab { get; init; }
+    public bool ShowStatsPerMatchTab { get; init; }
+    public bool ShowStatsClassificationTab { get; init; }
 
     // ── Notificações configuráveis ────────────────────────────────────────────
     public int? PaymentDueDay        { get; init; }
