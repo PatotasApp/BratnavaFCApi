@@ -8,7 +8,7 @@ namespace BratnavaFC.Application.Services;
 
 public class RedisMatchEventPublisher : IMatchEventPublisher
 {
-    private readonly IConnectionMultiplexer _redis;
+    private readonly IRedisConnectionProvider _redis;
     private readonly string _streamKey;
 
     private static readonly JsonSerializerOptions _jsonOpts = new()
@@ -19,7 +19,7 @@ public class RedisMatchEventPublisher : IMatchEventPublisher
 
     private static readonly TimeZoneInfo _saoPauloTz = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
 
-    public RedisMatchEventPublisher(IConnectionMultiplexer redis, string streamKey = "replay_events")
+    public RedisMatchEventPublisher(IRedisConnectionProvider redis, string streamKey = "replay_events")
     {
         _redis = redis;
         _streamKey = string.IsNullOrWhiteSpace(streamKey) ? "replay_events" : streamKey;
@@ -39,7 +39,10 @@ public class RedisMatchEventPublisher : IMatchEventPublisher
             durationSeconds,
         }, _jsonOpts);
 
-        var db = _redis.GetDatabase();
+        var redis = await _redis.GetConnectionAsync(ct)
+            ?? throw new InvalidOperationException("Redis indisponível. Não foi possível publicar o evento de replay agora.");
+
+        var db = redis.GetDatabase();
         var id = await db.StreamAddAsync(_streamKey, new[]
         {
             new NameValueEntry("payload", payload),

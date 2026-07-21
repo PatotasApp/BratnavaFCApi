@@ -1,3 +1,4 @@
+using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
@@ -16,7 +17,7 @@ public class ReplayStreamConsumerServiceTests
 
     private static ReplayStreamConsumerService CreateSut(IServiceScopeFactory scopeFactory)
     {
-        var redis = new Mock<IConnectionMultiplexer>();
+        var redis = new Mock<IRedisConnectionProvider>();
         var logger = new Mock<ILogger<ReplayStreamConsumerService>>();
         return new ReplayStreamConsumerService(redis.Object, scopeFactory, logger.Object);
     }

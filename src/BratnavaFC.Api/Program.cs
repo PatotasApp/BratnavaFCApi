@@ -23,7 +23,6 @@ using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 using Hangfire;
 using Hangfire.PostgreSql;
-using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -276,12 +275,10 @@ var redisConnectionString =
     ?? builder.Configuration["Redis:ConnectionString"]
     ?? "localhost:6379";
 
-var redisOptions = ConfigurationOptions.Parse(redisConnectionString);
-redisOptions.ConnectTimeout = 10_000;
-redisOptions.SyncTimeout = 40_000;
-
-builder.Services.AddSingleton<IConnectionMultiplexer>(
-    ConnectionMultiplexer.Connect(redisOptions));
+builder.Services.AddSingleton<IRedisConnectionProvider>(sp =>
+    new RedisConnectionProvider(
+        redisConnectionString,
+        sp.GetRequiredService<ILogger<RedisConnectionProvider>>()));
 
 builder.Services.AddScoped<IMatchEventPublisher>(sp =>
 {
@@ -291,7 +288,7 @@ builder.Services.AddScoped<IMatchEventPublisher>(sp =>
         ?? "replay_events";
 
     return new RedisMatchEventPublisher(
-        sp.GetRequiredService<IConnectionMultiplexer>(),
+        sp.GetRequiredService<IRedisConnectionProvider>(),
         streamKey);
 });
 builder.Services.AddSingleton<IReplayUrlService, R2ReplayUrlService>();

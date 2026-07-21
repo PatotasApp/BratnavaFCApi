@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
@@ -20,14 +21,14 @@ public sealed class ReplayStreamConsumerService : BackgroundService
     private const int MaxAttempts = 3;
     private const int TtlDays     = 7;
 
-    private readonly IConnectionMultiplexer _redis;
+    private readonly IRedisConnectionProvider _redis;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ReplayStreamConsumerService> _logger;
     private readonly string _consumerName;
     private readonly ConcurrentDictionary<string, int> _failureCounts = new();
 
     public ReplayStreamConsumerService(
-        IConnectionMultiplexer redis,
+        IRedisConnectionProvider redis,
         IServiceScopeFactory scopeFactory,
         ILogger<ReplayStreamConsumerService> logger)
     {
@@ -39,21 +40,34 @@ public sealed class ReplayStreamConsumerService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await EnsureConsumerGroupAsync();
+        var redis = await WaitForRedisAsync(stoppingToken);
+        if (redis is null)
+            return;
+
+        await EnsureConsumerGroupAsync(redis);
 
         _logger.LogInformation(
             "[ReplayStream] Consumidor iniciado. Stream={Stream} Group={Group} Consumer={Consumer}",
             StreamKey, GroupName, _consumerName);
 
         // Pendentes processados UMA VEZ só no startup (ex: restart da app)
-        await DrainPendingAsync(stoppingToken);
+        await DrainPendingAsync(redis, stoppingToken);
 
         // Loop principal com BLOCK — só acorda quando chega mensagem nova
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await ProcessNewMessagesBlockingAsync(stoppingToken);
+                if (!redis.IsConnected)
+                {
+                    redis = await WaitForRedisAsync(stoppingToken);
+                    if (redis is null)
+                        break;
+
+                    await EnsureConsumerGroupAsync(redis);
+                }
+
+                await ProcessNewMessagesBlockingAsync(redis, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -70,9 +84,9 @@ public sealed class ReplayStreamConsumerService : BackgroundService
     }
 
     // Drena mensagens pendentes (PEL) apenas no startup
-    private async Task DrainPendingAsync(CancellationToken ct)
+    private async Task DrainPendingAsync(IConnectionMultiplexer redis, CancellationToken ct)
     {
-        var db = _redis.GetDatabase();
+        var db = redis.GetDatabase();
         StreamEntry[] entries;
         int total = 0;
 
@@ -96,9 +110,9 @@ public sealed class ReplayStreamConsumerService : BackgroundService
     }
 
     // Usa XREADGROUP BLOCK — não polica, apenas acorda quando há mensagem nova
-    private async Task ProcessNewMessagesBlockingAsync(CancellationToken ct)
+    private async Task ProcessNewMessagesBlockingAsync(IConnectionMultiplexer redis, CancellationToken ct)
     {
-        var db = _redis.GetDatabase();
+        var db = redis.GetDatabase();
 
         // XREADGROUP GROUP <group> <consumer> COUNT <n> BLOCK <ms> STREAMS <key> >
         var result = await db.ExecuteAsync(
@@ -212,9 +226,24 @@ public sealed class ReplayStreamConsumerService : BackgroundService
         _ => throw new ArgumentException($"Tipo desconhecido no stream: '{tipo}'")
     };
 
-    private async Task EnsureConsumerGroupAsync()
+    private async Task<IConnectionMultiplexer?> WaitForRedisAsync(CancellationToken ct)
     {
-        var db = _redis.GetDatabase();
+        while (!ct.IsCancellationRequested)
+        {
+            var redis = await _redis.GetConnectionAsync(ct);
+            if (redis is not null)
+                return redis;
+
+            _logger.LogWarning("[ReplayStream] Redis indisponível. Nova tentativa em 30s.");
+            await Task.Delay(TimeSpan.FromSeconds(30), ct);
+        }
+
+        return null;
+    }
+
+    private async Task EnsureConsumerGroupAsync(IConnectionMultiplexer redis)
+    {
+        var db = redis.GetDatabase();
         try
         {
             await db.StreamCreateConsumerGroupAsync(StreamKey, GroupName, "$", createStream: true);
