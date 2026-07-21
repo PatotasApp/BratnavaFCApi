@@ -334,6 +334,10 @@ try
 }
 catch (Exception ex)
 {
+    DependencyStatusMonitor.RecordWarning(
+        "firebase",
+        "Firebase nao pode ser inicializado. Push notifications estarao indisponiveis.",
+        ex);
     startupLogger.LogWarning(
         ex,
         "[Firebase] Não pôde ser inicializado. Push notifications estarão indisponíveis. " +
@@ -365,6 +369,7 @@ builder.Services.AddScoped<IMatchEventPublisher>(sp =>
 
     return new RedisMatchEventPublisher(
         sp.GetRequiredService<IRedisConnectionProvider>(),
+        sp.GetRequiredService<AppDbContext>(),
         sp.GetRequiredService<ILogger<RedisMatchEventPublisher>>(),
         streamKey);
 });

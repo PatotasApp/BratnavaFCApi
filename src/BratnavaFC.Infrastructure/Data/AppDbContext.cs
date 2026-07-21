@@ -40,6 +40,7 @@ public class AppDbContext : DbContext
     public DbSet<ReplayClipEntity> ReplayClips => Set<ReplayClipEntity>();
     public DbSet<ReplayLikeEntity> ReplayLikes => Set<ReplayLikeEntity>();
     public DbSet<ReplayFavoriteEntity> ReplayFavorites => Set<ReplayFavoriteEntity>();
+    public DbSet<ReplayEventOutboxEntity> ReplayEventOutbox => Set<ReplayEventOutboxEntity>();
     public DbSet<MatchBetEntity> MatchBets => Set<MatchBetEntity>();
     public DbSet<MatchBetSelectionEntity> MatchBetSelections => Set<MatchBetSelectionEntity>();
     public DbSet<UserBetBalanceEntity> UserBetBalances => Set<UserBetBalanceEntity>();
@@ -65,6 +66,20 @@ public class AppDbContext : DbContext
             builder.Property(x => x.TriggerType).IsRequired().HasMaxLength(10);
             builder.Property(x => x.HangfireJobId).IsRequired().HasMaxLength(100);
             builder.HasIndex(x => new { x.EntityType, x.EntityId });
+        });
+
+        modelBuilder.Entity<ReplayEventOutboxEntity>(builder =>
+        {
+            builder.HasKey(x => x.Id);
+            builder.Property(x => x.StreamKey).IsRequired().HasMaxLength(100);
+            builder.Property(x => x.Type).HasConversion<string>().IsRequired().HasMaxLength(20);
+            builder.Property(x => x.Payload).IsRequired().HasColumnType("jsonb");
+            builder.Property(x => x.StreamFieldsJson).IsRequired().HasColumnType("jsonb");
+            builder.Property(x => x.Status).IsRequired().HasMaxLength(20);
+            builder.Property(x => x.Reason).HasMaxLength(500);
+            builder.Property(x => x.RedisStreamEntryId).HasMaxLength(100);
+            builder.HasIndex(x => new { x.Status, x.CreateDate });
+            builder.HasIndex(x => new { x.GroupId, x.MatchId, x.CreateDate });
         });
 
 

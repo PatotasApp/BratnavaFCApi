@@ -1,7 +1,10 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Diagnostics;
+using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
+using BratnavaFC.Infrastructure.Data;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 
@@ -10,6 +13,7 @@ namespace BratnavaFC.Application.Services;
 public class RedisMatchEventPublisher : IMatchEventPublisher
 {
     private readonly IRedisConnectionProvider _redis;
+    private readonly AppDbContext _db;
     private readonly ILogger<RedisMatchEventPublisher> _logger;
     private readonly string _streamKey;
 
@@ -23,10 +27,12 @@ public class RedisMatchEventPublisher : IMatchEventPublisher
 
     public RedisMatchEventPublisher(
         IRedisConnectionProvider redis,
+        AppDbContext db,
         ILogger<RedisMatchEventPublisher> logger,
         string streamKey = "replay_events")
     {
         _redis = redis;
+        _db = db;
         _logger = logger;
         _streamKey = string.IsNullOrWhiteSpace(streamKey) ? "replay_events" : streamKey;
     }
@@ -45,11 +51,38 @@ public class RedisMatchEventPublisher : IMatchEventPublisher
             durationSeconds,
         }, _jsonOpts);
 
-        var redis = await _redis.GetConnectionAsync(ct)
-            ?? throw new InvalidOperationException("Redis indisponível. Não foi possível publicar o evento de replay agora.");
+        var streamFieldsJson = JsonSerializer.Serialize(new
+        {
+            payload,
+            groupId = groupId.ToString(),
+            matchId = matchId.ToString(),
+            type = type.ToString(),
+            eventTime = replayEventTime.ToString("O"),
+            secondsBeforeStart,
+            durationSeconds,
+        }, _jsonOpts);
 
+        // Redis temporariamente desativado por limite do plano.
+        // Quando voltar, reativar o StreamAddAsync abaixo e manter o outbox como fallback.
+        return await SaveOutboxAsync(
+            groupId,
+            matchId,
+            type,
+            replayEventTime,
+            secondsBeforeStart,
+            durationSeconds,
+            payload,
+            streamFieldsJson,
+            "Redis temporariamente desativado; evento salvo no banco.",
+            ct);
+
+        /*
         try
         {
+            var redis = await _redis.GetConnectionAsync(ct);
+            if (redis is null)
+                return await SaveOutboxAsync(groupId, matchId, type, replayEventTime, secondsBeforeStart, durationSeconds, payload, streamFieldsJson, "Redis indisponivel.", ct);
+
             var db = redis.GetDatabase();
             var id = await db.StreamAddAsync(_streamKey, new[]
             {
@@ -66,6 +99,11 @@ public class RedisMatchEventPublisher : IMatchEventPublisher
         }
         catch (Exception ex) when (ex is RedisException or TimeoutException)
         {
+            DependencyStatusMonitor.RecordWarning(
+                "redis",
+                $"Falha ao publicar evento de replay no stream '{_streamKey}'.",
+                ex);
+
             try
             {
                 _logger.LogWarning(
@@ -78,7 +116,60 @@ public class RedisMatchEventPublisher : IMatchEventPublisher
             }
             catch { }
 
-            throw new InvalidOperationException("Redis indisponível ou com limite excedido. Não foi possível publicar o evento de replay agora.", ex);
+            return await SaveOutboxAsync(
+                groupId,
+                matchId,
+                type,
+                replayEventTime,
+                secondsBeforeStart,
+                durationSeconds,
+                payload,
+                streamFieldsJson,
+                ex.Message,
+                ct);
         }
+        */
+    }
+
+    private async Task<string> SaveOutboxAsync(
+        Guid groupId,
+        Guid matchId,
+        MatchEventType type,
+        DateTimeOffset eventTime,
+        int secondsBeforeStart,
+        int durationSeconds,
+        string payload,
+        string streamFieldsJson,
+        string reason,
+        CancellationToken ct)
+    {
+        var outbox = new ReplayEventOutboxEntity(
+            _streamKey,
+            groupId,
+            matchId,
+            type,
+            eventTime,
+            secondsBeforeStart,
+            durationSeconds,
+            payload,
+            streamFieldsJson,
+            reason);
+
+        _db.ReplayEventOutbox.Add(outbox);
+        await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            _logger.LogWarning(
+                "[ReplayOutbox] Evento salvo no banco porque Redis indisponivel. OutboxId={OutboxId} Stream={Stream} Group={GroupId} Match={MatchId} Type={Type}",
+                outbox.Id,
+                _streamKey,
+                groupId,
+                matchId,
+                type);
+        }
+        catch { }
+
+        return $"db:{outbox.Id}";
     }
 }
