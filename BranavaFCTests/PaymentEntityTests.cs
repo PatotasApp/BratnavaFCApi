@@ -71,6 +71,24 @@ public class MonthlyPaymentEntityTests
         sut.PaidAt.Should().NotBeNull();
         sut.PaidAt!.Value.Should().BeOnOrAfter(before);
         sut.MarkedByAdminId.Should().Be(adminId);
+        sut.MarkedByUserId.Should().Be(adminId);
+    }
+
+    [Fact]
+    public void MarkAsPaid_WithDifferentMarkerAndAdmin_ShouldStoreBoth()
+    {
+        var sut      = Make();
+        var markerId = Guid.NewGuid();
+        var adminId  = Guid.NewGuid();
+        var before   = DateTime.UtcNow;
+
+        sut.MarkAsPaid(markerId, adminId, null, null, null);
+
+        sut.Status.Should().Be(PaymentStatus.Paid);
+        sut.PaidAt.Should().NotBeNull();
+        sut.PaidAt!.Value.Should().BeOnOrAfter(before);
+        sut.MarkedByUserId.Should().Be(markerId);
+        sut.MarkedByAdminId.Should().Be(adminId);
     }
 
     [Fact]
@@ -102,12 +120,14 @@ public class MonthlyPaymentEntityTests
     public void MarkAsPending_ShouldRevertStatus()
     {
         var sut = Make();
-        sut.MarkAsPaid(null, null, null, null);
+        sut.MarkAsPaid(Guid.NewGuid(), Guid.NewGuid(), null, null, null);
 
         sut.MarkAsPending();
 
         sut.Status.Should().Be(PaymentStatus.Pending);
         sut.PaidAt.Should().BeNull();
+        sut.MarkedByUserId.Should().BeNull();
+        sut.MarkedByAdminId.Should().BeNull();
     }
 
     // ── ApplyDiscount ─────────────────────────────────────────────────────────
@@ -135,17 +155,22 @@ public class MonthlyPaymentEntityTests
 
         sut.Status.Should().Be(PaymentStatus.Paid);
         sut.PaidAt.Should().NotBeNull();
+        sut.MarkedByUserId.Should().Be(adminId);
+        sut.MarkedByAdminId.Should().Be(adminId);
     }
 
     [Fact]
     public void ApplyDiscount_ExceedingAmount_ShouldStillMarkPaid()
     {
         var sut = Make(100m);
+        var adminId = Guid.NewGuid();
 
-        sut.ApplyDiscount(150m, null, Guid.NewGuid());
+        sut.ApplyDiscount(150m, null, adminId);
 
         sut.Discount.Should().Be(150m);
         sut.Status.Should().Be(PaymentStatus.Paid);
+        sut.MarkedByUserId.Should().Be(adminId);
+        sut.MarkedByAdminId.Should().Be(adminId);
     }
 
     [Fact]
@@ -262,11 +287,31 @@ public class ExtraChargePaymentEntityTests
     public void MarkAsPaid_ShouldSetStatusPaidAndTimestamp()
     {
         var sut = Make();
+        var markerId = Guid.NewGuid();
 
-        sut.MarkAsPaid(Guid.NewGuid(), null, null, null);
+        sut.MarkAsPaid(markerId, null, null, null);
 
         sut.Status.Should().Be(PaymentStatus.Paid);
         sut.PaidAt.Should().NotBeNull();
+        sut.MarkedByUserId.Should().Be(markerId);
+        sut.MarkedByAdminId.Should().Be(markerId);
+    }
+
+    [Fact]
+    public void MarkAsPaid_WithDifferentMarkerAndAdmin_ShouldStoreBoth()
+    {
+        var sut      = Make();
+        var markerId = Guid.NewGuid();
+        var adminId  = Guid.NewGuid();
+        var before   = DateTime.UtcNow;
+
+        sut.MarkAsPaid(markerId, adminId, null, null, null);
+
+        sut.Status.Should().Be(PaymentStatus.Paid);
+        sut.PaidAt.Should().NotBeNull();
+        sut.PaidAt!.Value.Should().BeOnOrAfter(before);
+        sut.MarkedByUserId.Should().Be(markerId);
+        sut.MarkedByAdminId.Should().Be(adminId);
     }
 
     // ── MarkAsPending ─────────────────────────────────────────────────────────
@@ -275,12 +320,14 @@ public class ExtraChargePaymentEntityTests
     public void MarkAsPending_ShouldResetStatus()
     {
         var sut = Make();
-        sut.MarkAsPaid(null, null, null, null);
+        sut.MarkAsPaid(Guid.NewGuid(), Guid.NewGuid(), null, null, null);
 
         sut.MarkAsPending();
 
         sut.Status.Should().Be(PaymentStatus.Pending);
         sut.PaidAt.Should().BeNull();
+        sut.MarkedByUserId.Should().BeNull();
+        sut.MarkedByAdminId.Should().BeNull();
     }
 
     // ── ApplyDiscount ─────────────────────────────────────────────────────────
@@ -289,11 +336,15 @@ public class ExtraChargePaymentEntityTests
     public void ApplyDiscount_FullCoverage_ShouldAutoMarkPaid()
     {
         var sut = Make(50m);
+        var adminId = Guid.NewGuid();
 
-        sut.ApplyDiscount(50m, "Isenção total", Guid.NewGuid());
+        sut.ApplyDiscount(50m, "Isencao total", adminId);
 
         sut.Status.Should().Be(PaymentStatus.Paid);
         sut.Discount.Should().Be(50m);
+        sut.PaidAt.Should().NotBeNull();
+        sut.MarkedByUserId.Should().Be(adminId);
+        sut.MarkedByAdminId.Should().Be(adminId);
     }
 
     [Fact]

@@ -85,4 +85,9 @@ public sealed class GroupTransactionEntity : BaseEntity
 
     /// <summary>Usuário que criou a transação manual (null em automáticas).</summary>
     public Guid?   CreatedByUserId { get; private set; }
+
+    public void ClearCreator()
+    {
+        CreatedByUserId = null;
+    }
 }

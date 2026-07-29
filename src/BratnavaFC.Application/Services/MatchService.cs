@@ -11,6 +11,7 @@ namespace BratnavaFC.Application.Services;
 
 public sealed class MatchService : IMatchService
 {
+
     private readonly AppDbContext _context;
     private readonly IRepositoryBase<MatchEntity> _repository;
     private readonly IPushService _push;
@@ -1281,7 +1282,7 @@ public sealed class MatchService : IMatchService
                 .ToListAsync(ct);
 
             var savedResponses = existingMps
-                .ToDictionary(mp => mp.PlayerId, mp => (mp.InviteResponse, mp.AutoRejectedByAbsenceId));
+                .ToDictionary(mp => mp.PlayerId, mp => (mp.InviteResponse, mp.InviteRespondedAt, mp.AutoRejectedByAbsenceId));
 
             _context.MatchPlayers.RemoveRange(existingMps);
 
@@ -1298,9 +1299,9 @@ public sealed class MatchService : IMatchService
 
                 if (savedResponses.TryGetValue(player.Id, out var saved))
                 {
-                    newMp.RestoreInviteResponse(saved.InviteResponse);
+                    newMp.RestoreInviteResponse(saved.InviteResponse, saved.InviteRespondedAt);
                     if (saved.AutoRejectedByAbsenceId.HasValue)
-                        newMp.AutoRejectByAbsence(saved.AutoRejectedByAbsenceId.Value);
+                        newMp.AutoRejectByAbsence(saved.AutoRejectedByAbsenceId.Value, saved.InviteRespondedAt);
                 }
 
                 _context.MatchPlayers.Add(newMp);
@@ -1374,6 +1375,7 @@ public sealed class MatchService : IMatchService
                         IsGuest = mp.Player!.IsGuest,
                         Team = mp.Team,
                         InviteResponse = (short)mp.InviteResponse,
+                        InviteRespondedAt = mp.InviteRespondedAt,
                         AbsenceType = mp.AutoRejectedByAbsenceId != null ? (int?)mp.AutoRejectedByAbsence!.AbsenceType : null,
                         AbsenceDescription = mp.AutoRejectedByAbsenceId != null
                             ? (mp.AutoRejectedByAbsence!.Description == null
@@ -1495,6 +1497,7 @@ public sealed class MatchService : IMatchService
                         IsGuest       = mp.Player!.IsGuest,
                         Team          = mp.Team,
                         InviteResponse = (short)mp.InviteResponse,
+                        InviteRespondedAt = mp.InviteRespondedAt,
                     })
                     .ToList(),
 
@@ -1511,6 +1514,7 @@ public sealed class MatchService : IMatchService
                         IsGuest       = mp.Player!.IsGuest,
                         Team          = mp.Team,
                         InviteResponse = (short)mp.InviteResponse,
+                        InviteRespondedAt = mp.InviteRespondedAt,
                     })
                     .ToList(),
 
@@ -1528,6 +1532,7 @@ public sealed class MatchService : IMatchService
                         IsGuest       = mp.Player!.IsGuest,
                         Team          = mp.Team,
                         InviteResponse = (short)mp.InviteResponse,
+                        InviteRespondedAt = mp.InviteRespondedAt,
                     })
                     .ToList(),
 
@@ -1548,6 +1553,7 @@ public sealed class MatchService : IMatchService
                         IsGuest       = mp.Player!.IsGuest,
                         Team          = mp.Team,
                         InviteResponse = (short)mp.InviteResponse,
+                        InviteRespondedAt = mp.InviteRespondedAt,
                     })
                     .ToList(),
             })
@@ -2009,6 +2015,7 @@ public sealed class MatchService : IMatchService
         IsGuest            = mp.Player?.IsGuest ?? false,
         Team               = mp.Team,
         InviteResponse     = (short)mp.InviteResponse,
+        InviteRespondedAt  = mp.InviteRespondedAt,
         IsMvp              = mp.IsMvp ?? false,
         AbsenceType        = mp.AutoRejectedByAbsenceId != null ? (int?)mp.AutoRejectedByAbsence?.AbsenceType : null,
         AbsenceDescription = BuildAbsenceDescription(

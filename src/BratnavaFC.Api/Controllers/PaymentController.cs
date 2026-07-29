@@ -1,4 +1,5 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Payments;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
@@ -291,6 +292,54 @@ public sealed class PaymentController : GroupAuthorizedController
     }
 
     // ── Comprovantes ──────────────────────────────────────────────────────────
+
+    [HttpGet("exit-pending")]
+    public async Task<IActionResult> GetExitPendingPayments(Guid groupId, CancellationToken ct)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        var playerId = await _db.Players
+            .Where(p => p.GroupId == groupId && p.UserId == userId.Value && !p.IsGuest)
+            .Select(p => (Guid?)p.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (playerId is null)
+            return ToResponse(Result<ExitPendingPaymentsDto>.Ok(new ExitPendingPaymentsDto()));
+
+        var result = await _payments.GetExitPendingPaymentsForPlayerAsync(playerId.Value, userId.Value, ct);
+        return ToResponse(result);
+    }
+
+    [HttpGet("exit-debt-alerts")]
+    public async Task<IActionResult> GetExitDebtAlerts(Guid groupId, CancellationToken ct)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        var result = await _payments.GetExitDebtAlertsAsync(groupId, userId.Value, ct);
+        return ToResponse(result);
+    }
+
+    [HttpPost("exit-debt-alerts/{notificationId:guid}/keep")]
+    public async Task<IActionResult> KeepExitDebtAlert(Guid groupId, Guid notificationId, CancellationToken ct)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        var result = await _payments.KeepExitDebtAlertAsync(groupId, notificationId, userId.Value, ct);
+        return ToResponse(result);
+    }
+
+    [HttpPost("exit-debt-alerts/{notificationId:guid}/mark-paid")]
+    public async Task<IActionResult> MarkExitDebtAlertAsPaid(Guid groupId, Guid notificationId, CancellationToken ct)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        var result = await _payments.MarkExitDebtAlertAsPaidAsync(groupId, notificationId, userId.Value, ct);
+        return ToResponse(result);
+    }
 
     [HttpGet("monthly/{year:int}/{month:int}/{playerId:guid}/proof")]
     public async Task<IActionResult> GetMonthlyProof(

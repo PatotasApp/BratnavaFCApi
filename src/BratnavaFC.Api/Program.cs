@@ -202,6 +202,7 @@ builder.Services.AddScoped<IPlayerStatsService, PlayerStatsService>();
 builder.Services.AddScoped<ITeamColorService, TeamColorService>();
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
 builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IPlayerMembershipService, PlayerMembershipService>();
 builder.Services.AddScoped<IPlayerService, PlayerService>();
 builder.Services.AddScoped<IGroupService, GroupService>();
 builder.Services.AddScoped<TeamGenerationService>();

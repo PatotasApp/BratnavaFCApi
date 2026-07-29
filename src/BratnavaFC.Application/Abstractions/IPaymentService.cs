@@ -83,6 +83,14 @@ public interface IPaymentService
     /// <summary>Lista todos os itens pendentes do usuário na patota (mensalidades + cobranças extras).</summary>
     Task<Result<IReadOnlyList<PendingPaymentItemDto>>> GetMyPendingItemsAsync(Guid groupId, Guid userId, CancellationToken ct = default);
 
+    Task<Result<ExitPendingPaymentsDto>> GetExitPendingPaymentsAsync(Guid userId, CancellationToken ct = default);
+    Task<Result<ExitPendingPaymentsDto>> GetExitPendingPaymentsForPlayerAsync(Guid playerId, Guid userId, CancellationToken ct = default);
+    Task<Result<IReadOnlyList<ExitDebtAlertDto>>> GetExitDebtAlertsAsync(Guid groupId, Guid userId, CancellationToken ct = default);
+    Task<Result> KeepExitDebtAlertAsync(Guid groupId, Guid notificationId, Guid userId, CancellationToken ct = default);
+    Task<Result> MarkExitDebtAlertAsPaidAsync(Guid groupId, Guid notificationId, Guid userId, CancellationToken ct = default);
+    Task<Result> PaySelectedForPlayerAsync(Guid groupId, Guid playerId, PaySelectedDto dto, Guid userId, CancellationToken ct = default);
+    Task CreateExitDebtAlertsAsync(ExitPendingPaymentsDto pending, CancellationToken ct = default);
+
     /// <summary>Marca os itens selecionados como pagos em lote.</summary>
     Task<Result> PaySelectedAsync(Guid groupId, Guid userId, PaySelectedDto dto, CancellationToken ct = default);
 

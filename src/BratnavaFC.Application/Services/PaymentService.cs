@@ -7,6 +7,7 @@ using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace BratnavaFC.Application.Services;
 
@@ -63,6 +64,7 @@ public sealed class PaymentService : IPaymentService
                      && playerIds.Contains(m.PlayerId)
                      && m.Year == year)
             .ToListAsync(ct);
+        var markedByUsers = await LoadMarkedByUsersAsync(records.Select(r => r.MarkedByUserId ?? r.MarkedByAdminId), ct);
 
         var settings = await _context.GroupSettings
             .AsNoTracking()
@@ -109,6 +111,9 @@ public sealed class PaymentService : IPaymentService
                         Discount       = rec.Discount,
                         DiscountReason = rec.DiscountReason,
                         PaidAt         = rec.PaidAt,
+                        MarkedByUserId = MarkedByUserId(rec.MarkedByUserId, rec.MarkedByAdminId),
+                        MarkedByUserName = MarkedByUserName(rec.MarkedByUserId, rec.MarkedByAdminId, markedByUsers),
+                        MarkedByUserKind = MarkedByUserKind(rec.MarkedByUserId, rec.MarkedByAdminId, p.UserId),
                         HasProof       = rec.ProofBase64 is not null,
                         ProofFileName  = rec.ProofFileName,
                     };
@@ -269,6 +274,7 @@ public sealed class PaymentService : IPaymentService
         if (dto.Status == PaymentStatus.Paid)
         {
             record.MarkAsPaid(
+                actingUserId,
                 isAdmin ? actingUserId : null,
                 dto.ProofBase64,
                 dto.ProofFileName,
@@ -344,14 +350,20 @@ public sealed class PaymentService : IPaymentService
             .Distinct()
             .ToList();
 
-        var playerNames = playerIds.Count > 0
+        var playerInfos = playerIds.Count > 0
             ? await _context.Players
                 .AsNoTracking()
                 .Where(p => playerIds.Contains(p.Id))
-                .ToDictionaryAsync(p => p.Id, p => p.Name, ct)
-            : new Dictionary<Guid, string>();
+                .Select(p => new { p.Id, p.Name, p.UserId })
+                .ToListAsync(ct)
+            : [];
 
-        var items = charges.Select(c => ToExtraChargeDto(c, playerNames)).ToList();
+        var playerNames = playerInfos.ToDictionary(p => p.Id, p => p.Name);
+        var playerUserIds = playerInfos.ToDictionary(p => p.Id, p => p.UserId);
+        var markedByUsers = await LoadMarkedByUsersAsync(
+            charges.SelectMany(c => c.Payments.Select(p => p.MarkedByUserId ?? p.MarkedByAdminId)), ct);
+
+        var items = charges.Select(c => ToExtraChargeDto(c, playerNames, playerUserIds, markedByUsers)).ToList();
         return Result<PagedResultDto<ExtraChargeDto>>.Ok(new PagedResultDto<ExtraChargeDto>
         {
             Page = page, PageSize = pageSize, Total = total, Items = items,
@@ -665,6 +677,7 @@ public sealed class PaymentService : IPaymentService
         if (dto.Status == PaymentStatus.Paid)
         {
             payment.MarkAsPaid(
+                actingUserId,
                 isAdmin ? actingUserId : null,
                 dto.ProofBase64,
                 dto.ProofFileName,
@@ -746,6 +759,7 @@ public sealed class PaymentService : IPaymentService
                      && m.PlayerId == player.Id
                      && m.Year     == year)
             .ToListAsync(ct);
+        var markedByUsers = await LoadMarkedByUsersAsync(records.Select(r => r.MarkedByUserId ?? r.MarkedByAdminId), ct);
 
         var recordMap     = records.ToLookup(r => r.Month);
         var monthlyFee    = settings?.MonthlyFee;
@@ -780,6 +794,9 @@ public sealed class PaymentService : IPaymentService
                     Discount       = rec.Discount,
                     DiscountReason = rec.DiscountReason,
                     PaidAt         = rec.PaidAt,
+                    MarkedByUserId = MarkedByUserId(rec.MarkedByUserId, rec.MarkedByAdminId),
+                    MarkedByUserName = MarkedByUserName(rec.MarkedByUserId, rec.MarkedByAdminId, markedByUsers),
+                    MarkedByUserKind = MarkedByUserKind(rec.MarkedByUserId, rec.MarkedByAdminId, player.UserId),
                     HasProof       = rec.ProofBase64 is not null,
                     ProofFileName  = rec.ProofFileName,
                 };
@@ -843,6 +860,7 @@ public sealed class PaymentService : IPaymentService
             .FirstOrDefaultAsync(ct) ?? "?";
 
         var names = new Dictionary<Guid, string> { [playerId.Value] = playerName };
+        var markedByUsers = await LoadMarkedByUsersAsync(payments.Select(p => p.MarkedByUserId ?? p.MarkedByAdminId), ct);
 
         IReadOnlyList<ExtraChargeDto> items = payments
             .Where(ep => ep.ExtraCharge is not null)
@@ -869,6 +887,9 @@ public sealed class PaymentService : IPaymentService
                         DiscountReason = ep.DiscountReason,
                         Status         = ep.Status,
                         PaidAt         = ep.PaidAt,
+                        MarkedByUserId = MarkedByUserId(ep.MarkedByUserId, ep.MarkedByAdminId),
+                        MarkedByUserName = MarkedByUserName(ep.MarkedByUserId, ep.MarkedByAdminId, markedByUsers),
+                        MarkedByUserKind = MarkedByUserKind(ep.MarkedByUserId, ep.MarkedByAdminId, userId),
                         HasProof       = ep.ProofBase64 is not null,
                         ProofFileName  = ep.ProofFileName,
                     }).ToArray(),
@@ -1371,7 +1392,7 @@ public sealed class PaymentService : IPaymentService
 
                 if (item.IsPaid)
                 {
-                    record.MarkAsPaid(null, null, null, null);
+                    record.MarkAsPaid(userId, null, null, null, null);
                     if (!wasPaid)
                         notifications.Add(() => NotifyFinanceirosMonthlyPaidAsync(groupId, player.Id, mo, yr, ct));
                 }
@@ -1411,7 +1432,7 @@ public sealed class PaymentService : IPaymentService
 
                 if (item.IsPaid)
                 {
-                    payment.MarkAsPaid(null, null, null, null);
+                    payment.MarkAsPaid(userId, null, null, null, null);
                     if (!wasPaid)
                     {
                         var cidCapture = cid;
@@ -1457,6 +1478,442 @@ public sealed class PaymentService : IPaymentService
         return Result.Ok("Pagamentos confirmados com sucesso.");
     }
 
+    public async Task<Result<ExitPendingPaymentsDto>> GetExitPendingPaymentsAsync(
+        Guid userId, CancellationToken ct = default)
+    {
+        var players = await _context.Players
+            .AsNoTracking()
+            .Include(p => p.Group)
+            .Where(p => p.UserId == userId && !p.IsGuest && p.Status == Status.Active)
+            .ToListAsync(ct);
+
+        var groups = new List<GroupPendingPaymentsDto>();
+        foreach (var player in players)
+        {
+            var summary = await BuildPendingForPlayerAsync(player, ct);
+            if (summary.Items.Length > 0) groups.Add(summary);
+        }
+
+        return Result<ExitPendingPaymentsDto>.Ok(ToExitPendingDto(groups));
+    }
+
+    public async Task<Result<ExitPendingPaymentsDto>> GetExitPendingPaymentsForPlayerAsync(
+        Guid playerId, Guid userId, CancellationToken ct = default)
+    {
+        var player = await _context.Players
+            .AsNoTracking()
+            .Include(p => p.Group)
+            .FirstOrDefaultAsync(p => p.Id == playerId && p.UserId == userId && !p.IsGuest, ct);
+
+        if (player is null)
+            return Result<ExitPendingPaymentsDto>.Fail("Jogador não encontrado nesta patota.", ResultStatus.NotFound);
+
+        var summary = await BuildPendingForPlayerAsync(player, ct);
+        return Result<ExitPendingPaymentsDto>.Ok(ToExitPendingDto(summary.Items.Length > 0 ? [summary] : []));
+    }
+
+    public async Task CreateExitDebtAlertsAsync(ExitPendingPaymentsDto pending, CancellationToken ct = default)
+    {
+        foreach (var group in pending.Groups.Where(g => g.Items.Length > 0))
+        {
+            var alert = new ExitDebtAlertEntity(
+                group.GroupId,
+                group.PlayerId,
+                group.PlayerName,
+                group.Items.Length,
+                group.Total);
+            _context.ExitDebtAlerts.Add(alert);
+
+            var recipients = await _context.GroupAdmins
+                .AsNoTracking()
+                .Where(a => a.GroupId == group.GroupId)
+                .Select(a => a.UserId)
+                .Concat(_context.GroupFinanceiros
+                    .AsNoTracking()
+                    .Where(f => f.GroupId == group.GroupId)
+                    .Select(f => f.UserId))
+                .Concat(_context.Groups
+                    .AsNoTracking()
+                    .Where(g => g.Id == group.GroupId)
+                    .Select(g => g.CreatedByUserId))
+                .Distinct()
+                .ToListAsync(ct);
+
+            var data = JsonSerializer.Serialize(new
+            {
+                exitDebtAlertId = alert.Id,
+                groupId = group.GroupId,
+                playerId = group.PlayerId,
+                playerName = group.PlayerName,
+                count = group.Items.Length,
+                total = group.Total
+            });
+
+            foreach (var userId in recipients)
+            {
+                _context.UserNotifications.Add(new UserNotificationEntity(
+                    userId,
+                    group.GroupId,
+                    "Pendências ao sair",
+                    $"{group.PlayerName} saiu com {group.Items.Length} pendência(s) financeira(s).",
+                    "member_left_with_debt",
+                    data));
+            }
+        }
+
+        await _context.SaveChangesAsync(ct);
+    }
+
+    public async Task<Result<IReadOnlyList<ExitDebtAlertDto>>> GetExitDebtAlertsAsync(
+        Guid groupId, Guid userId, CancellationToken ct = default)
+    {
+        if (!await IsFinanceiroOrAdminAsync(groupId, userId, ct))
+            return Result<IReadOnlyList<ExitDebtAlertDto>>.Fail("Sem permissão.", ResultStatus.Forbidden);
+
+        var alerts = await _context.ExitDebtAlerts
+            .AsNoTracking()
+            .Where(a => a.GroupId == groupId && a.ResolvedAt == null)
+            .OrderByDescending(a => a.CreateDate)
+            .ToListAsync(ct);
+
+        var dtos = alerts
+            .Select(a => new ExitDebtAlertDto
+            {
+                NotificationId = a.Id,
+                GroupId = a.GroupId,
+                PlayerId = a.PlayerId,
+                PlayerName = a.PlayerName,
+                Count = a.Count,
+                Total = a.Total,
+                CreatedAt = a.CreateDate
+            })
+            .ToList();
+
+        return Result<IReadOnlyList<ExitDebtAlertDto>>.Ok(dtos);
+    }
+
+    public async Task<Result> KeepExitDebtAlertAsync(
+        Guid groupId, Guid notificationId, Guid userId, CancellationToken ct = default)
+    {
+        if (!await IsFinanceiroOrAdminAsync(groupId, userId, ct))
+            return Result.Fail("Sem permissão.", ResultStatus.Forbidden);
+
+        var alert = await _context.ExitDebtAlerts
+            .FirstOrDefaultAsync(a => a.Id == notificationId
+                                   && a.GroupId == groupId
+                                   && a.ResolvedAt == null, ct);
+
+        if (alert is null)
+            return Result.Fail("Alerta não encontrado.", ResultStatus.NotFound);
+
+        alert.ResolveKeep(userId);
+        await _context.SaveChangesAsync(ct);
+        return Result.Ok();
+    }
+
+    public async Task<Result> MarkExitDebtAlertAsPaidAsync(
+        Guid groupId, Guid notificationId, Guid userId, CancellationToken ct = default)
+    {
+        if (!await IsFinanceiroOrAdminAsync(groupId, userId, ct))
+            return Result.Fail("Sem permissão.", ResultStatus.Forbidden);
+
+        var alert = await _context.ExitDebtAlerts
+            .FirstOrDefaultAsync(a => a.Id == notificationId
+                                   && a.GroupId == groupId
+                                   && a.ResolvedAt == null, ct);
+
+        if (alert is null)
+            return Result.Fail("Alerta não encontrado.", ResultStatus.NotFound);
+
+        var pending = await BuildPendingForPlayerAsync(alert.PlayerId, ct);
+        if (pending is not null && pending.Items.Length > 0)
+        {
+            var dto = new PaySelectedDto
+            {
+                Items = pending.Items.Select(i => new PaySelectedItem
+                {
+                    Type = i.Type,
+                    Year = i.Year,
+                    Month = i.Month,
+                    ChargeId = i.ChargeId,
+                    IsPaid = true
+                }).ToArray()
+            };
+
+            var paid = await PaySelectedForPlayerAsync(groupId, alert.PlayerId, dto, userId, ct);
+            if (!paid.Success) return paid;
+        }
+
+        alert.ResolvePaid(userId);
+        await _context.SaveChangesAsync(ct);
+        return Result.Ok();
+    }
+
+    public async Task<Result> PaySelectedForPlayerAsync(
+        Guid groupId, Guid playerId, PaySelectedDto dto, Guid userId, CancellationToken ct = default)
+    {
+        if (dto.Items.Length == 0)
+            return Result.Fail("Nenhum item selecionado.", ResultStatus.BadRequest);
+
+        var player = await _context.Players
+            .Where(p => p.Id == playerId && p.GroupId == groupId)
+            .Select(p => new { p.Id, p.Name, p.IsGoalkeeper })
+            .FirstOrDefaultAsync(ct);
+
+        if (player is null)
+            return Result.Fail("Jogador não encontrado nesta patota.", ResultStatus.NotFound);
+
+        var settings = await _context.GroupSettings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.GroupId == groupId, ct);
+
+        var transactionHooks = new List<Func<Task>>();
+
+        var extraChargeIds = dto.Items
+            .Where(i => i.Type == PendingPaymentType.Extra && i.ChargeId.HasValue)
+            .Select(i => i.ChargeId!.Value)
+            .Distinct()
+            .ToList();
+
+        var chargeNames = extraChargeIds.Count > 0
+            ? await _context.ExtraCharges
+                .AsNoTracking()
+                .Where(c => extraChargeIds.Contains(c.Id))
+                .ToDictionaryAsync(c => c.Id, c => c.Name, ct)
+            : new Dictionary<Guid, string>();
+
+        foreach (var item in dto.Items)
+        {
+            if (item.Type == PendingPaymentType.Monthly
+                && item.Year.HasValue && item.Month.HasValue)
+            {
+                var yr = item.Year.Value;
+                var mo = item.Month.Value;
+
+                var record = await _context.MonthlyPayments
+                    .FirstOrDefaultAsync(m => m.GroupId == groupId
+                                           && m.PlayerId == player.Id
+                                           && m.Year == yr
+                                           && m.Month == mo, ct);
+
+                if (record is null)
+                {
+                    if (!item.IsPaid) continue;
+                    var fee = player.IsGoalkeeper
+                        ? (settings?.GoalkeeperMonthlyFee ?? settings?.MonthlyFee ?? 0)
+                        : (settings?.MonthlyFee ?? 0);
+                    record = new MonthlyPaymentEntity(groupId, player.Id, yr, mo, fee);
+                    await _context.MonthlyPayments.AddAsync(record, ct);
+                }
+
+                if (item.IsPaid) record.MarkAsPaid(userId, userId, null, null, null);
+                else record.MarkAsPending();
+
+                var capturedRecord = record;
+                transactionHooks.Add(() =>
+                    _transactions.RecordOrRemovePaymentEntryAsync(
+                        groupId,
+                        TransactionSourceType.MonthlyPayment,
+                        capturedRecord.Id,
+                        capturedRecord.Amount - capturedRecord.Discount,
+                        $"Mensalidade {_monthNames[mo - 1]}/{yr} – {player.Name}",
+                        new DateOnly(yr, mo, 1),
+                        item.IsPaid,
+                        player.Name,
+                        ct));
+            }
+            else if (item.Type == PendingPaymentType.Extra && item.ChargeId.HasValue)
+            {
+                var cid = item.ChargeId.Value;
+
+                var payment = await _context.ExtraChargePayments
+                    .FirstOrDefaultAsync(p => p.ExtraChargeId == cid
+                                           && p.PlayerId == player.Id
+                                           && p.GroupId == groupId, ct);
+
+                if (payment is null) continue;
+
+                if (item.IsPaid) payment.MarkAsPaid(userId, userId, null, null, null);
+                else payment.MarkAsPending();
+
+                var capturedPayment = payment;
+                var capturedName = chargeNames.GetValueOrDefault(cid, "Cobrança");
+                transactionHooks.Add(() =>
+                    _transactions.RecordOrRemovePaymentEntryAsync(
+                        groupId,
+                        TransactionSourceType.ExtraCharge,
+                        capturedPayment.Id,
+                        capturedPayment.Amount - capturedPayment.Discount,
+                        $"{capturedName} – {player.Name}",
+                        capturedPayment.PaidAt.HasValue
+                            ? DateOnly.FromDateTime(capturedPayment.PaidAt.Value)
+                            : DateOnly.FromDateTime(DateTime.UtcNow),
+                        item.IsPaid,
+                        player.Name,
+                        ct));
+            }
+        }
+
+        await _context.SaveChangesAsync(ct);
+        foreach (var hook in transactionHooks)
+            await hook();
+
+        return Result.Ok("Pagamentos atualizados.");
+    }
+
+    private async Task<GroupPendingPaymentsDto?> BuildPendingForPlayerAsync(Guid playerId, CancellationToken ct)
+    {
+        var player = await _context.Players
+            .AsNoTracking()
+            .Include(p => p.Group)
+            .FirstOrDefaultAsync(p => p.Id == playerId, ct);
+
+        return player is null ? null : await BuildPendingForPlayerAsync(player, ct);
+    }
+
+    private async Task<GroupPendingPaymentsDto> BuildPendingForPlayerAsync(PlayerEntity player, CancellationToken ct)
+    {
+        var items = new List<PendingPaymentItemDto>();
+        var today = DateTime.UtcNow;
+        var year = today.Year;
+
+        var settings = await _context.GroupSettings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.GroupId == player.GroupId, ct);
+
+        var maxMonth = today.Month;
+        var joinDate = player.JoinedAt ?? player.CreateDate;
+        var joinYear = joinDate.Year;
+        var joinMonth = joinDate.Month;
+        var firstMonth = joinYear == year ? joinMonth
+                       : joinYear > year ? maxMonth + 1
+                       : 1;
+
+        var hasRecordsOrFee = settings?.MonthlyFee > 0
+            || await _context.MonthlyPayments
+                .AnyAsync(m => m.GroupId == player.GroupId && m.PlayerId == player.Id && m.Year == year, ct);
+
+        if (firstMonth <= maxMonth && hasRecordsOrFee)
+        {
+            var records = await _context.MonthlyPayments
+                .AsNoTracking()
+                .Where(m => m.GroupId == player.GroupId && m.PlayerId == player.Id && m.Year == year)
+                .ToListAsync(ct);
+
+            var recordMap = records.ToDictionary(r => r.Month);
+            var fee = player.IsGoalkeeper
+                ? (settings?.GoalkeeperMonthlyFee ?? settings?.MonthlyFee ?? 0m)
+                : (settings?.MonthlyFee ?? 0m);
+
+            for (var m = firstMonth; m <= maxMonth; m++)
+            {
+                recordMap.TryGetValue(m, out var rec);
+                if (rec?.Status == PaymentStatus.Paid) continue;
+
+                var amount = rec?.Amount ?? fee;
+                var discount = rec?.Discount ?? 0m;
+                var final = Math.Max(0, amount - discount);
+                if (final <= 0) continue;
+
+                items.Add(new PendingPaymentItemDto
+                {
+                    Id = $"m-{year}-{m}",
+                    Description = $"{_monthNames[m - 1]} {year}",
+                    Amount = amount,
+                    Discount = discount,
+                    FinalAmount = final,
+                    Type = PendingPaymentType.Monthly,
+                    Year = year,
+                    Month = m,
+                    IsPaid = false,
+                });
+            }
+        }
+
+        var extras = await _context.ExtraChargePayments
+            .AsNoTracking()
+            .Include(ep => ep.ExtraCharge)
+            .Where(ep => ep.GroupId == player.GroupId
+                      && ep.PlayerId == player.Id
+                      && ep.Status == PaymentStatus.Pending
+                      && !ep.ExtraCharge!.IsCancelled)
+            .ToListAsync(ct);
+
+        foreach (var ep in extras)
+        {
+            var effective = Math.Max(0, ep.Amount - ep.Discount);
+            if (effective <= 0) continue;
+
+            items.Add(new PendingPaymentItemDto
+            {
+                Id = $"e-{ep.ExtraChargeId}",
+                Description = ep.ExtraCharge!.Name,
+                Amount = ep.Amount,
+                Discount = ep.Discount,
+                FinalAmount = effective,
+                Type = PendingPaymentType.Extra,
+                ChargeId = ep.ExtraChargeId,
+                IsPaid = false,
+            });
+        }
+
+        return new GroupPendingPaymentsDto
+        {
+            GroupId = player.GroupId,
+            GroupName = player.Group?.Name ?? string.Empty,
+            PlayerId = player.Id,
+            PlayerName = player.Name,
+            Items = items.ToArray(),
+            Total = items.Sum(i => i.FinalAmount)
+        };
+    }
+
+    private static ExitPendingPaymentsDto ToExitPendingDto(IEnumerable<GroupPendingPaymentsDto> groups)
+    {
+        var arr = groups.ToArray();
+        return new ExitPendingPaymentsDto
+        {
+            Groups = arr,
+            Count = arr.Sum(g => g.Items.Length),
+            Total = arr.Sum(g => g.Total)
+        };
+    }
+
+    private async Task<bool> IsFinanceiroOrAdminAsync(Guid groupId, Guid userId, CancellationToken ct)
+    {
+        var owns = await _context.Groups
+            .AnyAsync(g => g.Id == groupId && g.CreatedByUserId == userId, ct);
+        if (owns) return true;
+
+        return await _context.GroupAdmins.AnyAsync(a => a.GroupId == groupId && a.UserId == userId, ct)
+            || await _context.GroupFinanceiros.AnyAsync(f => f.GroupId == groupId && f.UserId == userId, ct);
+    }
+
+    private static ExitDebtAlertDto? TryParseExitDebtAlert(UserNotificationEntity notification)
+    {
+        if (string.IsNullOrWhiteSpace(notification.DataJson)) return null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(notification.DataJson);
+            var root = doc.RootElement;
+            return new ExitDebtAlertDto
+            {
+                NotificationId = notification.Id,
+                GroupId = root.GetProperty("groupId").GetGuid(),
+                PlayerId = root.GetProperty("playerId").GetGuid(),
+                PlayerName = root.GetProperty("playerName").GetString() ?? string.Empty,
+                Count = root.GetProperty("count").GetInt32(),
+                Total = root.GetProperty("total").GetDecimal(),
+                CreatedAt = notification.CreateDate
+            };
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     // ── Limpeza (diagnóstico) ─────────────────────────────────────────────────
 
     public async Task<Result<(int MonthlyDeleted, int ExtraReset)>> ClearAllPaymentsAsync(
@@ -1479,7 +1936,8 @@ public sealed class PaymentService : IPaymentService
                   ""ProofBase64""    = NULL,
                   ""ProofFileName""  = NULL,
                   ""ProofMimeType""  = NULL,
-                  ""MarkedByAdminId"" = NULL
+                  ""MarkedByAdminId"" = NULL,
+                  ""MarkedByUserId"" = NULL
               WHERE ""GroupId"" = {0}",
             groupId);
 
@@ -1495,7 +1953,14 @@ public sealed class PaymentService : IPaymentService
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static ExtraChargeDto ToExtraChargeDto(ExtraChargeEntity c, Dictionary<Guid, string> names) => new()
+    private static ExtraChargeDto ToExtraChargeDto(ExtraChargeEntity c, Dictionary<Guid, string> names) =>
+        ToExtraChargeDto(c, names, [], []);
+
+    private static ExtraChargeDto ToExtraChargeDto(
+        ExtraChargeEntity c,
+        Dictionary<Guid, string> names,
+        Dictionary<Guid, Guid?> playerUserIds,
+        Dictionary<Guid, string> markedByUsers) => new()
     {
         Id          = c.Id,
         Name        = c.Name,
@@ -1514,8 +1979,54 @@ public sealed class PaymentService : IPaymentService
             DiscountReason = p.DiscountReason,
             Status         = p.Status,
             PaidAt         = p.PaidAt,
+            MarkedByUserId = MarkedByUserId(p.MarkedByUserId, p.MarkedByAdminId),
+            MarkedByUserName = MarkedByUserName(p.MarkedByUserId, p.MarkedByAdminId, markedByUsers),
+            MarkedByUserKind = MarkedByUserKind(
+                p.MarkedByUserId,
+                p.MarkedByAdminId,
+                playerUserIds.GetValueOrDefault(p.PlayerId)),
             HasProof       = p.ProofBase64 is not null,
             ProofFileName  = p.ProofFileName,
         }).ToArray(),
     };
+
+    private async Task<Dictionary<Guid, string>> LoadMarkedByUsersAsync(
+        IEnumerable<Guid?> userIds,
+        CancellationToken ct)
+    {
+        var ids = userIds
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+
+        if (ids.Count == 0) return [];
+
+        return await _context.Users
+            .AsNoTracking()
+            .Where(u => ids.Contains(u.Id))
+            .ToDictionaryAsync(
+                u => u.Id,
+                u => (u.FirstName + " " + u.LastName).Trim(),
+                ct);
+    }
+
+    private static Guid? MarkedByUserId(Guid? markedByUserId, Guid? markedByAdminId) =>
+        markedByUserId ?? markedByAdminId;
+
+    private static string? MarkedByUserName(
+        Guid? markedByUserId,
+        Guid? markedByAdminId,
+        Dictionary<Guid, string> users)
+    {
+        var id = MarkedByUserId(markedByUserId, markedByAdminId);
+        return id.HasValue && users.TryGetValue(id.Value, out var name) ? name : null;
+    }
+
+    private static string? MarkedByUserKind(Guid? markedByUserId, Guid? markedByAdminId, Guid? ownerUserId)
+    {
+        var id = MarkedByUserId(markedByUserId, markedByAdminId);
+        if (!id.HasValue) return null;
+        return ownerUserId.HasValue && id.Value == ownerUserId.Value ? "self" : "financeiro";
+    }
 }

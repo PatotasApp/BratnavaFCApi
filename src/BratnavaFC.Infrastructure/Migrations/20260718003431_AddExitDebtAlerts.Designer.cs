@@ -3,6 +3,7 @@ using System;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BratnavaFC.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260718003431_AddExitDebtAlerts")]
+    partial class AddExitDebtAlerts
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -242,9 +245,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<Guid?>("MarkedByAdminId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("MarkedByUserId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTime?>("PaidAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -271,8 +271,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("GroupId");
-
-                    b.HasIndex("MarkedByUserId");
 
                     b.HasIndex("PlayerId");
 
@@ -534,21 +532,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<bool>("ShowPlayerStats")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("ShowStatsClassificationTab")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<bool>("ShowStatsGeneralTab")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<bool>("ShowStatsPerMatchTab")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
                     b.Property<DateTime?>("UpdateDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -777,9 +760,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<Guid>("GroupId")
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime?>("InviteRespondedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<int>("InviteResponse")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -852,9 +832,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<Guid?>("MarkedByAdminId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("MarkedByUserId")
-                        .HasColumnType("uuid");
-
                     b.Property<int>("Month")
                         .HasColumnType("integer");
 
@@ -885,8 +862,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("MarkedByUserId");
 
                     b.HasIndex("PlayerId");
 
@@ -1294,76 +1269,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.HasIndex("MatchId", "EventType");
 
                     b.ToTable("ReplayClips");
-                });
-
-            modelBuilder.Entity("BratnavaFC.Domain.Entities.ReplayEventOutboxEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("DurationSeconds")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset>("EventTime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("GroupId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("MatchId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Payload")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.Property<DateTime?>("ProcessedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Reason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("RedisStreamEntryId")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<int>("SecondsBeforeStart")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<string>("StreamFieldsJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.Property<string>("StreamKey")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTime?>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Status", "CreateDate");
-
-                    b.HasIndex("GroupId", "MatchId", "CreateDate");
-
-                    b.ToTable("ReplayEventOutbox");
                 });
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.ReplayFavoriteEntity", b =>
@@ -1788,11 +1693,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("BratnavaFC.Domain.Entities.UserEntity", "MarkedByUser")
-                        .WithMany()
-                        .HasForeignKey("MarkedByUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("BratnavaFC.Domain.Entities.PlayerEntity", "Player")
                         .WithMany()
                         .HasForeignKey("PlayerId")
@@ -1802,8 +1702,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Navigation("ExtraCharge");
 
                     b.Navigation("Group");
-
-                    b.Navigation("MarkedByUser");
 
                     b.Navigation("Player");
                 });
@@ -2009,11 +1907,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("BratnavaFC.Domain.Entities.UserEntity", "MarkedByUser")
-                        .WithMany()
-                        .HasForeignKey("MarkedByUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("BratnavaFC.Domain.Entities.PlayerEntity", "Player")
                         .WithMany()
                         .HasForeignKey("PlayerId")
@@ -2021,8 +1914,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Group");
-
-                    b.Navigation("MarkedByUser");
 
                     b.Navigation("Player");
                 });

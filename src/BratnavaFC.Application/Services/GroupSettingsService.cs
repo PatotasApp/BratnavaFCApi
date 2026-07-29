@@ -243,7 +243,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
         var manualSchedules = dto.ManualMatchSchedules?
             .Select(x => new ManualMatchScheduleEntry
             {
-                PlayedAt = DateTime.SpecifyKind(x.PlayedAt, DateTimeKind.Utc),
+                PlayedAt = DateTime.SpecifyKind(x.PlayedAt, DateTimeKind.Unspecified),
                 Created = x.Created,
                 MatchId = x.MatchId,
             })
