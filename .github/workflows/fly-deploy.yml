@@ -1,22 +1,19 @@
 name: Fly Deploy
-
 on:
   push:
     branches:
       - main
+      - develop
   workflow_dispatch:
 
 jobs:
-  deploy:
+  build-test:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-
       - name: Force UTF-8 locale (pt_BR)
         run: |
           sudo apt-get update
@@ -26,10 +23,8 @@ jobs:
           echo "LANG=pt_BR.UTF-8" >> $GITHUB_ENV
           echo "LC_ALL=pt_BR.UTF-8" >> $GITHUB_ENV
           echo "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=0" >> $GITHUB_ENV
-
       - name: Restore
         run: dotnet restore
-
       - name: Test
         run: dotnet test ./BranavaFCTests/BranavaFC.Tests.csproj -c Release
         env:
@@ -37,9 +32,107 @@ jobs:
           LC_ALL: pt_BR.UTF-8
           DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: "0"
 
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-
-      - name: Deploy
-        run: flyctl deploy --remote-only
+  # Prova que a cadeia de migrations constrói um banco a partir do zero, num Postgres
+  # descartável do runner. Não toca em nenhum banco real e não usa secret.
+  # Existe porque duas migrations ficaram meses quebradas em silêncio: nada exercitava
+  # o caminho "banco vazio -> schema completo".
+  migrations-check:
+    runs-on: ubuntu-latest
+    env:
+      ASPNETCORE_ENVIRONMENT: Development
+    services:
+      postgres:
+        image: postgres:17-alpine
         env:
-          FLY_API_TOKEN: ${{ secrets.FLY_DEPLOY }}
+          POSTGRES_DB: migcheck
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      # O install global vai para $HOME/.dotnet/tools, que não está no PATH do runner.
+      - name: Install dotnet-ef
+        run: |
+          dotnet tool install --global dotnet-ef --version 8.*
+          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+
+      # Pega o erro mais comum: mexer numa entidade e esquecer de gerar a migration.
+      - name: Modelo tem mudança sem migration?
+        run: |
+          dotnet ef migrations has-pending-model-changes \
+            --project src/BratnavaFC.Infrastructure \
+            --startup-project src/BratnavaFC.Api
+
+      # Pega migration editada depois de aplicada, atributo [Migration] ausente
+      # e operação duplicada entre migrations.
+      - name: Migrations aplicam num banco vazio?
+        run: |
+          dotnet ef database update \
+            --project src/BratnavaFC.Infrastructure \
+            --startup-project src/BratnavaFC.Api \
+            --connection "Host=localhost;Port=5432;Database=migcheck;Username=ci;Password=ci;"
+
+  deploy-dev:
+    needs: [build-test, migrations-check]
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      # Roda antes do deploy: se a migration falhar, a versão nova não sobe.
+      # A connection string aqui usa o endpoint DIRETO (sem -pooler), porque DDL
+      # através do PgBouncer é problemático.
+      - name: Apply EF migrations
+        run: |
+          dotnet tool install --global dotnet-ef --version 8.*
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          dotnet ef database update \
+            --project src/BratnavaFC.Infrastructure \
+            --startup-project src/BratnavaFC.Api \
+            --connection "$DATABASE_CONNECTION_STRING"
+        env:
+          DATABASE_CONNECTION_STRING: ${{ secrets.DATABASE_CONNECTION_STRING }}
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy DEVELOPMENT
+        run: flyctl deploy --remote-only -c fly.dev.toml
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_DEPLOYMENT_TOKEN }}
+
+  deploy-prod:
+    needs: [build-test, migrations-check]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      # Ver a nota no job deploy-dev.
+      - name: Apply EF migrations
+        run: |
+          dotnet tool install --global dotnet-ef --version 8.*
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          dotnet ef database update \
+            --project src/BratnavaFC.Infrastructure \
+            --startup-project src/BratnavaFC.Api \
+            --connection "$DATABASE_CONNECTION_STRING"
+        env:
+          DATABASE_CONNECTION_STRING: ${{ secrets.DATABASE_CONNECTION_STRING }}
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy PRODUCTION
+        run: flyctl deploy --remote-only -c fly.prod.toml
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_DEPLOYMENT_TOKEN }}

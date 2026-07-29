@@ -1,6 +1,6 @@
 using StackExchange.Redis;
 
-namespace BratnavaFC.Application.Abstractions;
+namespace BratnavaFC.Infrastructure.Redis;
 
 public interface IRedisConnectionProvider
 {
