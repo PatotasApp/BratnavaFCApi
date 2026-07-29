@@ -556,32 +556,17 @@ if (hangfireEnabled)
             TimeZone = TimeZoneInfo.Utc
         });
 
-    recurringJobs.AddOrUpdate<IBirthdayNotificationJob>(
-        recurringJobId: "birthday-daily",
-        methodCall: job => job.ExecuteAsync(CancellationToken.None),
-        cronExpression: "0 11 * * *",
-        options: new RecurringJobOptions
-        {
-            TimeZone = TimeZoneInfo.Utc
-        });
-
     recurringJobs.AddOrUpdate<IMonthlyPaymentReminderJob>(
-        recurringJobId: "monthly-payment-reminder",
-        methodCall: job => job.ExecuteAsync(CancellationToken.None),
-        cronExpression: "0 11 * * *",
-        options: new RecurringJobOptions
-        {
-            TimeZone = TimeZoneInfo.Utc
-        });
+      recurringJobId: "monthly-payment-reminder",
+      methodCall: job => job.ExecuteAsync(CancellationToken.None),
+      cronExpression: "0 13 10,20 * *",
+      options: new RecurringJobOptions
+      {
+          TimeZone = TimeZoneInfo.Utc
+      });
 
-    recurringJobs.AddOrUpdate<IMatchSchedulerJob>(
-        recurringJobId: "match-scheduler",
-        methodCall: job => job.ExecuteAsync(CancellationToken.None),
-        cronExpression: "* * * * *",
-        options: new RecurringJobOptions
-        {
-            TimeZone = TimeZoneInfo.Utc
-        });
+    recurringJobs.RemoveIfExists("match-scheduler");
+    recurringJobs.RemoveIfExists("birthday-daily");
 
     startupLogger.LogInformation("[Startup] 16 - Hangfire Dashboard e jobs recorrentes registrados.");
 }
@@ -590,8 +575,6 @@ else
     startupLogger.LogWarning("[Startup] 15 - Hangfire Dashboard e jobs recorrentes não registrados neste startup.");
 }
 
-// Teste direto no celular:
-// http://SEU-IP:5000/health
 app.MapGet("/health", () => Results.Ok(new
 {
     ok = true,
