@@ -16,20 +16,6 @@ public sealed class CalendarService : ICalendarService
     /// Fuso horário de Brasília (UTC-3 / UTC-2 no horário de verão).
     /// Tenta o ID do Windows primeiro, depois o IANA (Linux/macOS/Docker).
     /// </summary>
-    private static readonly TimeZoneInfo BrazilTz = ResolveBrazilTimeZone();
-
-    private static TimeZoneInfo ResolveBrazilTimeZone()
-    {
-        foreach (var id in new[] { "E. South America Standard Time", "America/Sao_Paulo" })
-        {
-            try { return TimeZoneInfo.FindSystemTimeZoneById(id); }
-            catch (TimeZoneNotFoundException) { }
-        }
-        // Fallback: UTC-3 fixo (sem horário de verão)
-        return TimeZoneInfo.CreateCustomTimeZone(
-            "BRT", TimeSpan.FromHours(-3), "Brasília Time", "BRT");
-    }
-
     private readonly AppDbContext _context;
     private readonly IHolidayService _holidays;
     private readonly IPushService _push;
@@ -445,8 +431,8 @@ public sealed class CalendarService : ICalendarService
         var startRaw = DateTime.SpecifyKind(start.ToDateTime(TimeOnly.MinValue), DateTimeKind.Unspecified);
         var endRaw   = DateTime.SpecifyKind(end.ToDateTime(TimeOnly.MaxValue), DateTimeKind.Unspecified);
         return (
-            TimeZoneInfo.ConvertTimeToUtc(startRaw, BrazilTz),
-            TimeZoneInfo.ConvertTimeToUtc(endRaw,   BrazilTz)
+            TimeZoneInfo.ConvertTimeToUtc(startRaw, BrazilTimeZone.Instance),
+            TimeZoneInfo.ConvertTimeToUtc(endRaw,   BrazilTimeZone.Instance)
         );
     }
 
@@ -500,7 +486,7 @@ public sealed class CalendarService : ICalendarService
         {
             // PlayedAt é UTC (Npgsql). Converte para horário de Brasília antes de exibir.
             var playedAtUtc = DateTime.SpecifyKind(match.PlayedAt, DateTimeKind.Utc);
-            var playedAtBrazil = TimeZoneInfo.ConvertTimeFromUtc(playedAtUtc, BrazilTz);
+            var playedAtBrazil = TimeZoneInfo.ConvertTimeFromUtc(playedAtUtc, BrazilTimeZone.Instance);
             var matchDate = DateOnly.FromDateTime(playedAtBrazil);
 
             // O range UTC foi expandido para não perder jogos na virada do dia;

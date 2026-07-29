@@ -163,8 +163,11 @@ public sealed class AbsenceService : IAbsenceService
     /// </summary>
     private async Task<int> ApplyAbsenceToUpcomingMatchesAsync(UserAbsenceEntity absence, CancellationToken ct)
     {
-        var rangeStart = absence.StartDate.ToDateTime(TimeOnly.MinValue);
-        var rangeEnd   = absence.EndDate.AddDays(1).ToDateTime(TimeOnly.MinValue);
+        // Limites do período são datas locais (BR); converte para UTC para comparar com PlayedAt (timestamptz).
+        var rangeStart = TimeZoneInfo.ConvertTimeToUtc(
+            absence.StartDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified), BrazilTimeZone.Instance);
+        var rangeEnd   = TimeZoneInfo.ConvertTimeToUtc(
+            absence.EndDate.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified), BrazilTimeZone.Instance);
 
         var matchPlayers = await _context.MatchPlayers
             .Include(mp => mp.Match)
@@ -199,8 +202,10 @@ public sealed class AbsenceService : IAbsenceService
 
         if (exceptRange is { } range)
         {
-            var keepStart = range.Start.ToDateTime(TimeOnly.MinValue);
-            var keepEnd   = range.End.AddDays(1).ToDateTime(TimeOnly.MinValue);
+            var keepStart = TimeZoneInfo.ConvertTimeToUtc(
+                range.Start.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified), BrazilTimeZone.Instance);
+            var keepEnd   = TimeZoneInfo.ConvertTimeToUtc(
+                range.End.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified), BrazilTimeZone.Instance);
             query = query.Where(mp => mp.Match!.PlayedAt < keepStart || mp.Match!.PlayedAt >= keepEnd);
         }
 

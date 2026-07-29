@@ -14,8 +14,6 @@ namespace BratnavaFC.Api.Controllers;
 [Route("api/groups/{groupId:guid}/scheduled-actions")]
 public sealed class ScheduledActionsController : GroupAuthorizedController
 {
-    private static readonly TimeZoneInfo BrazilTimeZone = ResolveBrazilTimeZone();
-
     private readonly AppDbContext _db;
     private readonly IServiceProvider _services;
 
@@ -418,10 +416,10 @@ public sealed class ScheduledActionsController : GroupAuthorizedController
         => value.Kind == DateTimeKind.Utc ? value : DateTime.SpecifyKind(value, DateTimeKind.Utc);
 
     private static DateTime ToBrazilLocal(DateTime utc)
-        => TimeZoneInfo.ConvertTimeFromUtc(EnsureUtc(utc), BrazilTimeZone);
+        => TimeZoneInfo.ConvertTimeFromUtc(EnsureUtc(utc), BrazilTimeZone.Instance);
 
     private static DateTime ToUtc(DateTime local)
-        => TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(local, DateTimeKind.Unspecified), BrazilTimeZone);
+        => TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(local, DateTimeKind.Unspecified), BrazilTimeZone.Instance);
 
     private static string FormatDateTime(DateTime local)
         => local.ToString("dd/MM/yyyy 'as' HH:mm");
@@ -430,12 +428,6 @@ public sealed class ScheduledActionsController : GroupAuthorizedController
     {
         var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes($"{groupId:N}:{value}"));
         return new Guid(bytes[..16]);
-    }
-
-    private static TimeZoneInfo ResolveBrazilTimeZone()
-    {
-        try { return TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo"); }
-        catch (TimeZoneNotFoundException) { return TimeZoneInfo.FindSystemTimeZoneById("E. South America Standard Time"); }
     }
 }
 
