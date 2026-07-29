@@ -1,14 +1,12 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using BratnavaFC.Application.Abstractions;
-using BratnavaFC.Application.Diagnostics;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 
-namespace BratnavaFC.Application.Services;
+namespace BratnavaFC.Infrastructure.Redis;
 
 public class RedisMatchEventPublisher : IMatchEventPublisher
 {

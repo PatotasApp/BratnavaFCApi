@@ -3,7 +3,9 @@ using BratnavaFC.Api.Realtime;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
+using BratnavaFC.Infrastructure.Cloudflare;
 using BratnavaFC.Infrastructure.Data;
+using BratnavaFC.Infrastructure.Redis;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -524,6 +526,14 @@ public class MatchesController : GroupAuthorizedController
             return;
         }
 
+        // Este endpoint escreve direto no Response e não passa pelo exception handler
+        // global, então o 503 de storage desabilitado tem que ser tratado aqui.
+        if (!_replayUrl.IsEnabled)
+        {
+            Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            return;
+        }
+
         var presignedUrl = _replayUrl.GeneratePresignedUrl(clip.ObjectKey);
 
         using var httpClient = _httpClientFactory.CreateClient();
@@ -566,7 +576,9 @@ public class MatchesController : GroupAuthorizedController
     public async Task<IActionResult> UploadReplay(
         [FromRoute] Guid groupId,
         [FromRoute] Guid matchId,
-        [FromForm] IFormFile file,
+        // Sem [FromForm]: IFormFile já é bindado do multipart por padrão, e o atributo
+        // explícito faz o Swashbuckle falhar ao descrever a operação.
+        IFormFile file,
         [FromForm] string eventType,
         CancellationToken ct)
     {

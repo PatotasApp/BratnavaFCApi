@@ -1,12 +1,9 @@
 using Amazon;
 using Amazon.S3;
 using Amazon.S3.Model;
-using BratnavaFC.Application.Abstractions;
-using BratnavaFC.Infrastructure.Cloudflare;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 
-namespace BratnavaFC.Application.Services;
+namespace BratnavaFC.Infrastructure.Cloudflare;
 
 public sealed class R2ReplayUrlService : IReplayUrlService, IDisposable
 {
@@ -23,6 +20,8 @@ public sealed class R2ReplayUrlService : IReplayUrlService, IDisposable
             ForcePathStyle = true,
         });
     }
+
+    public bool IsEnabled => true;
 
     public string GeneratePresignedUrl(string objectKey) =>
         _client.GetPreSignedURL(new GetPreSignedUrlRequest

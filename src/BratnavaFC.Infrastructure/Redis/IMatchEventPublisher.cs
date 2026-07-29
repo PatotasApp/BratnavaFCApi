@@ -1,6 +1,6 @@
 using BratnavaFC.Domain.Enums;
 
-namespace BratnavaFC.Application.Abstractions;
+namespace BratnavaFC.Infrastructure.Redis;
 
 public interface IMatchEventPublisher
 {
