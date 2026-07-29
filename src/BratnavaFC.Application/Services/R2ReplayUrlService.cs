@@ -2,32 +2,24 @@ using Amazon;
 using Amazon.S3;
 using Amazon.S3.Model;
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Infrastructure.Cloudflare;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace BratnavaFC.Application.Services;
 
 public sealed class R2ReplayUrlService : IReplayUrlService, IDisposable
 {
     private readonly AmazonS3Client _client;
-    private readonly string _bucketName;
+    private readonly string _bucketName = "goal-replays";
 
-    public R2ReplayUrlService()
+    public R2ReplayUrlService(IOptions<R2Options> cloudflareR2Options)
     {
-        var endpointUrl = Environment.GetEnvironmentVariable("CLOUDFLARE_R2_ENDPOINT_URL")
-            ?? throw new InvalidOperationException("CLOUDFLARE_R2_ENDPOINT_URL não configurado.");
-
-        var accessKeyId = Environment.GetEnvironmentVariable("CLOUDFLARE_R2_ACCESS_KEY_ID")
-            ?? throw new InvalidOperationException("CLOUDFLARE_R2_ACCESS_KEY_ID não configurado.");
-
-        var secretKey = Environment.GetEnvironmentVariable("CLOUDFLARE_R2_SECRET_ACCESS_KEY")
-            ?? throw new InvalidOperationException("CLOUDFLARE_R2_SECRET_ACCESS_KEY não configurado.");
-
-        _bucketName = Environment.GetEnvironmentVariable("CLOUDFLARE_R2_BUCKET_NAME") ?? "goal-replays";
-
         AWSConfigsS3.UseSignatureVersion4 = true;
 
-        _client = new AmazonS3Client(accessKeyId, secretKey, new AmazonS3Config
+        _client = new AmazonS3Client(cloudflareR2Options.Value.AccessKey, cloudflareR2Options.Value.SecretKey, new AmazonS3Config
         {
-            ServiceURL     = endpointUrl,
+            ServiceURL = cloudflareR2Options.Value.EndpointUrl,
             ForcePathStyle = true,
         });
     }
@@ -57,7 +49,7 @@ public sealed class R2ReplayUrlService : IReplayUrlService, IDisposable
         await _client.DeleteObjectAsync(new DeleteObjectRequest
         {
             BucketName = _bucketName,
-            Key        = objectKey,
+            Key = objectKey,
         }, ct);
     }
 
@@ -80,10 +72,10 @@ public sealed class R2ReplayUrlService : IReplayUrlService, IDisposable
 
         var response = await _client.PutObjectAsync(new PutObjectRequest
         {
-            BucketName       = _bucketName,
-            Key              = objectKey,
-            InputStream      = buffer,
-            ContentType      = contentType,
+            BucketName = _bucketName,
+            Key = objectKey,
+            InputStream = buffer,
+            ContentType = contentType,
             UseChunkEncoding = false,
         }, ct);
 

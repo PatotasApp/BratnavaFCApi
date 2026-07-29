@@ -130,17 +130,13 @@ public sealed class StatusController : ControllerBase
 
     private EnvironmentCheckDto CheckFirebase()
     {
-        var hasJson =
-            !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("FIREBASE_SERVICE_ACCOUNT_B64")) ||
-            !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("FIREBASE_SERVICE_ACCOUNT_JSON")) ||
-            !string.IsNullOrWhiteSpace(_configuration["Firebase:ServiceAccountJson"]);
-        var hasPath = !string.IsNullOrWhiteSpace(_configuration["Firebase:ServiceAccountPath"]);
+        var hasJson = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("FIREBASE_SERVICE_ACCOUNT_JSON"));
         var initialized = IsFirebaseInitialized();
 
         return new EnvironmentCheckDto(
             "Firebase",
             "push",
-            initialized ? "ok" : hasJson || hasPath ? "degraded" : "not_configured",
+            initialized ? "ok" : hasJson ? "degraded" : "not_configured",
             initialized ? "Firebase Admin inicializado." : "Firebase Admin nao inicializado.",
             null,
             DateTimeOffset.UtcNow);

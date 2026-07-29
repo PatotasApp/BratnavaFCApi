@@ -26,13 +26,12 @@ using Google.Apis.Auth.OAuth2;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Npgsql;
+using BratnavaFC.Infrastructure.Cloudflare.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 var startupLogger = LoggerFactory.Create(l => l.AddConsole()).CreateLogger("Startup");
 
-startupLogger.LogInformation(
-    "[Startup] 01 - Host builder criado. Environment={Environment}",
-    builder.Environment.EnvironmentName);
+startupLogger.LogInformation("[Startup] 01 - Host builder criado. Environment={Environment}", builder.Environment.EnvironmentName);
 
 builder.Services.Configure<HostOptions>(options =>
 {
@@ -373,6 +372,8 @@ builder.Services.AddScoped<IMatchEventPublisher>(sp =>
         sp.GetRequiredService<ILogger<RedisMatchEventPublisher>>(),
         streamKey);
 });
+
+builder.Services.AddCloudflareR2Bucket(builder.Configuration);
 builder.Services.AddSingleton<IReplayUrlService, R2ReplayUrlService>();
 builder.Services.AddHostedService<ReplayStreamConsumerService>();
 startupLogger.LogInformation("[Startup] 08 - Serviços de replay/Redis registrados.");
@@ -536,7 +537,7 @@ app.UseMiddleware<AuditMiddleware>();
 // =====================
 // HANGFIRE DASHBOARD + JOBS
 // =====================
-if (hangfireEnabled)
+if (app.Environment.IsProduction() && hangfireEnabled)
 {
     startupLogger.LogInformation("[Startup] 15 - Registrando Hangfire Dashboard e jobs recorrentes.");
 

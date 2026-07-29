@@ -1,22 +1,19 @@
 name: Fly Deploy
-
 on:
   push:
     branches:
       - main
+      - develop
   workflow_dispatch:
 
 jobs:
-  deploy:
+  build-test:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-
       - name: Force UTF-8 locale (pt_BR)
         run: |
           sudo apt-get update
@@ -26,10 +23,8 @@ jobs:
           echo "LANG=pt_BR.UTF-8" >> $GITHUB_ENV
           echo "LC_ALL=pt_BR.UTF-8" >> $GITHUB_ENV
           echo "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=0" >> $GITHUB_ENV
-
       - name: Restore
         run: dotnet restore
-
       - name: Test
         run: dotnet test ./BranavaFCTests/BranavaFC.Tests.csproj -c Release
         env:
@@ -37,9 +32,28 @@ jobs:
           LC_ALL: pt_BR.UTF-8
           DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: "0"
 
+  deploy-dev:
+    needs: build-test
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: actions/checkout@v4
       - uses: superfly/flyctl-actions/setup-flyctl@master
-
-      - name: Deploy
-        run: flyctl deploy --remote-only
+      - name: Deploy DEVELOPMENT
+        run: flyctl deploy --remote-only -c fly.dev.toml
         env:
-          FLY_API_TOKEN: ${{ secrets.FLY_DEPLOY }}
+          FLY_API_TOKEN: ${{ secrets.FLY_DEPLOYMENT_TOKEN }}
+
+  deploy-prod:
+    needs: build-test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy PRODUCTION
+        run: flyctl deploy --remote-only -c fly.prod.toml
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_DEPLOYMENT_TOKEN }}
