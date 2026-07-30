@@ -1,7 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using BratnavaFC.Application.Abstractions;
-using BratnavaFC.Application.Diagnostics;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Calendar;
 using Microsoft.Extensions.Caching.Memory;
@@ -63,10 +62,6 @@ public sealed class HolidayService : IHolidayService
         }
         catch (Exception ex)
         {
-            DependencyStatusMonitor.RecordWarning(
-                "brasil-api",
-                $"Falha ao buscar feriados da BrasilAPI para o ano {year}. O calendario sera exibido sem feriados.",
-                ex);
             _logger.LogWarning(ex, "Falha ao buscar feriados da BrasilAPI para o ano {Year}. O calendario sera exibido sem feriados.", year);
             return Result<IReadOnlyList<HolidayDto>>.Ok(Array.Empty<HolidayDto>());
         }

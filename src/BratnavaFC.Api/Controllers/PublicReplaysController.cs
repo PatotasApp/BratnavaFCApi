@@ -1,6 +1,7 @@
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Enums;
+using BratnavaFC.Infrastructure.Cloudflare;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

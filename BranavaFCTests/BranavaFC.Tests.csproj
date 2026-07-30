@@ -27,6 +27,8 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="BratnavaFC.Infrastructure.Cloudflare" />
+    <Using Include="BratnavaFC.Infrastructure.Redis" />
   </ItemGroup>
 
 	<ItemGroup>

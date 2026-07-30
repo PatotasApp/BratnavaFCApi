@@ -1,6 +1,4 @@
 using System.Collections.Concurrent;
-using BratnavaFC.Application.Abstractions;
-using BratnavaFC.Application.Diagnostics;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
@@ -9,9 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 
-[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("BranavaFC.Tests")]
-
-namespace BratnavaFC.Application.Services;
+namespace BratnavaFC.Infrastructure.Redis;
 
 public sealed class ReplayStreamConsumerService : BackgroundService
 {
@@ -78,10 +74,6 @@ public sealed class ReplayStreamConsumerService : BackgroundService
             }
             catch (Exception ex)
             {
-                    DependencyStatusMonitor.RecordWarning(
-                        "redis",
-                        "Falha no consumidor Redis de replays. A API seguiu online e tentara retomar o consumo.",
-                        ex);
                     SafeLogError(ex, "[ReplayStream] Erro no loop. Aguardando antes de retomar...");
                 await Task.Delay(5_000, stoppingToken);
             }
@@ -94,10 +86,6 @@ public sealed class ReplayStreamConsumerService : BackgroundService
         }
         catch (Exception ex)
         {
-            DependencyStatusMonitor.RecordWarning(
-                "redis",
-                "Consumidor Redis de replays foi interrompido sem derrubar a API.",
-                ex);
             try
             {
                 SafeLogError(ex, "[ReplayStream] Consumidor interrompido sem derrubar a API.");

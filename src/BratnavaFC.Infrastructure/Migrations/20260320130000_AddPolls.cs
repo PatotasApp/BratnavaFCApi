@@ -5,6 +5,11 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace BratnavaFC.Infrastructure.Migrations
 {
+    /// <summary>
+    /// Os campos de prazo, evento e custo pertencem a Polls, não a PollOptions — é o que
+    /// PollEntity define e o que produção tem. O arquivo havia sido editado depois de
+    /// aplicado, colocando parte deles em PollOptions e omitindo os demais.
+    /// </summary>
     public partial class AddPolls : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -20,6 +25,15 @@ namespace BratnavaFC.Infrastructure.Migrations
                     AllowMultipleVotes = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     ShowVotes = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     Status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "open"),
+                    Type = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "poll"),
+                    DeadlineDate = table.Column<DateOnly>(type: "date", nullable: true),
+                    DeadlineTime = table.Column<TimeOnly>(type: "time without time zone", nullable: true),
+                    EventDate = table.Column<DateOnly>(type: "date", nullable: true),
+                    EventTime = table.Column<TimeOnly>(type: "time without time zone", nullable: true),
+                    EventLocation = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: true),
+                    EventIcon = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    CostType = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: true),
+                    CostAmount = table.Column<decimal>(type: "numeric", nullable: true),
                     CreatedByUserId = table.Column<Guid>(type: "uuid", nullable: true),
                     CreateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
@@ -44,12 +58,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                     Text = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: false),
                     Description = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
                     ImageUrl = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
-                    IsEvent = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
-                    EventTitle = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
-                    EventDate = table.Column<DateOnly>(type: "date", nullable: true),
-                    EventTime = table.Column<TimeOnly>(type: "time without time zone", nullable: true),
-                    CostType = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: true),
-                    CostAmount = table.Column<decimal>(type: "numeric(10,2)", precision: 10, scale: 2, nullable: true),
                     SortOrder = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
                     CreateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
