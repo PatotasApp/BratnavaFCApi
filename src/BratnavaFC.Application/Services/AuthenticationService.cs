@@ -5,10 +5,12 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Validators;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Authentication;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Infrastructure.Data;
+using FluentValidation;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -24,22 +26,30 @@ public sealed class AuthenticationService : IAuthenticationService
     private readonly ILogger<AuthenticationService> _logger;
     private readonly PasswordHasher<UserEntity> _passwordHasher;
     private readonly IConfiguration _configuration;
+    private readonly IValidator<LoginDto> _loginValidator;
 
     public AuthenticationService(
         AppDbContext db,
         ILogger<AuthenticationService> logger,
         PasswordHasher<UserEntity> passwordHasher,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IValidator<LoginDto> loginValidator)
     {
         _db = db ?? throw new ArgumentNullException(nameof(db));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _passwordHasher = passwordHasher ?? throw new ArgumentNullException(nameof(passwordHasher));
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        _loginValidator = loginValidator ?? throw new ArgumentNullException(nameof(loginValidator));
     }
 
     public async Task<Result<TokenDto>> LoginAsync(LoginDto request, CancellationToken cancellationToken)
     {
-        var username = request.Username.Trim().ToLower();
+        var errors = await _loginValidator.CollectErrorsAsync(request, cancellationToken);
+
+        if (errors is not null)
+            return Result<TokenDto>.Fail(errors[0], ResultStatus.BadRequest, errors);
+
+        var username = request.Username.Trim().ToLowerInvariant();
         var user = await _db.Users.FirstOrDefaultAsync(x => x.UserName == username, cancellationToken);
 
         if (user is null)

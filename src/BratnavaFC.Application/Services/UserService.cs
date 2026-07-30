@@ -1,31 +1,46 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Validators;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Dtos.Users;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
+using FluentValidation;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 
 namespace BratnavaFC.Application.Services;
 
 public class UserService : IUserService
 {
+    /// <summary>unique_violation do PostgreSQL — o índice único de UserName ou de Email.</summary>
+    private const string UniqueViolationSqlState = "23505";
+
     private readonly AppDbContext _db;
     private readonly IRepositoryBase<UserEntity> _repository;
     private readonly ILogger<UserService> _logger;
     private readonly PasswordHasher<UserEntity> _passwordHasher;
     private readonly IPushService _push;
+    private readonly IValidator<CreateUserDto> _createValidator;
+    private readonly IValidator<UpdateUserDto> _updateValidator;
+    private readonly IValidator<ChangePasswordDto> _changePasswordValidator;
 
     public UserService(
         AppDbContext db,
         IRepositoryBase<UserEntity> repository,
         ILogger<UserService> logger,
         PasswordHasher<UserEntity> passwordHasher,
-        IPushService push)
+        IPushService push,
+        IValidator<CreateUserDto> createValidator,
+        IValidator<UpdateUserDto> updateValidator,
+        IValidator<ChangePasswordDto> changePasswordValidator)
     {
+        _createValidator = createValidator;
+        _updateValidator = updateValidator;
+        _changePasswordValidator = changePasswordValidator;
         _repository = repository;
         _logger = logger;
         _passwordHasher = passwordHasher;
@@ -35,22 +50,27 @@ public class UserService : IUserService
 
     public async Task<Result> CreateUserAsync(CreateUserDto dto, CancellationToken cancellationToken)
     {
-        var username = dto.UserName?.Trim().ToLower();
+        var errors = await _createValidator.CollectErrorsAsync(dto, cancellationToken);
 
-        var existing = await _db.Users
-            .FirstOrDefaultAsync(x => x.Email == dto.Email || x.UserName == username, cancellationToken);
+        if (errors is not null)
+            return Result.Fail(errors[0], ResultStatus.BadRequest, errors);
 
-        if (existing?.UserName == username)
-            return Result.Fail($"User already exists with the user name '{dto.UserName}'.", ResultStatus.BadRequest);
+        // Compara na forma canônica em que a entidade grava. Sem ToLower() na query, para que
+        // a comparação use o índice único em vez de varrer a tabela.
+        var username = dto.UserName.Trim().ToLowerInvariant();
+        var email = EmailAddress.Normalize(dto.Email);
 
-        if (existing?.Email == dto.Email)
-            return Result.Fail($"User already exists with the email '{dto.Email}'.", ResultStatus.BadRequest);
+        if (await _db.Users.AnyAsync(x => x.UserName == username, cancellationToken))
+            return Result.Fail($"User already exists with the user name '{username}'.", ResultStatus.BadRequest);
+
+        if (await _db.Users.AnyAsync(x => x.Email == email, cancellationToken))
+            return Result.Fail($"User already exists with the email '{email}'.", ResultStatus.BadRequest);
 
         var tempUser = new UserEntity(
-            dto.UserName,
+            username,
             dto.FirstName,
             dto.LastName,
-            dto.Email,
+            email,
             passwordHashed: "temp",
             phone: dto.Phone,
             birthDate: dto.BirthDate);
@@ -59,10 +79,28 @@ public class UserService : IUserService
         tempUser.SetPasswordHash(hashed);
 
         _repository.Add(tempUser);
-        await _repository.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await _repository.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            // As checagens acima não fecham a janela entre o SELECT e o INSERT: dois requests
+            // simultâneos passam as duas e só o índice único separa um do outro.
+            _logger.LogWarning(ex, "Criação de usuário barrada pelo índice único (username ou email já existe).");
+            return Result.Fail("Nome de usuário ou email inválido.", ResultStatus.BadRequest);
+        }
 
         return Result.Ok("Usuário criado com sucesso.");
     }
+
+    /// <summary>
+    /// Distingue a colisão de índice único de qualquer outra falha de escrita, para não
+    /// transformar erro de banco genérico em mensagem de "usuário já existe".
+    /// </summary>
+    private static bool IsUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException { SqlState: UniqueViolationSqlState };
 
     public async Task<Result<UserDto>> GetUserByIdAsync(Guid userId, CancellationToken cancellationToken)
     {
@@ -161,6 +199,11 @@ public class UserService : IUserService
 
     public async Task<Result> UpdateAsync(Guid userId, UpdateUserDto dto, CancellationToken cancellationToken)
     {
+        var errors = await _updateValidator.CollectErrorsAsync(dto, cancellationToken);
+
+        if (errors is not null)
+            return Result.Fail(errors[0], ResultStatus.BadRequest, errors);
+
         var user = await _repository.GetByIdIncludingInactiveAsync(userId, cancellationToken);
         if (user == null)
             return Result.Fail("Usuário não encontrado.", ResultStatus.NotFound);
@@ -168,24 +211,24 @@ public class UserService : IUserService
         // username/email duplicados (se vierem)
         if (!string.IsNullOrWhiteSpace(dto.UserName))
         {
-            var username = dto.UserName.Trim().ToLower();
+            var username = dto.UserName.Trim().ToLowerInvariant();
             var existsUserName = await _db.Users
-                .AnyAsync(u => u.Id != userId && u.UserName.ToLower() == username, cancellationToken);
+                .AnyAsync(u => u.Id != userId && u.UserName == username, cancellationToken);
 
             if (existsUserName)
-                return Result.Fail($"User already exists with the user name '{dto.UserName}'.", ResultStatus.BadRequest);
+                return Result.Fail($"User already exists with the user name '{username}'.", ResultStatus.BadRequest);
 
             user.SetUserName(dto.UserName);
         }
 
         if (!string.IsNullOrWhiteSpace(dto.Email))
         {
-            var email = dto.Email.Trim().ToLower();
+            var email = EmailAddress.Normalize(dto.Email);
             var existsEmail = await _db.Users
-                .AnyAsync(u => u.Id != userId && u.Email.ToLower() == email, cancellationToken);
+                .AnyAsync(u => u.Id != userId && u.Email == email, cancellationToken);
 
             if (existsEmail)
-                return Result.Fail($"User already exists with the email '{dto.Email}'.", ResultStatus.BadRequest);
+                return Result.Fail($"User already exists with the email '{email}'.", ResultStatus.BadRequest);
 
             user.SetEmail(dto.Email);
         }
@@ -224,18 +267,26 @@ public class UserService : IUserService
         }
 
         _repository.Update(user);
-        await _repository.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await _repository.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            _logger.LogWarning(ex, "Atualização de usuário barrada pelo índice único (username ou email já existe).");
+            return Result.Fail("Usuário já existe com esse nome de usuário ou email.", ResultStatus.BadRequest);
+        }
 
         return Result.Ok("Usuário atualizado com sucesso.");
     }
 
     public async Task<Result> ChangePasswordAsync(Guid userId, ChangePasswordDto dto, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(dto.CurrentPassword))
-            return Result.Fail("CurrentPassword is required.", ResultStatus.BadRequest);
+        var errors = await _changePasswordValidator.CollectErrorsAsync(dto, cancellationToken);
 
-        if (string.IsNullOrWhiteSpace(dto.NewPassword))
-            return Result.Fail("NewPassword is required.", ResultStatus.BadRequest);
+        if (errors is not null)
+            return Result.Fail(errors[0], ResultStatus.BadRequest, errors);
 
         var user = await _repository.GetByIdIncludingInactiveAsync(userId, cancellationToken);
         if (user == null)

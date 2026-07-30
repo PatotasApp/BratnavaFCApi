@@ -1,4 +1,5 @@
 using BratnavaFC.Application.Services;
+using BratnavaFC.Application.Validators;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.AspNetCore.Identity;
@@ -32,7 +33,7 @@ public class AuthenticationServiceTests
         var logger        = Substitute.For<ILogger<AuthenticationService>>();
         var passwordHasher = new PasswordHasher<UserEntity>();
         var configuration  = Substitute.For<IConfiguration>();
-        return new AuthenticationService(db, logger, passwordHasher, configuration);
+        return new AuthenticationService(db, logger, passwordHasher, configuration, new LoginDtoValidator());
     }
 
     private static UserEntity MakeUser(string suffix) =>

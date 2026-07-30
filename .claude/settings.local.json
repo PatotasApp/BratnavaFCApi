@@ -9,7 +9,17 @@
       "Bash(rtk dotnet *)",
       "Bash(rtk grep *)",
       "Bash(rtk find *)",
-      "Bash(dotnet test *)"
+      "Bash(dotnet test *)",
+      "Bash(rtk read *)",
+      "Bash(grep -iE \"docker-?compose|\\\\.ya?ml$\")",
+      "Bash(git mv *)",
+      "Bash(dotnet add *)",
+      "Bash(dotnet remove *)",
+      "Bash(rtk wc *)",
+      "Bash(taskkill //F //IM BratnavaFC.Api.exe)",
+      "Read(//c/github/BratnavaFCFront/src/api/**)",
+      "Read(//c/github/BratnavaFCFront/src/domains/matches/ui/**)",
+      "PowerShell(dotnet build *)"
     ]
   }
 }

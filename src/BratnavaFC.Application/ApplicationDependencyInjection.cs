@@ -1,7 +1,9 @@
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Application.TeamGeneration;
+using BratnavaFC.Application.Validators;
 using BratnavaFC.Domain.Entities;
+using FluentValidation;
 using Hangfire;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,6 +25,7 @@ public static class ApplicationDependencyInjection
     {
         var isDevelopment = environment.IsDevelopment();
 
+        services.AddValidators();
         services.AddDomainServices();
         services.AddNotificationScheduling(isDevelopment);
         services.AddRecurringJobHandlers(isDevelopment);
@@ -58,6 +61,16 @@ public static class ApplicationDependencyInjection
         recurringJobs.RemoveIfExists("birthday-daily");
 
         logger.LogInformation("[Startup] 2 jobs recorrentes registrados, 2 removidos do storage.");
+    }
+
+    /// <summary>
+    /// Registra todo IValidator&lt;T&gt; deste assembly. Os services os injetam e chamam
+    /// explicitamente, em vez de validação automática no pipeline do MVC, para que o erro
+    /// saia como Result.Fail — no mesmo envelope que o resto da API devolve.
+    /// </summary>
+    private static void AddValidators(this IServiceCollection services)
+    {
+        services.AddValidatorsFromAssemblyContaining<CreateUserDtoValidator>(ServiceLifetime.Singleton);
     }
 
     private static void AddDomainServices(this IServiceCollection services)

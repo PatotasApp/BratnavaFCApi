@@ -258,6 +258,13 @@ public class AppDbContext : DbContext
             builder.Property(x => x.LastName).IsRequired();
             builder.Property(x => x.Email).IsRequired();
 
+            // Até aqui a unicidade era só aplicacional, e o email era comparado sem
+            // normalizar. Como o email passa a ser credencial no Firebase Auth — único e
+            // case-insensitive lá — a garantia precisa estar no banco. UserEntity grava
+            // ambos em minúsculas, então o índice simples já cobre variação de caixa.
+            builder.HasIndex(x => x.UserName).IsUnique();
+            builder.HasIndex(x => x.Email).IsUnique();
+
             builder.HasMany(x => x.Players)
                 .WithOne(x => x.User)
                 .HasForeignKey(x => x.UserId);

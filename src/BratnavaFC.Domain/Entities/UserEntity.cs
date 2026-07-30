@@ -1,4 +1,5 @@
-﻿using BratnavaFC.Domain.Enums;
+﻿using BratnavaFC.Domain.Common;
+using BratnavaFC.Domain.Enums;
 
 namespace BratnavaFC.Domain.Entities;
 
@@ -50,20 +51,32 @@ public sealed class UserEntity : InactivatableEntity
         SetRole(role);
     }
 
+    /// <summary>
+    /// Grava o username em minúsculas.
+    ///
+    /// O login busca por <c>UserName == request.Username.Trim().ToLower()</c>, então gravar
+    /// preservando a caixa deixava o usuário inacessível: quem fosse criado como "Joao"
+    /// nunca era encontrado, com qualquer caixa digitada no login.
+    /// </summary>
     public void SetUserName(string userName)
     {
         if (string.IsNullOrWhiteSpace(userName))
             throw new InvalidOperationException("UserName is required.");
 
-        UserName = userName.Trim();
+        UserName = userName.Trim().ToLowerInvariant();
     }
 
+    /// <summary>
+    /// Grava o email na forma canônica. A normalização acontece aqui, e não só nos
+    /// validators, porque é ela que sustenta o índice único da coluna — qualquer caminho de
+    /// escrita que não passe pelo controller (seed, job, script) precisa dela também.
+    /// </summary>
     public void SetEmail(string email)
     {
         if (string.IsNullOrWhiteSpace(email))
             throw new InvalidOperationException("Email is required.");
 
-        Email = email.Trim();
+        Email = EmailAddress.Normalize(email);
     }
 
     public void SetPasswordHash(string passwordHashed)
