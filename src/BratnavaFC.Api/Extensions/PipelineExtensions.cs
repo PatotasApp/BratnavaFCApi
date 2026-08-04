@@ -73,12 +73,13 @@ public static class PipelineExtensions
     }
 
     /// <summary>
-    /// Dashboard e jobs recorrentes só existem onde o Hangfire foi registrado. O dashboard
-    /// fica restrito a Production porque expõe payload e histórico de execução dos jobs.
+    /// Dashboard e jobs recorrentes só existem onde o Hangfire foi registrado — ver
+    /// <see cref="BackgroundJobsGate"/>. O dashboard fica restrito a Production porque
+    /// expõe payload e histórico de execução dos jobs.
     /// </summary>
     public static WebApplication UseBackgroundJobs(this WebApplication app)
     {
-        if (app.Environment.IsDevelopment())
+        if (!BackgroundJobsGate.IsEnabled(app.Configuration, app.Environment))
             return app;
 
         if (app.Environment.IsProduction())

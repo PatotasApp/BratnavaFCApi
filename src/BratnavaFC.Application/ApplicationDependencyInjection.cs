@@ -2,8 +2,10 @@ using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Application.TeamGeneration;
 using BratnavaFC.Domain.Entities;
+using BratnavaFC.Infrastructure;
 using Hangfire;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -13,19 +15,22 @@ namespace BratnavaFC.Application;
 public static class ApplicationDependencyInjection
 {
     /// <summary>
-    /// Registra os serviços de negócio. Em Development os handlers de job recorrente ficam
-    /// fora — só o Hangfire os resolve, e ele não sobe nesse ambiente — e o agendamento cai
-    /// no <see cref="NoOpNotificationScheduler"/>.
+    /// Registra os serviços de negócio. Os handlers de job recorrente e o agendamento real
+    /// só entram quando os jobs em background estão ligados — ver
+    /// <see cref="BackgroundJobsGate"/>. Sem isso, o agendamento cai no
+    /// <see cref="NoOpNotificationScheduler"/>, porque o real depende de
+    /// <c>IBackgroundJobClient</c>, que só existe junto com o Hangfire.
     /// </summary>
     public static IServiceCollection AddApplication(
         this IServiceCollection services,
+        IConfiguration configuration,
         IHostEnvironment environment)
     {
-        var isDevelopment = environment.IsDevelopment();
+        var backgroundJobsEnabled = BackgroundJobsGate.IsEnabled(configuration, environment);
 
         services.AddDomainServices();
-        services.AddNotificationScheduling(isDevelopment);
-        services.AddRecurringJobHandlers(isDevelopment);
+        services.AddNotificationScheduling(backgroundJobsEnabled);
+        services.AddRecurringJobHandlers(backgroundJobsEnabled);
         services.AddHolidayService();
 
         return services;
@@ -52,12 +57,18 @@ public static class ApplicationDependencyInjection
             "0 13 10,20 * *",
             utc);
 
+        recurringJobs.AddOrUpdate<IFailedJobCleanupJob>(
+            "failed-job-cleanup",
+            job => job.ExecuteAsync(CancellationToken.None),
+            "0 4 10,20 * *",
+            utc);
+
         // AddOrUpdate persiste o job no storage, então tirar o código não basta: sem o
         // RemoveIfExists estes dois continuariam disparando a partir do banco.
         recurringJobs.RemoveIfExists("match-scheduler");
         recurringJobs.RemoveIfExists("birthday-daily");
 
-        logger.LogInformation("[Startup] 2 jobs recorrentes registrados, 2 removidos do storage.");
+        logger.LogInformation("[Startup] 3 jobs recorrentes registrados, 2 removidos do storage.");
     }
 
     private static void AddDomainServices(this IServiceCollection services)
@@ -84,17 +95,19 @@ public static class ApplicationDependencyInjection
         services.AddScoped<ITeamBuilderService, TeamBuilderService>();
     }
 
-    private static void AddNotificationScheduling(this IServiceCollection services, bool isDevelopment)
+    private static void AddNotificationScheduling(
+        this IServiceCollection services, bool backgroundJobsEnabled)
     {
-        if (isDevelopment)
-            services.AddScoped<INotificationScheduler, NoOpNotificationScheduler>();
-        else
+        if (backgroundJobsEnabled)
             services.AddScoped<INotificationScheduler, NotificationScheduler>();
+        else
+            services.AddScoped<INotificationScheduler, NoOpNotificationScheduler>();
     }
 
-    private static void AddRecurringJobHandlers(this IServiceCollection services, bool isDevelopment)
+    private static void AddRecurringJobHandlers(
+        this IServiceCollection services, bool backgroundJobsEnabled)
     {
-        if (isDevelopment)
+        if (!backgroundJobsEnabled)
             return;
 
         services.AddScoped<IClipCleanupJob, ClipCleanupJob>();
@@ -107,6 +120,7 @@ public static class ApplicationDependencyInjection
         services.AddScoped<IMatchAutoFinalizeJob, MatchAutoFinalizeJob>();
         services.AddScoped<IMonthlyPaymentReminderJob, MonthlyPaymentReminderJob>();
         services.AddScoped<IMatchSchedulerJob, MatchSchedulerJob>();
+        services.AddScoped<IFailedJobCleanupJob, FailedJobCleanupJob>();
     }
 
     private static void AddHolidayService(this IServiceCollection services)

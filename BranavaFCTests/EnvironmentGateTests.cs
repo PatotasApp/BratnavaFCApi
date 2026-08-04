@@ -5,6 +5,7 @@ using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Infrastructure;
 using FluentAssertions;
+using Hangfire;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -37,6 +38,40 @@ public class EnvironmentGateTests
         var services = BuildInfrastructure("Production");
 
         services.Should().Contain(d => d.ServiceType == typeof(IHostedService));
+    }
+
+    [Fact]
+    public void Production_com_Redis_registra_o_storage_do_Hangfire()
+    {
+        var services = BuildInfrastructure("Production");
+
+        services.Should().Contain(d => d.ServiceType == typeof(JobStorage));
+        services.Should().Contain(d => d.ServiceType == typeof(IBackgroundJobClient));
+        services.Should().Contain(d => d.ServiceType == typeof(IRecurringJobManager));
+    }
+
+    [Fact]
+    public void Production_sem_RedisConnection_nao_registra_Hangfire()
+    {
+        // É o app de dev no Fly: roda como Production, mas não tem Redis provisionado.
+        // Sem storage não há como registrar o Hangfire, e o processo tem que subir mesmo assim.
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=test;Username=u;Password=p;",
+                ["Cloudflare:R2:AccessKey"] = "key",
+                ["Cloudflare:R2:SecretKey"] = "secret",
+                ["Cloudflare:R2:EndpointUrl"] = "https://r2.example.com",
+            })
+            .Build();
+
+        services.AddInfrastructure(configuration, new FakeEnvironment("Production"), NullLogger.Instance);
+
+        services.Should().NotContain(d => d.ServiceType == typeof(JobStorage));
+        services.Should().NotContain(d => d.ServiceType == typeof(IBackgroundJobClient));
     }
 
     // ── Redis ────────────────────────────────────────────────────────────────
@@ -94,6 +129,38 @@ public class EnvironmentGateTests
             .Should().Contain(d => d.ServiceType == typeof(IClipCleanupJob));
     }
 
+    [Fact]
+    public void Production_sem_Redis_usa_o_scheduler_no_op()
+    {
+        // Sem Hangfire não existe IBackgroundJobClient, e o NotificationScheduler depende
+        // dele. Registrar o real aqui faria "criar partida" lançar em runtime.
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=test;Username=u;Password=p;",
+            })
+            .Build();
+
+        var descriptor = BuildApplication("Production", configuration)
+            .Single(d => d.ServiceType == typeof(INotificationScheduler));
+
+        descriptor.ImplementationType.Should().Be(typeof(NoOpNotificationScheduler));
+    }
+
+    [Fact]
+    public void Production_sem_Redis_nao_registra_handlers_de_job_recorrente()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=test;Username=u;Password=p;",
+            })
+            .Build();
+
+        BuildApplication("Production", configuration)
+            .Should().NotContain(d => d.ServiceType == typeof(IClipCleanupJob));
+    }
+
     // ── SignalR ──────────────────────────────────────────────────────────────
 
     [Theory]
@@ -146,9 +213,13 @@ public class EnvironmentGateTests
     }
 
     private static IServiceCollection BuildApplication(string environmentName)
+        => BuildApplication(environmentName, BuildConfiguration());
+
+    private static IServiceCollection BuildApplication(
+        string environmentName, IConfiguration configuration)
     {
         var services = new ServiceCollection();
-        services.AddApplication(new FakeEnvironment(environmentName));
+        services.AddApplication(configuration, new FakeEnvironment(environmentName));
         return services;
     }
 
@@ -164,7 +235,9 @@ public class EnvironmentGateTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=test;Username=u;Password=p;",
-                ["Redis:ConnectionString"] = "localhost:6379",
+                // Chave real que o BackgroundJobsGate e o AddReplayEventing leem. A antiga
+                // "Redis:ConnectionString" não era lida por nada.
+                ["ConnectionStrings:RedisConnection"] = "localhost:6379",
                 ["Cloudflare:R2:AccessKey"] = "key",
                 ["Cloudflare:R2:SecretKey"] = "secret",
                 ["Cloudflare:R2:EndpointUrl"] = "https://r2.example.com",
