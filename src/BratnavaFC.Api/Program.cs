@@ -33,7 +33,7 @@ try
     });
 
     builder.Services.AddInfrastructure(builder.Configuration, builder.Environment, startupLogger);
-    builder.Services.AddApplication(builder.Environment);
+    builder.Services.AddApplication(builder.Configuration, builder.Environment);
 
     builder.Services.AddApiPresentation(builder.Environment);
     builder.Services.AddJwtAuthentication(builder.Configuration);
