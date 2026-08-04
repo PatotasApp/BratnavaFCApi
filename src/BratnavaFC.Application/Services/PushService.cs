@@ -11,11 +11,16 @@ namespace BratnavaFC.Application.Services;
 public class PushService : IPushService
 {
     private readonly AppDbContext _context;
+    private readonly IRealtimeNotifier _realtime;
     private readonly ILogger<PushService> _logger;
 
-    public PushService(AppDbContext context, ILogger<PushService> logger)
+    public PushService(
+        AppDbContext context,
+        IRealtimeNotifier realtime,
+        ILogger<PushService> logger)
     {
         _context = context;
+        _realtime = realtime;
         _logger = logger;
     }
 
@@ -383,6 +388,43 @@ public class PushService : IPushService
         catch (Exception ex)
         {
             _logger.LogError(ex, "[Push] Falha ao persistir notificações no inbox para {Count} usuário(s).", userIds.Count);
+
+            // Sem persistir, não há o que avisar: o badge do cliente não deve contar algo
+            // que não existe no banco.
+            return;
+        }
+
+        await NotifyRealtimeAsync(userIds, groupId, title, type, ct);
+    }
+
+    /// <summary>
+    /// Avisa os clientes conectados que chegou notificação nova, para o badge do sininho
+    /// subir sem polling. É o que permite ao front parar de chamar o unread-count de minuto
+    /// em minuto — e é por isso que aqui NÃO se calcula contagem alguma: um COUNT por usuário
+    /// do lote recolocaria no banco a carga que a mudança veio remover.
+    ///
+    /// Falha de realtime nunca derruba o push: a notificação já está persistida e o cliente a
+    /// vê no próximo resync de conexão.
+    /// </summary>
+    private async Task NotifyRealtimeAsync(
+        List<Guid> userIds, Guid? groupId,
+        string title, string? type,
+        CancellationToken ct)
+    {
+        foreach (var uid in userIds)
+        {
+            try
+            {
+                await _realtime.NotificationCreatedAsync(uid, groupId, title, type, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "[Push] Falha ao avisar o cliente {UserId} sobre notificação nova. O badge "
+                    + "sobe no próximo resync de conexão.",
+                    uid);
+            }
         }
     }
 
