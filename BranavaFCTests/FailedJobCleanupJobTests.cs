@@ -18,7 +18,7 @@ public class FailedJobCleanupJobTests
     private const int Retention = 5;
 
     [Fact]
-    public async Task Deleta_job_falho_mais_antigo_que_a_retencao()
+    public async Task Deletes_failed_job_older_than_the_retention_window()
     {
         var jobs = NewClient();
         var job = await RunWith(jobs, ("job-velho", DateTime.UtcNow.AddDays(-(Retention + 1))));
@@ -30,7 +30,7 @@ public class FailedJobCleanupJobTests
     }
 
     [Fact]
-    public async Task Preserva_job_falho_dentro_da_janela()
+    public async Task Preserves_failed_job_inside_the_retention_window()
     {
         var jobs = NewClient();
         await RunWith(jobs, ("job-novo", DateTime.UtcNow.AddDays(-(Retention - 1))));
@@ -41,7 +41,7 @@ public class FailedJobCleanupJobTests
     }
 
     [Fact]
-    public async Task Ignora_job_sem_FailedAt_sem_lancar()
+    public async Task Ignores_failed_job_without_FailedAt_without_throwing()
     {
         var jobs = NewClient();
 
@@ -55,7 +55,7 @@ public class FailedJobCleanupJobTests
     }
 
     [Fact]
-    public async Task Lista_vazia_e_no_op()
+    public async Task Empty_failed_list_is_a_no_op()
     {
         var jobs = NewClient();
         await RunWith(jobs);
@@ -66,7 +66,7 @@ public class FailedJobCleanupJobTests
     }
 
     [Fact]
-    public async Task Apaga_todos_os_expirados_mesmo_com_mais_de_uma_pagina()
+    public async Task Deletes_every_expired_job_across_more_than_one_page()
     {
         // Reproduz o cenário do bug: um lote maior que uma página (PageSize=200 no job),
         // com os expirados posicionados de forma que apagar-durante-a-paginação encolheria

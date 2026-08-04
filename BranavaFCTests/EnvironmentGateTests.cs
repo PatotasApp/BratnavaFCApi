@@ -41,7 +41,7 @@ public class EnvironmentGateTests
     }
 
     [Fact]
-    public void Production_com_Redis_registra_o_storage_do_Hangfire()
+    public void Production_with_Redis_registers_the_Hangfire_storage()
     {
         var services = BuildInfrastructure("Production");
 
@@ -51,7 +51,7 @@ public class EnvironmentGateTests
     }
 
     [Fact]
-    public void Production_sem_RedisConnection_nao_registra_Hangfire()
+    public void Production_without_RedisConnection_does_not_register_Hangfire()
     {
         // É o app de dev no Fly: roda como Production, mas não tem Redis provisionado.
         // Sem storage não há como registrar o Hangfire, e o processo tem que subir mesmo assim.
@@ -130,7 +130,7 @@ public class EnvironmentGateTests
     }
 
     [Fact]
-    public void Production_sem_Redis_usa_o_scheduler_no_op()
+    public void Production_without_Redis_uses_the_no_op_scheduler()
     {
         // Sem Hangfire não existe IBackgroundJobClient, e o NotificationScheduler depende
         // dele. Registrar o real aqui faria "criar partida" lançar em runtime.
@@ -148,7 +148,7 @@ public class EnvironmentGateTests
     }
 
     [Fact]
-    public void Production_sem_Redis_nao_registra_handlers_de_job_recorrente()
+    public void Production_without_Redis_does_not_register_recurring_job_handlers()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>

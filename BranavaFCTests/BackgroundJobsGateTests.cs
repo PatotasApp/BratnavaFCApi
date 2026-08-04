@@ -24,7 +24,7 @@ public class BackgroundJobsGateTests
     [InlineData("Production", "", false)]
     [InlineData("Production", null, false)]
     [InlineData("Production", "   ", false)]
-    public void Gate_exige_ambiente_nao_dev_e_RedisConnection(
+    public void Gate_requires_non_development_environment_and_a_RedisConnection(
         string environmentName, string? redisConnection, bool expected)
     {
         var configuration = new ConfigurationBuilder()
@@ -40,7 +40,7 @@ public class BackgroundJobsGateTests
     }
 
     [Fact]
-    public void Gate_desliga_quando_a_chave_nao_existe()
+    public void Gate_is_off_when_the_connection_string_key_is_absent()
     {
         // Configuração totalmente vazia — nem a seção ConnectionStrings existe.
         var configuration = new ConfigurationBuilder().Build();
