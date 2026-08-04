@@ -1,4 +1,6 @@
 using BratnavaFC.Api.Realtime;
+using BratnavaFC.Application.Abstractions;
+using Microsoft.AspNetCore.SignalR;
 
 namespace BratnavaFC.Api.Extensions;
 
@@ -20,6 +22,11 @@ public static class RealtimeExtensions
         }
 
         services.AddScoped<IRealtimeNotifier, SignalRRealtimeNotifier>();
+
+        // Precisa vir junto do AddSignalR: sem ele o Clients.User(...) do sininho não resolve
+        // destinatário, porque o provider padrão lê ClaimTypes.NameIdentifier e este JWT usa "sub".
+        services.AddSingleton<IUserIdProvider, SubClaimUserIdProvider>();
+
         services.AddSignalR();
 
         return services;
