@@ -1,3 +1,4 @@
+using BratnavaFC.Application.Abstractions;
 using Microsoft.Extensions.Logging;
 
 namespace BratnavaFC.Api.Realtime;
@@ -28,6 +29,24 @@ public sealed class NoOpRealtimeNotifier : IRealtimeNotifier
 
     public Task GroupChangedAsync(Guid groupId, string reason, CancellationToken ct = default)
         => SkippedAsync("group.changed", groupId, reason);
+
+    public Task NotificationCreatedAsync(
+        Guid userId,
+        Guid? groupId,
+        string title,
+        string? notificationType,
+        CancellationToken ct = default)
+    {
+        _logger.LogDebug(
+            "[Realtime] Evento de sininho ignorado porque o SignalR esta desabilitado no ambiente "
+            + "{Environment}. User={UserId} Group={GroupId} Type={NotificationType}",
+            _environment.EnvironmentName,
+            userId,
+            groupId,
+            notificationType);
+
+        return Task.CompletedTask;
+    }
 
     private Task SkippedAsync(string eventType, Guid groupId, string reason)
     {
