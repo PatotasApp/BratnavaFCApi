@@ -33,11 +33,12 @@ public static class InfrastructureDependencyInjection
         services.AddExternalHttpClients();
 
         logger.LogInformation(
-            "[Startup] Infraestrutura registrada. Environment={Environment} Hangfire={Hangfire} Redis={Redis} CloudflareR2={R2}",
+            "[Startup] Infraestrutura registrada. Environment={Environment} Hangfire={Hangfire} Redis={Redis} CloudflareR2={R2} ReplayConsumer={ReplayConsumer}",
             environment.EnvironmentName,
             BackgroundJobsGate.IsEnabled(configuration, environment),
             !isDevelopment,
-            !isDevelopment);
+            !isDevelopment,
+            ReplayConsumerGate.IsEnabled(configuration, environment));
 
         return services;
     }
@@ -197,7 +198,10 @@ public static class InfrastructureDependencyInjection
                 sp.GetRequiredService<ILogger<RedisMatchEventPublisher>>(),
                 "replay_events"));
 
-        services.AddHostedService<ReplayStreamConsumerService>();
+        // Desligado por padrão: ver ReplayConsumerGate para o porquê (custo de comandos
+        // Upstash com o stream vazio + pipeline de replays hoje passar pelo outbox no banco).
+        if (ReplayConsumerGate.IsEnabled(configuration, environment))
+            services.AddHostedService<ReplayStreamConsumerService>();
     }
 
     private static void AddReplayStorage(
