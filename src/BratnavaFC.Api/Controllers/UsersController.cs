@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos.Users;
 using BratnavaFC.Domain.Enums;
@@ -18,15 +19,43 @@ public sealed class UsersController : BaseApiController
         _userService = userService;
     }
 
-    [AllowAnonymous]
-    [HttpPost]
-    public async Task<IActionResult> CreateAsync([FromBody] CreateUserDto dto, CancellationToken cancellationToken)
+    /// <summary>
+    /// Perfil interno do usuário autenticado. O cadastro não tem endpoint: a conta é criada no
+    /// Firebase pelo front-end e provisionada aqui no primeiro acesso autenticado.
+    /// </summary>
+    [HttpGet("me")]
+    public async Task<IActionResult> GetMeAsync(CancellationToken cancellationToken)
+    {
+        if (!TryGetInternalUserId(out var userId))
+            return Unauthorized();
+
+        var result = await _userService.GetMeAsync(userId, cancellationToken);
+        return ToResponse(result);
+    }
+
+    /// <summary>
+    /// Edita o próprio perfil. Um campo "email" no payload é ignorado — e-mail é read-only,
+    /// gerenciado no Firebase.
+    /// </summary>
+    [HttpPut("me")]
+    public async Task<IActionResult> UpdateMeAsync(
+        [FromBody] UpdateMeDto dto,
+        CancellationToken cancellationToken)
     {
         if (dto == null) return BadRequest();
 
-        var result = await _userService.CreateUserAsync(dto, cancellationToken);
-        return ToResponse(result, overrideSuccessStatus: 201);
+        if (!TryGetInternalUserId(out var userId))
+            return Unauthorized();
+
+        var result = await _userService.UpdateMeAsync(userId, dto, cancellationToken);
+        return ToResponse(result);
     }
+
+    /// <summary>
+    /// Identidade INTERNA, injetada pelo FirebaseIdentityMiddleware. Nunca é o UID do Firebase.
+    /// </summary>
+    private bool TryGetInternalUserId(out Guid userId)
+        => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out userId);
 
     [HttpGet("{userId:guid}")]
     public async Task<IActionResult> GetUserAsync(Guid userId, CancellationToken cancellationToken)
@@ -65,15 +94,6 @@ public sealed class UsersController : BaseApiController
         if (dto == null) return BadRequest();
 
         var result = await _userService.UpdateAsync(userId, dto, cancellationToken);
-        return ToResponse(result);
-    }
-
-    [HttpPut("{userId:guid}/password")]
-    public async Task<IActionResult> ChangePasswordAsync(Guid userId, [FromBody] ChangePasswordDto dto, CancellationToken cancellationToken)
-    {
-        if (dto == null) return BadRequest();
-
-        var result = await _userService.ChangePasswordAsync(userId, dto, cancellationToken);
         return ToResponse(result);
     }
 

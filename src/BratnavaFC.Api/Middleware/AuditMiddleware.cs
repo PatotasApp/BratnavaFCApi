@@ -20,7 +20,9 @@ public class AuditMiddleware(RequestDelegate next, ILogger<AuditMiddleware> logg
             return;
         }
 
-        var userId  = context.User?.FindFirstValue("sub") ?? "anon";
+        // Identidade INTERNA: "sub" traria o UID do Firebase, que não é o id usado nas FKs e
+        // não serviria para rastrear a atividade até o usuário no banco.
+        var userId  = context.User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "anon";
         var ip      = context.Connection.RemoteIpAddress?.ToString() ?? "-";
         var method  = context.Request.Method;
         var ua      = context.Request.Headers.UserAgent.ToString();

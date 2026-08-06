@@ -31,7 +31,10 @@ public sealed class RealtimeHub : Hub
 
     private async Task<bool> CanAccessGroupAsync(Guid groupId)
     {
-        var userIdText = Context.User?.FindFirstValue("sub");
+        // Identidade INTERNA, escrita pelo FirebaseIdentityMiddleware. Ler "sub" aqui traria o
+        // UID do Firebase, que não é GUID para usuários criados via social login — o
+        // TryParse falharia e todo não-admin perderia acesso ao grupo.
+        var userIdText = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!Guid.TryParse(userIdText, out var userId))
             return false;
 

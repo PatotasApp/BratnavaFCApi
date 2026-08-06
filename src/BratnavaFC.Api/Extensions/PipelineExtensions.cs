@@ -65,6 +65,12 @@ public static class PipelineExtensions
         app.UseRateLimiter();
 
         app.UseAuthentication();
+
+        // Entre os dois de propósito: precisa do principal já montado pelo UseAuthentication,
+        // e precisa injetar a claim de role antes de o UseAuthorization avaliar os
+        // [Authorize(Roles = ...)].
+        app.UseMiddleware<FirebaseIdentityMiddleware>();
+
         app.UseAuthorization();
 
         app.UseMiddleware<AuditMiddleware>();

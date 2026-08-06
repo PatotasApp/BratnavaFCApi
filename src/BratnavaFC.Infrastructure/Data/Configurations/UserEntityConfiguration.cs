@@ -16,6 +16,19 @@ public class UserEntityConfiguration : IEntityTypeConfiguration<UserEntity>
         builder.Property(x => x.LastName).IsRequired();
         builder.Property(x => x.Email).IsRequired();
 
+        builder.Property(x => x.FirebaseUid).HasMaxLength(128);
+
+        // Índice único parcial: enquanto o usuário não migrou, FirebaseUid é nulo, e o
+        // Postgres trataria cada nulo como distinto num índice único comum — mas o filtro
+        // deixa a intenção explícita e mantém o índice pequeno durante a transição.
+        builder.HasIndex(x => x.FirebaseUid)
+            .IsUnique()
+            .HasFilter("\"FirebaseUid\" IS NOT NULL");
+
+        // Derivado de FirstName/LastName. Explícito para o snapshot não criar coluna e para
+        // deixar claro que projeções EF devem concatenar os dois campos, não ler esta.
+        builder.Ignore(x => x.DisplayName);
+
         builder.HasMany(x => x.Players)
             .WithOne(x => x.User)
             .HasForeignKey(x => x.UserId);

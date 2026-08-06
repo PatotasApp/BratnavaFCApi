@@ -1,5 +1,6 @@
 using BratnavaFC.Infrastructure.Cloudflare;
 using BratnavaFC.Infrastructure.Data;
+using BratnavaFC.Infrastructure.Firebase;
 using BratnavaFC.Infrastructure.Redis;
 using BratnavaFC.Infrastructure.Repositories;
 using FirebaseAdmin;
@@ -239,12 +240,34 @@ public static class InfrastructureDependencyInjection
         IConfiguration configuration,
         ILogger logger)
     {
+        var json = """
+                {
+              "type": "service_account",
+              "project_id": "development-d04ef",
+              "private_key_id": "5962049cf096dc196e71785bc1706cb8bcbb710f",
+              "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC5u07s1rxehFMf\nXuOWOvUBwMnWJB2R/YW6ZrPBpKnYAI6l+3C0PIiTYfjOcoyZV2qvYiGcrX/DJP+o\nb5QybqSIaF0bAsS6gHi+QzT2WeB+IvmIHYVpLYEt+s2oGzBTsq4WHYe+DzcyahKE\nOguHsuxoImNnM+QWFNhoEis+rCwaRQu86dul7YJUNR6jOWZXcsH9/Q51pgM1eBbe\nTzpm3Nc8OqfyYltK+GzJFPTURyPaKtqNIEFBVbL+TiW/9jTvv9UZsxLSjZ2kEHBm\nVHvEfKrne+v4J6GcxhUrmvQd1sDTi8Lw5LGmWOsStjbXM+YSAaf05j90TJSxppRc\n2tlZw/ebAgMBAAECggEAFtfrTqTgmS1kPdUBX95TeQo5qN1bR7PrSTBNhpEWlKsI\n4HBK/df+IkZoABhFo6yFQhnrMWaDcsBvs0s56nQCR4aygNp30MpxT1Fbx7rpKgpq\nL2wWFwgSPdH9jmH9sSWmVLEAG4eqjchPC7VJ6sA+ZFZqbGyM7oxUy4QEjppFeFt0\n/YpGim8Nzy/8v7PFiYRs+IbcwhUw2AFY04BeH1VNT8Y4daucNbqG03qpvHR7042l\nlGgfkT0JR572lQU3XZWz8B8vEZ9l3N48cFaDqb81jMQx9M7TfeN7sChnHnC1wdF4\nRxIqSYWM6OaMbV5wIBvVgKVbpezcMUGRx1da9xs+UQKBgQDfKYmhv5FD3kDesQbH\nr0Vq2CgPv2V2Z7BUr1jTyVxZu0GKAYZNYHWmAjcacHpdlvQ0kVsM+iZP8F6maETA\nOh9DCPVMMeQFQEIWdYNlSg4ues2G4iA9D6/zgCkxdvXRyLBxQrH6fvDBCZNOqaB0\n4zoS9wvLpb0+AOgGHmgwPOvLkQKBgQDVD8VIiNMc/n76i3xf06xhS+rWMCnwec0h\nnFI/DVCTcomJi+y3WAr+GixG8O78mjhoJTnwMH1LDg4LPryDDiviYCsywpEwNY+F\nSl1zRaqtZiGEYp/k1ow2SxD6upM+M+5K4e/JQEetFAgDCJiOPdG1uIKce3G4B9JL\nEyOd1tLCawKBgQDKqPIwTcQiGihXE/TQSr+DtCFNi8ccrDVZ8pN8YZTYeFGgfpn0\nkvDEfaaFADhf3cKQKqDBPDqmxeduv6oP17ikK/J366bjjeN2eemFhqcyVptnLtuQ\nGDr1qyG9pga/KL3zXVo73iPNamC4QxtQizomFuxDWJRvRmtvgxWjGPAZwQKBgBL9\nOdcSIsa1w/lujyI3SmjNjFuUpVhCcs7pEMd/10uc7LcummVo2mn1STb1aEdpM1fM\n4ZIPsEsNMKE98S05CR4+9fqrLqd+TpFRpGyOq/ySWrBi3d9WY96+5/+Au3jSxg00\nf9uO+BRr8Z7bmEUtK1Cn5jQuKF9/ivWX+heqOtSLAoGBAL3B4xJ/KlEWrQkvOPz7\nS6n1ok+y6Yy038JjQU6PKyPjcgDC1Y8UpoSoOrL6/nY7qO36jBbo3KaKiJr1ePTC\nwh3lN+ysMY+QtlY7qbtg9zQBnaP0gkaBcNTdKFaHTQk5sx23kLF6XlsqryRYIwuE\nyr/rvn2iU6ZnO5qr1OsOAosy\n-----END PRIVATE KEY-----\n",
+              "client_email": "firebase-adminsdk-fbsvc@development-d04ef.iam.gserviceaccount.com",
+              "client_id": "104266903761076619893",
+              "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+              "token_uri": "https://oauth2.googleapis.com/token",
+              "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+              "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40development-d04ef.iam.gserviceaccount.com",
+              "universe_domain": "googleapis.com"
+            }
+            
+            """;
+
         var firebaseJson = Environment.GetEnvironmentVariable("FIREBASE_SERVICE_ACCOUNT_JSON");
         try
         {
-            if (!string.IsNullOrWhiteSpace(firebaseJson))
+            if (!string.IsNullOrWhiteSpace(json))
             {
-                FirebaseApp.Create(new AppOptions { Credential = GoogleCredential.FromJson(firebaseJson) });
+                FirebaseApp.Create(new AppOptions
+                {
+                    Credential = GoogleCredential.FromJson(json),
+                    ProjectId = FirebaseProjectId.FromServiceAccountJson(json)
+                });
+
                 logger.LogInformation("[Firebase] Inicializado via ServiceAccountJson.");
             }
             else

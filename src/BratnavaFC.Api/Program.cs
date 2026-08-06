@@ -36,6 +36,7 @@ try
     builder.Services.AddApplication(builder.Configuration, builder.Environment);
 
     builder.Services.AddApiPresentation(builder.Environment);
+    // Depende de AddInfrastructure acima: lê o ProjectId do FirebaseApp já inicializado.
     builder.Services.AddJwtAuthentication(builder.Configuration);
     builder.Services.AddRealtime(builder.Environment);
 

@@ -9,7 +9,20 @@
       "Bash(rtk dotnet *)",
       "Bash(rtk grep *)",
       "Bash(rtk find *)",
-      "Bash(dotnet test *)"
+      "Bash(dotnet test *)",
+      "Bash(rtk read *)",
+      "Bash(dotnet package *)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(p['id'],p['version']\\) for s in d['searchResult'] for p in s['packages']]\")",
+      "Bash(dotnet list *)",
+      "Bash(dotnet nuget *)",
+      "WebSearch",
+      "WebFetch(domain:oneuptime.com)",
+      "WebFetch(domain:slack.engineering)",
+      "Bash(git checkout *)",
+      "PowerShell(git *)",
+      "PowerShell(dotnet build *)",
+      "Bash(rtk curl *)",
+      "Bash(dotnet ef *)"
     ]
   }
 }

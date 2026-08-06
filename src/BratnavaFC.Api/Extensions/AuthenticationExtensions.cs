@@ -1,5 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
-using System.Text;
+using BratnavaFC.Infrastructure.Firebase;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 
@@ -7,15 +7,32 @@ namespace BratnavaFC.Api.Extensions;
 
 public static class AuthenticationExtensions
 {
+    /// <summary>
+    /// Valida os ID tokens emitidos pelo Firebase Auth. As chaves públicas RS256 da Google
+    /// são baixadas e rotacionadas pelo próprio middleware a partir do discovery document
+    /// em {Authority}/.well-known/openid-configuration — não há chave simétrica local.
+    /// </summary>
     public static IServiceCollection AddJwtAuthentication(
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        var jwtSecret = configuration["Jwt:SecretKey"]
-            ?? throw new InvalidOperationException("Jwt:SecretKey nao configurado.");
+        // Configuração explícita tem precedência; na ausência dela, o ProjectId é derivado do
+        // service account JSON já usado pelo push, evitando config duplicada. Depende de
+        // AddInfrastructure ter rodado o FirebaseApp.Create antes.
+        var configured = configuration["Firebase:ProjectId"];
 
-        var jwtIssuer = configuration["Jwt:Issuer"] ?? "TeamManagement";
-        var jwtAudience = configuration["Jwt:Audience"] ?? "account";
+        // Cuidado com string vazia: o appsettings traz a chave com "" como placeholder, e ""
+        // não é null — um ?? simples nunca cairia no fallback.
+        var projectId = string.IsNullOrWhiteSpace(configured)
+            ? FirebaseProjectId.FromInitializedApp()
+            : configured;
+
+        if (string.IsNullOrWhiteSpace(projectId))
+            throw new InvalidOperationException(
+                "ProjectId do Firebase não resolvido. Configure Firebase:ProjectId " +
+                "ou FIREBASE_SERVICE_ACCOUNT_JSON.");
+
+        var issuer = $"https://securetoken.google.com/{projectId}";
 
         JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
 
@@ -23,18 +40,26 @@ public static class AuthenticationExtensions
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
             {
+                options.Authority = issuer;
+
+                // Precisa continuar false. Com true, o handler RENOMEIA a claim "sub" para
+                // NameIdentifier — e o NameIdentifier pertence à identidade INTERNA, escrita
+                // pelo FirebaseIdentityMiddleware. Deixar o UID do Firebase entrar ali faria
+                // os controllers lerem a identidade externa achando que é a interna.
                 options.MapInboundClaims = false;
 
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
+                    ValidIssuer = issuer,
                     ValidateAudience = true,
+                    ValidAudience = projectId,
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
-                    ValidIssuer = jwtIssuer,
-                    ValidAudience = jwtAudience,
-                    IssuerSigningKey = new SymmetricSecurityKey(
-                        Encoding.UTF8.GetBytes(jwtSecret)),
+
+                    // As custom claims do Firebase caem na raiz do payload, então a role
+                    // injetada via SetCustomUserClaimsAsync alimenta o mesmo nome que os
+                    // [Authorize(Roles = ...)] já usam.
                     RoleClaimType = "role",
                     NameClaimType = "name"
                 };
