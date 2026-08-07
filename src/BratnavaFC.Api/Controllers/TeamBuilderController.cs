@@ -26,7 +26,8 @@ public sealed class TeamBuilderController : GroupAuthorizedController
         [FromBody] TeamBuilderRequestDto dto,
         CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        // Qualquer membro do grupo pode visualizar (nao so admin).
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
 
         var result = await _teamBuilder.GetStatsAsync(groupId, dto.PlayerIds, ct);
 
