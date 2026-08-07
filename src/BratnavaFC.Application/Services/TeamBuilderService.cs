@@ -56,11 +56,15 @@ public sealed class TeamBuilderService : ITeamBuilderService
             .Select(m => new
             {
                 m.Id,
+                m.PlayedAt,
                 m.TeamAGoals,
                 m.TeamBGoals,
+                m.PlaceName,
+                TeamAColorHex = m.TeamAColor != null ? m.TeamAColor.HexValue : null,
+                TeamBColorHex = m.TeamBColor != null ? m.TeamBColor.HexValue : null,
                 SelectedMPs = m.Players
                     .Where(mp => playerIdSet.Contains(mp.PlayerId) && !mp.DidNotPlay)
-                    .Select(mp => new { mp.Id, mp.PlayerId, mp.Team })
+                    .Select(mp => new { mp.Id, mp.PlayerId, mp.Team, mp.IsMvp })
                     .ToList(),
             })
             .ToListAsync(ct);
@@ -73,11 +77,21 @@ public sealed class TeamBuilderService : ITeamBuilderService
         var mpIdSet = mpToPlayer.Keys.ToHashSet();
 
         int wins = 0, draws = 0, losses = 0, goalsScored = 0, goalsConceded = 0;
+        var playerNameMap = players.ToDictionary(p => p.Id, p => p.Name);
+
+        // Quebra por jogador (#4)
+        var pb = players.ToDictionary(p => p.Id, p => new PlayerBreakdownDto
+        {
+            Id = p.Id, Name = p.Name, IsGoalkeeper = p.IsGoalkeeper,
+        });
+
+        // Histórico da formação (#7)
+        var formationMatches = new List<FormationMatchDto>(matchData.Count);
 
         foreach (var match in matchData)
         {
-            var t1      = match.SelectedMPs.Count(mp => mp.Team == 1);
-            var t2      = match.SelectedMPs.Count(mp => mp.Team == 2);
+            var t1       = match.SelectedMPs.Count(mp => mp.Team == 1);
+            var t2       = match.SelectedMPs.Count(mp => mp.Team == 2);
             var dominant = t1 >= t2 ? 1 : 2;
 
             var teamG = dominant == 1 ? (match.TeamAGoals ?? 0) : (match.TeamBGoals ?? 0);
@@ -86,23 +100,67 @@ public sealed class TeamBuilderService : ITeamBuilderService
             goalsScored   += teamG;
             goalsConceded += oppG;
 
-            if      (teamG > oppG) wins++;
-            else if (teamG == oppG) draws++;
-            else                    losses++;
+            int result;
+            if      (teamG > oppG)  { wins++;   result = 1;  }
+            else if (teamG == oppG) { draws++;  result = 0;  }
+            else                    { losses++; result = -1; }
+
+            formationMatches.Add(new FormationMatchDto
+            {
+                MatchId         = match.Id,
+                PlayedAt        = match.PlayedAt,
+                GoalsFor        = teamG,
+                GoalsAgainst    = oppG,
+                PlaceName       = match.PlaceName,
+                ColorForHex     = dominant == 1 ? match.TeamAColorHex : match.TeamBColorHex,
+                ColorAgainstHex = dominant == 1 ? match.TeamBColorHex : match.TeamAColorHex,
+                Result          = result,
+            });
+
+            // W/D/L por jogador (perspectiva do próprio time) + MVP
+            foreach (var mp in match.SelectedMPs)
+            {
+                if (mp.Team != 1 && mp.Team != 2) continue;
+                if (!pb.TryGetValue(mp.PlayerId, out var acc)) continue;
+
+                var myG  = mp.Team == 1 ? (match.TeamAGoals ?? 0) : (match.TeamBGoals ?? 0);
+                var advG = mp.Team == 1 ? (match.TeamBGoals ?? 0) : (match.TeamAGoals ?? 0);
+
+                acc.Games++;
+                if      (myG > advG)  acc.Wins++;
+                else if (myG == advG) acc.Draws++;
+                else                  acc.Losses++;
+                if (mp.IsMvp == true) acc.Mvps++;
+            }
         }
 
+        // Todos os gols válidos das partidas (contagem por jogador + pares de assistência)
         var goals = await _db.Goals
-            .Where(g => matchIds.Contains(g.MatchId)
-                     && mpIdSet.Contains(g.ScorerMatchPlayerId)
-                     && !g.IsOwnGoal)
+            .Where(g => matchIds.Contains(g.MatchId) && !g.IsOwnGoal)
             .Select(g => new { g.ScorerMatchPlayerId, g.AssistMatchPlayerId })
             .ToListAsync(ct);
 
-        var goalsScoredByPlayers = goals.Count;
-        var playerNameMap        = players.ToDictionary(p => p.Id, p => p.Name);
+        var goalsScoredByPlayers = 0;
+        foreach (var g in goals)
+        {
+            if (mpToPlayer.TryGetValue(g.ScorerMatchPlayerId, out var scorerPid)
+                && pb.TryGetValue(scorerPid, out var sAcc))
+            {
+                sAcc.Goals++;
+                goalsScoredByPlayers++;
+            }
+            if (g.AssistMatchPlayerId.HasValue
+                && mpToPlayer.TryGetValue(g.AssistMatchPlayerId.Value, out var assistPid)
+                && pb.TryGetValue(assistPid, out var aAcc))
+            {
+                aAcc.Assists++;
+            }
+        }
 
+        // Assistências ENTRE os selecionados (ambos na seleção)
         var assistPairs = goals
             .Where(g => g.AssistMatchPlayerId.HasValue
+                     && mpIdSet.Contains(g.ScorerMatchPlayerId)
                      && mpIdSet.Contains(g.AssistMatchPlayerId.Value))
             .GroupBy(g => (
                 Assister: mpToPlayer[g.AssistMatchPlayerId!.Value],
@@ -118,6 +176,15 @@ public sealed class TeamBuilderService : ITeamBuilderService
             .OrderByDescending(a => a.Count)
             .ToList();
 
+        foreach (var acc in pb.Values)
+            acc.WinRate = acc.Games > 0 ? acc.Wins / (double)acc.Games : 0.0;
+
+        var playerBreakdown = pb.Values
+            .OrderByDescending(p => p.Goals + p.Assists)
+            .ThenByDescending(p => p.Wins)
+            .ThenBy(p => p.Name)
+            .ToList();
+
         return Result<TeamBuilderStatsDto>.Ok(new TeamBuilderStatsDto
         {
             NeverPlayedTogether  = false,
@@ -130,6 +197,8 @@ public sealed class TeamBuilderService : ITeamBuilderService
             GoalsScoredByPlayers = goalsScoredByPlayers,
             AssistPairs          = assistPairs,
             Players              = players,
+            PlayerBreakdown      = playerBreakdown,
+            Matches              = formationMatches.OrderByDescending(m => m.PlayedAt).ToList(),
         });
     }
 }

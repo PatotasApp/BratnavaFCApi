@@ -384,8 +384,21 @@ public sealed class PlayerStatsService : IPlayerStatsService
         }
 
         var playerNameById = players.ToDictionary(p => p.Id, p => p.Name);
-        const int minTogether = 1;
-        const int minAgainst  = 1;
+        var isGuestById    = players.ToDictionary(p => p.Id, p => p.IsGuest);
+
+        // Corte de amostra das relações (parceiros / rivais / assistências).
+        // Evita "falso valor": ex.: um parceiro que jogou 2x aparecer com 100%.
+        // Como o evento é dos mensalistas, convidados só entram nas relações se
+        // forem recorrentes (>= minGuestGames jogos); esporádicos são ignorados.
+        const int minTogether   = 4;   // jogos JUNTOS para contar como parceiro
+        const int minAgainst    = 4;   // confrontos diretos para contar como rival
+        const int minGuestGames = 10;  // convidado só conta com histórico mínimo
+
+        // Um jogador só é candidato a relação se for mensalista, ou convidado
+        // com jogos suficientes para o dado ser confiável.
+        bool QualifiesForRelation(Guid id) =>
+            (!isGuestById.TryGetValue(id, out var isGuest) || !isGuest)
+            || (perPlayer.TryGetValue(id, out var gAcc) && gAcc.MatchesPlayed >= minGuestGames);
 
         var items = new List<PlayerSpotlightItem>(players.Count);
 
@@ -399,6 +412,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
             foreach (var otherId in playerIds)
             {
                 if (otherId == pl.Id) continue;
+                if (!QualifiesForRelation(otherId)) continue;
                 var key = PairKey.Create(pl.Id, otherId);
                 if (!pairTotals.TryGetValue(key, out var pa) || pa.MatchesTogether < minTogether) continue;
                 double wr = pa.WinsTogether / (double)pa.MatchesTogether;
@@ -422,6 +436,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
             foreach (var otherId in playerIds)
             {
                 if (otherId == pl.Id) continue;
+                if (!QualifiesForRelation(otherId)) continue;
                 var key = PairKey.Create(pl.Id, otherId);
                 if (!opponentTotals.TryGetValue(key, out var oa) || oa.Matches < minAgainst) continue;
                 int myWins = (pl.Id == key.A) ? oa.WinsForA : oa.WinsForB;
@@ -445,14 +460,14 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
             // ── Assist relationships ──
             var mostAssistedBy = assistPairs
-                .Where(kv => kv.Key.scorer == pl.Id)
+                .Where(kv => kv.Key.scorer == pl.Id && QualifiesForRelation(kv.Key.assister))
                 .OrderByDescending(kv => kv.Value)
                 .Take(3)
                 .Select(kv => new SpotlightRelation { PlayerId = kv.Key.assister, Name = playerNameById.GetValueOrDefault(kv.Key.assister, ""), Count = kv.Value, Rate = 0 })
                 .ToList();
 
             var mostAssistedTo = assistPairs
-                .Where(kv => kv.Key.assister == pl.Id)
+                .Where(kv => kv.Key.assister == pl.Id && QualifiesForRelation(kv.Key.scorer))
                 .OrderByDescending(kv => kv.Value)
                 .Take(3)
                 .Select(kv => new SpotlightRelation { PlayerId = kv.Key.scorer, Name = playerNameById.GetValueOrDefault(kv.Key.scorer, ""), Count = kv.Value, Rate = 0 })
