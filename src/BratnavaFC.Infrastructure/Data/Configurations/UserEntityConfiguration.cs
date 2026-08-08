@@ -16,6 +16,12 @@ public class UserEntityConfiguration : IEntityTypeConfiguration<UserEntity>
         builder.Property(x => x.LastName).IsRequired();
         builder.Property(x => x.Email).IsRequired();
 
+        // O e-mail é a identidade de autenticação e a chave que liga o token do Firebase à
+        // linha aqui, então duas linhas com o mesmo e-mail tornariam essa resolução ambígua.
+        // Depende de UserEntity.SetEmail normalizar para minúsculas — é o único caminho de
+        // escrita da propriedade, então o índice simples basta e não precisa ser funcional.
+        builder.HasIndex(x => x.Email).IsUnique();
+
         builder.Property(x => x.FirebaseUid).HasMaxLength(128);
 
         // Índice único parcial: enquanto o usuário não migrou, FirebaseUid é nulo, e o

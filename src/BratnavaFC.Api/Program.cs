@@ -37,7 +37,7 @@ try
 
     builder.Services.AddApiPresentation(builder.Environment);
     // Depende de AddInfrastructure acima: lê o ProjectId do FirebaseApp já inicializado.
-    builder.Services.AddJwtAuthentication(builder.Configuration);
+    builder.Services.AddJwtAuthentication();
     builder.Services.AddRealtime(builder.Environment);
 
     // Health checks estão implementados em Api/HealthChecks e Api/Extensions/HealthCheckExtensions,

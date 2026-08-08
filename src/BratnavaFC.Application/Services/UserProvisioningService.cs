@@ -84,6 +84,28 @@ public sealed class UserProvisioningService : IUserProvisioningService
                 return null;
             }
 
+            // Herdar uma linha existente significa herdar TODO o histórico dela — partidas,
+            // apostas, financeiro. Só liberamos isso para quem provou controlar o e-mail.
+            //
+            // Sem esta guarda, qualquer pessoa criaria uma conta com o e-mail de um usuário
+            // que ainda não migrou (cadastro por senha não exige verificação) e, na primeira
+            // request, assumiria a conta dele.
+            //
+            // Google e Apple sempre trazem email_verified = true, então o caminho de migração
+            // por login social não é afetado. O ramo de CRIAR usuário novo, mais abaixo, também
+            // não tem esta exigência: quem não herda nada não precisa provar nada.
+            if (!IsEmailVerified(principal))
+            {
+                _logger.LogWarning(
+                    "[Provisioning] UID {FirebaseUid} tentou vincular-se ao usuário {UserId} " +
+                    "pelo e-mail {Email} sem tê-lo verificado. Vínculo recusado.",
+                    firebaseUid,
+                    existingByEmail.Id,
+                    email);
+
+                return null;
+            }
+
             existingByEmail.SetFirebaseUid(firebaseUid);
 
             await _db.SaveChangesAsync(cancellationToken);
@@ -202,6 +224,14 @@ public sealed class UserProvisioningService : IUserProvisioningService
                 user.Id);
         }
     }
+
+    /// <summary>
+    /// Lê a claim <c>email_verified</c> do ID token. O Firebase a envia como booleano JSON, que
+    /// o handler materializa como a string "true"/"false" — daí o parse em vez de comparação
+    /// direta. Ausência da claim é tratada como não verificado.
+    /// </summary>
+    private static bool IsEmailVerified(ClaimsPrincipal principal)
+        => bool.TryParse(principal.FindFirst("email_verified")?.Value, out var verified) && verified;
 
     /// <summary>
     /// O UserName é obrigatório e único, e nenhum provedor social fornece um. Derivamos da

@@ -22,6 +22,8 @@ public sealed class UsersController : BaseApiController
     /// <summary>
     /// Perfil interno do usuário autenticado. O cadastro não tem endpoint: a conta é criada no
     /// Firebase pelo front-end e provisionada aqui no primeiro acesso autenticado.
+    ///
+    /// Também reconcilia o e-mail com o do token — ver SyncEmailFromTokenAsync no UserService.
     /// </summary>
     [HttpGet("me")]
     public async Task<IActionResult> GetMeAsync(CancellationToken cancellationToken)
@@ -29,7 +31,12 @@ public sealed class UsersController : BaseApiController
         if (!TryGetInternalUserId(out var userId))
             return Unauthorized();
 
-        var result = await _userService.GetMeAsync(userId, cancellationToken);
+        // MapInboundClaims está desligado, então a claim chega como "email"; o nome longo do
+        // .NET fica como segundo caminho para não depender dessa configuração.
+        var tokenEmail = User.FindFirstValue("email")
+                      ?? User.FindFirstValue(ClaimTypes.Email);
+
+        var result = await _userService.GetMeAsync(userId, tokenEmail, cancellationToken);
         return ToResponse(result);
     }
 
@@ -88,6 +95,15 @@ public sealed class UsersController : BaseApiController
         return ToResponse(result);
     }
 
+    /// <summary>
+    /// Fluxo administrativo: altera perfil, role e status de QUALQUER usuário.
+    ///
+    /// Restrito a Admin/GodMode. Sem isso, a role da classe (que inclui "User") deixaria
+    /// qualquer autenticado alterar o perfil alheio passando o GUID — e o UpdateUserDto
+    /// aceita Role, então um usuário comum poderia se promover a GodMode numa request.
+    /// O usuário comum edita o próprio perfil por PUT /api/users/me.
+    /// </summary>
+    [Authorize(Roles = "Admin,GodMode")]
     [HttpPut("{userId:guid}")]
     public async Task<IActionResult> UpdateAsync(Guid userId, [FromBody] UpdateUserDto dto, CancellationToken cancellationToken)
     {
@@ -97,6 +113,7 @@ public sealed class UsersController : BaseApiController
         return ToResponse(result);
     }
 
+    [Authorize(Roles = "Admin,GodMode")]
     [HttpPut("{userId:guid}/inactivate")]
     public async Task<IActionResult> InactivateAsync(Guid userId, CancellationToken cancellationToken)
     {
@@ -104,6 +121,7 @@ public sealed class UsersController : BaseApiController
         return ToResponse(result);
     }
 
+    [Authorize(Roles = "Admin,GodMode")]
     [HttpPut("{userId:guid}/reactivate")]
     public async Task<IActionResult> ReactivateAsync(Guid userId, CancellationToken cancellationToken)
     {

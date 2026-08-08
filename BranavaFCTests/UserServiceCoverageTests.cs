@@ -7,7 +7,6 @@ using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
 using BratnavaFC.Infrastructure.Repositories;
 using FluentAssertions;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -16,13 +15,11 @@ namespace BranavaFC.Tests;
 
 public class UserServiceCoverageTests
 {
-    private static UserService Sut(AppDbContext db, IPushService? push = null)
+    private static UserService Sut(AppDbContext db)
         => new(
             db,
             new RepositoryBase<UserEntity>(db),
-            Mock.Of<ILogger<UserService>>(),
-            new PasswordHasher<UserEntity>(),
-            push ?? Mock.Of<IPushService>());
+            Mock.Of<ILogger<UserService>>());
 
     private static UserEntity User(string userName, string first, string last, string email,
         UserRole role = UserRole.User)
@@ -211,43 +208,6 @@ public class UserServiceCoverageTests
     }
 
     [Fact]
-    public async Task UpdateAsync_WhenEmailTaken_ReturnsBadRequest()
-    {
-        await using var db = DbContextFactory.Create(nameof(UpdateAsync_WhenEmailTaken_ReturnsBadRequest));
-        var target = User("target", "T", "T", "t@test.com");
-        var other = User("other", "O", "O", "taken@test.com");
-        db.Users.AddRange(target, other);
-        await db.SaveChangesAsync();
-
-        var sut = Sut(db);
-
-        var result = await sut.UpdateAsync(target.Id, new UpdateUserDto { Email = "TAKEN@test.com" }, CancellationToken.None);
-
-        result.Success.Should().BeFalse();
-        result.Status.Should().Be(ResultStatus.BadRequest);
-        result.Error.Should().Contain("email");
-    }
-
-    [Fact]
-    public async Task UpdateAsync_WithNewUserNameAndEmail_UpdatesBoth()
-    {
-        await using var db = DbContextFactory.Create(nameof(UpdateAsync_WithNewUserNameAndEmail_UpdatesBoth));
-        var user = User("old", "F", "L", "old@test.com");
-        db.Users.Add(user);
-        await db.SaveChangesAsync();
-
-        var sut = Sut(db);
-
-        var result = await sut.UpdateAsync(user.Id,
-            new UpdateUserDto { UserName = "newname", Email = "new@test.com" }, CancellationToken.None);
-
-        result.Success.Should().BeTrue();
-        var reloaded = await db.Users.IgnoreQueryFilters().FirstAsync(u => u.Id == user.Id);
-        reloaded.UserName.Should().Be("newname");
-        reloaded.Email.Should().Be("new@test.com");
-    }
-
-    [Fact]
     public async Task UpdateAsync_WithProfileFields_UpdatesProfile()
     {
         await using var db = DbContextFactory.Create(nameof(UpdateAsync_WithProfileFields_UpdatesProfile));
@@ -323,74 +283,6 @@ public class UserServiceCoverageTests
         result.Success.Should().BeFalse();
         result.Error.Should().Be("Invalid status.");
         result.Status.Should().Be(ResultStatus.BadRequest);
-    }
-
-    // ─── ChangePasswordAsync ─────────────────────────────────────────────────
-
-    [Fact]
-    public async Task ChangePasswordAsync_WhenCurrentPasswordMissing_ReturnsBadRequest()
-    {
-        await using var db = DbContextFactory.Create(nameof(ChangePasswordAsync_WhenCurrentPasswordMissing_ReturnsBadRequest));
-        var sut = Sut(db);
-
-        var result = await sut.ChangePasswordAsync(Guid.NewGuid(),
-            new ChangePasswordDto { CurrentPassword = "  ", NewPassword = "new" }, CancellationToken.None);
-
-        result.Success.Should().BeFalse();
-        result.Error.Should().Be("CurrentPassword is required.");
-    }
-
-    [Fact]
-    public async Task ChangePasswordAsync_WhenNewPasswordMissing_ReturnsBadRequest()
-    {
-        await using var db = DbContextFactory.Create(nameof(ChangePasswordAsync_WhenNewPasswordMissing_ReturnsBadRequest));
-        var sut = Sut(db);
-
-        var result = await sut.ChangePasswordAsync(Guid.NewGuid(),
-            new ChangePasswordDto { CurrentPassword = "old", NewPassword = "" }, CancellationToken.None);
-
-        result.Success.Should().BeFalse();
-        result.Error.Should().Be("NewPassword is required.");
-    }
-
-    [Fact]
-    public async Task ChangePasswordAsync_WhenUserNotFound_ReturnsNotFound()
-    {
-        await using var db = DbContextFactory.Create(nameof(ChangePasswordAsync_WhenUserNotFound_ReturnsNotFound));
-        var sut = Sut(db);
-
-        var result = await sut.ChangePasswordAsync(Guid.NewGuid(),
-            new ChangePasswordDto { CurrentPassword = "old", NewPassword = "new" }, CancellationToken.None);
-
-        result.Success.Should().BeFalse();
-        result.Status.Should().Be(ResultStatus.NotFound);
-    }
-
-    [Fact]
-    public async Task ChangePasswordAsync_WhenValid_NotifiesUser()
-    {
-        await using var db = DbContextFactory.Create(nameof(ChangePasswordAsync_WhenValid_NotifiesUser));
-        var hasher = new PasswordHasher<UserEntity>();
-        var user = User("u", "F", "L", "u@test.com");
-        user.SetPasswordHash(hasher.HashPassword(user, "old_pw"));
-        db.Users.Add(user);
-        await db.SaveChangesAsync();
-
-        var push = new Mock<IPushService>();
-        push.Setup(p => p.SendToUserAsync(
-                It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>(), It.IsAny<Guid?>()))
-            .Returns(Task.CompletedTask);
-
-        var sut = Sut(db, push.Object);
-
-        var result = await sut.ChangePasswordAsync(user.Id,
-            new ChangePasswordDto { CurrentPassword = "old_pw", NewPassword = "new_pw" }, CancellationToken.None);
-
-        result.Success.Should().BeTrue();
-        var reloaded = await db.Users.IgnoreQueryFilters().FirstAsync(u => u.Id == user.Id);
-        hasher.VerifyHashedPassword(reloaded, reloaded.Password, "new_pw")
-            .Should().Be(PasswordVerificationResult.Success);
     }
 
     // ─── Inactivate / Reactivate ─────────────────────────────────────────────

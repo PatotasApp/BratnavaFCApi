@@ -30,26 +30,74 @@ public class UserService : IUserService
         _db = db;
     }
 
-    public async Task<Result<MeDto>> GetMeAsync(Guid userId, CancellationToken cancellationToken)
+    public async Task<Result<MeDto>> GetMeAsync(Guid userId, string? tokenEmail, CancellationToken cancellationToken)
     {
-        var me = await _db.Users
-            .AsNoTracking()
-            .Where(u => u.Id == userId)
-            .Select(u => new MeDto(
-                u.Id,
-                u.Email,
-                u.UserName,
-                u.FirstName,
-                u.LastName,
-                u.Phone,
-                u.Role,
-                u.Status))
-            .FirstOrDefaultAsync(cancellationToken);
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
 
-        if (me is null)
+        if (user is null)
             return Result<MeDto>.Fail("Usuário não encontrado.", ResultStatus.NotFound);
 
+        await SyncEmailFromTokenAsync(user, tokenEmail, cancellationToken);
+
+        var me = new MeDto(
+            user.Id,
+            user.Email,
+            user.UserName,
+            user.FirstName,
+            user.LastName,
+            user.Phone,
+            user.Role,
+            user.Status);
+
         return Result<MeDto>.Ok(me);
+    }
+
+    /// <summary>
+    /// Alinha a coluna Email com o e-mail do ID token.
+    ///
+    /// Precisa acontecer aqui porque o FirebaseIdentityMiddleware tem um caminho rápido: assim
+    /// que o token carrega internal_id e role, ele responde sem chamar o
+    /// UserProvisioningService — e a sincronização que existe lá deixa de rodar. Como o /me é
+    /// chamado uma vez por sessão e já carregou a linha, é o ponto natural para reconciliar.
+    ///
+    /// Sentido único, do Firebase para cá: é lá que a troca de e-mail é confirmada pelo dono
+    /// do endereço novo (verifyBeforeUpdateEmail). Escrever no sentido inverso deixaria os
+    /// dois lados divergentes.
+    /// </summary>
+    private async Task SyncEmailFromTokenAsync(UserEntity user, string? tokenEmail, CancellationToken cancellationToken)
+    {
+        var email = tokenEmail?.Trim().ToLowerInvariant();
+
+        if (string.IsNullOrWhiteSpace(email) || string.Equals(user.Email, email, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        // A coluna tem índice único: sem esta checagem, o SaveChanges estouraria e derrubaria
+        // o /me inteiro por causa de um e-mail duplicado. Acontece quando o endereço novo já
+        // pertence a uma linha antiga que ainda não migrou.
+        var emailTaken = await _db.Users
+            .AnyAsync(x => x.Id != user.Id && x.Email.ToLower() == email, cancellationToken);
+
+        if (emailTaken)
+        {
+            _logger.LogError(
+                "[Users] E-mail do usuário {UserId} não pôde ser sincronizado: {Email} já " +
+                "pertence a outra linha. Resolva o duplicado no banco.",
+                user.Id,
+                email);
+
+            return;
+        }
+
+        var previous = user.Email;
+        user.SetEmail(email);
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "[Users] E-mail do usuário {UserId} sincronizado de {Previous} para {Current}.",
+            user.Id,
+            previous,
+            email);
     }
 
     /// <summary>

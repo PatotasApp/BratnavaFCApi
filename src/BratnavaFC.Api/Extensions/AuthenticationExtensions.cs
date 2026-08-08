@@ -12,20 +12,9 @@ public static class AuthenticationExtensions
     /// são baixadas e rotacionadas pelo próprio middleware a partir do discovery document
     /// em {Authority}/.well-known/openid-configuration — não há chave simétrica local.
     /// </summary>
-    public static IServiceCollection AddJwtAuthentication(
-        this IServiceCollection services,
-        IConfiguration configuration)
+    public static IServiceCollection AddJwtAuthentication(this IServiceCollection services)
     {
-        // Configuração explícita tem precedência; na ausência dela, o ProjectId é derivado do
-        // service account JSON já usado pelo push, evitando config duplicada. Depende de
-        // AddInfrastructure ter rodado o FirebaseApp.Create antes.
-        var configured = configuration["Firebase:ProjectId"];
-
-        // Cuidado com string vazia: o appsettings traz a chave com "" como placeholder, e ""
-        // não é null — um ?? simples nunca cairia no fallback.
-        var projectId = string.IsNullOrWhiteSpace(configured)
-            ? FirebaseProjectId.FromInitializedApp()
-            : configured;
+        var projectId = FirebaseProjectId.FromInitializedApp();
 
         if (string.IsNullOrWhiteSpace(projectId))
             throw new InvalidOperationException(

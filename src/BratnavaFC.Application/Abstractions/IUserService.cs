@@ -11,8 +11,14 @@ namespace BratnavaFC.Application.Abstractions;
 /// </summary>
 public interface IUserService
 {
-    /// <summary>Perfil do usuário autenticado, resolvido pela identidade interna.</summary>
-    Task<Result<MeDto>> GetMeAsync(Guid userId, CancellationToken cancellationToken);
+    /// <summary>
+    /// Perfil do usuário autenticado, resolvido pela identidade interna.
+    /// </summary>
+    /// <param name="tokenEmail">
+    /// E-mail vindo do ID token. O Firebase é a fonte da verdade do e-mail, então este método
+    /// aproveita a chamada para alinhar a coluna quando o usuário troca o endereço lá.
+    /// </param>
+    Task<Result<MeDto>> GetMeAsync(Guid userId, string? tokenEmail, CancellationToken cancellationToken);
 
     /// <summary>Edição do próprio perfil. Não altera e-mail, role nem status.</summary>
     Task<Result<bool>> UpdateMeAsync(Guid userId, UpdateMeDto dto, CancellationToken cancellationToken);

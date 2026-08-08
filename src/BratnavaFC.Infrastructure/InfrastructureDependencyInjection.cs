@@ -30,7 +30,7 @@ public static class InfrastructureDependencyInjection
         services.AddBackgroundJobs(configuration, environment, logger);
         services.AddReplayEventing(configuration, environment, isDevelopment);
         services.AddReplayStorage(configuration, environment, isDevelopment);
-        services.AddFirebase(configuration, logger);
+        services.AddFirebase(logger);
         services.AddExternalHttpClients();
 
         logger.LogInformation(
@@ -235,10 +235,7 @@ public static class InfrastructureDependencyInjection
         services.AddSingleton<IReplayUrlService, R2ReplayUrlService>();
     }
 
-    private static void AddFirebase(
-        this IServiceCollection services,
-        IConfiguration configuration,
-        ILogger logger)
+    private static void AddFirebase(this IServiceCollection services, ILogger logger)
     {
         var json = """
                 {
