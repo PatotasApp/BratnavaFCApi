@@ -43,6 +43,7 @@ public record BetPlayerDto(
     string Name,
     short  Team,
     bool   IsGuest,
+    bool   IsGoalkeeper,
     bool   HasBet,
     int?   TotalFichasWagered  // null se ainda não apostou
 );

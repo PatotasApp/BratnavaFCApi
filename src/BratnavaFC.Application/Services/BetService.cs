@@ -130,7 +130,7 @@ public sealed class BetService : IBetService
                 ? wageredByUser.GetValueOrDefault(mp.Player.UserId.Value)
                 : null;
             return new BetPlayerDto(mp.Id, mp.PlayerId, mp.Player!.Name, mp.Team,
-                mp.Player?.IsGuest ?? false, hasBet, fichas);
+                mp.Player?.IsGuest ?? false, mp.IsGoalkeeper, hasBet, fichas);
         }).ToList();
 
         // Membros do grupo adicionados depois da escalação ser fechada: aparecem com Team=0
@@ -149,7 +149,7 @@ public sealed class BetService : IBetService
             var fichas = hasBet && p.UserId != null
                 ? wageredByUser.GetValueOrDefault(p.UserId.Value)
                 : null;
-            players.Add(new BetPlayerDto(p.Id, p.Id, p.Name, 0, false, hasBet, fichas));
+            players.Add(new BetPlayerDto(p.Id, p.Id, p.Name, 0, false, p.IsGoalkeeper, hasBet, fichas));
         }
 
         var myBet = await GetMyBetDtoAsync(match.Id, userId, ct);
