@@ -242,12 +242,12 @@ public class PlayerService : IPlayerService
         if (userId == Guid.Empty)
             return Result<IReadOnlyList<MyPlayerDto>>.Fail("UserId is required.", ResultStatus.BadRequest);
 
-        var list = await _context.Players
+        var rows = await _context.Players
             .AsNoTracking()
-            .Include(p => p.Group)
             .Where(p => p.UserId == userId)
             .OrderBy(p => p.Group.Name)
-            .Select(p => new MyPlayerDto(
+            .Select(p => new
+            {
                 p.Id,
                 p.UserId,
                 p.GroupId,
@@ -255,10 +255,31 @@ public class PlayerService : IPlayerService
                 p.IsGoalkeeper,
                 p.SkillPoints,
                 p.Status,
-                p.Group.Name,
-                p.IsGuest
-            ))
+                GroupName = p.Group.Name,
+                p.IsGuest,
+                HasPhoto = p.User != null && p.User.ProfilePhotoData != null,
+                PhotoUpdatedAt = p.User != null ? p.User.ProfilePhotoUpdatedAt : null,
+                GroupLogoUpdatedAt = p.Group.LogoUpdatedAt,
+            })
             .ToListAsync(cancellationToken);
+
+        var list = rows.Select(p => new MyPlayerDto(
+            p.Id,
+            p.UserId,
+            p.GroupId,
+            p.Name,
+            p.IsGoalkeeper,
+            p.SkillPoints,
+            p.Status,
+            p.GroupName,
+            p.IsGuest,
+            p.HasPhoto
+                ? $"/api/Users/{p.UserId}/photo?v={p.PhotoUpdatedAt?.ToUnixTimeMilliseconds()}"
+                : null,
+            p.GroupLogoUpdatedAt.HasValue
+                ? $"/api/Groups/{p.GroupId}/logo?v={p.GroupLogoUpdatedAt.Value.ToUnixTimeMilliseconds()}"
+                : null
+        )).ToList();
 
         return Result<IReadOnlyList<MyPlayerDto>>.Ok(list);
     }
@@ -440,6 +461,9 @@ public class PlayerService : IPlayerService
         player.GuestStarRating,
         player.AttackRating,
         player.DefenseRating,
-        player.OverallRating
+        player.OverallRating,
+        player.User?.ProfilePhotoData is { Length: > 0 }
+            ? $"/api/Users/{player.User.Id}/photo?v={player.User.ProfilePhotoUpdatedAt?.ToUnixTimeMilliseconds()}"
+            : null
     );
 }

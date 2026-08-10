@@ -14,4 +14,5 @@ public sealed record PlayerDto(
     int? GuestStarRating,
     int? AttackRating,
     int? DefenseRating,
-    int? OverallRating);
+    int? OverallRating,
+    string? PhotoUrl);

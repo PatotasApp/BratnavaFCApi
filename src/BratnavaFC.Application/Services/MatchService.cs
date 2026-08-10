@@ -48,7 +48,7 @@ public sealed class MatchService : IMatchService
             .Include(m => m.TeamAColor)
             .Include(m => m.TeamBColor)
             .Include(m => m.Goals)
-            .Include(m => m.Players).ThenInclude(mp => mp.Player)
+            .Include(m => m.Players).ThenInclude(mp => mp.Player).ThenInclude(p => p.User)
             .Include(m => m.Players).ThenInclude(mp => mp.GoalsScored)
             .Include(m => m.Players).ThenInclude(mp => mp.GoalsAssisted)
             .Include(m => m.Votes).ThenInclude(v => v.Voter)
@@ -67,7 +67,7 @@ public sealed class MatchService : IMatchService
         var match = await _context.Matches
             .AsNoTracking()
             .Where(m => m.GroupId == groupId && m.Id == matchId)
-            .Include(m => m.Players).ThenInclude(mp => mp.Player)
+            .Include(m => m.Players).ThenInclude(mp => mp.Player).ThenInclude(p => p.User)
             .Include(m => m.Votes)
             .FirstOrDefaultAsync(ct);
 
@@ -89,7 +89,7 @@ public sealed class MatchService : IMatchService
             .AsNoTracking()
             .Where(m => m.GroupId == groupId && m.Id == matchId)
             .Include(m => m.Goals)
-            .Include(m => m.Players).ThenInclude(mp => mp.Player)
+            .Include(m => m.Players).ThenInclude(mp => mp.Player).ThenInclude(p => p.User)
             .FirstOrDefaultAsync(ct);
 
         if (match is null)
@@ -139,7 +139,7 @@ public sealed class MatchService : IMatchService
             .Include(m => m.TeamAColor)
             .Include(m => m.TeamBColor)
             .Include(m => m.Goals)
-            .Include(m => m.Players).ThenInclude(mp => mp.Player)
+            .Include(m => m.Players).ThenInclude(mp => mp.Player).ThenInclude(p => p.User)
             .Include(m => m.Votes)
             .FirstOrDefaultAsync(m => m.Id == matchId, ct);
 
@@ -152,6 +152,7 @@ public sealed class MatchService : IMatchService
                 MatchPlayerId = p.Id,
                 PlayerId = p.PlayerId,
                 PlayerName = p.Player?.Name ?? string.Empty,
+                PhotoUrl = UserPhotoUrl(p.Player?.User),
                 Team = p.Team
             })
             .ToList();
@@ -823,7 +824,7 @@ public sealed class MatchService : IMatchService
 
         return await _context.Matches
             .Where(m => m.GroupId == groupId && m.Id == matchId)
-            .Include(m => m.Players).ThenInclude(mp => mp.Player)
+            .Include(m => m.Players).ThenInclude(mp => mp.Player).ThenInclude(p => p.User)
             .Include(m => m.Votes)
             .FirstOrDefaultAsync(ct);
     }
@@ -1669,6 +1670,7 @@ public sealed class MatchService : IMatchService
                 MatchPlayerId = p.Id,
                 PlayerId = p.PlayerId,
                 PlayerName = p.PlayerName,
+                PhotoUrl = null,
                 Team = p.Team
             })
             .ToList();
@@ -2006,6 +2008,9 @@ public sealed class MatchService : IMatchService
         MatchPlayerId      = mp.Id,
         PlayerId           = mp.PlayerId,
         PlayerName         = mp.Player?.Name ?? string.Empty,
+        PhotoUrl           = mp.Player?.User?.ProfilePhotoData is { Length: > 0 }
+            ? $"/api/Users/{mp.Player.User.Id}/photo?v={mp.Player.User.ProfilePhotoUpdatedAt?.ToUnixTimeMilliseconds()}"
+            : null,
         IsGoalkeeper       = mp.IsGoalkeeper,
         IsGuest            = mp.Player?.IsGuest ?? false,
         Team               = mp.Team,
@@ -2017,6 +2022,11 @@ public sealed class MatchService : IMatchService
             mp.AutoRejectedByAbsence?.Description),
         DidNotPlay         = mp.DidNotPlay,
     };
+
+    private static string? UserPhotoUrl(UserEntity? user) =>
+        user?.ProfilePhotoData is { Length: > 0 }
+            ? $"/api/Users/{user.Id}/photo?v={user.ProfilePhotoUpdatedAt?.ToUnixTimeMilliseconds()}"
+            : null;
 
     internal static string? BuildAbsenceDescription(int? absenceType, string? rawDescription)
     {
@@ -2035,6 +2045,7 @@ public sealed class MatchService : IMatchService
                 MatchPlayerId = p.Id,
                 PlayerId = p.PlayerId,
                 PlayerName = p.Player?.Name ?? string.Empty,
+                PhotoUrl = UserPhotoUrl(p.Player?.User),
                 Team = p.Team
             })
             .ToList();

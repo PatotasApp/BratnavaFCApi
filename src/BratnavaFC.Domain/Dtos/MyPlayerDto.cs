@@ -15,6 +15,8 @@ namespace BratnavaFC.Domain.Dtos
         decimal SkillPoints,
         BratnavaFC.Domain.Enums.Status Status,
         string GroupName,
-        bool IsGuest
+        bool IsGuest,
+        string? PhotoUrl,
+        string? GroupLogoUrl
     );
 }

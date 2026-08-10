@@ -3,6 +3,7 @@ using BratnavaFC.Domain.Dtos.Users;
 using BratnavaFC.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace BratnavaFC.Api.Controllers;
 
@@ -77,6 +78,54 @@ public sealed class UsersController : BaseApiController
         return ToResponse(result);
     }
 
+    [HttpPost("{userId:guid}/photo")]
+    [RequestSizeLimit(6 * 1024 * 1024)]
+    public async Task<IActionResult> UploadPhotoAsync(
+        Guid userId,
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        if (!CanManagePhoto(userId)) return Forbid();
+        if (file is null || file.Length == 0)
+            return BadRequest("Selecione uma foto.");
+        if (file.Length > 5 * 1024 * 1024)
+            return BadRequest("A foto deve ter no máximo 5 MB.");
+
+        await using var stream = file.OpenReadStream();
+        using var buffer = new MemoryStream((int)file.Length);
+        await stream.CopyToAsync(buffer, cancellationToken);
+
+        var result = await _userService.SetPhotoAsync(
+            userId,
+            buffer.ToArray(),
+            file.ContentType,
+            cancellationToken);
+        return ToResponse(result);
+    }
+
+    [AllowAnonymous]
+    [HttpGet("{userId:guid}/photo")]
+    public async Task<IActionResult> GetPhotoAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var result = await _userService.GetPhotoAsync(userId, cancellationToken);
+        if (!result.Success || result.Data == default)
+            return ToResponse(result);
+
+        var (data, contentType, updatedAt) = result.Data;
+        Response.Headers.CacheControl = "public,max-age=3600,must-revalidate";
+        Response.Headers.ETag = $"\"{updatedAt.ToUnixTimeMilliseconds()}\"";
+        Response.Headers.LastModified = updatedAt.ToString("R");
+        return File(data, contentType);
+    }
+
+    [HttpDelete("{userId:guid}/photo")]
+    public async Task<IActionResult> DeletePhotoAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        if (!CanManagePhoto(userId)) return Forbid();
+        var result = await _userService.RemovePhotoAsync(userId, cancellationToken);
+        return ToResponse(result);
+    }
+
     [HttpPut("{userId:guid}/inactivate")]
     public async Task<IActionResult> InactivateAsync(Guid userId, CancellationToken cancellationToken)
     {
@@ -89,5 +138,15 @@ public sealed class UsersController : BaseApiController
     {
         var result = await _userService.ReactivateAsync(userId, cancellationToken);
         return ToResponse(result);
+    }
+
+    private bool CanManagePhoto(Guid userId)
+    {
+        if (User.IsInRole("Admin") || User.IsInRole("GodMode")) return true;
+
+        var raw = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                  ?? User.FindFirstValue("sub")
+                  ?? User.FindFirstValue("userId");
+        return Guid.TryParse(raw, out var currentUserId) && currentUserId == userId;
     }
 }

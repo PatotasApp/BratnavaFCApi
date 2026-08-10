@@ -3,8 +3,11 @@ using BratnavaFC.Application.TeamGeneration;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Models;
+using BratnavaFC.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace BratnavaFC.Api.Controllers;
 
@@ -14,11 +17,26 @@ public class TeamGenerationController : BaseApiController
 {
     private readonly TeamGenerationService _teamService;
     private readonly IPlayerStatsService _playerStats;
+    private readonly AppDbContext _db;
 
-    public TeamGenerationController(TeamGenerationService teamService, IPlayerStatsService playerStats)
+    public TeamGenerationController(TeamGenerationService teamService, IPlayerStatsService playerStats, AppDbContext db)
     {
         _teamService = teamService ?? throw new ArgumentNullException(nameof(teamService));
         _playerStats = playerStats ?? throw new ArgumentNullException(nameof(playerStats));
+        _db          = db ?? throw new ArgumentNullException(nameof(db));
+    }
+
+    // Espelha GroupAuthorizedController.IsGroupAdminAsync (este controller herda de BaseApiController).
+    private async Task<bool> IsGroupAdminAsync(Guid groupId, CancellationToken ct)
+    {
+        if (User.IsInRole("Admin") || User.IsInRole("GodMode")) return true;
+
+        var raw = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                  ?? User.FindFirstValue("sub")
+                  ?? User.FindFirstValue("userId");
+        if (!Guid.TryParse(raw, out var userId) || userId == Guid.Empty) return false;
+
+        return await _db.GroupAdmins.AnyAsync(x => x.GroupId == groupId && x.UserId == userId, ct);
     }
 
     [HttpPost("generate")]
@@ -48,6 +66,10 @@ public class TeamGenerationController : BaseApiController
     [ProducesResponseType(typeof(ApiResponse<PlayerSpotlightReport>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetSpotlight([FromRoute] Guid groupId, CancellationToken cancellationToken)
     {
+        // Spotlight é exclusivo de admins do grupo.
+        if (!await IsGroupAdminAsync(groupId, cancellationToken))
+            return Forbid();
+
         var report = await _playerStats.GetSpotlightReportAsync(groupId, cancellationToken);
         return ToResponse(Result<PlayerSpotlightReport>.Ok(report));
     }
