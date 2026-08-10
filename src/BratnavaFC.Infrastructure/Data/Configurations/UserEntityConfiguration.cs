@@ -18,6 +18,12 @@ public class UserEntityConfiguration : IEntityTypeConfiguration<UserEntity>
         builder.Property(x => x.ProfilePhotoData).HasColumnType("bytea");
         builder.Property(x => x.ProfilePhotoContentType).HasMaxLength(32);
         builder.Property(x => x.ProfilePhotoUpdatedAt);
+        builder.Property(x => x.ProfileVisibility)
+            .HasConversion<short>()
+            .HasDefaultValue(ProfileVisibility.AuthenticatedUsers)
+            .IsRequired();
+        builder.Property(x => x.ShowPatotaNamesOnProfile).HasDefaultValue(true).IsRequired();
+        builder.Property(x => x.ShowZoeiraAchievementsOnProfile).HasDefaultValue(false).IsRequired();
 
         builder.HasMany(x => x.Players)
             .WithOne(x => x.User)
