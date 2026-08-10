@@ -10,4 +10,6 @@ public record GroupDto(Guid Id, string Name, DateTimeOffset? ScheduleMatchDate, 
     public string[] AdminNames { get; init; } = Array.Empty<string>();
     /// <summary>Nomes dos usuários financeiro, na mesma ordem de FinanceiroIds.</summary>
     public string[] FinanceiroNames { get; init; } = Array.Empty<string>();
+    public string? LogoUrl { get; init; }
+    public DateTimeOffset? LogoUpdatedAt { get; init; }
 }

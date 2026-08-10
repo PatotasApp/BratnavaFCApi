@@ -15,6 +15,9 @@ public class UserEntityConfiguration : IEntityTypeConfiguration<UserEntity>
         builder.Property(x => x.FirstName).IsRequired();
         builder.Property(x => x.LastName).IsRequired();
         builder.Property(x => x.Email).IsRequired();
+        builder.Property(x => x.ProfilePhotoData).HasColumnType("bytea");
+        builder.Property(x => x.ProfilePhotoContentType).HasMaxLength(32);
+        builder.Property(x => x.ProfilePhotoUpdatedAt);
 
         builder.HasMany(x => x.Players)
             .WithOne(x => x.User)

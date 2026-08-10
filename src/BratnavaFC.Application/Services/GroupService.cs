@@ -204,7 +204,7 @@ public class GroupService : IGroupService
                 .Where(p => p.GroupId == groupId)
                 .ToListAsync(cancellationToken);
 
-            var players = allPlayers.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, p.User?.UserName, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating, p.AttackRating, p.DefenseRating, p.OverallRating)).ToList();
+            var players = allPlayers.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, p.User?.UserName, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating, p.AttackRating, p.DefenseRating, p.OverallRating, PhotoUrl(p.User))).ToList();
 
             var adminUserIds      = group.Admins.Select(x => x.UserId).ToArray();
             var financeiroUserIds = group.Financeiros.Select(x => x.UserId).ToArray();
@@ -222,6 +222,8 @@ public class GroupService : IGroupService
             {
                 AdminNames      = adminUserIds.Select(id => roleNames.GetValueOrDefault(id, "")).ToArray(),
                 FinanceiroNames = financeiroUserIds.Select(id => roleNames.GetValueOrDefault(id, "")).ToArray(),
+                LogoUrl = LogoUrl(group),
+                LogoUpdatedAt = group.LogoUpdatedAt,
             };
 
             return Result<GroupDto>.Ok(dto);
@@ -236,7 +238,7 @@ public class GroupService : IGroupService
     public async Task<Result<List<GroupDto>>> GetByAdminIdAsync(Guid adminId, CancellationToken cancellationToken)
     {
         var list = await _context.GroupAdmins
-            .Include(x => x.Group).ThenInclude(g => g.Players)
+            .Include(x => x.Group).ThenInclude(g => g.Players).ThenInclude(p => p.User)
             .Include(x => x.Group).ThenInclude(g => g.Admins)
             .Include(x => x.Group).ThenInclude(g => g.Financeiros)
             .Where(x => x.UserId == adminId)
@@ -247,9 +249,15 @@ public class GroupService : IGroupService
                 g.Group.Admins.Select(x => x.UserId).ToArray(),
                 g.Group.Financeiros.Select(x => x.UserId).ToArray(),
                 g.Group.Status,
-                g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating, p.AttackRating, p.DefenseRating, p.OverallRating)).ToList(),
+                g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, p.User != null ? p.User.UserName : null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating, p.AttackRating, p.DefenseRating, p.OverallRating, p.User != null && p.User.ProfilePhotoData != null ? "/api/Users/" + p.UserId + "/photo" : null)).ToList(),
                 g.Group.CreatedByUserId
-            ))
+            )
+            {
+                LogoUrl = g.Group.LogoUpdatedAt.HasValue
+                    ? "/api/Groups/" + g.Group.Id + "/logo"
+                    : null,
+                LogoUpdatedAt = g.Group.LogoUpdatedAt
+            })
             .ToListAsync(cancellationToken);
 
         return Result<List<GroupDto>>.Ok(list);
@@ -258,7 +266,7 @@ public class GroupService : IGroupService
     public async Task<Result<List<GroupDto>>> GetByFinanceiroIdAsync(Guid financeiroId, CancellationToken cancellationToken)
     {
         var list = await _context.GroupFinanceiros
-            .Include(x => x.Group).ThenInclude(g => g.Players)
+            .Include(x => x.Group).ThenInclude(g => g.Players).ThenInclude(p => p.User)
             .Include(x => x.Group).ThenInclude(g => g.Admins)
             .Include(x => x.Group).ThenInclude(g => g.Financeiros)
             .Where(x => x.UserId == financeiroId)
@@ -269,9 +277,15 @@ public class GroupService : IGroupService
                 g.Group.Admins.Select(x => x.UserId).ToArray(),
                 g.Group.Financeiros.Select(x => x.UserId).ToArray(),
                 g.Group.Status,
-                g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating, p.AttackRating, p.DefenseRating, p.OverallRating)).ToList(),
+                g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, p.User != null ? p.User.UserName : null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating, p.AttackRating, p.DefenseRating, p.OverallRating, p.User != null && p.User.ProfilePhotoData != null ? "/api/Users/" + p.UserId + "/photo" : null)).ToList(),
                 g.Group.CreatedByUserId
-            ))
+            )
+            {
+                LogoUrl = g.Group.LogoUpdatedAt.HasValue
+                    ? "/api/Groups/" + g.Group.Id + "/logo"
+                    : null,
+                LogoUpdatedAt = g.Group.LogoUpdatedAt
+            })
             .ToListAsync(cancellationToken);
 
         return Result<List<GroupDto>>.Ok(list);
@@ -304,15 +318,95 @@ public class GroupService : IGroupService
             g.Players.Select(p => new Domain.Dtos.Players.PlayerDto(
                 p.Id, p.Name, p.UserId, p.User?.UserName,
                 p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating,
-                p.AttackRating, p.DefenseRating, p.OverallRating)).ToList(),
+                p.AttackRating, p.DefenseRating, p.OverallRating, PhotoUrl(p.User))).ToList(),
             g.CreatedByUserId
-        )).ToList();
+        )
+        {
+            LogoUrl = LogoUrl(g),
+            LogoUpdatedAt = g.LogoUpdatedAt
+        }).ToList();
 
         return Result<PagedResultDto<GroupDto>>.Ok(new PagedResultDto<GroupDto>
         {
             Page = page, PageSize = pageSize, Total = total, Items = list,
         });
     }
+
+    private static string? PhotoUrl(UserEntity? user) =>
+        user?.ProfilePhotoData is { Length: > 0 }
+            ? $"/api/Users/{user.Id}/photo?v={user.ProfilePhotoUpdatedAt?.ToUnixTimeMilliseconds()}"
+            : null;
+
+    private static string? LogoUrl(GroupEntity group) =>
+        group.LogoUpdatedAt.HasValue
+            ? $"/api/Groups/{group.Id}/logo?v={group.LogoUpdatedAt.Value.ToUnixTimeMilliseconds()}"
+            : null;
+
+    public async Task<Result<GroupLogoDto>> SetLogoAsync(
+        Guid groupId,
+        byte[] data,
+        string contentType,
+        CancellationToken cancellationToken)
+    {
+        if (data.Length == 0 || data.Length > 5 * 1024 * 1024)
+            return Result<GroupLogoDto>.Fail("A logo deve ter no máximo 5 MB.", ResultStatus.BadRequest);
+
+        var normalizedContentType = contentType.Trim().ToLowerInvariant();
+        if (!IsSupportedImage(data, normalizedContentType))
+            return Result<GroupLogoDto>.Fail("Envie uma imagem JPEG, PNG ou WebP válida.", ResultStatus.BadRequest);
+
+        var group = await _context.Groups.FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
+        if (group is null)
+            return Result<GroupLogoDto>.Fail("Grupo não encontrado.", ResultStatus.NotFound);
+
+        group.SetLogo(data, normalizedContentType);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var updatedAt = group.LogoUpdatedAt ?? DateTimeOffset.UtcNow;
+        return Result<GroupLogoDto>.Ok(new GroupLogoDto(
+            $"/api/Groups/{group.Id}/logo?v={updatedAt.ToUnixTimeMilliseconds()}",
+            updatedAt));
+    }
+
+    public async Task<Result<(byte[] Data, string ContentType, DateTimeOffset UpdatedAt)>> GetLogoAsync(
+        Guid groupId,
+        CancellationToken cancellationToken)
+    {
+        var logo = await _context.Groups
+            .AsNoTracking()
+            .Where(g => g.Id == groupId && g.LogoData != null)
+            .Select(g => new
+            {
+                Data = g.LogoData!,
+                ContentType = g.LogoContentType!,
+                UpdatedAt = g.LogoUpdatedAt!.Value
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return logo is null
+            ? Result<(byte[], string, DateTimeOffset)>.Fail("Logo não encontrada.", ResultStatus.NotFound)
+            : Result<(byte[], string, DateTimeOffset)>.Ok((logo.Data, logo.ContentType, logo.UpdatedAt));
+    }
+
+    public async Task<Result> RemoveLogoAsync(Guid groupId, CancellationToken cancellationToken)
+    {
+        var group = await _context.Groups.FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
+        if (group is null)
+            return Result.Fail("Grupo não encontrado.", ResultStatus.NotFound);
+
+        group.RemoveLogo();
+        await _context.SaveChangesAsync(cancellationToken);
+        return Result.Ok("Logo removida com sucesso.");
+    }
+
+    private static bool IsSupportedImage(byte[] data, string contentType) => contentType switch
+    {
+        "image/jpeg" => data.Length >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF,
+        "image/png" => data.Length >= 8 && data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47,
+        "image/webp" => data.Length >= 12 && data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46
+            && data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50,
+        _ => false
+    };
 
     public async Task<Result> AddAdminToGroupAsync(Guid groupId, AddAdminToGroupDto request, CancellationToken cancellationToken)
     {
@@ -504,7 +598,8 @@ public class GroupService : IGroupService
                 invite.GuestPlayerId,
                 guestPlayerName,
                 (int)invite.Status,
-                invite.CreateDate
+                invite.CreateDate,
+                group is null ? null : LogoUrl(group)
             );
 
             return Result<GroupInviteDto>.Ok(dto, "Convite criado com sucesso.", ResultStatus.Created);
@@ -531,7 +626,8 @@ public class GroupService : IGroupService
                 i.GuestPlayerId,
                 i.GuestPlayer != null ? i.GuestPlayer.Name : null,
                 (int)i.Status,
-                i.CreateDate
+                i.CreateDate,
+                i.Group.LogoUpdatedAt.HasValue ? "/api/Groups/" + i.GroupId + "/logo" : null
             ))
             .ToListAsync(cancellationToken);
 

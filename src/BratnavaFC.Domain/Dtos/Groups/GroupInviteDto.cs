@@ -8,5 +8,6 @@ public record GroupInviteDto(
     Guid?  GuestPlayerId,
     string? GuestPlayerName,
     int    Status,          // 1=Pending 2=Accepted 3=Rejected
-    DateTime CreateDate
+    DateTime CreateDate,
+    string? GroupLogoUrl
 );

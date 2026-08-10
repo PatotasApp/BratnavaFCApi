@@ -14,6 +14,8 @@ public sealed class UserDto
     public string FirstName { get; set; } = null!;
     public string LastName { get; set; } = null!;
     public DateTimeOffset? BirthDate { get; set; }
+    public string? PhotoUrl { get; set; }
+    public DateTimeOffset? PhotoUpdatedAt { get; set; }
 
     public UserRole Role { get; set; }
     public Status Status { get; set; }

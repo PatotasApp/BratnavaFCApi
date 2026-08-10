@@ -29,7 +29,7 @@ public static class InfrastructureDependencyInjection
         services.AddBackgroundJobs(configuration, environment, logger);
         services.AddReplayEventing(configuration, environment, isDevelopment);
         services.AddReplayStorage(configuration, environment, isDevelopment);
-        services.AddFirebase(configuration, logger);
+        services.AddFirebase(configuration, environment, logger);
         services.AddExternalHttpClients();
 
         logger.LogInformation(
@@ -237,9 +237,17 @@ public static class InfrastructureDependencyInjection
     private static void AddFirebase(
         this IServiceCollection services,
         IConfiguration configuration,
+        IHostEnvironment environment,
         ILogger logger)
     {
         var firebaseJson = Environment.GetEnvironmentVariable("FIREBASE_SERVICE_ACCOUNT_JSON");
+        if (environment.IsDevelopment() && string.IsNullOrWhiteSpace(firebaseJson))
+        {
+            logger.LogInformation(
+                "[Firebase] Desabilitado em Development: FIREBASE_SERVICE_ACCOUNT_JSON não configurado.");
+            return;
+        }
+
         try
         {
             if (!string.IsNullOrWhiteSpace(firebaseJson))
