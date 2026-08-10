@@ -18,6 +18,7 @@ public sealed class MatchService : IMatchService
     private readonly IReplayUrlService _replayUrls;
     private readonly IBetService _bets;
     private readonly INotificationScheduler _scheduler;
+    private readonly IConquistaProjectionService? _conquistaProjection;
 
     public MatchService(
         AppDbContext context,
@@ -25,7 +26,8 @@ public sealed class MatchService : IMatchService
         IPushService push,
         IReplayUrlService replayUrls,
         IBetService bets,
-        INotificationScheduler scheduler)
+        INotificationScheduler scheduler,
+        IConquistaProjectionService? conquistaProjection = null)
     {
         _context    = context;
         _repository = repository;
@@ -33,6 +35,7 @@ public sealed class MatchService : IMatchService
         _replayUrls = replayUrls;
         _bets       = bets;
         _scheduler  = scheduler;
+        _conquistaProjection = conquistaProjection;
     }
 
     public async Task<Result<List<MatchDetailsDto>>> GetAllAsync(Guid groupId, CancellationToken ct = default)
@@ -58,6 +61,9 @@ public sealed class MatchService : IMatchService
 
         return Result<List<MatchDetailsDto>>.Ok(matches.Select(MapToDetailsDto).ToList());
     }
+
+    private Task ProjectConquistasAsync(Guid groupId, Guid matchId, CancellationToken ct) =>
+        _conquistaProjection?.ProjectMatchAsync(groupId, matchId, ct) ?? Task.CompletedTask;
 
     public async Task<Result<MatchEntity>> GetByIdAsync(Guid groupId, Guid matchId, CancellationToken ct = default)
     {
@@ -646,6 +652,7 @@ public sealed class MatchService : IMatchService
         match.FinalizeByVotes(tieRule, tieMax);
 
         await _context.SaveChangesAsync(ct);
+        await ProjectConquistasAsync(groupId, matchId, ct);
 
         // Resolve apostas imediatamente após finalização (evita resolução lazy com race condition)
         await _bets.ResolveMatchBetsAsync(matchId, ct);
@@ -674,6 +681,8 @@ public sealed class MatchService : IMatchService
         var (tieRule, tieMax) = await LoadMvpTieRuleAsync(groupId, ct);
         match.ReapplyMvpTieRule(tieRule, tieMax);
         await _context.SaveChangesAsync(ct);
+        if (match.Status == Domain.Enums.MatchStatus.Finalized)
+            await ProjectConquistasAsync(groupId, matchId, ct);
 
         return Result.Ok("MVP recalculado com sucesso.");
     }
@@ -977,7 +986,10 @@ public sealed class MatchService : IMatchService
         await _context.SaveChangesAsync(ct);
 
         if (match.Status == Domain.Enums.MatchStatus.Finalized)
+        {
             await _bets.ReResolveMatchBetsAsync(matchId, ct);
+            await ProjectConquistasAsync(groupId, matchId, ct);
+        }
 
         return Result.Ok("Gol adicionado com sucesso.");
     }
@@ -1027,7 +1039,10 @@ public sealed class MatchService : IMatchService
         await _context.SaveChangesAsync(ct);
 
         if (match.Status == Domain.Enums.MatchStatus.Finalized)
+        {
             await _bets.ReResolveMatchBetsAsync(matchId, ct);
+            await ProjectConquistasAsync(groupId, matchId, ct);
+        }
 
         return Result.Ok("Gol atualizado com sucesso.");
     }
@@ -1062,7 +1077,10 @@ public sealed class MatchService : IMatchService
         await _context.SaveChangesAsync(ct);
 
         if (match.Status == Domain.Enums.MatchStatus.Finalized)
+        {
             await _bets.ReResolveMatchBetsAsync(matchId, ct);
+            await ProjectConquistasAsync(groupId, matchId, ct);
+        }
 
         return Result.Ok("Gol removido com sucesso.");
     }

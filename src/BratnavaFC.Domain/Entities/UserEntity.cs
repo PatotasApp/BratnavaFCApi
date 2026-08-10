@@ -21,6 +21,9 @@ public sealed class UserEntity : InactivatableEntity
     public byte[]? ProfilePhotoData { get; private set; }
     public string? ProfilePhotoContentType { get; private set; }
     public DateTimeOffset? ProfilePhotoUpdatedAt { get; private set; }
+    public ProfileVisibility ProfileVisibility { get; private set; } = ProfileVisibility.AuthenticatedUsers;
+    public bool ShowPatotaNamesOnProfile { get; private set; } = true;
+    public bool ShowZoeiraAchievementsOnProfile { get; private set; }
 
     public UserRole Role { get; private set; } = UserRole.User;
 
@@ -111,5 +114,12 @@ public sealed class UserEntity : InactivatableEntity
         ProfilePhotoData = null;
         ProfilePhotoContentType = null;
         ProfilePhotoUpdatedAt = null;
+    }
+
+    public void SetProfilePrivacy(ProfileVisibility visibility, bool showPatotaNames, bool showZoeiraAchievements)
+    {
+        ProfileVisibility = visibility;
+        ShowPatotaNamesOnProfile = showPatotaNames;
+        ShowZoeiraAchievementsOnProfile = showZoeiraAchievements;
     }
 }
