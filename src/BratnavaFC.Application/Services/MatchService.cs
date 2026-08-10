@@ -1372,6 +1372,10 @@ public sealed class MatchService : IMatchService
                         MatchPlayerId = mp.Id,
                         PlayerId = mp.PlayerId,
                         PlayerName = mp.Player!.Name,
+                        PhotoUrl = mp.Player.User != null &&
+                                   mp.Player.User.ProfilePhotoData != null
+                            ? "/api/Users/" + mp.Player.UserId + "/photo"
+                            : null,
                         IsGoalkeeper = mp.IsGoalkeeper,
                         IsGuest = mp.Player!.IsGuest,
                         Team = mp.Team,
