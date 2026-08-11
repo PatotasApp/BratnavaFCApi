@@ -37,6 +37,22 @@ public sealed class PushController : BaseApiController
         return ToResponse(result);
     }
 
+    /// <summary>Desativa as notificações push deste dispositivo no logout.</summary>
+    [HttpDelete("register-token")]
+    public async Task<IActionResult> UnregisterTokenAsync(
+        [FromBody] UnregisterPushTokenDto request,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == Guid.Empty)
+            return Unauthorized();
+
+        var result = await _pushService.UnregisterTokenAsync(
+            userId, request.Token, cancellationToken);
+
+        return ToResponse(result);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private Guid GetCurrentUserId()

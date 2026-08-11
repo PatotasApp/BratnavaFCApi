@@ -1812,6 +1812,9 @@ public sealed class MatchServiceTests
         result.Data!.AcceptedPlayers.Single().PlayerId.Should().Be(players[0].Id);
         result.Data!.RejectedPlayers.Single().PlayerId.Should().Be(players[1].Id);
         result.Data!.PendingPlayers.Single().PlayerId.Should().Be(players[2].Id);
+        result.Data!.AcceptedPlayers.Single().UserId.Should().Be(players[0].UserId);
+        result.Data!.RejectedPlayers.Single().UserId.Should().Be(players[1].UserId);
+        result.Data!.PendingPlayers.Single().UserId.Should().Be(players[2].UserId);
     }
 
     [Fact]
@@ -1869,7 +1872,7 @@ public sealed class MatchServiceTests
         var sut = CreateSut(db, repo);
 
         var group = await SeedGroupAsync(db);
-        var (match, _) = await SeedMatchAsync(db, group.Id, playersCount: 4,
+        var (match, players) = await SeedMatchAsync(db, group.Id, playersCount: 4,
             targetStatus: MatchStatus.MatchMaking, acceptAllInvites: true, defineTeamsIfPossible: true);
 
         var result = await sut.GetMatchMakingAsync(group.Id, match.Id, CancellationToken.None);
@@ -1878,6 +1881,9 @@ public sealed class MatchServiceTests
         result.Data!.Participants.Should().HaveCount(4);
         result.Data!.Participants.Should().OnlyContain(p => p.Team == 1 || p.Team == 2,
             "Participants só deve incluir jogadores atribuídos a um time");
+        result.Data!.Participants.Should().OnlyContain(p =>
+            p.UserId == players.Single(source => source.Id == p.PlayerId).UserId,
+            "a formação precisa permitir abrir o perfil de cada participante");
     }
 
     [Fact]
@@ -1936,7 +1942,7 @@ public sealed class MatchServiceTests
         var sut = CreateSut(db, repo);
 
         var group = await SeedGroupAsync(db);
-        var (match, _) = await SeedMatchAsync(db, group.Id, playersCount: 4,
+        var (match, players) = await SeedMatchAsync(db, group.Id, playersCount: 4,
             targetStatus: MatchStatus.PostGame, acceptAllInvites: true, defineTeamsIfPossible: true);
 
         var result = await sut.GetPostGameAsync(group.Id, match.Id, CancellationToken.None);
@@ -1945,6 +1951,9 @@ public sealed class MatchServiceTests
         result.Data!.Participants.Should().HaveCount(4);
         result.Data!.Participants.Should().OnlyContain(p => p.Team == 1 || p.Team == 2,
             "Participants só deve incluir jogadores em times");
+        result.Data!.Participants.Should().OnlyContain(p =>
+            p.UserId == players.Single(source => source.Id == p.PlayerId).UserId,
+            "o pós-jogo precisa manter o vínculo com o perfil do usuário");
     }
 
     [Fact]
@@ -2032,6 +2041,9 @@ public sealed class MatchServiceTests
 
         result.Success.Should().BeTrue();
         result.Data!.ComputedMvps.Should().NotBeEmpty("MVP deve estar definido após todos votarem");
+        result.Data!.ComputedMvps.Should().OnlyContain(mvp =>
+            mvp.UserId == players.Single(source => source.Id == mvp.PlayerId).UserId,
+            "o MVP precisa manter o vínculo com o perfil do usuário");
     }
 
     // =========================

@@ -33,10 +33,17 @@ public class PushService : IPushService
             if (platform != "android" && platform != "ios")
                 return Result.Fail("Platform deve ser 'android' ou 'ios'.");
 
-            // Lookup por (userId + token): não roubamos o token de outro usuário.
-            // O mesmo dispositivo físico pode ter linhas para diferentes usuários.
-            var existing = await _context.PushTokens
-                .FirstOrDefaultAsync(t => t.UserId == userId && t.Token == token, cancellationToken);
+            // Mantemos o histórico por usuário, mas somente o vínculo da conta
+            // atualmente autenticada permanece ativo neste dispositivo.
+            var tokenRows = await _context.PushTokens
+                .Where(t => t.Token == token)
+                .ToListAsync(cancellationToken);
+            var existing = tokenRows.FirstOrDefault(t => t.UserId == userId);
+
+            // Uma instalação possui uma única conta ativa. Vínculos anteriores
+            // deste aparelho não podem continuar recebendo notificações.
+            foreach (var otherOwner in tokenRows.Where(t => t.UserId != userId && t.IsActive))
+                otherOwner.Deactivate();
 
             if (existing is not null)
             {
@@ -62,6 +69,23 @@ public class PushService : IPushService
 
     // ── Envio de notificações ─────────────────────────────────────────────────
 
+    public async Task<Result> UnregisterTokenAsync(
+        Guid userId, string token, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return Result.Fail("Token é obrigatório.");
+
+        var rows = await _context.PushTokens
+            .Where(t => t.UserId == userId && t.Token == token && t.IsActive)
+            .ToListAsync(cancellationToken);
+
+        foreach (var row in rows)
+            row.Deactivate();
+
+        await _context.SaveChangesAsync(cancellationToken);
+        return Result.Ok("Token desregistrado com sucesso.");
+    }
+
     public async Task SendToUserAsync(
         Guid userId, string title, string body,
         Dictionary<string, string>? data = null,
@@ -81,14 +105,11 @@ public class PushService : IPushService
             ? await PrefixWithGroupNameAsync(title, groupId.Value, cancellationToken)
             : title;
 
-        // Identifica o usuário no título para dispositivos com múltiplas contas
-        var personalizedTitle = await PersonalizeTitleAsync(userId, prefixedTitle, cancellationToken);
-
-        // Injeta userId no payload para que o app saiba a qual conta pertence
+        // Mantém o destinatário no payload para rastreamento e roteamento.
         var enrichedData = EnrichWithUserId(data, userId);
 
         // Persiste na caixa de entrada independente de ter token ativo
-        await PersistAsync([userId], groupId, personalizedTitle, body, enrichedData, cancellationToken);
+        await PersistAsync([userId], groupId, prefixedTitle, body, enrichedData, cancellationToken);
 
         if (tokens.Count == 0)
         {
@@ -96,7 +117,7 @@ public class PushService : IPushService
             return;
         }
 
-        await SendToTokensAsync(tokens, personalizedTitle, body, enrichedData, cancellationToken);
+        await SendToTokensAsync(tokens, prefixedTitle, body, enrichedData, cancellationToken);
     }
 
     public async Task SendDataOnlyToGroupAsync(
@@ -123,14 +144,24 @@ public class PushService : IPushService
         if (!string.IsNullOrEmpty(inboxTitle))
             await PersistAsync(userIds, groupId, inboxTitle, inboxBody ?? string.Empty, data, cancellationToken, inboxType);
 
-        if (userIds.Count == 0) return;
+        if (userIds.Count == 0)
+        {
+            _logger.LogWarning("[Push DataOnly] Grupo {GroupId} não possui usuários destinatários.", groupId);
+            return;
+        }
 
         var tokens = await _context.PushTokens
             .Where(t => userIds.Contains(t.UserId) && t.IsActive)
             .Select(t => t.Token)
             .ToListAsync(cancellationToken);
 
-        if (tokens.Count == 0) return;
+        if (tokens.Count == 0)
+        {
+            _logger.LogWarning(
+                "[Push DataOnly] Nenhum token ativo para {UserCount} usuários do grupo {GroupId}.",
+                userIds.Count, groupId);
+            return;
+        }
 
         // Envia sem campo Notification — o Flutter exibe a notificação local com botões
         var tokenList = tokens.Distinct().ToList();
@@ -186,7 +217,17 @@ public class PushService : IPushService
         Guid? groupId = null,
         CancellationToken cancellationToken = default)
     {
-        if (userIds.Count == 0) return;
+        if (userIds.Count == 0)
+        {
+            _logger.LogWarning("[Push DataOnly] Nenhum usuário destinatário para a notificação.");
+            return;
+        }
+
+        if (groupId.HasValue && data.TryGetValue("title", out var rawTitle))
+        {
+            var groupName = await GetGroupNameAsync(groupId.Value, cancellationToken);
+            data["title"] = $"{groupName} · {rawTitle}";
+        }
 
         // Persiste no sininho a partir das chaves title/body do payload
         data.TryGetValue("title", out var inboxTitle);
@@ -297,34 +338,35 @@ public class PushService : IPushService
         CancellationToken cancellationToken,
         Guid? groupId = null)
     {
-        if (userIds.Count == 0) return;
+        if (userIds.Count == 0)
+        {
+            _logger.LogWarning("[Push] Nenhum usuário destinatário para a notificação {Title}.", title);
+            return;
+        }
 
         // Persiste na caixa de entrada de cada usuário (sem prefixo de nome)
         await PersistAsync(userIds, groupId, title, body, data, cancellationToken);
 
-        // Busca tokens agrupados por usuário para poder personalizar o título
+        // Busca tokens agrupados por usuário para enriquecer o payload de cada destinatário.
         var tokensByUser = await _context.PushTokens
             .Where(t => userIds.Contains(t.UserId) && t.IsActive)
             .Select(t => new { t.UserId, t.Token })
             .ToListAsync(cancellationToken);
 
-        if (tokensByUser.Count == 0) return;
+        if (tokensByUser.Count == 0)
+        {
+            _logger.LogWarning(
+                "[Push] Nenhum token ativo para {UserCount} usuários. Notificação {Title} salva apenas no inbox.",
+                userIds.Count, title);
+            return;
+        }
 
-        // Busca nomes de usuário para personalização
-        var ids = tokensByUser.Select(t => t.UserId).Distinct().ToList();
-        var names = await _context.Users
-            .Where(u => ids.Contains(u.Id))
-            .Select(u => new { u.Id, Name = u.UserName ?? (u.FirstName + " " + u.LastName).Trim() })
-            .ToDictionaryAsync(u => u.Id, u => u.Name, cancellationToken);
-
-        // Agrupa por usuário e envia com título personalizado
+        // Agrupa por usuário sem alterar o título visível da notificação.
         foreach (var group in tokensByUser.GroupBy(t => t.UserId))
         {
             var tokens = group.Select(t => t.Token).ToList();
-            var userName = names.GetValueOrDefault(group.Key, string.Empty);
-            var personalizedTitle = string.IsNullOrEmpty(userName) ? title : $"[{userName}] {title}";
             var enrichedData = EnrichWithUserId(data, group.Key);
-            await SendToTokensAsync(tokens, personalizedTitle, body, enrichedData, cancellationToken);
+            await SendToTokensAsync(tokens, title, body, enrichedData, cancellationToken);
         }
     }
 
@@ -389,23 +431,7 @@ public class PushService : IPushService
     // ── Helpers privados ──────────────────────────────────────────────────────
 
     /// <summary>
-    /// Prefixa o título com [username] para que dispositivos com múltiplas
-    /// contas saibam a qual usuário a notificação pertence.
-    /// Ex.: "[luis] Senha alterada"
-    /// </summary>
-    private async Task<string> PersonalizeTitleAsync(Guid userId, string title, CancellationToken ct)
-    {
-        var name = await _context.Users
-            .Where(u => u.Id == userId)
-            .Select(u => u.UserName ?? (u.FirstName + " " + u.LastName).Trim())
-            .FirstOrDefaultAsync(ct);
-
-        return string.IsNullOrWhiteSpace(name) ? title : $"[{name}] {title}";
-    }
-
-    /// <summary>
-    /// Injeta userId no payload de dados — permite ao app identificar a conta
-    /// destinatária, especialmente em foreground com múltiplas contas ativas.
+    /// Injeta userId no payload de dados para rastreamento e roteamento.
     /// </summary>
     private static Dictionary<string, string> EnrichWithUserId(
         Dictionary<string, string>? data, Guid userId)

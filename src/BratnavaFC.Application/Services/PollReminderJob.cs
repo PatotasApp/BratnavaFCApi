@@ -161,6 +161,7 @@ public sealed class PollReminderJob : IPollReminderJob
             data: new Dictionary<string, string>
             {
                 ["type"]    = "poll_closed",
+                ["pollType"] = poll.Type,
                 ["pollId"]  = pollId.ToString(),
                 ["groupId"] = poll.GroupId.ToString(),
             },
