@@ -275,6 +275,9 @@ public sealed class MatchServiceCoverageTests
         dto.GroupName.Should().Be("Bratnava FC");
         dto.TeamAPlayers.Should().HaveCount(2);
         dto.TeamBPlayers.Should().HaveCount(2);
+        dto.TeamAPlayers.Concat(dto.TeamBPlayers).Should().OnlyContain(p =>
+            p.UserId == players.Single(source => source.Id == p.PlayerId).UserId,
+            "cada jogador da escalação deve manter o vínculo com o usuário");
         dto.Goals.Should().HaveCount(1);
         dto.Goals[0].AssistName.Should().NotBeNullOrEmpty();
         dto.Votes.Should().HaveCount(1);

@@ -13,6 +13,23 @@ namespace BranavaFC.Tests;
 public sealed class GroupRolesControllerTests
 {
     [Fact]
+    public async Task GetMyRolesAsync_WithoutAuthenticatedUser_ReturnsUnauthorized()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetMyRolesAsync_WithoutAuthenticatedUser_ReturnsUnauthorized));
+        var sut = new GroupsController(Mock.Of<IGroupService>(), db)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext(),
+            },
+        };
+
+        var result = await sut.GetMyRolesAsync(Guid.NewGuid(), CancellationToken.None);
+
+        result.Should().BeOfType<UnauthorizedResult>();
+    }
+
+    [Fact]
     public async Task GetMyRolesAsync_GodModeWithoutGroupLinks_ReturnsNoGroupRoles()
     {
         var userId = Guid.NewGuid();

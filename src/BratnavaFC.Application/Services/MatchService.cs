@@ -302,7 +302,7 @@ public sealed class MatchService : IMatchService
 
         await _repository.SaveChangesAsync(ct);
 
-        await NotifyMatchInviteAsync(groupId, match.Id, ct);
+        await NotifyMatchInviteAsync(groupId, match, ct);
         await _scheduler.ScheduleMatchRemindersAsync(match.Id, groupId, match.PlayedAt, ct);
         await _scheduler.ScheduleMatchNoQuorumReminderAsync(match.Id, groupId, match.PlayedAt, ct);
 
@@ -2253,26 +2253,45 @@ public sealed class MatchService : IMatchService
 
             if (newUserIds.Count == 0) return;
 
-            await _push.SendToUsersAsync(
+            var matchInfo = await _context.Matches
+                .AsNoTracking()
+                .Where(m => m.Id == matchId && m.GroupId == groupId)
+                .Select(m => new { m.PlayedAt, m.PlaceName })
+                .FirstOrDefaultAsync(ct);
+            if (matchInfo is null) return;
+
+            var body = NotificationContentFormatter.MatchInviteBody(
+                matchInfo.PlayedAt, matchInfo.PlaceName);
+            await _push.SendDataOnlyToUsersAsync(
                 newUserIds,
-                title: "Você foi adicionado a uma partida! ⚽",
-                body:  "Você foi incluído em uma partida. Confirme sua presença!",
-                data:  new Dictionary<string, string> { ["type"] = "match_invite", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
-                groupId: groupId);
+                data: new Dictionary<string, string>
+                {
+                    ["type"] = "match_invite",
+                    ["groupId"] = groupId.ToString(),
+                    ["matchId"] = matchId.ToString(),
+                    ["title"] = "Convite para partida",
+                    ["body"] = body,
+                    ["playedAt"] = matchInfo.PlayedAt.ToString("O"),
+                    ["placeName"] = matchInfo.PlaceName,
+                },
+                groupId: groupId,
+                cancellationToken: ct);
         }
         catch { /* notificação não crítica */ }
     }
 
-    private Task NotifyMatchInviteAsync(Guid groupId, Guid matchId, CancellationToken ct) =>
+    private Task NotifyMatchInviteAsync(Guid groupId, MatchEntity match, CancellationToken ct) =>
         _push.SendDataOnlyToGroupAsync(
             groupId,
             new Dictionary<string, string>
             {
                 ["type"] = "match_invite",
                 ["groupId"] = groupId.ToString(),
-                ["matchId"] = matchId.ToString(),
+                ["matchId"] = match.Id.ToString(),
                 ["title"] = "Convite para partida",
-                ["body"] = "Você foi convidado para uma partida. Confirme sua presença!",
+                ["body"] = NotificationContentFormatter.MatchInviteBody(match.PlayedAt, match.PlaceName),
+                ["playedAt"] = match.PlayedAt.ToString("O"),
+                ["placeName"] = match.PlaceName,
             },
             ct);
 

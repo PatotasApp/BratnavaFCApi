@@ -7,6 +7,9 @@ public interface IPushService
     /// <summary>Registra ou atualiza o token FCM de um dispositivo para o usuário autenticado.</summary>
     Task<Result> RegisterTokenAsync(Guid userId, string token, string platform, CancellationToken cancellationToken);
 
+    /// <summary>Desativa o token deste dispositivo para o usuário autenticado.</summary>
+    Task<Result> UnregisterTokenAsync(Guid userId, string token, CancellationToken cancellationToken);
+
     /// <summary>
     /// Envia notificação para todos os dispositivos ativos de um usuário.
     /// Se groupId for fornecido, o nome do grupo é prefixado no título automaticamente.

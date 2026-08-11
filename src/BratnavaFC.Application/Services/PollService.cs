@@ -358,7 +358,7 @@ public sealed class PollService : IPollService
 
             await _db.SaveChangesAsync(ct);
 
-            await NotifyPollClosedAsync(groupId, pollId, poll.Title, ct);
+            await NotifyPollClosedAsync(groupId, pollId, poll.Title, poll.Type, ct);
 
             if (createdEventTitle is not null && createdEventDate.HasValue)
                 await NotifyEventCreatedFromPollAsync(groupId, createdEventTitle, createdEventDate.Value, createdEventTime, ct);
@@ -801,25 +801,25 @@ public sealed class PollService : IPollService
     private Task NotifyPollCreatedAsync(Guid groupId, Guid pollId, string title, CancellationToken ct) =>
         _push.SendToGroupAsync(
             groupId,
-            title: $"Nova votação: {title}",
-            body:  "Uma nova votação foi criada.",
-            data:  new Dictionary<string, string> { ["type"] = "poll_created", ["groupId"] = groupId.ToString(), ["pollId"] = pollId.ToString() },
+            title: "Nova votação",
+            body:  NotificationContentFormatter.PollInviteBody(title, isEvent: false),
+            data:  new Dictionary<string, string> { ["type"] = "poll_created", ["pollType"] = "vote", ["groupId"] = groupId.ToString(), ["pollId"] = pollId.ToString(), ["pollTitle"] = title },
             ct);
 
     private Task NotifyEventPollCreatedAsync(Guid groupId, Guid pollId, string title, CancellationToken ct) =>
         _push.SendToGroupAsync(
             groupId,
-            title: $"Novo evento para votar: {title}",
-            body:  "Vote se você vai participar do evento!",
-            data:  new Dictionary<string, string> { ["type"] = "poll_created", ["groupId"] = groupId.ToString(), ["pollId"] = pollId.ToString() },
+            title: "Novo evento",
+            body:  NotificationContentFormatter.PollInviteBody(title, isEvent: true),
+            data:  new Dictionary<string, string> { ["type"] = "poll_created", ["pollType"] = "event", ["groupId"] = groupId.ToString(), ["pollId"] = pollId.ToString(), ["pollTitle"] = title },
             ct);
 
-    private Task NotifyPollClosedAsync(Guid groupId, Guid pollId, string pollTitle, CancellationToken ct) =>
+    private Task NotifyPollClosedAsync(Guid groupId, Guid pollId, string pollTitle, string pollType, CancellationToken ct) =>
         _push.SendToGroupAsync(
             groupId,
             title: "Votação encerrada!",
             body:  $"A votação \"{pollTitle}\" foi encerrada. Confira os resultados.",
-            data:  new Dictionary<string, string> { ["type"] = "poll_closed", ["groupId"] = groupId.ToString(), ["pollId"] = pollId.ToString() },
+            data:  new Dictionary<string, string> { ["type"] = "poll_closed", ["pollType"] = pollType, ["groupId"] = groupId.ToString(), ["pollId"] = pollId.ToString() },
             ct);
 
     private Task NotifyEventCreatedFromPollAsync(
@@ -846,7 +846,7 @@ public sealed class PollService : IPollService
                 groupId,
                 title: "Prazo alterado 🗳️",
                 body:  $"O prazo da votação \"{poll.Title}\" foi atualizado para {deadlineStr}.",
-                data:  new Dictionary<string, string> { ["type"] = "poll_deadline_changed", ["groupId"] = groupId.ToString(), ["pollId"] = poll.Id.ToString() },
+                data:  new Dictionary<string, string> { ["type"] = "poll_deadline_changed", ["pollType"] = poll.Type, ["groupId"] = groupId.ToString(), ["pollId"] = poll.Id.ToString() },
                 ct);
         }
         catch { /* notificação não crítica */ }
