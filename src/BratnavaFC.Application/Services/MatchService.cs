@@ -157,6 +157,7 @@ public sealed class MatchService : IMatchService
             {
                 MatchPlayerId = p.Id,
                 PlayerId = p.PlayerId,
+                UserId = p.Player?.UserId,
                 PlayerName = p.Player?.Name ?? string.Empty,
                 PhotoUrl = UserPhotoUrl(p.Player?.User),
                 Team = p.Team
@@ -1389,6 +1390,7 @@ public sealed class MatchService : IMatchService
                     {
                         MatchPlayerId = mp.Id,
                         PlayerId = mp.PlayerId,
+                        UserId = mp.Player.UserId,
                         PlayerName = mp.Player!.Name,
                         PhotoUrl = mp.Player.User != null &&
                                    mp.Player.User.ProfilePhotoData != null
@@ -1514,6 +1516,7 @@ public sealed class MatchService : IMatchService
                     {
                         MatchPlayerId = mp.Id,
                         PlayerId      = mp.PlayerId,
+                        UserId        = mp.Player!.UserId,
                         PlayerName    = mp.Player!.Name,
                         IsGoalkeeper  = mp.IsGoalkeeper,
                         IsGuest       = mp.Player!.IsGuest,
@@ -1530,6 +1533,7 @@ public sealed class MatchService : IMatchService
                     {
                         MatchPlayerId = mp.Id,
                         PlayerId      = mp.PlayerId,
+                        UserId        = mp.Player!.UserId,
                         PlayerName    = mp.Player!.Name,
                         IsGoalkeeper  = mp.IsGoalkeeper,
                         IsGuest       = mp.Player!.IsGuest,
@@ -1547,6 +1551,7 @@ public sealed class MatchService : IMatchService
                     {
                         MatchPlayerId = mp.Id,
                         PlayerId      = mp.PlayerId,
+                        UserId        = mp.Player!.UserId,
                         PlayerName    = mp.Player!.Name,
                         IsGoalkeeper  = mp.IsGoalkeeper,
                         IsGuest       = mp.Player!.IsGuest,
@@ -1567,6 +1572,7 @@ public sealed class MatchService : IMatchService
                     {
                         MatchPlayerId = mp.Id,
                         PlayerId      = mp.PlayerId,
+                        UserId        = mp.Player!.UserId,
                         PlayerName    = mp.Player!.Name,
                         IsGoalkeeper  = mp.IsGoalkeeper,
                         IsGuest       = mp.Player!.IsGuest,
@@ -1648,6 +1654,7 @@ public sealed class MatchService : IMatchService
             {
                 MatchPlayerId = p.Id,
                 PlayerId = p.PlayerId,
+                UserId = p.PlayerUserId,
                 PlayerName = p.PlayerName,
                 IsGoalkeeper = p.IsGoalkeeper,
                 IsGuest = p.IsGuest,
@@ -1691,6 +1698,7 @@ public sealed class MatchService : IMatchService
             {
                 MatchPlayerId = p.Id,
                 PlayerId = p.PlayerId,
+                UserId = p.PlayerUserId,
                 PlayerName = p.PlayerName,
                 PhotoUrl = null,
                 Team = p.Team
@@ -1752,6 +1760,7 @@ public sealed class MatchService : IMatchService
             {
                 MatchPlayerId = p.Id,
                 PlayerId = p.PlayerId,
+                UserId = p.PlayerUserId,
                 PlayerName = p.PlayerName,
                 IsGoalkeeper = p.IsGoalkeeper,
                 IsGuest = p.IsGuest,
@@ -2029,6 +2038,7 @@ public sealed class MatchService : IMatchService
     {
         MatchPlayerId      = mp.Id,
         PlayerId           = mp.PlayerId,
+        UserId             = mp.Player?.UserId,
         PlayerName         = mp.Player?.Name ?? string.Empty,
         PhotoUrl           = mp.Player?.User?.ProfilePhotoData is { Length: > 0 }
             ? $"/api/Users/{mp.Player.User.Id}/photo?v={mp.Player.User.ProfilePhotoUpdatedAt?.ToUnixTimeMilliseconds()}"
@@ -2066,6 +2076,7 @@ public sealed class MatchService : IMatchService
             {
                 MatchPlayerId = p.Id,
                 PlayerId = p.PlayerId,
+                UserId = p.Player?.UserId,
                 PlayerName = p.Player?.Name ?? string.Empty,
                 PhotoUrl = UserPhotoUrl(p.Player?.User),
                 Team = p.Team

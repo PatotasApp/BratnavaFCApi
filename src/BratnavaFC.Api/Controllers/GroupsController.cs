@@ -3,6 +3,7 @@ using BratnavaFC.Domain.Dtos.Groups;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace BratnavaFC.Api.Controllers;
@@ -145,8 +146,20 @@ public class GroupsController : GroupAuthorizedController
     [Authorize]
     public async Task<IActionResult> GetMyRolesAsync(Guid groupId, CancellationToken cancellationToken)
     {
-        var isAdmin       = await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken);
-        var isFinanceiro  = await IsFinanceiroForGroupAsync(groupId, _db, cancellationToken);
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        // Este endpoint descreve os vínculos explícitos do usuário com a patota.
+        // Papéis de plataforma (Admin/GodMode) não podem ser projetados como
+        // Admin/Financeiro da patota, pois o app usa esta resposta para montar
+        // menus e ocultar dados financeiros ao trocar de contexto.
+        var isAdmin = await _db.GroupAdmins.AnyAsync(
+            x => x.GroupId == groupId && x.UserId == userId.Value,
+            cancellationToken);
+        var isFinanceiro = await _db.GroupFinanceiros.AnyAsync(
+            x => x.GroupId == groupId && x.UserId == userId.Value,
+            cancellationToken);
+
         return Ok(new { success = true, data = new { isAdmin, isFinanceiro } });
     }
 
