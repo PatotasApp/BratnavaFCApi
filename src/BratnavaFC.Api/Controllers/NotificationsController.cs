@@ -17,10 +17,13 @@ public sealed class NotificationsController : ControllerBase
         _notifications = notifications;
     }
 
+    /// <summary>
+    /// Identidade INTERNA, injetada no NameIdentifier pelo FirebaseIdentityMiddleware — não o UID
+    /// do Firebase, que continua em "sub".
+    /// </summary>
     private Guid? CurrentUserId()
     {
-        var raw = User.FindFirstValue(ClaimTypes.NameIdentifier)
-               ?? User.FindFirstValue("sub");
+        var raw = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return Guid.TryParse(raw, out var id) ? id : null;
     }
 

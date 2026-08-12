@@ -38,10 +38,13 @@ public sealed class ProfileController : BaseApiController
         catch (ArgumentException e) { return BadRequest(new { error = e.Message }); }
     }
 
+    /// <summary>
+    /// Identidade INTERNA, injetada no NameIdentifier pelo FirebaseIdentityMiddleware — não o UID
+    /// do Firebase, que continua em "sub".
+    /// </summary>
     private Guid CurrentUserId()
     {
-        var value = User.FindFirstValue(ClaimTypes.NameIdentifier)
-                    ?? User.FindFirstValue("sub") ?? User.FindFirstValue("userId");
+        var value = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return Guid.TryParse(value, out var id) ? id : throw new UnauthorizedAccessException();
     }
 }

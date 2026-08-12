@@ -1,9 +1,9 @@
+using System.Security.Claims;
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos.Users;
 using BratnavaFC.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace BratnavaFC.Api.Controllers;
 
@@ -19,15 +19,50 @@ public sealed class UsersController : BaseApiController
         _userService = userService;
     }
 
-    [AllowAnonymous]
-    [HttpPost]
-    public async Task<IActionResult> CreateAsync([FromBody] CreateUserDto dto, CancellationToken cancellationToken)
+    /// <summary>
+    /// Perfil interno do usuário autenticado. O cadastro não tem endpoint: a conta é criada no
+    /// Firebase pelo front-end e provisionada aqui no primeiro acesso autenticado.
+    ///
+    /// Também reconcilia o e-mail com o do token — ver SyncEmailFromTokenAsync no UserService.
+    /// </summary>
+    [HttpGet("me")]
+    public async Task<IActionResult> GetMeAsync(CancellationToken cancellationToken)
+    {
+        if (!TryGetInternalUserId(out var userId))
+            return Unauthorized();
+
+        // MapInboundClaims está desligado, então a claim chega como "email"; o nome longo do
+        // .NET fica como segundo caminho para não depender dessa configuração.
+        var tokenEmail = User.FindFirstValue("email")
+                      ?? User.FindFirstValue(ClaimTypes.Email);
+
+        var result = await _userService.GetMeAsync(userId, tokenEmail, cancellationToken);
+        return ToResponse(result);
+    }
+
+    /// <summary>
+    /// Edita o próprio perfil. Um campo "email" no payload é ignorado — e-mail é read-only,
+    /// gerenciado no Firebase.
+    /// </summary>
+    [HttpPut("me")]
+    public async Task<IActionResult> UpdateMeAsync(
+        [FromBody] UpdateMeDto dto,
+        CancellationToken cancellationToken)
     {
         if (dto == null) return BadRequest();
 
-        var result = await _userService.CreateUserAsync(dto, cancellationToken);
-        return ToResponse(result, overrideSuccessStatus: 201);
+        if (!TryGetInternalUserId(out var userId))
+            return Unauthorized();
+
+        var result = await _userService.UpdateMeAsync(userId, dto, cancellationToken);
+        return ToResponse(result);
     }
+
+    /// <summary>
+    /// Identidade INTERNA, injetada pelo FirebaseIdentityMiddleware. Nunca é o UID do Firebase.
+    /// </summary>
+    private bool TryGetInternalUserId(out Guid userId)
+        => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out userId);
 
     [HttpGet("{userId:guid}")]
     public async Task<IActionResult> GetUserAsync(Guid userId, CancellationToken cancellationToken)
@@ -60,6 +95,15 @@ public sealed class UsersController : BaseApiController
         return ToResponse(result);
     }
 
+    /// <summary>
+    /// Fluxo administrativo: altera perfil, role e status de QUALQUER usuário.
+    ///
+    /// Restrito a Admin/GodMode. Sem isso, a role da classe (que inclui "User") deixaria
+    /// qualquer autenticado alterar o perfil alheio passando o GUID — e o UpdateUserDto
+    /// aceita Role, então um usuário comum poderia se promover a GodMode numa request.
+    /// O usuário comum edita o próprio perfil por PUT /api/users/me.
+    /// </summary>
+    [Authorize(Roles = "Admin,GodMode")]
     [HttpPut("{userId:guid}")]
     public async Task<IActionResult> UpdateAsync(Guid userId, [FromBody] UpdateUserDto dto, CancellationToken cancellationToken)
     {
@@ -69,23 +113,20 @@ public sealed class UsersController : BaseApiController
         return ToResponse(result);
     }
 
-    [HttpPut("{userId:guid}/password")]
-    public async Task<IActionResult> ChangePasswordAsync(Guid userId, [FromBody] ChangePasswordDto dto, CancellationToken cancellationToken)
-    {
-        if (dto == null) return BadRequest();
-
-        var result = await _userService.ChangePasswordAsync(userId, dto, cancellationToken);
-        return ToResponse(result);
-    }
-
-    [HttpPost("{userId:guid}/photo")]
+    /// <summary>
+    /// Troca a própria foto. O alvo vem da identidade do token, não da URL: um userId na rota
+    /// seria um alvo escolhido pelo cliente, e a autorização passaria a depender de comparar o
+    /// que ele mandou com quem ele é.
+    /// </summary>
+    [HttpPost("me/photo")]
     [RequestSizeLimit(6 * 1024 * 1024)]
-    public async Task<IActionResult> UploadPhotoAsync(
-        Guid userId,
+    public async Task<IActionResult> UploadMyPhotoAsync(
         IFormFile file,
         CancellationToken cancellationToken)
     {
-        if (!CanManagePhoto(userId)) return Forbid();
+        if (!TryGetInternalUserId(out var userId))
+            return Unauthorized();
+
         if (file is null || file.Length == 0)
             return BadRequest("Selecione uma foto.");
         if (file.Length > 5 * 1024 * 1024)
@@ -118,14 +159,18 @@ public sealed class UsersController : BaseApiController
         return File(data, contentType);
     }
 
-    [HttpDelete("{userId:guid}/photo")]
-    public async Task<IActionResult> DeletePhotoAsync(Guid userId, CancellationToken cancellationToken)
+    /// <summary>Remove a própria foto. Mesmo motivo do POST para o alvo vir do token.</summary>
+    [HttpDelete("me/photo")]
+    public async Task<IActionResult> DeleteMyPhotoAsync(CancellationToken cancellationToken)
     {
-        if (!CanManagePhoto(userId)) return Forbid();
+        if (!TryGetInternalUserId(out var userId))
+            return Unauthorized();
+
         var result = await _userService.RemovePhotoAsync(userId, cancellationToken);
         return ToResponse(result);
     }
 
+    [Authorize(Roles = "Admin,GodMode")]
     [HttpPut("{userId:guid}/inactivate")]
     public async Task<IActionResult> InactivateAsync(Guid userId, CancellationToken cancellationToken)
     {
@@ -133,20 +178,11 @@ public sealed class UsersController : BaseApiController
         return ToResponse(result);
     }
 
+    [Authorize(Roles = "Admin,GodMode")]
     [HttpPut("{userId:guid}/reactivate")]
     public async Task<IActionResult> ReactivateAsync(Guid userId, CancellationToken cancellationToken)
     {
         var result = await _userService.ReactivateAsync(userId, cancellationToken);
         return ToResponse(result);
-    }
-
-    private bool CanManagePhoto(Guid userId)
-    {
-        if (User.IsInRole("Admin") || User.IsInRole("GodMode")) return true;
-
-        var raw = User.FindFirstValue(ClaimTypes.NameIdentifier)
-                  ?? User.FindFirstValue("sub")
-                  ?? User.FindFirstValue("userId");
-        return Guid.TryParse(raw, out var currentUserId) && currentUserId == userId;
     }
 }

@@ -79,12 +79,11 @@ public static class ApplicationDependencyInjection
         services.AddScoped<IConquistaProjectionService, ConquistaProjectionService>();
         services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<ITeamColorService, TeamColorService>();
-        services.AddScoped<IAuthenticationService, AuthenticationService>();
+        services.AddScoped<IUserProvisioningService, UserProvisioningService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IPlayerService, PlayerService>();
         services.AddScoped<IGroupService, GroupService>();
         services.AddScoped<TeamGenerationService>();
-        services.AddScoped<PasswordHasher<UserEntity>>();
         services.AddScoped<IGroupSettingsService, GroupSettingsService>();
         services.AddScoped<ICalendarService, CalendarService>();
         services.AddScoped<IFinancialTransactionService, FinancialTransactionService>();

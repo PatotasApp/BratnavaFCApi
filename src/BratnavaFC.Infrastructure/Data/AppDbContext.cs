@@ -16,7 +16,6 @@ public class AppDbContext : DbContext
     public DbSet<VoteEntity> Votes => Set<VoteEntity>();
     public DbSet<TeamColorEntity> TeamColors => Set<TeamColorEntity>();
     public DbSet<UserEntity> Users => Set<UserEntity>();
-    public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
     public DbSet<GroupEntity> Groups => Set<GroupEntity>();
     public DbSet<GroupAdminEntity> GroupAdmins => Set<GroupAdminEntity>();
     public DbSet<GroupFinanceiroEntity> GroupFinanceiros => Set<GroupFinanceiroEntity>();

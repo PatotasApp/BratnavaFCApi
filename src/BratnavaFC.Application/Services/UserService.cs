@@ -5,7 +5,7 @@ using BratnavaFC.Domain.Dtos.Users;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
-using Microsoft.AspNetCore.Identity;
+using FirebaseAdmin.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -13,55 +13,189 @@ namespace BratnavaFC.Application.Services;
 
 public class UserService : IUserService
 {
+    private const string RoleClaim = UserProvisioningService.RoleClaim;
+    private const string InternalIdClaim = UserProvisioningService.InternalIdClaim;
+
     private readonly AppDbContext _db;
     private readonly IRepositoryBase<UserEntity> _repository;
     private readonly ILogger<UserService> _logger;
-    private readonly PasswordHasher<UserEntity> _passwordHasher;
-    private readonly IPushService _push;
 
     public UserService(
         AppDbContext db,
         IRepositoryBase<UserEntity> repository,
-        ILogger<UserService> logger,
-        PasswordHasher<UserEntity> passwordHasher,
-        IPushService push)
+        ILogger<UserService> logger)
     {
         _repository = repository;
         _logger = logger;
-        _passwordHasher = passwordHasher;
         _db = db;
-        _push = push;
     }
 
-    public async Task<Result> CreateUserAsync(CreateUserDto dto, CancellationToken cancellationToken)
+    public async Task<Result<MeDto>> GetMeAsync(Guid userId, string? tokenEmail, CancellationToken cancellationToken)
     {
-        var username = dto.UserName?.Trim().ToLower();
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
 
-        var existing = await _db.Users
-            .FirstOrDefaultAsync(x => x.Email == dto.Email || x.UserName == username, cancellationToken);
+        if (user is null)
+            return Result<MeDto>.Fail("Usuário não encontrado.", ResultStatus.NotFound);
 
-        if (existing?.UserName == username)
-            return Result.Fail($"User already exists with the user name '{dto.UserName}'.", ResultStatus.BadRequest);
+        await SyncEmailFromTokenAsync(user, tokenEmail, cancellationToken);
 
-        if (existing?.Email == dto.Email)
-            return Result.Fail($"User already exists with the email '{dto.Email}'.", ResultStatus.BadRequest);
+        var me = new MeDto(
+            user.Id,
+            user.Email,
+            user.UserName,
+            user.FirstName,
+            user.LastName,
+            user.Phone,
+            user.Role,
+            user.Status);
 
-        var tempUser = new UserEntity(
-            dto.UserName,
-            dto.FirstName,
-            dto.LastName,
-            dto.Email,
-            passwordHashed: "temp",
-            phone: dto.Phone,
-            birthDate: dto.BirthDate);
+        return Result<MeDto>.Ok(me);
+    }
 
-        var hashed = _passwordHasher.HashPassword(tempUser, dto.Password);
-        tempUser.SetPasswordHash(hashed);
+    /// <summary>
+    /// Alinha a coluna Email com o e-mail do ID token.
+    ///
+    /// Precisa acontecer aqui porque o FirebaseIdentityMiddleware tem um caminho rápido: assim
+    /// que o token carrega internal_id e role, ele responde sem chamar o
+    /// UserProvisioningService — e a sincronização que existe lá deixa de rodar. Como o /me é
+    /// chamado uma vez por sessão e já carregou a linha, é o ponto natural para reconciliar.
+    ///
+    /// Sentido único, do Firebase para cá: é lá que a troca de e-mail é confirmada pelo dono
+    /// do endereço novo (verifyBeforeUpdateEmail). Escrever no sentido inverso deixaria os
+    /// dois lados divergentes.
+    /// </summary>
+    private async Task SyncEmailFromTokenAsync(UserEntity user, string? tokenEmail, CancellationToken cancellationToken)
+    {
+        var email = tokenEmail?.Trim().ToLowerInvariant();
 
-        _repository.Add(tempUser);
-        await _repository.SaveChangesAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(email) || string.Equals(user.Email, email, StringComparison.OrdinalIgnoreCase))
+            return;
 
-        return Result.Ok("Usuário criado com sucesso.");
+        // A coluna tem índice único: sem esta checagem, o SaveChanges estouraria e derrubaria
+        // o /me inteiro por causa de um e-mail duplicado. Acontece quando o endereço novo já
+        // pertence a uma linha antiga que ainda não migrou.
+        var emailTaken = await _db.Users
+            .AnyAsync(x => x.Id != user.Id && x.Email.ToLower() == email, cancellationToken);
+
+        if (emailTaken)
+        {
+            _logger.LogError(
+                "[Users] E-mail do usuário {UserId} não pôde ser sincronizado: {Email} já " +
+                "pertence a outra linha. Resolva o duplicado no banco.",
+                user.Id,
+                email);
+
+            return;
+        }
+
+        var previous = user.Email;
+        user.SetEmail(email);
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "[Users] E-mail do usuário {UserId} sincronizado de {Previous} para {Current}.",
+            user.Id,
+            previous,
+            email);
+    }
+
+    /// <summary>
+    /// E-mail não entra aqui: é gerenciado no Firebase e read-only nesta fase. Role e status
+    /// também não — são do fluxo administrativo.
+    /// </summary>
+    public async Task<Result<bool>> UpdateMeAsync(Guid userId, UpdateMeDto dto, CancellationToken cancellationToken)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(x => x.Id == userId, cancellationToken);
+
+        if (user is null)
+            return Result<bool>.Fail("Usuário não encontrado.", ResultStatus.NotFound);
+
+        var previousUserName = user.UserName;
+        var previousFirstName = user.FirstName;
+        var previousLastName = user.LastName;
+        var previousPhone = user.Phone;
+
+        if (!string.IsNullOrWhiteSpace(dto.UserName))
+        {
+            var userName = dto.UserName.Trim().ToLower();
+
+            var userNameTaken = await _db.Users.AnyAsync(
+                x => x.Id != userId && x.UserName.ToLower() == userName,
+                cancellationToken);
+
+            if (userNameTaken)
+                return Result<bool>.Fail($"Já existe um usuário com o nome '{dto.UserName}'.");
+
+            user.SetUserName(dto.UserName);
+        }
+
+        user.UpdateProfile(
+            firstName: string.IsNullOrWhiteSpace(dto.FirstName) ? user.FirstName : dto.FirstName,
+            lastName: string.IsNullOrWhiteSpace(dto.LastName) ? user.LastName : dto.LastName,
+            birthDate: dto.BirthDate.HasValue ? dto.BirthDate : user.BirthDate,
+            phone: dto.Phone);
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        // Mantém o DisplayName do Firebase alinhado. Só tem o que sincronizar se o usuário já
+        // tem FirebaseUid; quem ainda não migrou não existe lá.
+        if (user.FirebaseUid is not null)
+        {
+            try
+            {
+                await FirebaseAuth.DefaultInstance.UpdateUserAsync(
+                    new UserRecordArgs
+                    {
+                        Uid = user.FirebaseUid,
+                        DisplayName = user.DisplayName,
+
+                        // O SDK exige E.164 e LANÇA se o número não começar com '+'. Nossa
+                        // coluna aceita qualquer formato ("11999999999"), então só enviamos o
+                        // que já é válido — do contrário toda edição de perfil de quem tem
+                        // telefone em formato local cairia no rollback abaixo.
+                        PhoneNumber = ToE164OrNull(user.Phone)
+                    },
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "[Users] Falha ao sincronizar o perfil do usuário {UserId} no Firebase. Revertendo o SQL.",
+                    userId);
+
+                user.SetUserName(previousUserName);
+                user.UpdateProfile(previousFirstName, previousLastName, user.BirthDate, previousPhone);
+                await _db.SaveChangesAsync(cancellationToken);
+
+                return Result<bool>.Fail("Não foi possível atualizar o perfil. Tente novamente.");
+            }
+        }
+
+        return Result<bool>.Ok(true, "Perfil atualizado com sucesso.");
+    }
+
+    /// <summary>
+    /// Devolve o telefone só quando ele já está em E.164 (o que o Firebase aceita); nulo em
+    /// qualquer outro caso, o que para o SDK significa remover o telefone do registro.
+    /// Não inferimos o DDI: adivinhar +55 gravaria número errado para quem não é do Brasil.
+    /// </summary>
+    private static string? ToE164OrNull(string? phone)
+    {
+        if (string.IsNullOrWhiteSpace(phone))
+            return null;
+
+        var trimmed = phone.Trim();
+
+        if (!trimmed.StartsWith('+'))
+            return null;
+
+        var digits = trimmed.Count(char.IsDigit);
+
+        return digits is >= 8 and <= 15 && trimmed.Skip(1).All(char.IsDigit)
+            ? trimmed
+            : null;
     }
 
     public async Task<Result<UserDto>> GetUserByIdAsync(Guid userId, CancellationToken cancellationToken)
@@ -172,13 +306,17 @@ public class UserService : IUserService
         return Result<PagedResultDto<UserListItemDto>>.Ok(pagedResult);
     }
 
+    /// <summary>
+    /// Fluxo administrativo: perfil, role e status. O e-mail não é alterável — é a
+    /// identidade do usuário no Firebase. Perfil do próprio usuário passa pelo
+    /// <see cref="UpdateMeAsync"/>, que também sincroniza o DisplayName no Firebase.
+    /// </summary>
     public async Task<Result> UpdateAsync(Guid userId, UpdateUserDto dto, CancellationToken cancellationToken)
     {
         var user = await _repository.GetByIdIncludingInactiveAsync(userId, cancellationToken);
         if (user == null)
             return Result.Fail("Usuário não encontrado.", ResultStatus.NotFound);
 
-        // username/email duplicados (se vierem)
         if (!string.IsNullOrWhiteSpace(dto.UserName))
         {
             var username = dto.UserName.Trim().ToLower();
@@ -189,18 +327,6 @@ public class UserService : IUserService
                 return Result.Fail($"User already exists with the user name '{dto.UserName}'.", ResultStatus.BadRequest);
 
             user.SetUserName(dto.UserName);
-        }
-
-        if (!string.IsNullOrWhiteSpace(dto.Email))
-        {
-            var email = dto.Email.Trim().ToLower();
-            var existsEmail = await _db.Users
-                .AnyAsync(u => u.Id != userId && u.Email.ToLower() == email, cancellationToken);
-
-            if (existsEmail)
-                return Result.Fail($"User already exists with the email '{dto.Email}'.", ResultStatus.BadRequest);
-
-            user.SetEmail(dto.Email);
         }
 
         // profile (só aplica se tiver algo)
@@ -219,6 +345,8 @@ public class UserService : IUserService
                 phone: dto.Phone // pode vir null pra limpar
             );
         }
+
+        var previousRole = user.Role;
 
         if (dto.Role.HasValue)
         {
@@ -239,34 +367,51 @@ public class UserService : IUserService
         _repository.Update(user);
         await _repository.SaveChangesAsync(cancellationToken);
 
+        if (user.Role != previousRole)
+            await SyncRoleClaimAsync(user, cancellationToken);
+
         return Result.Ok("Usuário atualizado com sucesso.");
     }
 
-    public async Task<Result> ChangePasswordAsync(Guid userId, ChangePasswordDto dto, CancellationToken cancellationToken)
+    /// <summary>
+    /// A autorização lê a claim "role" do token do Firebase, não a coluna do SQL. Sem este
+    /// sincronismo a role mudaria no banco e todo [Authorize(Roles = ...)] continuaria
+    /// decidindo pelo valor antigo.
+    /// </summary>
+    private async Task SyncRoleClaimAsync(UserEntity user, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(dto.CurrentPassword))
-            return Result.Fail("CurrentPassword is required.", ResultStatus.BadRequest);
+        // Quem ainda não migrou não existe no Firebase; a role do banco vale e o middleware a
+        // injeta pelo caminho lento.
+        if (user.FirebaseUid is null)
+            return;
 
-        if (string.IsNullOrWhiteSpace(dto.NewPassword))
-            return Result.Fail("NewPassword is required.", ResultStatus.BadRequest);
+        try
+        {
+            await FirebaseAuth.DefaultInstance.SetCustomUserClaimsAsync(
+                // Identidade EXTERNA. Usar user.Id aqui só funcionaria para os migrados, em
+                // que os dois coincidem por acidente do script.
+                user.FirebaseUid,
+                new Dictionary<string, object>
+                {
+                    [InternalIdClaim] = user.Id.ToString(),
+                    [RoleClaim] = user.Role.ToString()
+                },
+                cancellationToken);
 
-        var user = await _repository.GetByIdIncludingInactiveAsync(userId, cancellationToken);
-        if (user == null)
-            return Result.Fail("Usuário não encontrado.", ResultStatus.NotFound);
-
-        var verify = _passwordHasher.VerifyHashedPassword(user, user.Password, dto.CurrentPassword);
-        if (verify == PasswordVerificationResult.Failed)
-            return Result.Fail("Current password is invalid.", ResultStatus.BadRequest);
-
-        var newHash = _passwordHasher.HashPassword(user, dto.NewPassword);
-        user.SetPasswordHash(newHash);
-
-        _repository.Update(user);
-        await _repository.SaveChangesAsync(cancellationToken);
-
-        _ = NotifyPasswordChangedAsync(userId, cancellationToken);
-
-        return Result.Ok("Senha atualizada com sucesso.");
+            _logger.LogInformation(
+                "[Users] Role do usuário {UserId} sincronizada no Firebase como {Role}.",
+                user.Id,
+                user.Role);
+        }
+        catch (Exception ex)
+        {
+            // O SQL já foi salvo. Falhar aqui deixa a role divergente até a próxima
+            // atualização, então precisa aparecer no log.
+            _logger.LogError(
+                ex,
+                "[Users] Role do usuário {UserId} mudou no SQL mas não foi sincronizada no Firebase.",
+                user.Id);
+        }
     }
 
     public async Task<Result<UserPhotoDto>> SetPhotoAsync(
@@ -336,21 +481,6 @@ public class UserService : IUserService
             && data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50,
         _ => false
     };
-
-    private async Task NotifyPasswordChangedAsync(Guid userId, CancellationToken ct)
-    {
-        try
-        {
-            await _push.SendToUserAsync(
-                userId,
-                title: "Senha alterada",
-                body:  "Sua senha foi alterada. Se não foi você, entre em contato.",
-                data:  new Dictionary<string, string> { ["type"] = "password_changed" },
-                ct,
-                groupId: null);
-        }
-        catch { /* notificação não crítica */ }
-    }
 
     public async Task<Result> InactivateAsync(Guid userId, CancellationToken cancellationToken)
     {
