@@ -45,6 +45,12 @@ public sealed class UserEntity : InactivatableEntity
     public string Email { get; private set; } = null!;
     public string Password { get; private set; } = null!;
     public string? Phone { get; private set; }
+    public byte[]? ProfilePhotoData { get; private set; }
+    public string? ProfilePhotoContentType { get; private set; }
+    public DateTimeOffset? ProfilePhotoUpdatedAt { get; private set; }
+    public ProfileVisibility ProfileVisibility { get; private set; } = ProfileVisibility.AuthenticatedUsers;
+    public bool ShowPatotaNamesOnProfile { get; private set; } = true;
+    public bool ShowZoeiraAchievementsOnProfile { get; private set; }
 
     public UserRole Role { get; private set; } = UserRole.User;
 
@@ -141,5 +147,29 @@ public sealed class UserEntity : InactivatableEntity
     public void SetRole(UserRole role)
     {
         Role = role;
+    }
+
+    public void SetProfilePhoto(byte[] data, string contentType)
+    {
+        if (data is not { Length: > 0 })
+            throw new InvalidOperationException("Profile photo is required.");
+
+        ProfilePhotoData = data;
+        ProfilePhotoContentType = contentType;
+        ProfilePhotoUpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void RemoveProfilePhoto()
+    {
+        ProfilePhotoData = null;
+        ProfilePhotoContentType = null;
+        ProfilePhotoUpdatedAt = null;
+    }
+
+    public void SetProfilePrivacy(ProfileVisibility visibility, bool showPatotaNames, bool showZoeiraAchievements)
+    {
+        ProfileVisibility = visibility;
+        ShowPatotaNamesOnProfile = showPatotaNames;
+        ShowZoeiraAchievementsOnProfile = showZoeiraAchievements;
     }
 }

@@ -113,6 +113,63 @@ public sealed class UsersController : BaseApiController
         return ToResponse(result);
     }
 
+    /// <summary>
+    /// Troca a própria foto. O alvo vem da identidade do token, não da URL: um userId na rota
+    /// seria um alvo escolhido pelo cliente, e a autorização passaria a depender de comparar o
+    /// que ele mandou com quem ele é.
+    /// </summary>
+    [HttpPost("me/photo")]
+    [RequestSizeLimit(6 * 1024 * 1024)]
+    public async Task<IActionResult> UploadMyPhotoAsync(
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetInternalUserId(out var userId))
+            return Unauthorized();
+
+        if (file is null || file.Length == 0)
+            return BadRequest("Selecione uma foto.");
+        if (file.Length > 5 * 1024 * 1024)
+            return BadRequest("A foto deve ter no máximo 5 MB.");
+
+        await using var stream = file.OpenReadStream();
+        using var buffer = new MemoryStream((int)file.Length);
+        await stream.CopyToAsync(buffer, cancellationToken);
+
+        var result = await _userService.SetPhotoAsync(
+            userId,
+            buffer.ToArray(),
+            file.ContentType,
+            cancellationToken);
+        return ToResponse(result);
+    }
+
+    [AllowAnonymous]
+    [HttpGet("{userId:guid}/photo")]
+    public async Task<IActionResult> GetPhotoAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var result = await _userService.GetPhotoAsync(userId, cancellationToken);
+        if (!result.Success || result.Data == default)
+            return ToResponse(result);
+
+        var (data, contentType, updatedAt) = result.Data;
+        Response.Headers.CacheControl = "public,max-age=3600,must-revalidate";
+        Response.Headers.ETag = $"\"{updatedAt.ToUnixTimeMilliseconds()}\"";
+        Response.Headers.LastModified = updatedAt.ToString("R");
+        return File(data, contentType);
+    }
+
+    /// <summary>Remove a própria foto. Mesmo motivo do POST para o alvo vir do token.</summary>
+    [HttpDelete("me/photo")]
+    public async Task<IActionResult> DeleteMyPhotoAsync(CancellationToken cancellationToken)
+    {
+        if (!TryGetInternalUserId(out var userId))
+            return Unauthorized();
+
+        var result = await _userService.RemovePhotoAsync(userId, cancellationToken);
+        return ToResponse(result);
+    }
+
     [Authorize(Roles = "Admin,GodMode")]
     [HttpPut("{userId:guid}/inactivate")]
     public async Task<IActionResult> InactivateAsync(Guid userId, CancellationToken cancellationToken)

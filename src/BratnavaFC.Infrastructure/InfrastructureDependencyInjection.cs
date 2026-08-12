@@ -235,6 +235,11 @@ public static class InfrastructureDependencyInjection
         services.AddSingleton<IReplayUrlService, R2ReplayUrlService>();
     }
 
+    /// <summary>
+    /// O FirebaseApp deixou de ser opcional: <c>AddJwtAuthentication</c> resolve o ProjectId a
+    /// partir dele para montar o issuer dos ID tokens, e lança se não houver. Por isso não existe
+    /// mais o atalho que desabilitava o Firebase em Development — sem ele a API não sobe.
+    /// </summary>
     private static void AddFirebase(this IServiceCollection services, ILogger logger)
     {
         var json = """
@@ -254,15 +259,21 @@ public static class InfrastructureDependencyInjection
             
             """;
 
-        var firebaseJson = Environment.GetEnvironmentVariable("FIREBASE_SERVICE_ACCOUNT_JSON");
+        // A env var vence: é por ela que staging e produção apontam para o projeto certo. O JSON
+        // embutido acima é só o fallback do projeto de desenvolvimento.
+        var serviceAccountJson = Environment.GetEnvironmentVariable("FIREBASE_SERVICE_ACCOUNT_JSON");
+
+        if (string.IsNullOrWhiteSpace(serviceAccountJson))
+            serviceAccountJson = json;
+
         try
         {
-            if (!string.IsNullOrWhiteSpace(json))
+            if (!string.IsNullOrWhiteSpace(serviceAccountJson))
             {
                 FirebaseApp.Create(new AppOptions
                 {
-                    Credential = GoogleCredential.FromJson(json),
-                    ProjectId = FirebaseProjectId.FromServiceAccountJson(json)
+                    Credential = GoogleCredential.FromJson(serviceAccountJson),
+                    ProjectId = FirebaseProjectId.FromServiceAccountJson(serviceAccountJson)
                 });
 
                 logger.LogInformation("[Firebase] Inicializado via ServiceAccountJson.");

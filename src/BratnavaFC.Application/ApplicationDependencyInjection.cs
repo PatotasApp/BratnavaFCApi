@@ -75,6 +75,9 @@ public static class ApplicationDependencyInjection
     {
         services.AddScoped<IMatchService, MatchService>();
         services.AddScoped<IPlayerStatsService, PlayerStatsService>();
+        services.AddScoped<IConquistaService, ConquistaService>();
+        services.AddScoped<IConquistaProjectionService, ConquistaProjectionService>();
+        services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<ITeamColorService, TeamColorService>();
         services.AddScoped<IUserProvisioningService, UserProvisioningService>();
         services.AddScoped<IUserService, UserService>();

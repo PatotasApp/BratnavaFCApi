@@ -188,6 +188,52 @@ public class UserServiceMeTests
     }
 
     [Fact]
+    public async Task UpdateMeAsync_UpdatesBirthDate()
+    {
+        await using var db = DbContextFactory.Create(nameof(UpdateMeAsync_UpdatesBirthDate));
+
+        var user = User("luis", "luis@test.com");
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var birthDate = new DateTimeOffset(1990, 5, 14, 0, 0, 0, TimeSpan.Zero);
+
+        var result = await Sut(db).UpdateMeAsync(
+            user.Id,
+            new UpdateMeDto { BirthDate = birthDate },
+            CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+
+        (await db.Users.SingleAsync()).BirthDate.Should().Be(birthDate);
+    }
+
+    [Fact]
+    public async Task UpdateMeAsync_WhenBirthDateOmitted_KeepsCurrentValue()
+    {
+        await using var db = DbContextFactory.Create(nameof(UpdateMeAsync_WhenBirthDateOmitted_KeepsCurrentValue));
+
+        var birthDate = new DateTimeOffset(1990, 5, 14, 0, 0, 0, TimeSpan.Zero);
+
+        var user = User("luis", "luis@test.com");
+        user.UpdateProfile("Primeiro", "Ultimo", birthDate, "11999999999");
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        // Clientes editam o próprio perfil sem mandar a data. Se ausente significasse "limpar",
+        // cada salvamento apagaria o aniversário — que é o que alimenta a tela de
+        // aniversariantes.
+        var result = await Sut(db).UpdateMeAsync(
+            user.Id,
+            new UpdateMeDto { FirstName = "Luis" },
+            CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+
+        (await db.Users.SingleAsync()).BirthDate.Should().Be(birthDate);
+    }
+
+    [Fact]
     public async Task UpdateMeAsync_NeverChangesEmail()
     {
         await using var db = DbContextFactory.Create(nameof(UpdateMeAsync_NeverChangesEmail));

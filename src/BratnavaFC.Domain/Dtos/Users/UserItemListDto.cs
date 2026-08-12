@@ -16,6 +16,8 @@ namespace BratnavaFC.Domain.Dtos.Users
         public string Email { get; set; } = null!;
         public string? Phone { get; set; }
         public DateTimeOffset? BirthDate { get; set; }
+        public string? PhotoUrl { get; set; }
+        public DateTimeOffset? PhotoUpdatedAt { get; set; }
 
         public int Role { get; set; }
         public Status Status { get; set; }

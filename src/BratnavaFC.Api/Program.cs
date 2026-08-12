@@ -61,6 +61,12 @@ try
     startupLogger.LogInformation("[Startup] Endpoints mapeados. Iniciando app.Run().");
     app.Run();
 }
+catch (HostAbortedException)
+{
+    // O tooling do Entity Framework aborta o host propositalmente depois de
+    // resolver o DbContext. Isso não representa falha da API nem da migration.
+    Log.Information("[Startup] Host encerrado pelo tooling do Entity Framework.");
+}
 catch (Exception ex)
 {
     Log.Fatal(ex, "[Startup] Host encerrou de forma inesperada.");

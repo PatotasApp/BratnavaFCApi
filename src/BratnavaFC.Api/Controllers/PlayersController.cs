@@ -164,12 +164,13 @@ public class PlayersController : GroupAuthorizedController
         return ToResponse(result);
     }
 
+    /// <summary>
+    /// Identidade INTERNA, injetada no NameIdentifier pelo FirebaseIdentityMiddleware — não o UID
+    /// do Firebase, que continua em "sub".
+    /// </summary>
     private Guid GetUserIdOrThrow()
     {
-        var raw =
-            User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub")
-            ?? User.FindFirstValue("userId");
+        var raw = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
         if (!Guid.TryParse(raw, out var userId) || userId == Guid.Empty)
             throw new UnauthorizedAccessException("Invalid user id in token.");

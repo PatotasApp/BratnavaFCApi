@@ -37,12 +37,31 @@ public sealed class PushController : BaseApiController
         return ToResponse(result);
     }
 
+    /// <summary>Desativa as notificações push deste dispositivo no logout.</summary>
+    [HttpDelete("register-token")]
+    public async Task<IActionResult> UnregisterTokenAsync(
+        [FromBody] UnregisterPushTokenDto request,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == Guid.Empty)
+            return Unauthorized();
+
+        var result = await _pushService.UnregisterTokenAsync(
+            userId, request.Token, cancellationToken);
+
+        return ToResponse(result);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Identidade INTERNA, injetada no NameIdentifier pelo FirebaseIdentityMiddleware — não o UID
+    /// do Firebase, que continua em "sub".
+    /// </summary>
     private Guid GetCurrentUserId()
     {
-        var sub = User.FindFirstValue(ClaimTypes.NameIdentifier)
-               ?? User.FindFirstValue("sub");
-        return Guid.TryParse(sub, out var id) ? id : Guid.Empty;
+        var raw = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(raw, out var id) ? id : Guid.Empty;
     }
 }

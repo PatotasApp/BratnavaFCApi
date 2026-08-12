@@ -9,6 +9,7 @@ public sealed class PlayerSpotlightReport
 public sealed class PlayerSpotlightItem
 {
     public Guid PlayerId { get; set; }
+    public Guid? UserId { get; set; }
     public string Name { get; set; } = string.Empty;
     public bool IsGoalkeeper { get; set; }
     public bool IsGuest { get; set; }

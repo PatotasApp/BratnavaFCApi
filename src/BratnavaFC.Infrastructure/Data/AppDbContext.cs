@@ -45,6 +45,9 @@ public class AppDbContext : DbContext
     public DbSet<ScheduledNotificationJobEntity> ScheduledNotificationJobs => Set<ScheduledNotificationJobEntity>();
     public DbSet<UserNotificationEntity> UserNotifications => Set<UserNotificationEntity>();
     public DbSet<GroupTransactionEntity> GroupTransactions => Set<GroupTransactionEntity>();
+    public DbSet<PlayerMatchStatContributionEntity> PlayerMatchStatContributions => Set<PlayerMatchStatContributionEntity>();
+    public DbSet<PlayerStatProjectionEntity> PlayerStatProjections => Set<PlayerStatProjectionEntity>();
+    public DbSet<SeasonTitleEntity> SeasonTitles => Set<SeasonTitleEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -64,6 +67,9 @@ public class AppDbContext : DbContext
         modelBuilder.ApplyConfiguration(new VoteEntityConfiguration());
         modelBuilder.ApplyConfiguration(new GoalEntityConfiguration());
         modelBuilder.ApplyConfiguration(new TeamColorEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new PlayerMatchStatContributionEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new PlayerStatProjectionEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new SeasonTitleEntityConfiguration());
 
         // ── Users / Groups ───────────────────────────────────────────────────
         modelBuilder.ApplyConfiguration(new PlayerEntityConfiguration());

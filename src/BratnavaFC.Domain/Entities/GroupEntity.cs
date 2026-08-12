@@ -5,6 +5,9 @@ public class GroupEntity : InactivatableEntity
     public string Name { get; private set; } = null!;
     public DateTimeOffset? ScheduleMatchDate { get; private set; }
     public Guid CreatedByUserId { get; private set; }
+    public byte[]? LogoData { get; private set; }
+    public string? LogoContentType { get; private set; }
+    public DateTimeOffset? LogoUpdatedAt { get; private set; }
 
     private readonly List<PlayerEntity> _players = [];
     public IReadOnlyCollection<PlayerEntity> Players => _players;
@@ -47,6 +50,25 @@ public class GroupEntity : InactivatableEntity
     public void Reschedule(DateTimeOffset? scheduleMatchDate)
     {
         ScheduleMatchDate = scheduleMatchDate;
+    }
+
+    public void SetLogo(byte[] data, string contentType)
+    {
+        if (data is not { Length: > 0 })
+            throw new InvalidOperationException("Group logo is required.");
+
+        LogoData = data;
+        LogoContentType = string.IsNullOrWhiteSpace(contentType)
+            ? throw new ArgumentException("Logo content type is required.", nameof(contentType))
+            : contentType.Trim().ToLowerInvariant();
+        LogoUpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void RemoveLogo()
+    {
+        LogoData = null;
+        LogoContentType = null;
+        LogoUpdatedAt = null;
     }
 
     public void SetAdmins(IEnumerable<Guid> userAdminIds)

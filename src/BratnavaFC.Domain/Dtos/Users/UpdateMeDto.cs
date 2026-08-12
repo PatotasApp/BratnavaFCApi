@@ -18,4 +18,11 @@ public sealed class UpdateMeDto
 
     /// <summary>Nulo limpa o telefone.</summary>
     public string? Phone { get; set; }
+
+    /// <summary>
+    /// Nulo MANTÉM a data atual — mesma convenção do <see cref="UpdateUserDto"/>. Não segue o
+    /// comportamento do Phone de propósito: clientes que não enviam o campo apagariam o
+    /// aniversário de todo mundo a cada edição de perfil.
+    /// </summary>
+    public DateTimeOffset? BirthDate { get; set; }
 }

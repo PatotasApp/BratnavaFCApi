@@ -3,6 +3,7 @@ using BratnavaFC.Domain.Dtos.Groups;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace BratnavaFC.Api.Controllers;
@@ -93,12 +94,72 @@ public class GroupsController : GroupAuthorizedController
         return ToResponse(result);
     }
 
+    [HttpPost("{groupId:guid}/logo")]
+    [RequestSizeLimit(6 * 1024 * 1024)]
+    public async Task<IActionResult> UploadLogoAsync(
+        Guid groupId,
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
+            return Forbid();
+        if (file is null || file.Length == 0)
+            return BadRequest("Selecione uma logo.");
+        if (file.Length > 5 * 1024 * 1024)
+            return BadRequest("A logo deve ter no máximo 5 MB.");
+
+        await using var stream = file.OpenReadStream();
+        using var buffer = new MemoryStream((int)file.Length);
+        await stream.CopyToAsync(buffer, cancellationToken);
+
+        var result = await _groupService.SetLogoAsync(
+            groupId, buffer.ToArray(), file.ContentType, cancellationToken);
+        return ToResponse(result);
+    }
+
+    [AllowAnonymous]
+    [HttpGet("{groupId:guid}/logo")]
+    public async Task<IActionResult> GetLogoAsync(Guid groupId, CancellationToken cancellationToken)
+    {
+        var result = await _groupService.GetLogoAsync(groupId, cancellationToken);
+        if (!result.Success || result.Data == default)
+            return ToResponse(result);
+
+        var (data, contentType, updatedAt) = result.Data;
+        Response.Headers.CacheControl = "public,max-age=3600,must-revalidate";
+        Response.Headers.ETag = $"\"{updatedAt.ToUnixTimeMilliseconds()}\"";
+        Response.Headers.LastModified = updatedAt.ToString("R");
+        return File(data, contentType);
+    }
+
+    [HttpDelete("{groupId:guid}/logo")]
+    public async Task<IActionResult> DeleteLogoAsync(Guid groupId, CancellationToken cancellationToken)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
+            return Forbid();
+
+        var result = await _groupService.RemoveLogoAsync(groupId, cancellationToken);
+        return ToResponse(result);
+    }
+
     [HttpGet("{groupId:guid}/my-roles")]
     [Authorize]
     public async Task<IActionResult> GetMyRolesAsync(Guid groupId, CancellationToken cancellationToken)
     {
-        var isAdmin       = await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken);
-        var isFinanceiro  = await IsFinanceiroForGroupAsync(groupId, _db, cancellationToken);
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        // Este endpoint descreve os vínculos explícitos do usuário com a patota.
+        // Papéis de plataforma (Admin/GodMode) não podem ser projetados como
+        // Admin/Financeiro da patota, pois o app usa esta resposta para montar
+        // menus e ocultar dados financeiros ao trocar de contexto.
+        var isAdmin = await _db.GroupAdmins.AnyAsync(
+            x => x.GroupId == groupId && x.UserId == userId.Value,
+            cancellationToken);
+        var isFinanceiro = await _db.GroupFinanceiros.AnyAsync(
+            x => x.GroupId == groupId && x.UserId == userId.Value,
+            cancellationToken);
+
         return Ok(new { success = true, data = new { isAdmin, isFinanceiro } });
     }
 

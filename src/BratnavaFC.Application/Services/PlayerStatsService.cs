@@ -476,6 +476,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
             items.Add(new PlayerSpotlightItem
             {
                 PlayerId    = pl.Id,
+                UserId      = pl.UserId,
                 Name        = pl.Name,
                 IsGoalkeeper = pl.IsGoalkeeper,
                 IsGuest      = pl.IsGuest,

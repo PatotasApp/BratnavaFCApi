@@ -46,7 +46,9 @@ public sealed class MatchMvpDto
 {
     public Guid MatchPlayerId { get; set; }   // MVP e um MatchPlayer (pelo teu metodo)
     public Guid PlayerId { get; set; }
+    public Guid? UserId { get; set; }
     public string PlayerName { get; set; } = "";
+    public string? PhotoUrl { get; set; }
     public short Team { get; set; }
 }
 
@@ -54,7 +56,9 @@ public sealed class PlayerInMatchDto
 {
     public Guid MatchPlayerId { get; set; }
     public Guid PlayerId { get; set; }
+    public Guid? UserId { get; set; }
     public string PlayerName { get; set; } = "";
+    public string? PhotoUrl { get; set; }
     public bool IsGoalkeeper { get; set; }
     public bool IsGuest { get; set; }
     public short Team { get; set; }

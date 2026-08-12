@@ -133,7 +133,7 @@ public class UserService : IUserService
         user.UpdateProfile(
             firstName: string.IsNullOrWhiteSpace(dto.FirstName) ? user.FirstName : dto.FirstName,
             lastName: string.IsNullOrWhiteSpace(dto.LastName) ? user.LastName : dto.LastName,
-            birthDate: user.BirthDate,
+            birthDate: dto.BirthDate.HasValue ? dto.BirthDate : user.BirthDate,
             phone: dto.Phone);
 
         await _db.SaveChangesAsync(cancellationToken);
@@ -213,6 +213,8 @@ public class UserService : IUserService
                 FirstName = u.FirstName,
                 LastName = u.LastName,
                 BirthDate = u.BirthDate,
+                PhotoUrl = null,
+                PhotoUpdatedAt = u.ProfilePhotoUpdatedAt,
 
                 Role = u.Role,
                 Status = u.Status,
@@ -228,6 +230,9 @@ public class UserService : IUserService
 
         if (user is null)
             return Result<UserDto>.Fail("Usuário não encontrado.", ResultStatus.NotFound);
+
+        if (user.PhotoUpdatedAt.HasValue)
+            user.PhotoUrl = $"/api/Users/{user.Id}/photo?v={user.PhotoUpdatedAt.Value.ToUnixTimeMilliseconds()}";
 
         return Result<UserDto>.Ok(user);
     }
@@ -274,6 +279,8 @@ public class UserService : IUserService
                 Email = u.Email,
                 Phone = u.Phone,
                 BirthDate = u.BirthDate,
+                PhotoUrl = null,
+                PhotoUpdatedAt = u.ProfilePhotoUpdatedAt,
                 Role = (int)u.Role,
                 Status = u.Status,
                 CreateDate = u.CreateDate,
@@ -281,6 +288,12 @@ public class UserService : IUserService
                 InactivatedAt = u.InactivatedAt
             })
             .ToListAsync(cancellationToken);
+
+        foreach (var item in items)
+        {
+            if (item.PhotoUpdatedAt.HasValue)
+                item.PhotoUrl = $"/api/Users/{item.Id}/photo?v={item.PhotoUpdatedAt.Value.ToUnixTimeMilliseconds()}";
+        }
 
         var pagedResult = new PagedResultDto<UserListItemDto>
         {
@@ -400,6 +413,74 @@ public class UserService : IUserService
                 user.Id);
         }
     }
+
+    public async Task<Result<UserPhotoDto>> SetPhotoAsync(
+        Guid userId,
+        byte[] data,
+        string contentType,
+        CancellationToken cancellationToken)
+    {
+        if (data.Length == 0 || data.Length > 5 * 1024 * 1024)
+            return Result<UserPhotoDto>.Fail("A foto deve ter no máximo 5 MB.", ResultStatus.BadRequest);
+
+        var normalizedContentType = contentType.Trim().ToLowerInvariant();
+        if (!IsSupportedImage(data, normalizedContentType))
+            return Result<UserPhotoDto>.Fail("Envie uma imagem JPEG, PNG ou WebP válida.", ResultStatus.BadRequest);
+
+        var user = await _repository.GetByIdIncludingInactiveAsync(userId, cancellationToken);
+        if (user is null)
+            return Result<UserPhotoDto>.Fail("Usuário não encontrado.", ResultStatus.NotFound);
+
+        user.SetProfilePhoto(data, normalizedContentType);
+        _repository.Update(user);
+        await _repository.SaveChangesAsync(cancellationToken);
+
+        var updatedAt = user.ProfilePhotoUpdatedAt ?? DateTimeOffset.UtcNow;
+        return Result<UserPhotoDto>.Ok(new UserPhotoDto(
+            $"/api/Users/{user.Id}/photo?v={updatedAt.ToUnixTimeMilliseconds()}",
+            updatedAt));
+    }
+
+    public async Task<Result<(byte[] Data, string ContentType, DateTimeOffset UpdatedAt)>> GetPhotoAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var photo = await _db.Users
+            .AsNoTracking()
+            .Where(u => u.Id == userId && u.ProfilePhotoData != null)
+            .Select(u => new
+            {
+                Data = u.ProfilePhotoData!,
+                ContentType = u.ProfilePhotoContentType!,
+                UpdatedAt = u.ProfilePhotoUpdatedAt!.Value
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return photo is null
+            ? Result<(byte[], string, DateTimeOffset)>.Fail("Foto não encontrada.", ResultStatus.NotFound)
+            : Result<(byte[], string, DateTimeOffset)>.Ok((photo.Data, photo.ContentType, photo.UpdatedAt));
+    }
+
+    public async Task<Result> RemovePhotoAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var user = await _repository.GetByIdIncludingInactiveAsync(userId, cancellationToken);
+        if (user is null)
+            return Result.Fail("Usuário não encontrado.", ResultStatus.NotFound);
+
+        user.RemoveProfilePhoto();
+        _repository.Update(user);
+        await _repository.SaveChangesAsync(cancellationToken);
+        return Result.Ok("Foto removida com sucesso.");
+    }
+
+    private static bool IsSupportedImage(byte[] data, string contentType) => contentType switch
+    {
+        "image/jpeg" => data.Length >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF,
+        "image/png" => data.Length >= 8 && data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47,
+        "image/webp" => data.Length >= 12 && data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46
+            && data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50,
+        _ => false
+    };
 
     public async Task<Result> InactivateAsync(Guid userId, CancellationToken cancellationToken)
     {

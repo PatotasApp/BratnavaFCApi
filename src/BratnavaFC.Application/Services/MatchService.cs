@@ -18,6 +18,7 @@ public sealed class MatchService : IMatchService
     private readonly IReplayUrlService _replayUrls;
     private readonly IBetService _bets;
     private readonly INotificationScheduler _scheduler;
+    private readonly IConquistaProjectionService? _conquistaProjection;
 
     public MatchService(
         AppDbContext context,
@@ -25,7 +26,8 @@ public sealed class MatchService : IMatchService
         IPushService push,
         IReplayUrlService replayUrls,
         IBetService bets,
-        INotificationScheduler scheduler)
+        INotificationScheduler scheduler,
+        IConquistaProjectionService? conquistaProjection = null)
     {
         _context    = context;
         _repository = repository;
@@ -33,6 +35,7 @@ public sealed class MatchService : IMatchService
         _replayUrls = replayUrls;
         _bets       = bets;
         _scheduler  = scheduler;
+        _conquistaProjection = conquistaProjection;
     }
 
     public async Task<Result<List<MatchDetailsDto>>> GetAllAsync(Guid groupId, CancellationToken ct = default)
@@ -48,7 +51,7 @@ public sealed class MatchService : IMatchService
             .Include(m => m.TeamAColor)
             .Include(m => m.TeamBColor)
             .Include(m => m.Goals)
-            .Include(m => m.Players).ThenInclude(mp => mp.Player)
+            .Include(m => m.Players).ThenInclude(mp => mp.Player).ThenInclude(p => p.User)
             .Include(m => m.Players).ThenInclude(mp => mp.GoalsScored)
             .Include(m => m.Players).ThenInclude(mp => mp.GoalsAssisted)
             .Include(m => m.Votes).ThenInclude(v => v.Voter)
@@ -59,6 +62,9 @@ public sealed class MatchService : IMatchService
         return Result<List<MatchDetailsDto>>.Ok(matches.Select(MapToDetailsDto).ToList());
     }
 
+    private Task ProjectConquistasAsync(Guid groupId, Guid matchId, CancellationToken ct) =>
+        _conquistaProjection?.ProjectMatchAsync(groupId, matchId, ct) ?? Task.CompletedTask;
+
     public async Task<Result<MatchEntity>> GetByIdAsync(Guid groupId, Guid matchId, CancellationToken ct = default)
     {
         var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
@@ -67,7 +73,7 @@ public sealed class MatchService : IMatchService
         var match = await _context.Matches
             .AsNoTracking()
             .Where(m => m.GroupId == groupId && m.Id == matchId)
-            .Include(m => m.Players).ThenInclude(mp => mp.Player)
+            .Include(m => m.Players).ThenInclude(mp => mp.Player).ThenInclude(p => p.User)
             .Include(m => m.Votes)
             .FirstOrDefaultAsync(ct);
 
@@ -89,7 +95,7 @@ public sealed class MatchService : IMatchService
             .AsNoTracking()
             .Where(m => m.GroupId == groupId && m.Id == matchId)
             .Include(m => m.Goals)
-            .Include(m => m.Players).ThenInclude(mp => mp.Player)
+            .Include(m => m.Players).ThenInclude(mp => mp.Player).ThenInclude(p => p.User)
             .FirstOrDefaultAsync(ct);
 
         if (match is null)
@@ -139,7 +145,7 @@ public sealed class MatchService : IMatchService
             .Include(m => m.TeamAColor)
             .Include(m => m.TeamBColor)
             .Include(m => m.Goals)
-            .Include(m => m.Players).ThenInclude(mp => mp.Player)
+            .Include(m => m.Players).ThenInclude(mp => mp.Player).ThenInclude(p => p.User)
             .Include(m => m.Votes)
             .FirstOrDefaultAsync(m => m.Id == matchId, ct);
 
@@ -151,7 +157,9 @@ public sealed class MatchService : IMatchService
             {
                 MatchPlayerId = p.Id,
                 PlayerId = p.PlayerId,
+                UserId = p.Player?.UserId,
                 PlayerName = p.Player?.Name ?? string.Empty,
+                PhotoUrl = UserPhotoUrl(p.Player?.User),
                 Team = p.Team
             })
             .ToList();
@@ -294,7 +302,7 @@ public sealed class MatchService : IMatchService
 
         await _repository.SaveChangesAsync(ct);
 
-        await NotifyMatchInviteAsync(groupId, match.Id, ct);
+        await NotifyMatchInviteAsync(groupId, match, ct);
         await _scheduler.ScheduleMatchRemindersAsync(match.Id, groupId, match.PlayedAt, ct);
         await _scheduler.ScheduleMatchNoQuorumReminderAsync(match.Id, groupId, match.PlayedAt, ct);
 
@@ -645,6 +653,7 @@ public sealed class MatchService : IMatchService
         match.FinalizeByVotes(tieRule, tieMax);
 
         await _context.SaveChangesAsync(ct);
+        await ProjectConquistasAsync(groupId, matchId, ct);
 
         // Resolve apostas imediatamente após finalização (evita resolução lazy com race condition)
         await _bets.ResolveMatchBetsAsync(matchId, ct);
@@ -673,6 +682,8 @@ public sealed class MatchService : IMatchService
         var (tieRule, tieMax) = await LoadMvpTieRuleAsync(groupId, ct);
         match.ReapplyMvpTieRule(tieRule, tieMax);
         await _context.SaveChangesAsync(ct);
+        if (match.Status == Domain.Enums.MatchStatus.Finalized)
+            await ProjectConquistasAsync(groupId, matchId, ct);
 
         return Result.Ok("MVP recalculado com sucesso.");
     }
@@ -823,7 +834,7 @@ public sealed class MatchService : IMatchService
 
         return await _context.Matches
             .Where(m => m.GroupId == groupId && m.Id == matchId)
-            .Include(m => m.Players).ThenInclude(mp => mp.Player)
+            .Include(m => m.Players).ThenInclude(mp => mp.Player).ThenInclude(p => p.User)
             .Include(m => m.Votes)
             .FirstOrDefaultAsync(ct);
     }
@@ -976,7 +987,10 @@ public sealed class MatchService : IMatchService
         await _context.SaveChangesAsync(ct);
 
         if (match.Status == Domain.Enums.MatchStatus.Finalized)
+        {
             await _bets.ReResolveMatchBetsAsync(matchId, ct);
+            await ProjectConquistasAsync(groupId, matchId, ct);
+        }
 
         return Result.Ok("Gol adicionado com sucesso.");
     }
@@ -1026,7 +1040,10 @@ public sealed class MatchService : IMatchService
         await _context.SaveChangesAsync(ct);
 
         if (match.Status == Domain.Enums.MatchStatus.Finalized)
+        {
             await _bets.ReResolveMatchBetsAsync(matchId, ct);
+            await ProjectConquistasAsync(groupId, matchId, ct);
+        }
 
         return Result.Ok("Gol atualizado com sucesso.");
     }
@@ -1061,7 +1078,10 @@ public sealed class MatchService : IMatchService
         await _context.SaveChangesAsync(ct);
 
         if (match.Status == Domain.Enums.MatchStatus.Finalized)
+        {
             await _bets.ReResolveMatchBetsAsync(matchId, ct);
+            await ProjectConquistasAsync(groupId, matchId, ct);
+        }
 
         return Result.Ok("Gol removido com sucesso.");
     }
@@ -1370,7 +1390,12 @@ public sealed class MatchService : IMatchService
                     {
                         MatchPlayerId = mp.Id,
                         PlayerId = mp.PlayerId,
+                        UserId = mp.Player.UserId,
                         PlayerName = mp.Player!.Name,
+                        PhotoUrl = mp.Player.User != null &&
+                                   mp.Player.User.ProfilePhotoData != null
+                            ? "/api/Users/" + mp.Player.UserId + "/photo"
+                            : null,
                         IsGoalkeeper = mp.IsGoalkeeper,
                         IsGuest = mp.Player!.IsGuest,
                         Team = mp.Team,
@@ -1491,6 +1516,7 @@ public sealed class MatchService : IMatchService
                     {
                         MatchPlayerId = mp.Id,
                         PlayerId      = mp.PlayerId,
+                        UserId        = mp.Player!.UserId,
                         PlayerName    = mp.Player!.Name,
                         IsGoalkeeper  = mp.IsGoalkeeper,
                         IsGuest       = mp.Player!.IsGuest,
@@ -1507,6 +1533,7 @@ public sealed class MatchService : IMatchService
                     {
                         MatchPlayerId = mp.Id,
                         PlayerId      = mp.PlayerId,
+                        UserId        = mp.Player!.UserId,
                         PlayerName    = mp.Player!.Name,
                         IsGoalkeeper  = mp.IsGoalkeeper,
                         IsGuest       = mp.Player!.IsGuest,
@@ -1524,6 +1551,7 @@ public sealed class MatchService : IMatchService
                     {
                         MatchPlayerId = mp.Id,
                         PlayerId      = mp.PlayerId,
+                        UserId        = mp.Player!.UserId,
                         PlayerName    = mp.Player!.Name,
                         IsGoalkeeper  = mp.IsGoalkeeper,
                         IsGuest       = mp.Player!.IsGuest,
@@ -1544,6 +1572,7 @@ public sealed class MatchService : IMatchService
                     {
                         MatchPlayerId = mp.Id,
                         PlayerId      = mp.PlayerId,
+                        UserId        = mp.Player!.UserId,
                         PlayerName    = mp.Player!.Name,
                         IsGoalkeeper  = mp.IsGoalkeeper,
                         IsGuest       = mp.Player!.IsGuest,
@@ -1625,6 +1654,7 @@ public sealed class MatchService : IMatchService
             {
                 MatchPlayerId = p.Id,
                 PlayerId = p.PlayerId,
+                UserId = p.PlayerUserId,
                 PlayerName = p.PlayerName,
                 IsGoalkeeper = p.IsGoalkeeper,
                 IsGuest = p.IsGuest,
@@ -1668,7 +1698,9 @@ public sealed class MatchService : IMatchService
             {
                 MatchPlayerId = p.Id,
                 PlayerId = p.PlayerId,
+                UserId = p.PlayerUserId,
                 PlayerName = p.PlayerName,
+                PhotoUrl = null,
                 Team = p.Team
             })
             .ToList();
@@ -1728,6 +1760,7 @@ public sealed class MatchService : IMatchService
             {
                 MatchPlayerId = p.Id,
                 PlayerId = p.PlayerId,
+                UserId = p.PlayerUserId,
                 PlayerName = p.PlayerName,
                 IsGoalkeeper = p.IsGoalkeeper,
                 IsGuest = p.IsGuest,
@@ -2005,7 +2038,11 @@ public sealed class MatchService : IMatchService
     {
         MatchPlayerId      = mp.Id,
         PlayerId           = mp.PlayerId,
+        UserId             = mp.Player?.UserId,
         PlayerName         = mp.Player?.Name ?? string.Empty,
+        PhotoUrl           = mp.Player?.User?.ProfilePhotoData is { Length: > 0 }
+            ? $"/api/Users/{mp.Player.User.Id}/photo?v={mp.Player.User.ProfilePhotoUpdatedAt?.ToUnixTimeMilliseconds()}"
+            : null,
         IsGoalkeeper       = mp.IsGoalkeeper,
         IsGuest            = mp.Player?.IsGuest ?? false,
         Team               = mp.Team,
@@ -2017,6 +2054,11 @@ public sealed class MatchService : IMatchService
             mp.AutoRejectedByAbsence?.Description),
         DidNotPlay         = mp.DidNotPlay,
     };
+
+    private static string? UserPhotoUrl(UserEntity? user) =>
+        user?.ProfilePhotoData is { Length: > 0 }
+            ? $"/api/Users/{user.Id}/photo?v={user.ProfilePhotoUpdatedAt?.ToUnixTimeMilliseconds()}"
+            : null;
 
     internal static string? BuildAbsenceDescription(int? absenceType, string? rawDescription)
     {
@@ -2034,7 +2076,9 @@ public sealed class MatchService : IMatchService
             {
                 MatchPlayerId = p.Id,
                 PlayerId = p.PlayerId,
+                UserId = p.Player?.UserId,
                 PlayerName = p.Player?.Name ?? string.Empty,
+                PhotoUrl = UserPhotoUrl(p.Player?.User),
                 Team = p.Team
             })
             .ToList();
@@ -2209,26 +2253,45 @@ public sealed class MatchService : IMatchService
 
             if (newUserIds.Count == 0) return;
 
-            await _push.SendToUsersAsync(
+            var matchInfo = await _context.Matches
+                .AsNoTracking()
+                .Where(m => m.Id == matchId && m.GroupId == groupId)
+                .Select(m => new { m.PlayedAt, m.PlaceName })
+                .FirstOrDefaultAsync(ct);
+            if (matchInfo is null) return;
+
+            var body = NotificationContentFormatter.MatchInviteBody(
+                matchInfo.PlayedAt, matchInfo.PlaceName);
+            await _push.SendDataOnlyToUsersAsync(
                 newUserIds,
-                title: "Você foi adicionado a uma partida! ⚽",
-                body:  "Você foi incluído em uma partida. Confirme sua presença!",
-                data:  new Dictionary<string, string> { ["type"] = "match_invite", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
-                groupId: groupId);
+                data: new Dictionary<string, string>
+                {
+                    ["type"] = "match_invite",
+                    ["groupId"] = groupId.ToString(),
+                    ["matchId"] = matchId.ToString(),
+                    ["title"] = "Convite para partida",
+                    ["body"] = body,
+                    ["playedAt"] = matchInfo.PlayedAt.ToString("O"),
+                    ["placeName"] = matchInfo.PlaceName,
+                },
+                groupId: groupId,
+                cancellationToken: ct);
         }
         catch { /* notificação não crítica */ }
     }
 
-    private Task NotifyMatchInviteAsync(Guid groupId, Guid matchId, CancellationToken ct) =>
+    private Task NotifyMatchInviteAsync(Guid groupId, MatchEntity match, CancellationToken ct) =>
         _push.SendDataOnlyToGroupAsync(
             groupId,
             new Dictionary<string, string>
             {
                 ["type"] = "match_invite",
                 ["groupId"] = groupId.ToString(),
-                ["matchId"] = matchId.ToString(),
+                ["matchId"] = match.Id.ToString(),
                 ["title"] = "Convite para partida",
-                ["body"] = "Você foi convidado para uma partida. Confirme sua presença!",
+                ["body"] = NotificationContentFormatter.MatchInviteBody(match.PlayedAt, match.PlaceName),
+                ["playedAt"] = match.PlayedAt.ToString("O"),
+                ["placeName"] = match.PlaceName,
             },
             ct);
 

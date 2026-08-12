@@ -33,9 +33,10 @@ public sealed class PlayerStatsServiceTests
         BratnavaFC.Infrastructure.Data.AppDbContext db,
         Guid groupId,
         int? guestStarRating = null,
-        bool isGuest = false)
+        bool isGuest = false,
+        Guid? userId = null)
     {
-        var player = new PlayerEntity("Jogador", null, groupId, 0m, false, isGuest, Status.Active);
+        var player = new PlayerEntity("Jogador", userId, groupId, 0m, false, isGuest, Status.Active);
         if (guestStarRating.HasValue)
             player.SetGuestStarRating(guestStarRating.Value);
         db.Players.Add(player);
@@ -129,6 +130,21 @@ public sealed class PlayerStatsServiceTests
     // -----------------------------------------------------------------
     // Testes
     // -----------------------------------------------------------------
+
+    [Fact]
+    public async Task GetSpotlightReportAsync_ShouldExposeOnlyLinkedUserIds()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetSpotlightReportAsync_ShouldExposeOnlyLinkedUserIds));
+        var group = await SeedGroupAsync(db);
+        var linkedUserId = Guid.NewGuid();
+        var linked = await SeedPlayerAsync(db, group.Id, userId: linkedUserId);
+        var guest = await SeedPlayerAsync(db, group.Id, isGuest: true);
+
+        var result = await CreateSut(db).GetSpotlightReportAsync(group.Id);
+
+        result.Players.Single(p => p.PlayerId == linked.Id).UserId.Should().Be(linkedUserId);
+        result.Players.Single(p => p.PlayerId == guest.Id).UserId.Should().BeNull();
+    }
 
     /// <summary>
     /// Verifica o mapeamento correto de estrelas (1-5) para a escala 0-1.

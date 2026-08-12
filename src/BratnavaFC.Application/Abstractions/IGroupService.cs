@@ -14,6 +14,9 @@ public interface IGroupService
     Task<Result<PagedResultDto<GroupDto>>> GetAllGroupsAsync(int page, int pageSize, CancellationToken cancellationToken);
     Task<Result> InactivateAsync(Guid groupId, CancellationToken cancellationToken);
     Task<Result> ReactivateAsync(Guid groupId, CancellationToken cancellationToken);
+    Task<Result<GroupLogoDto>> SetLogoAsync(Guid groupId, byte[] data, string contentType, CancellationToken cancellationToken);
+    Task<Result<(byte[] Data, string ContentType, DateTimeOffset UpdatedAt)>> GetLogoAsync(Guid groupId, CancellationToken cancellationToken);
+    Task<Result> RemoveLogoAsync(Guid groupId, CancellationToken cancellationToken);
     Task<Result> AddAdminToGroupAsync(Guid groupId, AddAdminToGroupDto request, CancellationToken cancellationToken);
     Task<Result> RemoveAdminAsync(Guid groupId, Guid targetUserId, Guid requestingUserId, CancellationToken cancellationToken);
 
