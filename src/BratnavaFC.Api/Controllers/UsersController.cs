@@ -74,6 +74,7 @@ public sealed class UsersController : BaseApiController
     [HttpGet]
     public async Task<IActionResult> GetAllAsync(
         [FromQuery] string? search,
+        [FromQuery] string? userName,
         [FromQuery] Status? status,
         [FromQuery] int? role,
         [FromQuery] int page = 1,
@@ -84,6 +85,7 @@ public sealed class UsersController : BaseApiController
         var req = new ListUsersRequestDto
         {
             Search = search,
+            UserName = userName,
             Status = status,
             Role = role,
             Page = page,

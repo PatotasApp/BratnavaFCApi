@@ -579,6 +579,16 @@ public class GroupService : IGroupService
                     .FirstOrDefaultAsync(p => p.Id == request.GuestPlayerId.Value && p.GroupId == groupId && p.IsGuest, cancellationToken);
                 if (guest == null)
                     return Result<GroupInviteDto>.Fail("Jogador convidado não encontrado neste grupo.", ResultStatus.NotFound);
+
+                // Convidado não implica sem dono: LeaveAsCreator converte o criador que sai em
+                // convidado com SetIsGuest(true), sem ClearUser(). Apontar o convite para esse
+                // player transferiria o histórico do dono anterior — gols, mensalidades,
+                // cobranças, apostas — para a conta convidada.
+                if (guest.UserId is not null && guest.UserId != request.TargetUserId)
+                    return Result<GroupInviteDto>.Fail(
+                        "Este jogador convidado já pertence a outra conta.",
+                        ResultStatus.BadRequest);
+
                 guestPlayerName = guest.Name;
             }
 
@@ -687,6 +697,17 @@ public class GroupService : IGroupService
             if (invite.Status != GroupInviteStatus.Pending)
                 return Result.Fail("Convite não está pendente.", ResultStatus.BadRequest);
 
+            // CreateInviteAsync já recusa quem é membro, mas o convite fica pendente e a pessoa
+            // pode entrar no grupo por outro caminho nesse intervalo. Sem reconferir aqui, o
+            // ramo final criaria um SEGUNDO player para o mesmo usuário no mesmo grupo — e não
+            // existe índice único em (GroupId, UserId) para barrar, então a duplicata se
+            // propagaria para estatística e financeiro.
+            var alreadyMember = await _context.Players
+                .AnyAsync(p => p.GroupId == invite.GroupId && p.UserId == userId && !p.IsGuest, cancellationToken);
+
+            if (alreadyMember)
+                return Result.Fail("Usuário já é membro deste grupo.", ResultStatus.BadRequest);
+
             PlayerEntity thePlayer;
 
             if (invite.GuestPlayerId.HasValue)
@@ -697,6 +718,14 @@ public class GroupService : IGroupService
 
                 if (player == null)
                     return Result.Fail("Jogador convidado não encontrado.", ResultStatus.NotFound);
+
+                // Mesma guarda do CreateInviteAsync, repetida aqui de propósito: é esta que
+                // protege de fato, porque convites criados antes desta correção já existem
+                // pendentes no banco, e a posse do player pode mudar entre criar e aceitar.
+                if (player.UserId is not null && player.UserId != userId)
+                    return Result.Fail(
+                        "Este jogador convidado já pertence a outra conta.",
+                        ResultStatus.BadRequest);
 
                 player.SetUser(userId);
                 player.SetIsGuest(false);

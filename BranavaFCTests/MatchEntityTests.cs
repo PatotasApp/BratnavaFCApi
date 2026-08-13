@@ -495,7 +495,7 @@ public sealed class MatchEntityTests
     }
 
     [Fact]
-    public void Rewind_FromStarted_ShouldGoToMatchMaking()
+    public void Rewind_FromStarted_ShouldThrowAndPreserveMatch()
     {
         var (match, p1, _, _, _) = CreateMatchWithTwoPlayers_Started();
 
@@ -505,50 +505,57 @@ public sealed class MatchEntityTests
         Assert.Equal(MatchStatus.Started, match.Status);
         Assert.NotEmpty(match.Goals);
 
-        match.RewindOneStep();
+        var ex = Assert.Throws<InvalidOperationException>(() => match.RewindOneStep());
 
-        Assert.Equal(MatchStatus.MatchMaking, match.Status);
+        Assert.Contains("iniciada", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(MatchStatus.Started, match.Status);
+        Assert.NotEmpty(match.Goals);
     }
 
     [Fact]
-    public void Rewind_FromEnded_ShouldGoToStarted()
+    public void Rewind_FromEnded_ShouldThrowAndPreserveStatus()
     {
         var (match, _, _, _, _) = CreateMatchWithTwoPlayers_Started();
         match.End();
 
         Assert.Equal(MatchStatus.Ended, match.Status);
 
-        match.RewindOneStep();
+        var ex = Assert.Throws<InvalidOperationException>(() => match.RewindOneStep());
 
-        Assert.Equal(MatchStatus.Started, match.Status);
+        Assert.Contains("iniciada", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(MatchStatus.Ended, match.Status);
     }
 
     [Fact]
-    public void Rewind_FromPostGame_ShouldGoToEnded()
+    public void Rewind_FromPostGame_ShouldThrowAndPreserveStatus()
     {
         var (match, _, _, mp1, mp2) = CreateMatchWithTwoPlayers_PostGame();
 
         match.SetScore(1, 0);
         var vote = match.CreateVote(mp1.Id, mp2.Id);
         match.Votes.Add(vote);
+        var voteCount = match.Votes.Count;
 
         Assert.Equal(MatchStatus.PostGame, match.Status);
 
-        match.RewindOneStep();
+        var ex = Assert.Throws<InvalidOperationException>(() => match.RewindOneStep());
 
-        Assert.Equal(MatchStatus.Ended, match.Status);
+        Assert.Contains("iniciada", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(MatchStatus.PostGame, match.Status);
+        Assert.Equal(voteCount, match.Votes.Count);
     }
 
     [Fact]
-    public void Rewind_FromAcceptation_ShouldGoToCreated()
+    public void Rewind_FromAcceptation_ShouldThrowAndPreserveStatus()
     {
         var (match, _, _, _, _) = CreateMatchWithTwoPlayers_Acceptation(acceptBoth: true);
 
         Assert.Equal(MatchStatus.Acceptation, match.Status);
 
-        match.RewindOneStep();
+        var ex = Assert.Throws<InvalidOperationException>(() => match.RewindOneStep());
 
-        Assert.Equal(MatchStatus.Created, match.Status);
+        Assert.Contains("aceitacao", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(MatchStatus.Acceptation, match.Status);
     }
 
     [Fact]
@@ -557,7 +564,8 @@ public sealed class MatchEntityTests
         var (match, _, _, _, _) = CreateMatchWithTwoPlayers_Created();
 
         var ex = Assert.Throws<InvalidOperationException>(() => match.RewindOneStep());
-        Assert.Equal("Nao e possivel voltar status quando a partida esta Created.", ex.Message);
+        Assert.Contains("nao pode voltar", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(MatchStatus.Created, match.Status);
     }
 
     [Fact]
@@ -568,7 +576,8 @@ public sealed class MatchEntityTests
         match.FinalizeByVotes();
 
         var ex = Assert.Throws<InvalidOperationException>(() => match.RewindOneStep());
-        Assert.Equal("Partida finalizada. Nao e possivel voltar status.", ex.Message);
+        Assert.Contains("iniciada", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(MatchStatus.Finalized, match.Status);
     }
 
     // =========================
