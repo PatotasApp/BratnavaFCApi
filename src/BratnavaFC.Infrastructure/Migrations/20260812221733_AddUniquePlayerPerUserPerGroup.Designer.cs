@@ -3,6 +3,7 @@ using System;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BratnavaFC.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260812221733_AddUniquePlayerPerUserPerGroup")]
+    partial class AddUniquePlayerPerUserPerGroup
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1811,9 +1814,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"FirebaseUid\" IS NOT NULL");
 
-                    b.HasIndex("UserName")
-                        .IsUnique();
-
                     b.ToTable("Users");
                 });
 
@@ -2294,15 +2294,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("BratnavaFC.Domain.Entities.SeasonTitleEntity", b =>
-                {
-                    b.HasOne("BratnavaFC.Domain.Entities.PlayerEntity", null)
-                        .WithMany()
-                        .HasForeignKey("PlayerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.SeasonTitleEntity", b =>

@@ -248,7 +248,14 @@ public class UserService : IUserService
         if (!req.IncludeInactive)
             q = q.Where(u => u.Status != Status.Inactive);
 
-        if (!string.IsNullOrWhiteSpace(req.Search))
+        // Prefixo, não Contains: o handle é único e identifica a pessoa, então casar no meio da
+        // string só traria de volta o ruído que este filtro existe para eliminar.
+        if (!string.IsNullOrWhiteSpace(req.UserName))
+        {
+            var handle = req.UserName.Trim().ToLower();
+            q = q.Where(u => u.UserName.ToLower().StartsWith(handle));
+        }
+        else if (!string.IsNullOrWhiteSpace(req.Search))
         {
             var s = req.Search.Trim().ToLower();
             q = q.Where(u =>

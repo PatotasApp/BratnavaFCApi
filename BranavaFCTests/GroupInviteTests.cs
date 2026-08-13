@@ -1001,3 +1001,137 @@ public class GroupService_RejectInviteTests
         result.Status.Should().Be(ResultStatus.NotFound);
     }
 }
+
+// ─── GroupService — guardas de vínculo do convite ─────────────────────────────
+//
+// Aceitar convite transfere a posse de um PlayerEntity, e com ela todo o
+// histórico daquele jogador no grupo: gols, assistências, MVPs, mensalidades,
+// cobranças extras e apostas. Os testes abaixo cobrem os dois caminhos em que
+// essa transferência acontecia sem dono definido ou sem checagem.
+
+public class GroupService_InviteGuardTests
+{
+    /// <summary>
+    /// Um player com dono pode virar convidado — é o que LeaveAsCreator faz com o
+    /// criador que sai (SetIsGuest(true) sem ClearUser()). Apontar um convite para
+    /// esse player transferiria o histórico do dono anterior para outra conta.
+    /// </summary>
+    [Fact]
+    public async Task AcceptInvite_WhenGuestPlayerBelongsToAnotherUser_ShouldNotTransferOwnership()
+    {
+        await using var db = DbContextFactory.Create(nameof(AcceptInvite_WhenGuestPlayerBelongsToAnotherUser_ShouldNotTransferOwnership));
+        var sut = Builders.MakeSut(db);
+
+        var owner = Builders.MakeUser("dono");
+        var other = Builders.MakeUser("outro");
+        var group = Builders.MakeGroup();
+
+        // Ex-criador: mantém UserId, mas está marcado como convidado.
+        var player = new PlayerEntity("Ex Criador", owner.Id, group.Id, 9m, false, true, Status.Active);
+
+        db.Users.AddRange(owner, other);
+        db.Groups.Add(group);
+        db.Players.Add(player);
+        var invite = new GroupInviteEntity(group.Id, other.Id, player.Id);
+        db.GroupInvites.Add(invite);
+        await db.SaveChangesAsync();
+
+        var result = await sut.AcceptInviteAsync(invite.Id, other.Id, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+
+        var unchanged = db.Players.IgnoreQueryFilters().First(p => p.Id == player.Id);
+        unchanged.UserId.Should().Be(owner.Id, "o histórico do dono anterior não pode migrar para outra conta");
+    }
+
+    /// <summary>
+    /// Mesma proteção no ponto de criação, para o convite inválido não chegar a existir.
+    /// </summary>
+    [Fact]
+    public async Task CreateInvite_WhenGuestPlayerBelongsToAnotherUser_ShouldReturnFailure()
+    {
+        await using var db = DbContextFactory.Create(nameof(CreateInvite_WhenGuestPlayerBelongsToAnotherUser_ShouldReturnFailure));
+        var sut = Builders.MakeSut(db);
+
+        var owner = Builders.MakeUser("dono");
+        var other = Builders.MakeUser("outro");
+        var group = Builders.MakeGroup();
+        var player = new PlayerEntity("Ex Criador", owner.Id, group.Id, 9m, false, true, Status.Active);
+
+        db.Users.AddRange(owner, other);
+        db.Groups.Add(group);
+        db.Players.Add(player);
+        await db.SaveChangesAsync();
+
+        var result = await sut.CreateInviteAsync(
+            group.Id,
+            new CreateGroupInviteDto(other.Id, player.Id),
+            CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        db.GroupInvites.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// O dono legítimo reassumindo o próprio player convidado precisa continuar
+    /// funcionando — a guarda acima não pode ser estrita demais.
+    /// </summary>
+    [Fact]
+    public async Task AcceptInvite_WhenGuestPlayerBelongsToTargetUser_ShouldStillLink()
+    {
+        await using var db = DbContextFactory.Create(nameof(AcceptInvite_WhenGuestPlayerBelongsToTargetUser_ShouldStillLink));
+        var sut = Builders.MakeSut(db);
+
+        var user  = Builders.MakeUser("dono");
+        var group = Builders.MakeGroup();
+        var player = new PlayerEntity("Ex Criador", user.Id, group.Id, 9m, false, true, Status.Active);
+
+        db.Users.Add(user);
+        db.Groups.Add(group);
+        db.Players.Add(player);
+        var invite = new GroupInviteEntity(group.Id, user.Id, player.Id);
+        db.GroupInvites.Add(invite);
+        await db.SaveChangesAsync();
+
+        var result = await sut.AcceptInviteAsync(invite.Id, user.Id, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+
+        var linked = db.Players.IgnoreQueryFilters().First(p => p.Id == player.Id);
+        linked.UserId.Should().Be(user.Id);
+        linked.IsGuest.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// CreateInviteAsync recusa quem já é membro, mas o convite pode ficar pendente
+    /// enquanto a pessoa entra no grupo por outro caminho. Sem reconferir no aceite,
+    /// o else de AcceptInviteAsync cria um SEGUNDO player para o mesmo usuário —
+    /// e não há índice único em (GroupId, UserId) para barrar.
+    /// </summary>
+    [Fact]
+    public async Task AcceptInvite_WhenUserAlreadyMember_ShouldNotCreateDuplicatePlayer()
+    {
+        await using var db = DbContextFactory.Create(nameof(AcceptInvite_WhenUserAlreadyMember_ShouldNotCreateDuplicatePlayer));
+        var sut = Builders.MakeSut(db);
+
+        var user  = Builders.MakeUser();
+        var group = Builders.MakeGroup();
+
+        db.Users.Add(user);
+        db.Groups.Add(group);
+        var invite = new GroupInviteEntity(group.Id, user.Id, null);
+        db.GroupInvites.Add(invite);
+        await db.SaveChangesAsync();
+
+        // Entrou no grupo por outro caminho depois de o convite ser criado.
+        db.Players.Add(new PlayerEntity("Primeiro Sobrenome", user.Id, group.Id, 0m, false, false, Status.Active));
+        await db.SaveChangesAsync();
+
+        var result = await sut.AcceptInviteAsync(invite.Id, user.Id, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+
+        var players = db.Players.IgnoreQueryFilters().Where(p => p.GroupId == group.Id && p.UserId == user.Id).ToList();
+        players.Should().HaveCount(1, "aceitar convite obsoleto não pode duplicar o jogador");
+    }
+}
