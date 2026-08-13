@@ -1,5 +1,6 @@
 using BratnavaFC.Infrastructure.Cloudflare;
 using BratnavaFC.Infrastructure.Data;
+using BratnavaFC.Infrastructure.Firebase;
 using BratnavaFC.Infrastructure.Redis;
 using BratnavaFC.Infrastructure.Repositories;
 using FirebaseAdmin;
@@ -29,7 +30,7 @@ public static class InfrastructureDependencyInjection
         services.AddBackgroundJobs(configuration, environment, logger);
         services.AddReplayEventing(configuration, environment, isDevelopment);
         services.AddReplayStorage(configuration, environment, isDevelopment);
-        services.AddFirebase(configuration, environment, logger);
+        services.AddFirebase(logger);
         services.AddExternalHttpClients();
 
         logger.LogInformation(
@@ -234,25 +235,25 @@ public static class InfrastructureDependencyInjection
         services.AddSingleton<IReplayUrlService, R2ReplayUrlService>();
     }
 
-    private static void AddFirebase(
-        this IServiceCollection services,
-        IConfiguration configuration,
-        IHostEnvironment environment,
-        ILogger logger)
+    /// <summary>
+    /// O FirebaseApp deixou de ser opcional: <c>AddJwtAuthentication</c> resolve o ProjectId a
+    /// partir dele para montar o issuer dos ID tokens, e lança se não houver. Por isso não existe
+    /// mais o atalho que desabilitava o Firebase em Development — sem ele a API não sobe.
+    /// </summary>
+    private static void AddFirebase(this IServiceCollection services, ILogger logger)
     {
-        var firebaseJson = Environment.GetEnvironmentVariable("FIREBASE_SERVICE_ACCOUNT_JSON");
-        if (environment.IsDevelopment() && string.IsNullOrWhiteSpace(firebaseJson))
-        {
-            logger.LogInformation(
-                "[Firebase] Desabilitado em Development: FIREBASE_SERVICE_ACCOUNT_JSON não configurado.");
-            return;
-        }
+        var serviceAccountJson = Environment.GetEnvironmentVariable("FIREBASE_SERVICE_ACCOUNT_JSON");
 
         try
         {
-            if (!string.IsNullOrWhiteSpace(firebaseJson))
+            if (!string.IsNullOrWhiteSpace(serviceAccountJson))
             {
-                FirebaseApp.Create(new AppOptions { Credential = GoogleCredential.FromJson(firebaseJson) });
+                FirebaseApp.Create(new AppOptions
+                {
+                    Credential = GoogleCredential.FromJson(serviceAccountJson),
+                    ProjectId = FirebaseProjectId.FromServiceAccountJson(serviceAccountJson)
+                });
+
                 logger.LogInformation("[Firebase] Inicializado via ServiceAccountJson.");
             }
             else

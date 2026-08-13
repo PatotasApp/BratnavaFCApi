@@ -55,10 +55,13 @@ public sealed class PushController : BaseApiController
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Identidade INTERNA, injetada no NameIdentifier pelo FirebaseIdentityMiddleware — não o UID
+    /// do Firebase, que continua em "sub".
+    /// </summary>
     private Guid GetCurrentUserId()
     {
-        var sub = User.FindFirstValue(ClaimTypes.NameIdentifier)
-               ?? User.FindFirstValue("sub");
-        return Guid.TryParse(sub, out var id) ? id : Guid.Empty;
+        var raw = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(raw, out var id) ? id : Guid.Empty;
     }
 }

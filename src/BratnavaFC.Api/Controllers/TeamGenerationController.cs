@@ -31,9 +31,9 @@ public class TeamGenerationController : BaseApiController
     {
         if (User.IsInRole("Admin") || User.IsInRole("GodMode")) return true;
 
-        var raw = User.FindFirstValue(ClaimTypes.NameIdentifier)
-                  ?? User.FindFirstValue("sub")
-                  ?? User.FindFirstValue("userId");
+        // NameIdentifier carrega a identidade INTERNA (FirebaseIdentityMiddleware); "sub" tem o
+        // UID do Firebase e não serve para comparar com GroupAdmins.UserId.
+        var raw = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!Guid.TryParse(raw, out var userId) || userId == Guid.Empty) return false;
 
         return await _db.GroupAdmins.AnyAsync(x => x.GroupId == groupId && x.UserId == userId, ct);

@@ -1481,9 +1481,9 @@ public sealed class MatchServiceTests
     }
 
     [Fact]
-    public async Task RewindOneStepAsync_WhenStarted_ShouldPreserveTeamAssignments()
+    public async Task RewindOneStepAsync_WhenStarted_ShouldRejectAndPreserveTeamAssignments()
     {
-        await using var db = DbContextFactory.Create(nameof(RewindOneStepAsync_WhenStarted_ShouldPreserveTeamAssignments));
+        await using var db = DbContextFactory.Create(nameof(RewindOneStepAsync_WhenStarted_ShouldRejectAndPreserveTeamAssignments));
         var repo = BuildRepoMock(db);
         var sut = CreateSut(db, repo);
 
@@ -1498,19 +1498,20 @@ public sealed class MatchServiceTests
 
         db.ChangeTracker.Clear();
 
-        await sut.RewindOneStepAsync(group.Id, match.Id, CancellationToken.None);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.RewindOneStepAsync(group.Id, match.Id, CancellationToken.None));
 
         var after = await db.Matches
             .AsNoTracking()
             .Include(m => m.Players)
             .FirstAsync(m => m.Id == match.Id);
 
-        after.Status.Should().Be(MatchStatus.MatchMaking);
+        after.Status.Should().Be(MatchStatus.Started);
 
-        // Rewind de Started → MatchMaking não deve tocar os jogadores
+        // A tentativa bloqueada não deve tocar nos jogadores nem nos times.
         after.Players.Should().HaveCount(players.Count);
         after.Players.Any(p => p.Team != 0).Should().BeTrue(
-            "atribuições de time devem ser preservadas ao voltar de Started para MatchMaking");
+            "atribuições de time devem ser preservadas quando o retorno é bloqueado");
     }
 
     // =========================
@@ -1737,9 +1738,9 @@ public sealed class MatchServiceTests
     }
 
     [Fact]
-    public async Task GetHeaderAsync_WhenPostGame_ShouldReturn_StepKey_Post_And_CanRewind_True()
+    public async Task GetHeaderAsync_WhenPostGame_ShouldReturn_StepKey_Post_And_CanRewind_False()
     {
-        await using var db = DbContextFactory.Create(nameof(GetHeaderAsync_WhenPostGame_ShouldReturn_StepKey_Post_And_CanRewind_True));
+        await using var db = DbContextFactory.Create(nameof(GetHeaderAsync_WhenPostGame_ShouldReturn_StepKey_Post_And_CanRewind_False));
         var repo = BuildRepoMock(db);
         var sut = CreateSut(db, repo);
 
@@ -1751,22 +1752,22 @@ public sealed class MatchServiceTests
 
         result.Success.Should().BeTrue();
         result.Data!.StepKey.Should().Be("post");
-        result.Data!.CanRewind.Should().BeTrue();
+        result.Data!.CanRewind.Should().BeFalse();
     }
 
     [Fact]
     public async Task GetHeaderAsync_ShouldReturn_CorrectStepKey_ForEachStatus()
     {
         // Verifica os mapeamentos status → stepKey para Acceptation, MatchMaking, Started, Ended, Finalized
-        var statusToStepKey = new Dictionary<MatchStatus, string>
+        var expectedByStatus = new Dictionary<MatchStatus, (string StepKey, bool CanRewind)>
         {
-            { MatchStatus.Acceptation, "accept"  },
-            { MatchStatus.MatchMaking, "teams"   },
-            { MatchStatus.Started,     "playing" },
-            { MatchStatus.Ended,       "ended"   },
+            { MatchStatus.Acceptation, ("accept",  false) },
+            { MatchStatus.MatchMaking, ("teams",   true)  },
+            { MatchStatus.Started,     ("playing", false) },
+            { MatchStatus.Ended,       ("ended",   false) },
         };
 
-        foreach (var (status, expectedKey) in statusToStepKey)
+        foreach (var (status, expected) in expectedByStatus)
         {
             var dbName = $"GetHeaderAsync_StepKey_{status}";
             await using var db = DbContextFactory.Create(dbName);
@@ -1779,8 +1780,10 @@ public sealed class MatchServiceTests
 
             var result = await sut.GetHeaderAsync(group.Id, match.Id, CancellationToken.None);
 
-            result.Data!.StepKey.Should().Be(expectedKey, $"status {status} deve mapear para stepKey '{expectedKey}'");
-            result.Data!.CanRewind.Should().BeTrue($"status {status} > Created → CanRewind deve ser true");
+            result.Data!.StepKey.Should().Be(expected.StepKey,
+                $"status {status} deve mapear para stepKey '{expected.StepKey}'");
+            result.Data!.CanRewind.Should().Be(expected.CanRewind,
+                $"somente MatchMaking pode voltar para Acceptation");
         }
     }
 

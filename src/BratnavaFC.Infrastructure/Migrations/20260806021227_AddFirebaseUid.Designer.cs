@@ -3,6 +3,7 @@ using System;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BratnavaFC.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260806021227_AddFirebaseUid")]
+    partial class AddFirebaseUid
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -300,16 +303,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<DateTime?>("InactivatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("LogoContentType")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<byte[]>("LogoData")
-                        .HasColumnType("bytea");
-
-                    b.Property<DateTimeOffset?>("LogoUpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Name")
@@ -907,171 +900,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.ToTable("Players");
                 });
 
-            modelBuilder.Entity("BratnavaFC.Domain.Entities.PlayerMatchStatContributionEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Assists")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("CleanSheets")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("FiveGoalGames")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Games")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("GoalAndAssistGames")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Goals")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("GroupId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("HatTricks")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsGoalkeeper")
-                        .HasColumnType("boolean");
-
-                    b.Property<Guid>("MatchId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Mvps")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("OwnGoals")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset>("PlayedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("PlayerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Pokers")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Result")
-                        .IsRequired()
-                        .HasMaxLength(1)
-                        .HasColumnType("character varying(1)");
-
-                    b.Property<int>("Season")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ThreeAssistGames")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Wins")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PlayerId");
-
-                    b.HasIndex("MatchId", "PlayerId")
-                        .IsUnique();
-
-                    b.HasIndex("GroupId", "PlayerId", "Season");
-
-                    b.ToTable("PlayerMatchStatContributions");
-                });
-
-            modelBuilder.Entity("BratnavaFC.Domain.Entities.PlayerStatProjectionEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Assists")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("CleanSheets")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("FiveGoalGames")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("FiveWinRuns")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Games")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("GoalAndAssistGames")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Goals")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("GroupId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("HatTricks")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Mvps")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("OwnGoals")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("PlayerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Pokers")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset>("ProjectedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Season")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ThreeAssistGames")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ThreeCleanSheetRuns")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("UnbeatenFiveRuns")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("UnbeatenTenRuns")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Wins")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PlayerId");
-
-                    b.HasIndex("GroupId", "PlayerId", "Season")
-                        .IsUnique();
-
-                    b.ToTable("PlayerStatProjections");
-                });
-
             modelBuilder.Entity("BratnavaFC.Domain.Entities.PollEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1552,61 +1380,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.ToTable("ScheduledNotificationJobs");
                 });
 
-            modelBuilder.Entity("BratnavaFC.Domain.Entities.SeasonTitleEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("AwardedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Category")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("GroupId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Icon")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Guid>("PlayerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Position")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Season")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Value")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PlayerId");
-
-                    b.HasIndex("GroupId", "Season", "Category", "PlayerId")
-                        .IsUnique();
-
-                    b.ToTable("SeasonTitles");
-                });
-
             modelBuilder.Entity("BratnavaFC.Domain.Entities.TeamColorEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1758,33 +1531,8 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<string>("Phone")
                         .HasColumnType("text");
 
-                    b.Property<string>("ProfilePhotoContentType")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<byte[]>("ProfilePhotoData")
-                        .HasColumnType("bytea");
-
-                    b.Property<DateTimeOffset?>("ProfilePhotoUpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<short>("ProfileVisibility")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("smallint")
-                        .HasDefaultValue((short)1);
-
                     b.Property<int>("Role")
                         .HasColumnType("integer");
-
-                    b.Property<bool>("ShowPatotaNamesOnProfile")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<bool>("ShowZoeiraAchievementsOnProfile")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
 
                     b.Property<short>("Status")
                         .ValueGeneratedOnAdd()
@@ -1799,9 +1547,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("Email")
-                        .IsUnique();
 
                     b.HasIndex("FirebaseUid")
                         .IsUnique()
@@ -2184,30 +1929,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("BratnavaFC.Domain.Entities.PlayerMatchStatContributionEntity", b =>
-                {
-                    b.HasOne("BratnavaFC.Domain.Entities.MatchEntity", null)
-                        .WithMany()
-                        .HasForeignKey("MatchId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("BratnavaFC.Domain.Entities.PlayerEntity", null)
-                        .WithMany()
-                        .HasForeignKey("PlayerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("BratnavaFC.Domain.Entities.PlayerStatProjectionEntity", b =>
-                {
-                    b.HasOne("BratnavaFC.Domain.Entities.PlayerEntity", null)
-                        .WithMany()
-                        .HasForeignKey("PlayerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("BratnavaFC.Domain.Entities.PollEntity", b =>
                 {
                     b.HasOne("BratnavaFC.Domain.Entities.GroupEntity", null)
@@ -2287,24 +2008,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("BratnavaFC.Domain.Entities.SeasonTitleEntity", b =>
-                {
-                    b.HasOne("BratnavaFC.Domain.Entities.PlayerEntity", null)
-                        .WithMany()
-                        .HasForeignKey("PlayerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("BratnavaFC.Domain.Entities.SeasonTitleEntity", b =>
-                {
-                    b.HasOne("BratnavaFC.Domain.Entities.PlayerEntity", null)
-                        .WithMany()
-                        .HasForeignKey("PlayerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.TeamColorEntity", b =>

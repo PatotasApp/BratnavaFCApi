@@ -21,12 +21,14 @@ public abstract class GroupAuthorizedController : BaseApiController
 {
     // ── Identity helpers ─────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Identidade INTERNA, injetada no NameIdentifier pelo FirebaseIdentityMiddleware. Não há
+    /// fallback para "sub": ali fica o UID do Firebase, que não é um GUID e não corresponde a
+    /// nenhuma coluna UserId.
+    /// </summary>
     protected Guid? GetCurrentUserId()
     {
-        var raw =
-            User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub")
-            ?? User.FindFirstValue("userId");
+        var raw = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
         return Guid.TryParse(raw, out var id) && id != Guid.Empty ? id : null;
     }
