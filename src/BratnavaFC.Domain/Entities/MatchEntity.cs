@@ -605,31 +605,15 @@ public class MatchEntity : BaseEntity
 
     public void RewindOneStep()
     {
-        if (Status == MatchStatus.Finalized)
-            throw new InvalidOperationException("Partida finalizada. Nao e possivel voltar status.");
+        if (Status == MatchStatus.Acceptation)
+            throw new InvalidOperationException("A etapa de aceitacao nao pode voltar para a criacao da partida.");
 
-        switch (Status)
-        {
-            case MatchStatus.Created:
-                throw new InvalidOperationException("Nao e possivel voltar status quando a partida esta Created.");
+        if (Status >= MatchStatus.Started)
+            throw new InvalidOperationException("Uma partida ja iniciada nao pode voltar de etapa.");
 
-            case MatchStatus.Acceptation:
-                Status = MatchStatus.Created;
-                break;
-            case MatchStatus.MatchMaking:
-                Status = MatchStatus.Acceptation;
-                break;
-            case MatchStatus.Started:
-                Status = MatchStatus.MatchMaking;
-                break;
-            case MatchStatus.Ended:
-                Status = MatchStatus.Started;
-                break;
-            case MatchStatus.PostGame:
-                Status = MatchStatus.Ended;
-                break;
-            default:
-                throw new InvalidOperationException("Status invalido para rewind.");
-        }
+        if (Status != MatchStatus.MatchMaking)
+            throw new InvalidOperationException("Esta partida nao pode voltar de etapa.");
+
+        Status = MatchStatus.Acceptation;
     }
 }
