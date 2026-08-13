@@ -30,6 +30,19 @@ public class UserEntityConfiguration : IEntityTypeConfiguration<UserEntity>
         // escrita da propriedade, então o índice simples basta e não precisa ser funcional.
         builder.HasIndex(x => x.Email).IsUnique();
 
+        // O UserName virou o identificador que um admin usa para achar a pessoa certa ao
+        // vincular um convidado a uma conta — e vincular errado transfere o histórico do
+        // jogador junto. Duas linhas com o mesmo handle tornariam essa escolha ambígua.
+        //
+        // GenerateUniqueUserNameAsync e UpdateMeAsync já checam colisão, mas os dois leem antes
+        // de escrever: dois primeiros logins simultâneos derivando o mesmo candidato passam
+        // pelas duas leituras antes de qualquer insert. É essa corrida que o índice fecha.
+        //
+        // Índice comum, não funcional: o candidato gerado vem do e-mail, que ResolveOrCreateAsync
+        // já normalizou para minúsculas, então handle automático é sempre minúsculo. Caixa mista
+        // só entra por PUT /users/me, e ali a checagem é case-insensitive.
+        builder.HasIndex(x => x.UserName).IsUnique();
+
         builder.Property(x => x.FirebaseUid).HasMaxLength(128);
 
         // Índice único parcial: enquanto o usuário não migrou, FirebaseUid é nulo, e o
