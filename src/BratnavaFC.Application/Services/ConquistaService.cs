@@ -169,6 +169,34 @@ public sealed class ConquistaService : IConquistaService
             ProximoNome = level + 1 < track.Length ? track[level + 1].nome : null,
             PctPatota = fraction,
             Raridade = level >= 0 ? HybridRarity(fixedRarity, fraction, sampleSize) : "Comum",
+            Etapas = track.Select(stage => new ConquistaEtapaDto
+            {
+                Nome = stage.nome,
+                Descricao = MilestoneInstruction(category, stage.t),
+                Meta = stage.t,
+                Desbloqueada = value >= stage.t,
+            }).ToList(),
+        };
+    }
+
+    private static string MilestoneInstruction(string category, int target)
+    {
+        var formatted = target.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"));
+        return category switch
+        {
+        "Presença" => target == 1
+            ? "Participe de uma partida."
+            : $"Participe de {formatted} partidas.",
+        "Gols" => target == 1
+            ? "Marque seu primeiro gol."
+            : $"Marque {formatted} gols.",
+        "Assistências" => target == 1
+            ? "Dê sua primeira assistência."
+            : $"Dê {formatted} assistências.",
+        "MVPs" => target == 1
+            ? "Seja eleito MVP pela primeira vez."
+            : $"Seja eleito MVP {formatted} vezes.",
+        _ => $"Alcance a meta de {formatted} em {category}.",
         };
     }
 

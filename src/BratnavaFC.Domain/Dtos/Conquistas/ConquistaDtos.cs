@@ -43,6 +43,15 @@ public sealed class ConquistaDto
     public string? ProximoNome  { get; set; }          // marco: nome do próximo nível (null se maxado)
     public int?    Ano          { get; set; }          // títulos de temporada
     public int?    Posicao      { get; set; }          // pódio 1..3 (títulos)
+    public List<ConquistaEtapaDto> Etapas { get; set; } = [];
+}
+
+public sealed class ConquistaEtapaDto
+{
+    public string Nome { get; set; } = "";
+    public string Descricao { get; set; } = "";
+    public int Meta { get; set; }
+    public bool Desbloqueada { get; set; }
 }
 
 /// <summary>Posição do jogador numa categoria da temporada atual (percentil vivo, muda jogo a jogo).</summary>
