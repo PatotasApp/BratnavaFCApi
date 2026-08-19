@@ -618,58 +618,6 @@ public sealed class MatchServiceCoverageTests
         result.Status.Should().Be(ResultStatus.NotFound);
     }
 
-    [Fact]
-    public async Task ReapplyMvpTieRuleAsync_WhenWrongStatus_ShouldFailBadRequest()
-    {
-        await using var db = DbContextFactory.Create(nameof(ReapplyMvpTieRuleAsync_WhenWrongStatus_ShouldFailBadRequest));
-        var sut = CreateSut(db);
-
-        var group = await SeedGroupAsync(db);
-        var (match, _) = await SeedMatchAsync(db, group.Id, 2, MatchStatus.MatchMaking);
-
-        var result = await sut.ReapplyMvpTieRuleAsync(group.Id, match.Id, CancellationToken.None);
-
-        result.Success.Should().BeFalse();
-        result.Status.Should().Be(ResultStatus.BadRequest);
-    }
-
-    [Fact]
-    public async Task ReapplyMvpTieRuleAsync_WhenPostGame_ShouldRecomputeMvp()
-    {
-        await using var db = DbContextFactory.Create(nameof(ReapplyMvpTieRuleAsync_WhenPostGame_ShouldRecomputeMvp));
-        var sut = CreateSut(db);
-
-        var group = await SeedGroupAsync(db);
-        var (match, players) = await SeedMatchAsync(db, group.Id, 3, MatchStatus.PostGame);
-
-        var mp0 = match.Players.First(p => p.PlayerId == players[0].Id);
-        var mp1 = match.Players.First(p => p.PlayerId == players[1].Id);
-        var mp2 = match.Players.First(p => p.PlayerId == players[2].Id);
-
-        await sut.VoteAsync(group.Id, match.Id, mp0.Id, mp1.Id, CancellationToken.None);
-        await sut.VoteAsync(group.Id, match.Id, mp2.Id, mp1.Id, CancellationToken.None);
-
-        var result = await sut.ReapplyMvpTieRuleAsync(group.Id, match.Id, CancellationToken.None);
-
-        result.Success.Should().BeTrue();
-        var reloaded = await db.MatchPlayers.AsNoTracking().FirstAsync(x => x.Id == mp1.Id);
-        reloaded.IsMvp.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task ReapplyMvpTieRuleAsync_WhenMatchNotFound_ShouldFail()
-    {
-        await using var db = DbContextFactory.Create(nameof(ReapplyMvpTieRuleAsync_WhenMatchNotFound_ShouldFail));
-        var sut = CreateSut(db);
-
-        var group = await SeedGroupAsync(db);
-
-        var result = await sut.ReapplyMvpTieRuleAsync(group.Id, Guid.NewGuid(), CancellationToken.None);
-
-        result.Success.Should().BeFalse();
-        result.Status.Should().Be(ResultStatus.NotFound);
-    }
-
     // =========================
     // SCORE / COLORS / FINALIZE — error paths
     // =========================

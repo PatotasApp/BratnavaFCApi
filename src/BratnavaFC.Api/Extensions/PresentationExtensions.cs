@@ -9,7 +9,8 @@ public static class PresentationExtensions
 {
     public static IServiceCollection AddApiPresentation(
         this IServiceCollection services,
-        IWebHostEnvironment environment)
+        IWebHostEnvironment environment,
+        IConfiguration configuration)
     {
         services.AddControllers()
             .AddJsonOptions(opts =>
@@ -18,7 +19,7 @@ public static class PresentationExtensions
         // Swagger é ferramenta de desenvolvimento. Fora de Development nem o gerador é
         // registrado — manter o SwaggerGen e o ApiExplorer na memória sem ninguém para
         // consumir só ocupa espaço e expõe a superfície da API.
-        if (environment.IsDevelopment())
+        if (environment.IsDevelopment() || configuration.GetValue<bool>("Swagger:Enabled"))
         {
             services.AddEndpointsApiExplorer();
             services.AddSwaggerDocumentation();

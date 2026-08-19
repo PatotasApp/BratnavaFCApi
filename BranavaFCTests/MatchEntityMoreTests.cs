@@ -448,31 +448,6 @@ public sealed class MatchEntityMoreTests
     }
 
     [Fact]
-    public void ReapplyMvpTieRule_WithSingleLeader_ShouldSetSingleMvp()
-    {
-        var (match, mps) = CreatePostGameWithFourPlayers();
-        match.SetScore(1, 0);
-
-        match.CreateVote(mps[0].Id, mps[1].Id);
-        match.CreateVote(mps[2].Id, mps[1].Id);
-        match.CreateVote(mps[3].Id, mps[1].Id);
-
-        match.ReapplyMvpTieRule(MvpTieRule.NoMvp, 2);
-
-        match.Players.Single(p => p.IsMvp == true).Id.Should().Be(mps[1].Id);
-    }
-
-    [Fact]
-    public void ReapplyMvpTieRule_WithNoVotes_ShouldLeaveNoMvp()
-    {
-        var (match, _) = CreatePostGameWithFourPlayers();
-
-        match.ReapplyMvpTieRule(MvpTieRule.AllMvp, 2);
-
-        match.Players.Should().OnlyContain(p => p.IsMvp != true);
-    }
-
-    [Fact]
     public void GetComputedMvps_WithNoVotes_ShouldReturnEmpty()
     {
         var (match, _) = CreatePostGameWithFourPlayers();

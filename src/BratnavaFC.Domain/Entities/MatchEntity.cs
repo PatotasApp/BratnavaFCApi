@@ -293,18 +293,6 @@ public class MatchEntity : BaseEntity
     }
 
     /// <summary>
-    /// Recalcula e persiste os MVPs a partir dos votos, aplicando a regra de empate configurada.
-    /// Pode ser chamado em partidas PostGame ou Finalized (por exemplo, para corrigir um MVP não atribuído).
-    /// </summary>
-    public void ReapplyMvpTieRule(Domain.Enums.MvpTieRule tieRule, int tieMaxPlayers)
-    {
-        foreach (var p in Players)
-            p.RevokeMvp();
-
-        ApplyMvpTieRule(tieRule, tieMaxPlayers);
-    }
-
-    /// <summary>
     /// Calcula os MVPs a partir dos votos aplicando a regra de empate configurada.
     /// Assume que RevokeMvp() já foi chamado antes desta operação.
     /// </summary>

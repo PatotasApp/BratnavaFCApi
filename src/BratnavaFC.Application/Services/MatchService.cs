@@ -667,27 +667,6 @@ public sealed class MatchService : IMatchService
         return Result.Ok("Partida atualizada com sucesso.");
     }
 
-    public async Task<Result> ReapplyMvpTieRuleAsync(Guid groupId, Guid matchId, CancellationToken ct)
-    {
-        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
-        if (!groupCheck.Success) return groupCheck;
-
-        var match = await LoadMatchForDomainActionsAsync(groupId, matchId, ct);
-        if (match is null)
-            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
-
-        if (match.Status != Domain.Enums.MatchStatus.PostGame && match.Status != Domain.Enums.MatchStatus.Finalized)
-            return Result.Fail("A partida precisa estar em PostGame ou Finalizada para recalcular o MVP.", ResultStatus.BadRequest);
-
-        var (tieRule, tieMax) = await LoadMvpTieRuleAsync(groupId, ct);
-        match.ReapplyMvpTieRule(tieRule, tieMax);
-        await _context.SaveChangesAsync(ct);
-        if (match.Status == Domain.Enums.MatchStatus.Finalized)
-            await ProjectConquistasAsync(groupId, matchId, ct);
-
-        return Result.Ok("MVP recalculado com sucesso.");
-    }
-
     public async Task<Result> AssignTeamsAsync(Guid groupId, Guid matchId, AssignTeamsDto dto, CancellationToken ct)
     {
         var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
@@ -1771,6 +1750,7 @@ public sealed class MatchService : IMatchService
         // ── CanVote / HasVoted para o usuário autenticado ────────────────────
         bool? canVote = null;
         bool? hasVoted = null;
+        Guid? myMatchPlayerId = null;
         Guid? myVotedForMatchPlayerId = null;
 
         if (requestingUserId.HasValue)
@@ -1780,6 +1760,7 @@ public sealed class MatchService : IMatchService
 
             if (myMatchPlayer is not null)
             {
+                myMatchPlayerId = myMatchPlayer.Id;
                 var iVoted = voterIds.Contains(myMatchPlayer.Id);
                 hasVoted = iVoted;
                 canVote  = !myMatchPlayer.IsGuest
@@ -1808,6 +1789,7 @@ public sealed class MatchService : IMatchService
             Participants = participants,
             CanVote = canVote,
             HasVoted = hasVoted,
+            MyMatchPlayerId = myMatchPlayerId,
             MyVotedForMatchPlayerId = myVotedForMatchPlayerId,
         });
     }
