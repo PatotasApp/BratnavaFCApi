@@ -285,9 +285,31 @@ public class MatchesController : GroupAuthorizedController
     [HttpPost("group/{groupId:guid}/{matchId:guid}/vote")]
     public async Task<IActionResult> VoteAsync(Guid groupId, Guid matchId, [FromBody] VoteRequestDto dto, CancellationToken cancellationToken)
     {
+        if (!await IsGroupMemberAsync(groupId, _db, cancellationToken)) return Forbid();
+
         try
         {
-            await _service.VoteAsync(groupId, matchId, dto.VoterPlayerId, dto.VotedPlayerId, cancellationToken);
+            var voterMatchPlayerId = dto.VoterPlayerId;
+
+            // Um membro comum sempre vota com o próprio vínculo na partida. Além de
+            // impedir voto em nome de terceiros, isto elimina a dependência do playerId
+            // que o app tinha persistido antes de uma troca de patota ou novo login.
+            if (!await IsGroupAdminAsync(groupId, _db, cancellationToken))
+            {
+                var currentUserId = GetCurrentUserId();
+                voterMatchPlayerId = await _db.MatchPlayers
+                    .AsNoTracking()
+                    .Where(mp => mp.MatchId == matchId
+                                 && mp.Match!.GroupId == groupId
+                                 && mp.Player!.UserId == currentUserId)
+                    .Select(mp => mp.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (voterMatchPlayerId == Guid.Empty)
+                    return BadRequest(new { error = "Você não está entre os participantes desta partida." });
+            }
+
+            await _service.VoteAsync(groupId, matchId, voterMatchPlayerId, dto.VotedPlayerId, cancellationToken);
             await _realtime.MatchChangedAsync(groupId, matchId, "match.mvp-vote.changed", cancellationToken);
             return NoContent();
         }
@@ -352,15 +374,6 @@ public class MatchesController : GroupAuthorizedController
         {
             return BadRequest(new { error = ex.Message });
         }
-    }
-
-    [HttpPost("group/{groupId:guid}/{matchId:guid}/reapply-mvp")]
-    public async Task<IActionResult> ReapplyMvpAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
-    {
-        if (!await IsGroupAdminAsync(groupId, _db, cancellationToken)) return Forbid();
-        var result = await _service.ReapplyMvpTieRuleAsync(groupId, matchId, cancellationToken);
-        await NotifyMatchChangedIfSuccess(result, groupId, matchId, "match.mvp.changed", cancellationToken);
-        return ToResponse(result);
     }
 
     [EnableRateLimiting("PerUser")]

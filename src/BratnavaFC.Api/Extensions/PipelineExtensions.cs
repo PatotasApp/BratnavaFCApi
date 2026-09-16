@@ -50,7 +50,7 @@ public static class PipelineExtensions
 
         // Precisa casar com o gate de AddApiPresentation: sem o SwaggerGen registrado,
         // este middleware não teria de onde gerar o documento.
-        if (app.Environment.IsDevelopment())
+        if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Swagger:Enabled"))
         {
             app.UseSwagger();
             app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "BratnavaFC API v1"));
@@ -146,7 +146,8 @@ public static class PipelineExtensions
                 context.Response.StatusCode = 500;
                 context.Response.ContentType = "application/json";
 
-                var isDev = app.Environment.IsDevelopment();
+                var isDev = app.Environment.IsDevelopment()
+                            || app.Configuration.GetValue<bool>("Diagnostics:DetailedErrors");
 
                 var errorMessage = isDev && ex is not null
                     ? $"[{ex.GetType().Name}] {ex.Message}"

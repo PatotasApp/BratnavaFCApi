@@ -12,14 +12,24 @@ public static class AuthenticationExtensions
     /// são baixadas e rotacionadas pelo próprio middleware a partir do discovery document
     /// em {Authority}/.well-known/openid-configuration — não há chave simétrica local.
     /// </summary>
-    public static IServiceCollection AddJwtAuthentication(this IServiceCollection services)
+    public static IServiceCollection AddJwtAuthentication(
+        this IServiceCollection services,
+        IConfiguration configuration)
     {
-        var projectId = FirebaseProjectId.FromInitializedApp();
+        // Validar um ID token exige somente o identificador público do projeto; a
+        // credencial administrativa é necessária para push/custom claims, não para o
+        // middleware JWT. Isso mantém a autenticação local funcionando mesmo quando o
+        // Firebase Admin está propositalmente indisponível no ambiente de desenvolvimento.
+        var configuredProjectId = configuration["Firebase:ProjectId"]?.Trim();
+        var projectId = !string.IsNullOrWhiteSpace(configuredProjectId)
+            ? configuredProjectId
+            : FirebaseProjectId.FromInitializedApp();
 
         if (string.IsNullOrWhiteSpace(projectId))
             throw new InvalidOperationException(
                 "ProjectId do Firebase não resolvido. Configure Firebase:ProjectId " +
-                "ou FIREBASE_SERVICE_ACCOUNT_JSON.");
+                "(Firebase__ProjectId em variável de ambiente) ou " +
+                "FIREBASE_SERVICE_ACCOUNT_JSON.");
 
         var issuer = $"https://securetoken.google.com/{projectId}";
 

@@ -236,9 +236,9 @@ public static class InfrastructureDependencyInjection
     }
 
     /// <summary>
-    /// O FirebaseApp deixou de ser opcional: <c>AddJwtAuthentication</c> resolve o ProjectId a
-    /// partir dele para montar o issuer dos ID tokens, e lança se não houver. Por isso não existe
-    /// mais o atalho que desabilitava o Firebase em Development — sem ele a API não sobe.
+    /// Inicializa o Firebase Admin para push e custom claims. A validação dos ID tokens usa o
+    /// ProjectId configurado separadamente e, portanto, continua disponível em Development
+    /// mesmo quando não há credencial administrativa local.
     /// </summary>
     private static void AddFirebase(this IServiceCollection services, ILogger logger)
     {

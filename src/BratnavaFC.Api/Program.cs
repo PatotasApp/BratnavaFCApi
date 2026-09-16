@@ -13,6 +13,11 @@ try
 {
     var builder = WebApplication.CreateBuilder(args);
 
+    // O perfil IIS Express pode executar com comportamento de Production para reproduzir
+    // o Fly, mas ainda precisa das credenciais locais mantidas fora do repositório.
+    // No servidor publicado esta fonte é vazia e os secrets continuam vindo do ambiente.
+    builder.Configuration.AddUserSecrets<Program>(optional: true);
+
     builder.Host.UseSerilog((context, services, loggerConfiguration) => loggerConfiguration
         .ReadFrom.Configuration(context.Configuration)
         .ReadFrom.Services(services)
@@ -35,9 +40,9 @@ try
     builder.Services.AddInfrastructure(builder.Configuration, builder.Environment, startupLogger);
     builder.Services.AddApplication(builder.Configuration, builder.Environment);
 
-    builder.Services.AddApiPresentation(builder.Environment);
-    // Depende de AddInfrastructure acima: lê o ProjectId do FirebaseApp já inicializado.
-    builder.Services.AddJwtAuthentication();
+    builder.Services.AddApiPresentation(builder.Environment, builder.Configuration);
+    // A validação JWT usa o ProjectId configurado e não depende da credencial administrativa.
+    builder.Services.AddJwtAuthentication(builder.Configuration);
     builder.Services.AddRealtime(builder.Environment);
 
     // Health checks estão implementados em Api/HealthChecks e Api/Extensions/HealthCheckExtensions,

@@ -36,6 +36,12 @@ namespace BratnavaFC.Domain.Dtos
         /// <summary>True se o jogador autenticado já registrou voto.</summary>
         public bool? HasVoted { get; init; }
 
+        /// <summary>
+        /// Id do vínculo do jogador autenticado nesta partida.
+        /// Evita que os clientes precisem inferi-lo pelo jogador ativo salvo localmente.
+        /// </summary>
+        public Guid? MyMatchPlayerId { get; init; }
+
         /// <summary>Id do MatchPlayer para quem o usuário autenticado votou (null se ainda não votou).</summary>
         public Guid? MyVotedForMatchPlayerId { get; init; }
     }
