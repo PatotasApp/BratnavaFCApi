@@ -1,4 +1,4 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
@@ -20,7 +20,7 @@ public class MatchServiceReplayTests
         var repo = new RepositoryBase<MatchEntity>(db);
         var push = Mock.Of<IPushService>();
         var urls = replayUrls ?? Mock.Of<IReplayUrlService>();
-        return new MatchService(db, repo, push, urls, Mock.Of<IBetService>(), Mock.Of<INotificationScheduler>());
+        return new MatchService(db, repo, push, urls, Mock.Of<IBetService>(), Mock.Of<INotificationScheduler>(), TestImageStorage.Create());
     }
 
     private static ReplayClipEntity MakeClip(

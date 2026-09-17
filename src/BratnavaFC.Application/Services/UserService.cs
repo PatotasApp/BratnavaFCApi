@@ -1,9 +1,10 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Dtos.Users;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
+using BratnavaFC.Infrastructure.Cloudflare;
 using BratnavaFC.Infrastructure.Data;
 using FirebaseAdmin.Auth;
 using Microsoft.EntityFrameworkCore;
@@ -19,15 +20,18 @@ public class UserService : IUserService
     private readonly AppDbContext _db;
     private readonly IRepositoryBase<UserEntity> _repository;
     private readonly ILogger<UserService> _logger;
+    private readonly IImageStorageService _images;
 
     public UserService(
         AppDbContext db,
         IRepositoryBase<UserEntity> repository,
-        ILogger<UserService> logger)
+        ILogger<UserService> logger,
+        IImageStorageService images)
     {
         _repository = repository;
         _logger = logger;
         _db = db;
+        _images = images;
     }
 
     public async Task<Result<MeDto>> GetMeAsync(Guid userId, string? tokenEmail, CancellationToken cancellationToken)
@@ -47,7 +51,8 @@ public class UserService : IUserService
             user.LastName,
             user.Phone,
             user.Role,
-            user.Status);
+            user.Status,
+            user.ProfilePhotoKey is { } photoKey ? _images.BuildPublicUrl(photoKey) : null);
 
         return Result<MeDto>.Ok(me);
     }
@@ -213,7 +218,7 @@ public class UserService : IUserService
                 FirstName = u.FirstName,
                 LastName = u.LastName,
                 BirthDate = u.BirthDate,
-                PhotoUrl = null,
+                PhotoUrl = u.ProfilePhotoKey != null ? _images.PublicBaseUrl + "/" + u.ProfilePhotoKey : null,
                 PhotoUpdatedAt = u.ProfilePhotoUpdatedAt,
 
                 Role = u.Role,
@@ -231,14 +236,12 @@ public class UserService : IUserService
         if (user is null)
             return Result<UserDto>.Fail("Usuário não encontrado.", ResultStatus.NotFound);
 
-        if (user.PhotoUpdatedAt.HasValue)
-            user.PhotoUrl = $"/api/Users/{user.Id}/photo?v={user.PhotoUpdatedAt.Value.ToUnixTimeMilliseconds()}";
-
         return Result<UserDto>.Ok(user);
     }
 
     public async Task<Result<PagedResultDto<UserListItemDto>>> GetAllAsync(ListUsersRequestDto req, CancellationToken cancellationToken)
     {
+
         var page = req.Page <= 0 ? 1 : req.Page;
         var pageSize = req.PageSize <= 0 ? 20 : req.PageSize;
         if (pageSize > 2000) pageSize = 2000;
@@ -286,7 +289,7 @@ public class UserService : IUserService
                 Email = u.Email,
                 Phone = u.Phone,
                 BirthDate = u.BirthDate,
-                PhotoUrl = null,
+                PhotoUrl = u.ProfilePhotoKey != null ? _images.PublicBaseUrl + "/" + u.ProfilePhotoKey : null,
                 PhotoUpdatedAt = u.ProfilePhotoUpdatedAt,
                 Role = (int)u.Role,
                 Status = u.Status,
@@ -295,12 +298,6 @@ public class UserService : IUserService
                 InactivatedAt = u.InactivatedAt
             })
             .ToListAsync(cancellationToken);
-
-        foreach (var item in items)
-        {
-            if (item.PhotoUpdatedAt.HasValue)
-                item.PhotoUrl = $"/api/Users/{item.Id}/photo?v={item.PhotoUpdatedAt.Value.ToUnixTimeMilliseconds()}";
-        }
 
         var pagedResult = new PagedResultDto<UserListItemDto>
         {
@@ -423,49 +420,42 @@ public class UserService : IUserService
 
     public async Task<Result<UserPhotoDto>> SetPhotoAsync(
         Guid userId,
-        byte[] data,
-        string contentType,
+        Stream image,
         CancellationToken cancellationToken)
     {
-        if (data.Length == 0 || data.Length > 5 * 1024 * 1024)
-            return Result<UserPhotoDto>.Fail("A foto deve ter no máximo 5 MB.", ResultStatus.BadRequest);
-
-        var normalizedContentType = contentType.Trim().ToLowerInvariant();
-        if (!IsSupportedImage(data, normalizedContentType))
-            return Result<UserPhotoDto>.Fail("Envie uma imagem JPEG, PNG ou WebP válida.", ResultStatus.BadRequest);
-
         var user = await _repository.GetByIdIncludingInactiveAsync(userId, cancellationToken);
         if (user is null)
             return Result<UserPhotoDto>.Fail("Usuário não encontrado.", ResultStatus.NotFound);
 
-        user.SetProfilePhoto(data, normalizedContentType);
+        var previousKey = user.ProfilePhotoKey;
+
+        string objectKey;
+        try
+        {
+            objectKey = await _images.UploadAsync(ImageKind.Avatar, userId, image, cancellationToken);
+        }
+        catch (InvalidImageException ex)
+        {
+            return Result<UserPhotoDto>.Fail(ex.Message, ResultStatus.BadRequest);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Users] Falha ao enviar avatar do usuário {UserId} para o R2.", userId);
+            return Result<UserPhotoDto>.Fail("Falha ao enviar a foto para o storage. Tente novamente.");
+        }
+
+        user.SetProfilePhoto(objectKey);
         _repository.Update(user);
         await _repository.SaveChangesAsync(cancellationToken);
 
+        // Só depois do commit: se o banco falhar, a foto antiga ainda é a que o usuário vê,
+        // e apagá-la antes deixaria o avatar quebrado sem nada ter sido trocado.
+        await DeletePreviousPhotoAsync(previousKey, userId, cancellationToken);
+
         var updatedAt = user.ProfilePhotoUpdatedAt ?? DateTimeOffset.UtcNow;
         return Result<UserPhotoDto>.Ok(new UserPhotoDto(
-            $"/api/Users/{user.Id}/photo?v={updatedAt.ToUnixTimeMilliseconds()}",
+            _images.BuildPublicUrl(objectKey),
             updatedAt));
-    }
-
-    public async Task<Result<(byte[] Data, string ContentType, DateTimeOffset UpdatedAt)>> GetPhotoAsync(
-        Guid userId,
-        CancellationToken cancellationToken)
-    {
-        var photo = await _db.Users
-            .AsNoTracking()
-            .Where(u => u.Id == userId && u.ProfilePhotoData != null)
-            .Select(u => new
-            {
-                Data = u.ProfilePhotoData!,
-                ContentType = u.ProfilePhotoContentType!,
-                UpdatedAt = u.ProfilePhotoUpdatedAt!.Value
-            })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        return photo is null
-            ? Result<(byte[], string, DateTimeOffset)>.Fail("Foto não encontrada.", ResultStatus.NotFound)
-            : Result<(byte[], string, DateTimeOffset)>.Ok((photo.Data, photo.ContentType, photo.UpdatedAt));
     }
 
     public async Task<Result> RemovePhotoAsync(Guid userId, CancellationToken cancellationToken)
@@ -474,20 +464,38 @@ public class UserService : IUserService
         if (user is null)
             return Result.Fail("Usuário não encontrado.", ResultStatus.NotFound);
 
+        var previousKey = user.ProfilePhotoKey;
+
         user.RemoveProfilePhoto();
         _repository.Update(user);
         await _repository.SaveChangesAsync(cancellationToken);
+
+        await DeletePreviousPhotoAsync(previousKey, userId, cancellationToken);
         return Result.Ok("Foto removida com sucesso.");
     }
 
-    private static bool IsSupportedImage(byte[] data, string contentType) => contentType switch
+    /// <summary>
+    /// Best-effort, no mesmo espírito do descarte de clip no MatchService: a linha já foi
+    /// gravada, e um objeto órfão de algumas dezenas de KB no bucket é um problema menor do
+    /// que derrubar a troca de foto que o usuário acabou de fazer.
+    /// </summary>
+    private async Task DeletePreviousPhotoAsync(string? previousKey, Guid userId, CancellationToken ct)
     {
-        "image/jpeg" => data.Length >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF,
-        "image/png" => data.Length >= 8 && data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47,
-        "image/webp" => data.Length >= 12 && data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46
-            && data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50,
-        _ => false
-    };
+        if (string.IsNullOrWhiteSpace(previousKey)) return;
+
+        try
+        {
+            await _images.DeleteAsync(previousKey, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "[Users] Avatar anterior do usuário {UserId} não pôde ser removido do R2. Key={ObjectKey}",
+                userId,
+                previousKey);
+        }
+    }
 
     public async Task<Result> InactivateAsync(Guid userId, CancellationToken cancellationToken)
     {

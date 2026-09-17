@@ -1,4 +1,4 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Users;
@@ -23,7 +23,41 @@ namespace BranavaFC.Tests;
 public class UserServiceMeTests
 {
     private static UserService Sut(AppDbContext db)
-        => new(db, Mock.Of<IRepositoryBase<UserEntity>>(), Mock.Of<ILogger<UserService>>());
+        => new(db, Mock.Of<IRepositoryBase<UserEntity>>(), Mock.Of<ILogger<UserService>>(), TestImageStorage.Create());
+
+    /// <summary>
+    /// A topbar renderiza o avatar do usuário logado a partir do /me. Antes ela lia de
+    /// MyPlayerDto, cuja query tem a tabela Players como raiz — usuário sem patota não tinha
+    /// linha nenhuma, então a foto nunca chegava à tela mesmo estando gravada.
+    /// </summary>
+    [Fact]
+    public async Task GetMeAsync_ReturnsThePhotoUrlComposedFromTheStoredKey()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetMeAsync_ReturnsThePhotoUrlComposedFromTheStoredKey));
+        var user = User("andrei", "andrei@test.com");
+        user.SetProfilePhoto("avatars/u/foto.jpg");
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var result = await Sut(db).GetMeAsync(user.Id, null, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Data!.PhotoUrl.Should().Be($"{TestImageStorage.BaseUrl}/avatars/u/foto.jpg");
+    }
+
+    /// <summary>Usuário sem foto: nulo, não string vazia — o client decide cair nas iniciais.</summary>
+    [Fact]
+    public async Task GetMeAsync_WithoutPhoto_ReturnsNullPhotoUrl()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetMeAsync_WithoutPhoto_ReturnsNullPhotoUrl));
+        var user = User("semfoto", "semfoto@test.com");
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var result = await Sut(db).GetMeAsync(user.Id, null, CancellationToken.None);
+
+        result.Data!.PhotoUrl.Should().BeNull();
+    }
 
     private static UserEntity User(
         string userName,

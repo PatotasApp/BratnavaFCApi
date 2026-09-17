@@ -1,7 +1,8 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos.Conquistas;
 using BratnavaFC.Domain.Dtos.Profile;
 using BratnavaFC.Domain.Enums;
+using BratnavaFC.Infrastructure.Cloudflare;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,11 +12,13 @@ public sealed class ProfileService : IProfileService
 {
     private readonly AppDbContext _db;
     private readonly IConquistaService _conquistas;
+    private readonly IImageStorageService _images;
 
-    public ProfileService(AppDbContext db, IConquistaService conquistas)
+    public ProfileService(AppDbContext db, IConquistaService conquistas, IImageStorageService images)
     {
         _db = db;
         _conquistas = conquistas;
+        _images = images;
     }
 
     public async Task<UserProfileDto> GetPublicProfileAsync(Guid userId, Guid requesterId,
@@ -42,8 +45,8 @@ public sealed class ProfileService : IProfileService
             UserId = user.Id,
             Name = $"{user.FirstName} {user.LastName}".Trim(),
             UserName = user.UserName,
-            PhotoUrl = user.ProfilePhotoData != null
-                ? $"/api/Users/{user.Id}/photo?v={user.ProfilePhotoUpdatedAt?.ToUnixTimeMilliseconds()}" : null,
+            PhotoUrl = user.ProfilePhotoKey is { } photoKey
+                ? _images.BuildPublicUrl(photoKey) : null,
             Age = CalculateAge(user.BirthDate),
             Position = ResolvePosition(players.Select(x => x.IsGoalkeeper)),
         };
