@@ -1,4 +1,4 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Groups;
@@ -26,7 +26,7 @@ file static class Builders
         var logger = Mock.Of<ILogger<GroupService>>();
         var repo   = new Mock<IRepositoryBase<GroupEntity>>().Object;
         var push   = Mock.Of<IPushService>();
-        return new GroupService(db, logger, repo, push);
+        return new GroupService(db, logger, repo, push, TestImageStorage.Create());
     }
 }
 
