@@ -1,4 +1,4 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Players;
@@ -30,7 +30,8 @@ public class PlayerServiceCoverageTests
             Mock.Of<ILogger<PlayerService>>(),
             db,
             push ?? Mock.Of<IPushService>(),
-            matchService ?? MatchServiceMock().Object);
+            matchService ?? MatchServiceMock().Object,
+            TestImageStorage.Create());
 
     private static MatchEntity MatchWithStatus(Guid groupId, MatchStatus status)
     {

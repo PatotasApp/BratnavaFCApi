@@ -41,7 +41,8 @@ public sealed class MatchServiceCoverageTests
             Mock.Of<IPushService>(),
             replayUrls ?? Mock.Of<IReplayUrlService>(),
             Mock.Of<IBetService>(),
-            scheduler ?? Mock.Of<INotificationScheduler>());
+            scheduler ?? Mock.Of<INotificationScheduler>(),
+            TestImageStorage.Create());
     }
 
     private static async Task<GroupEntity> SeedGroupAsync(AppDbContext db, string name = "Bratnava FC")

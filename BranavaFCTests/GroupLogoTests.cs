@@ -5,28 +5,37 @@ namespace BranavaFC.Tests;
 public sealed class GroupLogoTests
 {
     [Fact]
-    public void SetLogo_StoresImageMetadata()
+    public void SetLogo_StoresObjectKey()
     {
-        var group = new GroupEntity("Patota", null, Guid.NewGuid());
-        var bytes = new byte[] { 0x89, 0x50, 0x4E, 0x47 };
+        var group = CreateGroup();
 
-        group.SetLogo(bytes, "image/png");
+        group.SetLogo("logos/3f2a/8c1d.png");
 
-        Assert.Same(bytes, group.LogoData);
-        Assert.Equal("image/png", group.LogoContentType);
+        Assert.Equal("logos/3f2a/8c1d.png", group.LogoKey);
         Assert.NotNull(group.LogoUpdatedAt);
     }
 
     [Fact]
-    public void RemoveLogo_ClearsStoredImage()
+    public void RemoveLogo_ClearsStoredKey()
     {
-        var group = new GroupEntity("Patota", null, Guid.NewGuid());
-        group.SetLogo(new byte[] { 1 }, "image/png");
+        var group = CreateGroup();
+        group.SetLogo("logos/3f2a/8c1d.png");
 
         group.RemoveLogo();
 
-        Assert.Null(group.LogoData);
-        Assert.Null(group.LogoContentType);
+        Assert.Null(group.LogoKey);
         Assert.Null(group.LogoUpdatedAt);
     }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void SetLogo_RejectsBlankObjectKey(string objectKey)
+    {
+        var group = CreateGroup();
+
+        Assert.Throws<InvalidOperationException>(() => group.SetLogo(objectKey));
+    }
+
+    private static GroupEntity CreateGroup() => new("Patota", null, Guid.NewGuid());
 }

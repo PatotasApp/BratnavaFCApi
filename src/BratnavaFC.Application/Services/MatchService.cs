@@ -18,6 +18,7 @@ public sealed class MatchService : IMatchService
     private readonly IReplayUrlService _replayUrls;
     private readonly IBetService _bets;
     private readonly INotificationScheduler _scheduler;
+    private readonly IImageStorageService _images;
     private readonly IConquistaProjectionService? _conquistaProjection;
 
     public MatchService(
@@ -27,6 +28,7 @@ public sealed class MatchService : IMatchService
         IReplayUrlService replayUrls,
         IBetService bets,
         INotificationScheduler scheduler,
+        IImageStorageService images,
         IConquistaProjectionService? conquistaProjection = null)
     {
         _context    = context;
@@ -35,6 +37,7 @@ public sealed class MatchService : IMatchService
         _replayUrls = replayUrls;
         _bets       = bets;
         _scheduler  = scheduler;
+        _images = images;
         _conquistaProjection = conquistaProjection;
     }
 
@@ -1372,8 +1375,8 @@ public sealed class MatchService : IMatchService
                         UserId = mp.Player.UserId,
                         PlayerName = mp.Player!.Name,
                         PhotoUrl = mp.Player.User != null &&
-                                   mp.Player.User.ProfilePhotoData != null
-                            ? "/api/Users/" + mp.Player.UserId + "/photo"
+                                   mp.Player.User.ProfilePhotoKey != null
+                            ? _images.PublicBaseUrl + "/" + mp.Player.User.ProfilePhotoKey
                             : null,
                         IsGoalkeeper = mp.IsGoalkeeper,
                         IsGuest = mp.Player!.IsGuest,
@@ -2016,14 +2019,14 @@ public sealed class MatchService : IMatchService
         return Result<IReadOnlyList<PlayerRecentMatchDto>>.Ok(result);
     }
 
-    private static PlayerInMatchDto ToPlayerDto(MatchPlayerEntity mp) => new()
+    private PlayerInMatchDto ToPlayerDto(MatchPlayerEntity mp) => new()
     {
         MatchPlayerId      = mp.Id,
         PlayerId           = mp.PlayerId,
         UserId             = mp.Player?.UserId,
         PlayerName         = mp.Player?.Name ?? string.Empty,
-        PhotoUrl           = mp.Player?.User?.ProfilePhotoData is { Length: > 0 }
-            ? $"/api/Users/{mp.Player.User.Id}/photo?v={mp.Player.User.ProfilePhotoUpdatedAt?.ToUnixTimeMilliseconds()}"
+        PhotoUrl           = mp.Player?.User?.ProfilePhotoKey is { } photoKey
+            ? _images.BuildPublicUrl(photoKey)
             : null,
         IsGoalkeeper       = mp.IsGoalkeeper,
         IsGuest            = mp.Player?.IsGuest ?? false,
@@ -2037,9 +2040,9 @@ public sealed class MatchService : IMatchService
         DidNotPlay         = mp.DidNotPlay,
     };
 
-    private static string? UserPhotoUrl(UserEntity? user) =>
-        user?.ProfilePhotoData is { Length: > 0 }
-            ? $"/api/Users/{user.Id}/photo?v={user.ProfilePhotoUpdatedAt?.ToUnixTimeMilliseconds()}"
+    private string? UserPhotoUrl(UserEntity? user) =>
+        user?.ProfilePhotoKey is { } photoKey
+            ? _images.BuildPublicUrl(photoKey)
             : null;
 
     internal static string? BuildAbsenceDescription(int? absenceType, string? rawDescription)
@@ -2051,7 +2054,7 @@ public sealed class MatchService : IMatchService
             : $"{typeName} - {rawDescription}";
     }
 
-    private static MatchDetailsDto MapToDetailsDto(MatchEntity match)
+    private MatchDetailsDto MapToDetailsDto(MatchEntity match)
     {
         var computedMvps = match.GetComputedMvps()
             .Select(p => new MatchMvpDto

@@ -22,7 +22,7 @@ public class GroupServiceTests
         var logger = new Mock<ILogger<GroupService>>();
         var repo   = new RepositoryBase<GroupEntity>(db);
         var push   = Mock.Of<IPushService>();
-        return new GroupService(db, logger.Object, repo, push);
+        return new GroupService(db, logger.Object, repo, push, TestImageStorage.Create());
     }
 
     // ─── CreateAsync ──────────────────────────────────────────────────────────

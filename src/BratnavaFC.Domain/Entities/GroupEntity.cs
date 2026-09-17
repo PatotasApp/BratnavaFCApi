@@ -5,8 +5,14 @@ public class GroupEntity : InactivatableEntity
     public string Name { get; private set; } = null!;
     public DateTimeOffset? ScheduleMatchDate { get; private set; }
     public Guid CreatedByUserId { get; private set; }
-    public byte[]? LogoData { get; private set; }
-    public string? LogoContentType { get; private set; }
+    /// <summary>
+    /// Caminho do objeto no bucket de imagens do R2, no formato
+    /// <c>logos/{groupId}/{guid}.png</c>. Guardamos a KEY, não a URL: o host público vive em
+    /// configuração, então trocar o r2.dev por um domínio custom é mudança de config, não
+    /// UPDATE em toda a tabela. Ver <see cref="UserEntity.ProfilePhotoKey"/>.
+    /// </summary>
+    public string? LogoKey { get; private set; }
+
     public DateTimeOffset? LogoUpdatedAt { get; private set; }
 
     private readonly List<PlayerEntity> _players = [];
@@ -52,22 +58,18 @@ public class GroupEntity : InactivatableEntity
         ScheduleMatchDate = scheduleMatchDate;
     }
 
-    public void SetLogo(byte[] data, string contentType)
+    public void SetLogo(string objectKey)
     {
-        if (data is not { Length: > 0 })
-            throw new InvalidOperationException("Group logo is required.");
+        if (string.IsNullOrWhiteSpace(objectKey))
+            throw new InvalidOperationException("Group logo object key is required.");
 
-        LogoData = data;
-        LogoContentType = string.IsNullOrWhiteSpace(contentType)
-            ? throw new ArgumentException("Logo content type is required.", nameof(contentType))
-            : contentType.Trim().ToLowerInvariant();
+        LogoKey = objectKey.Trim();
         LogoUpdatedAt = DateTimeOffset.UtcNow;
     }
 
     public void RemoveLogo()
     {
-        LogoData = null;
-        LogoContentType = null;
+        LogoKey = null;
         LogoUpdatedAt = null;
     }
 

@@ -135,30 +135,9 @@ public sealed class UsersController : BaseApiController
             return BadRequest("A foto deve ter no máximo 5 MB.");
 
         await using var stream = file.OpenReadStream();
-        using var buffer = new MemoryStream((int)file.Length);
-        await stream.CopyToAsync(buffer, cancellationToken);
 
-        var result = await _userService.SetPhotoAsync(
-            userId,
-            buffer.ToArray(),
-            file.ContentType,
-            cancellationToken);
+        var result = await _userService.SetPhotoAsync(userId, stream, cancellationToken);
         return ToResponse(result);
-    }
-
-    [AllowAnonymous]
-    [HttpGet("{userId:guid}/photo")]
-    public async Task<IActionResult> GetPhotoAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        var result = await _userService.GetPhotoAsync(userId, cancellationToken);
-        if (!result.Success || result.Data == default)
-            return ToResponse(result);
-
-        var (data, contentType, updatedAt) = result.Data;
-        Response.Headers.CacheControl = "public,max-age=3600,must-revalidate";
-        Response.Headers.ETag = $"\"{updatedAt.ToUnixTimeMilliseconds()}\"";
-        Response.Headers.LastModified = updatedAt.ToString("R");
-        return File(data, contentType);
     }
 
     /// <summary>Remove a própria foto. Mesmo motivo do POST para o alvo vir do token.</summary>

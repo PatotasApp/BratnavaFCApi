@@ -1,4 +1,4 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Users;
@@ -19,7 +19,8 @@ public class UserServiceCoverageTests
         => new(
             db,
             new RepositoryBase<UserEntity>(db),
-            Mock.Of<ILogger<UserService>>());
+            Mock.Of<ILogger<UserService>>(),
+            TestImageStorage.Create());
 
     private static UserEntity User(string userName, string first, string last, string email,
         UserRole role = UserRole.User)
