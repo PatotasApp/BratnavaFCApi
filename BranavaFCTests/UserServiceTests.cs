@@ -1,4 +1,4 @@
-// Tests/Application/Services/UserServiceTests.cs
+﻿// Tests/Application/Services/UserServiceTests.cs
 //
 // Os testes de CreateUserAsync e ChangePasswordAsync foram removidos junto com os métodos:
 // cadastro agora acontece no Firebase pelo front-end e é provisionado no primeiro acesso
@@ -43,7 +43,7 @@ public class UserServiceTests
 
         var repo = new Mock<IRepositoryBase<UserEntity>>();
         var logger = new Mock<ILogger<UserService>>();
-        var sut = new UserService(db, repo.Object, logger.Object);
+        var sut = new UserService(db, repo.Object, logger.Object, TestImageStorage.Create());
 
         var req = new ListUsersRequestDto
         {
@@ -84,7 +84,7 @@ public class UserServiceTests
 
         var repo   = new Mock<IRepositoryBase<UserEntity>>();
         var logger = new Mock<ILogger<UserService>>();
-        var sut    = new UserService(db, repo.Object, logger.Object);
+        var sut    = new UserService(db, repo.Object, logger.Object, TestImageStorage.Create());
 
         var req = new ListUsersRequestDto { Page = 1, PageSize = 9999 };
 
@@ -106,7 +106,7 @@ public class UserServiceTests
 
         var repo   = new Mock<IRepositoryBase<UserEntity>>();
         var logger = new Mock<ILogger<UserService>>();
-        var sut    = new UserService(db, repo.Object, logger.Object);
+        var sut    = new UserService(db, repo.Object, logger.Object, TestImageStorage.Create());
 
         var req = new ListUsersRequestDto { Page = 1, PageSize = 2000 };
 
@@ -126,7 +126,7 @@ public class UserServiceTests
 
         var repo   = new Mock<IRepositoryBase<UserEntity>>();
         var logger = new Mock<ILogger<UserService>>();
-        var sut    = new UserService(db, repo.Object, logger.Object);
+        var sut    = new UserService(db, repo.Object, logger.Object, TestImageStorage.Create());
 
         var req = new ListUsersRequestDto { Page = 1, PageSize = 50 };
 
@@ -159,7 +159,7 @@ public class UserServiceTests
         repo.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var sut = new UserService(db, repo.Object, logger.Object);
+        var sut = new UserService(db, repo.Object, logger.Object, TestImageStorage.Create());
 
         var dto = new UpdateUserDto
         {
@@ -198,7 +198,7 @@ public class UserServiceTests
         repo.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var sut = new UserService(db, repo.Object, logger.Object);
+        var sut = new UserService(db, repo.Object, logger.Object, TestImageStorage.Create());
 
         var dto = new UpdateUserDto
         {

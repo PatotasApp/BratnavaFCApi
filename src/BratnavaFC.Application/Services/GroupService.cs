@@ -4,6 +4,7 @@ using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Dtos.Groups;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
+using BratnavaFC.Infrastructure.Cloudflare;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -16,17 +17,20 @@ public class GroupService : IGroupService
     private readonly ILogger<GroupService> _logger;
     private readonly IRepositoryBase<GroupEntity> _repository;
     private readonly IPushService _push;
+    private readonly IImageStorageService _images;
 
     public GroupService(
         AppDbContext context,
         ILogger<GroupService> logger,
         IRepositoryBase<GroupEntity> repository,
-        IPushService push)
+        IPushService push,
+        IImageStorageService images)
     {
         _context = context;
         _logger = logger;
         _repository = repository;
         _push = push;
+        _images = images;
     }
 
     public async Task<Result<Guid>> CreateAsync(CreateGroupDto request, CancellationToken cancellationToken)
@@ -249,12 +253,12 @@ public class GroupService : IGroupService
                 g.Group.Admins.Select(x => x.UserId).ToArray(),
                 g.Group.Financeiros.Select(x => x.UserId).ToArray(),
                 g.Group.Status,
-                g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, p.User != null ? p.User.UserName : null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating, p.AttackRating, p.DefenseRating, p.OverallRating, p.User != null && p.User.ProfilePhotoData != null ? "/api/Users/" + p.UserId + "/photo" : null)).ToList(),
+                g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, p.User != null ? p.User.UserName : null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating, p.AttackRating, p.DefenseRating, p.OverallRating, p.User != null && p.User.ProfilePhotoKey != null ? _images.PublicBaseUrl + "/" + p.User.ProfilePhotoKey : null)).ToList(),
                 g.Group.CreatedByUserId
             )
             {
-                LogoUrl = g.Group.LogoUpdatedAt.HasValue
-                    ? "/api/Groups/" + g.Group.Id + "/logo"
+                LogoUrl = g.Group.LogoKey != null
+                    ? _images.PublicBaseUrl + "/" + g.Group.LogoKey
                     : null,
                 LogoUpdatedAt = g.Group.LogoUpdatedAt
             })
@@ -277,12 +281,12 @@ public class GroupService : IGroupService
                 g.Group.Admins.Select(x => x.UserId).ToArray(),
                 g.Group.Financeiros.Select(x => x.UserId).ToArray(),
                 g.Group.Status,
-                g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, p.User != null ? p.User.UserName : null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating, p.AttackRating, p.DefenseRating, p.OverallRating, p.User != null && p.User.ProfilePhotoData != null ? "/api/Users/" + p.UserId + "/photo" : null)).ToList(),
+                g.Group.Players.Select(p => new Domain.Dtos.Players.PlayerDto(p.Id, p.Name, p.UserId, p.User != null ? p.User.UserName : null, p.SkillPoints, p.IsGoalkeeper, p.IsGuest, p.Status, p.GuestStarRating, p.AttackRating, p.DefenseRating, p.OverallRating, p.User != null && p.User.ProfilePhotoKey != null ? _images.PublicBaseUrl + "/" + p.User.ProfilePhotoKey : null)).ToList(),
                 g.Group.CreatedByUserId
             )
             {
-                LogoUrl = g.Group.LogoUpdatedAt.HasValue
-                    ? "/api/Groups/" + g.Group.Id + "/logo"
+                LogoUrl = g.Group.LogoKey != null
+                    ? _images.PublicBaseUrl + "/" + g.Group.LogoKey
                     : null,
                 LogoUpdatedAt = g.Group.LogoUpdatedAt
             })
@@ -332,60 +336,51 @@ public class GroupService : IGroupService
         });
     }
 
-    private static string? PhotoUrl(UserEntity? user) =>
-        user?.ProfilePhotoData is { Length: > 0 }
-            ? $"/api/Users/{user.Id}/photo?v={user.ProfilePhotoUpdatedAt?.ToUnixTimeMilliseconds()}"
+    private string? PhotoUrl(UserEntity? user) =>
+        user?.ProfilePhotoKey is { } photoKey
+            ? _images.BuildPublicUrl(photoKey)
             : null;
 
-    private static string? LogoUrl(GroupEntity group) =>
-        group.LogoUpdatedAt.HasValue
-            ? $"/api/Groups/{group.Id}/logo?v={group.LogoUpdatedAt.Value.ToUnixTimeMilliseconds()}"
+    private string? LogoUrl(GroupEntity group) =>
+        group.LogoKey is { } logoKey
+            ? _images.BuildPublicUrl(logoKey)
             : null;
 
     public async Task<Result<GroupLogoDto>> SetLogoAsync(
         Guid groupId,
-        byte[] data,
-        string contentType,
+        Stream image,
         CancellationToken cancellationToken)
     {
-        if (data.Length == 0 || data.Length > 5 * 1024 * 1024)
-            return Result<GroupLogoDto>.Fail("A logo deve ter no máximo 5 MB.", ResultStatus.BadRequest);
-
-        var normalizedContentType = contentType.Trim().ToLowerInvariant();
-        if (!IsSupportedImage(data, normalizedContentType))
-            return Result<GroupLogoDto>.Fail("Envie uma imagem JPEG, PNG ou WebP válida.", ResultStatus.BadRequest);
-
         var group = await _context.Groups.FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
         if (group is null)
             return Result<GroupLogoDto>.Fail("Grupo não encontrado.", ResultStatus.NotFound);
 
-        group.SetLogo(data, normalizedContentType);
+        var previousKey = group.LogoKey;
+
+        string objectKey;
+        try
+        {
+            objectKey = await _images.UploadAsync(ImageKind.Logo, groupId, image, cancellationToken);
+        }
+        catch (InvalidImageException ex)
+        {
+            return Result<GroupLogoDto>.Fail(ex.Message, ResultStatus.BadRequest);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Groups] Falha ao enviar logo do grupo {GroupId} para o R2.", groupId);
+            return Result<GroupLogoDto>.Fail("Falha ao enviar a logo para o storage. Tente novamente.");
+        }
+
+        group.SetLogo(objectKey);
         await _context.SaveChangesAsync(cancellationToken);
 
+        // Só depois do commit: se o banco falhar, a logo antiga ainda é a que o grupo exibe,
+        // e apagá-la antes deixaria o grupo sem imagem sem nada ter sido trocado.
+        await DeletePreviousLogoAsync(previousKey, groupId, cancellationToken);
+
         var updatedAt = group.LogoUpdatedAt ?? DateTimeOffset.UtcNow;
-        return Result<GroupLogoDto>.Ok(new GroupLogoDto(
-            $"/api/Groups/{group.Id}/logo?v={updatedAt.ToUnixTimeMilliseconds()}",
-            updatedAt));
-    }
-
-    public async Task<Result<(byte[] Data, string ContentType, DateTimeOffset UpdatedAt)>> GetLogoAsync(
-        Guid groupId,
-        CancellationToken cancellationToken)
-    {
-        var logo = await _context.Groups
-            .AsNoTracking()
-            .Where(g => g.Id == groupId && g.LogoData != null)
-            .Select(g => new
-            {
-                Data = g.LogoData!,
-                ContentType = g.LogoContentType!,
-                UpdatedAt = g.LogoUpdatedAt!.Value
-            })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        return logo is null
-            ? Result<(byte[], string, DateTimeOffset)>.Fail("Logo não encontrada.", ResultStatus.NotFound)
-            : Result<(byte[], string, DateTimeOffset)>.Ok((logo.Data, logo.ContentType, logo.UpdatedAt));
+        return Result<GroupLogoDto>.Ok(new GroupLogoDto(_images.BuildPublicUrl(objectKey), updatedAt));
     }
 
     public async Task<Result> RemoveLogoAsync(Guid groupId, CancellationToken cancellationToken)
@@ -394,19 +389,37 @@ public class GroupService : IGroupService
         if (group is null)
             return Result.Fail("Grupo não encontrado.", ResultStatus.NotFound);
 
+        var previousKey = group.LogoKey;
+
         group.RemoveLogo();
         await _context.SaveChangesAsync(cancellationToken);
+
+        await DeletePreviousLogoAsync(previousKey, groupId, cancellationToken);
         return Result.Ok("Logo removida com sucesso.");
     }
 
-    private static bool IsSupportedImage(byte[] data, string contentType) => contentType switch
+    /// <summary>
+    /// Best-effort, mesmo espírito do descarte de clip no MatchService: a linha já foi
+    /// gravada, e um objeto órfão de algumas dezenas de KB no bucket é um problema menor do
+    /// que derrubar a troca de logo que o admin acabou de fazer.
+    /// </summary>
+    private async Task DeletePreviousLogoAsync(string? previousKey, Guid groupId, CancellationToken ct)
     {
-        "image/jpeg" => data.Length >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF,
-        "image/png" => data.Length >= 8 && data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47,
-        "image/webp" => data.Length >= 12 && data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46
-            && data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50,
-        _ => false
-    };
+        if (string.IsNullOrWhiteSpace(previousKey)) return;
+
+        try
+        {
+            await _images.DeleteAsync(previousKey, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "[Groups] Logo anterior do grupo {GroupId} não pôde ser removida do R2. Key={ObjectKey}",
+                groupId,
+                previousKey);
+        }
+    }
 
     public async Task<Result> AddAdminToGroupAsync(Guid groupId, AddAdminToGroupDto request, CancellationToken cancellationToken)
     {
@@ -637,7 +650,7 @@ public class GroupService : IGroupService
                 i.GuestPlayer != null ? i.GuestPlayer.Name : null,
                 (int)i.Status,
                 i.CreateDate,
-                i.Group.LogoUpdatedAt.HasValue ? "/api/Groups/" + i.GroupId + "/logo" : null
+                i.Group.LogoKey != null ? _images.PublicBaseUrl + "/" + i.Group.LogoKey : null
             ))
             .ToListAsync(cancellationToken);
 

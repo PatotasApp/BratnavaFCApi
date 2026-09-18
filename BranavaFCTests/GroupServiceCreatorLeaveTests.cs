@@ -1,4 +1,4 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Groups;
@@ -21,7 +21,7 @@ public class GroupServiceCreatorLeaveTests
         var logger = new Mock<ILogger<GroupService>>();
         var repo   = new RepositoryBase<GroupEntity>(db);
         var push   = Mock.Of<IPushService>();
-        return new GroupService(db, logger.Object, repo, push);
+        return new GroupService(db, logger.Object, repo, push, TestImageStorage.Create());
     }
 
     // ─── Validações gerais ────────────────────────────────────────────────────

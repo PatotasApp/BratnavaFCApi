@@ -1,4 +1,4 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
@@ -52,7 +52,7 @@ public sealed class MatchService_NewFeaturesTests
 
     private static MatchService CreateSut(AppDbContext db, Mock<IRepositoryBase<MatchEntity>> repo)
         => new(db, repo.Object, Mock.Of<IPushService>(), Mock.Of<IReplayUrlService>(),
-               Mock.Of<IBetService>(), Mock.Of<INotificationScheduler>());
+               Mock.Of<IBetService>(), Mock.Of<INotificationScheduler>(), TestImageStorage.Create());
 
     // ── Seeds ─────────────────────────────────────────────────────────────────
 

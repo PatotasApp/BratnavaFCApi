@@ -1,4 +1,4 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Infrastructure.Data;
@@ -33,7 +33,7 @@ public sealed class LinkedPollAtomicTests
     {
         var sut = new MatchService(db, new RepositoryBase<MatchEntity>(db),
             Mock.Of<IPushService>(), Mock.Of<IReplayUrlService>(),
-            Mock.Of<IBetService>(), Mock.Of<INotificationScheduler>());
+            Mock.Of<IBetService>(), Mock.Of<INotificationScheduler>(), TestImageStorage.Create());
 
         var result = await sut.SetLinkedPollAsync(groupId, matchId, pollId, ct);
         return result.Success;

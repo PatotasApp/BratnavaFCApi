@@ -29,8 +29,7 @@ public interface IUserService
 
     Task<Result> UpdateAsync(Guid userId, UpdateUserDto dto, CancellationToken cancellationToken);
 
-    Task<Result<UserPhotoDto>> SetPhotoAsync(Guid userId, byte[] data, string contentType, CancellationToken cancellationToken);
-    Task<Result<(byte[] Data, string ContentType, DateTimeOffset UpdatedAt)>> GetPhotoAsync(Guid userId, CancellationToken cancellationToken);
+    Task<Result<UserPhotoDto>> SetPhotoAsync(Guid userId, Stream image, CancellationToken cancellationToken);
     Task<Result> RemovePhotoAsync(Guid userId, CancellationToken cancellationToken);
 
     Task<Result> InactivateAsync(Guid userId, CancellationToken cancellationToken);

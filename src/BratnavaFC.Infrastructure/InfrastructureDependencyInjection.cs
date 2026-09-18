@@ -1,4 +1,4 @@
-using BratnavaFC.Infrastructure.Cloudflare;
+﻿using BratnavaFC.Infrastructure.Cloudflare;
 using BratnavaFC.Infrastructure.Data;
 using BratnavaFC.Infrastructure.Firebase;
 using BratnavaFC.Infrastructure.Redis;
@@ -30,6 +30,7 @@ public static class InfrastructureDependencyInjection
         services.AddBackgroundJobs(configuration, environment, logger);
         services.AddReplayEventing(configuration, environment, isDevelopment);
         services.AddReplayStorage(configuration, environment, isDevelopment);
+        services.AddImageStorage(configuration, environment, isDevelopment);
         services.AddFirebase(logger);
         services.AddExternalHttpClients();
 
@@ -234,6 +235,53 @@ public static class InfrastructureDependencyInjection
 
         services.AddSingleton<IReplayUrlService, R2ReplayUrlService>();
     }
+
+    private static void AddImageStorage(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment environment,
+        bool isDevelopment)
+    {
+        // Em Development o R2 é OPCIONAL, não proibido. Sem credencial — o caso normal — o
+        // NoOp mantém a API de pé. Mas quando as chaves estão presentes (user-secrets, para
+        // testar upload local contra o bucket de desenvolvimento), usamos o R2 de verdade:
+        // sem isso não haveria como exercitar o fluxo de foto fora de um deploy.
+        if (isDevelopment && !IsImageStorageConfigured(configuration))
+        {
+            services.AddSingleton<IImageStorageService>(sp =>
+                new NoOpImageStorageService(
+                    sp.GetRequiredService<ILogger<NoOpImageStorageService>>(),
+                    environment.EnvironmentName));
+
+            return;
+        }
+
+        // AddReplayStorage só liga o R2Options fora de Development, e o serviço de imagens
+        // depende dele para as credenciais — então garantimos o bind aqui também.
+        services.AddOptions<R2Options>().Bind(configuration.GetSection(R2Options.SectionName));
+
+        var options = services.AddOptions<ImageStorageOptions>()
+            .Bind(configuration.GetSection(ImageStorageOptions.SectionName))
+            .Validate(
+                o => !string.IsNullOrWhiteSpace(o.BucketName)
+                     && !string.IsNullOrWhiteSpace(o.PublicBaseUrl),
+                "Configuração do bucket de imagens incompleta.");
+
+        // ValidateOnStart só fora de Development: derrubar o boot local por causa de
+        // configuração de storage tornaria impossível rodar a API para qualquer outra coisa.
+        if (!isDevelopment)
+            options.ValidateOnStart();
+
+        services.AddSingleton<IImageProcessor, ImageProcessor>();
+        services.AddSingleton<IImageStorageService, R2ImageStorageService>();
+    }
+
+    private static bool IsImageStorageConfigured(IConfiguration configuration)
+        => !string.IsNullOrWhiteSpace(configuration[$"{ImageStorageOptions.SectionName}:BucketName"])
+           && !string.IsNullOrWhiteSpace(configuration[$"{ImageStorageOptions.SectionName}:PublicBaseUrl"])
+           && !string.IsNullOrWhiteSpace(configuration[$"{R2Options.SectionName}:AccessKey"])
+           && !string.IsNullOrWhiteSpace(configuration[$"{R2Options.SectionName}:SecretKey"])
+           && !string.IsNullOrWhiteSpace(configuration[$"{R2Options.SectionName}:EndpointUrl"]);
 
     /// <summary>
     /// Inicializa o Firebase Admin para push e custom claims. A validação dos ID tokens usa o

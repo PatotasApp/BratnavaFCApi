@@ -45,8 +45,18 @@ public sealed class UserEntity : InactivatableEntity
     public string Email { get; private set; } = null!;
     public string Password { get; private set; } = null!;
     public string? Phone { get; private set; }
-    public byte[]? ProfilePhotoData { get; private set; }
-    public string? ProfilePhotoContentType { get; private set; }
+    /// <summary>
+    /// Caminho do objeto no bucket de avatares do R2, no formato
+    /// <c>{prefixo}/{userId}/{guid}.jpg</c>. Guardamos a KEY, não a URL: o host público do
+    /// bucket vive em configuração, então trocar o domínio r2.dev por um domínio custom é
+    /// mudança de config, não UPDATE em toda a tabela.
+    ///
+    /// O GUID no nome é deliberado. Ele torna a key imutável — um conteúdo nunca reaparece
+    /// sob outra key, nem uma key sob outro conteúdo — e é isso que autoriza o objeto a ser
+    /// servido com Cache-Control immutable. Trocar a foto gera key nova e apaga a anterior.
+    /// </summary>
+    public string? ProfilePhotoKey { get; private set; }
+
     public DateTimeOffset? ProfilePhotoUpdatedAt { get; private set; }
     public ProfileVisibility ProfileVisibility { get; private set; } = ProfileVisibility.AuthenticatedUsers;
     public bool ShowPatotaNamesOnProfile { get; private set; } = true;
@@ -149,20 +159,18 @@ public sealed class UserEntity : InactivatableEntity
         Role = role;
     }
 
-    public void SetProfilePhoto(byte[] data, string contentType)
+    public void SetProfilePhoto(string objectKey)
     {
-        if (data is not { Length: > 0 })
-            throw new InvalidOperationException("Profile photo is required.");
+        if (string.IsNullOrWhiteSpace(objectKey))
+            throw new InvalidOperationException("Profile photo object key is required.");
 
-        ProfilePhotoData = data;
-        ProfilePhotoContentType = contentType;
+        ProfilePhotoKey = objectKey.Trim();
         ProfilePhotoUpdatedAt = DateTimeOffset.UtcNow;
     }
 
     public void RemoveProfilePhoto()
     {
-        ProfilePhotoData = null;
-        ProfilePhotoContentType = null;
+        ProfilePhotoKey = null;
         ProfilePhotoUpdatedAt = null;
     }
 

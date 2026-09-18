@@ -1,4 +1,4 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
@@ -149,7 +149,7 @@ public sealed class PaginationTests
 
     private static MatchService MakeMatchSut(AppDbContext db)
         => new(db, new RepositoryBase<MatchEntity>(db), Mock.Of<IPushService>(),
-               Mock.Of<IReplayUrlService>(), Mock.Of<IBetService>(), Mock.Of<INotificationScheduler>());
+               Mock.Of<IReplayUrlService>(), Mock.Of<IBetService>(), Mock.Of<INotificationScheduler>(), TestImageStorage.Create());
 
     private static ReplayClipEntity MakeClip(Guid groupId, Guid matchId, string key, DateTimeOffset recordedAt) =>
         new(groupId, matchId, "goal-replays", key, "video/mp4", "etag", recordedAt, MatchEventType.Gol);
@@ -356,7 +356,7 @@ public sealed class PaginationTests
         await db.SaveChangesAsync();
 
         var sut = new GroupService(db, Mock.Of<ILogger<GroupService>>(),
-            new RepositoryBase<GroupEntity>(db), Mock.Of<IPushService>());
+            new RepositoryBase<GroupEntity>(db), Mock.Of<IPushService>(), TestImageStorage.Create());
 
         var page1 = await sut.GetAllGroupsAsync(1, 2, CancellationToken.None);
         page1.Data!.Total.Should().Be(3);
