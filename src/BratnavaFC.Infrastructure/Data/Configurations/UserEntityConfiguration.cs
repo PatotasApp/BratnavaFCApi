@@ -15,8 +15,9 @@ public class UserEntityConfiguration : IEntityTypeConfiguration<UserEntity>
         builder.Property(x => x.FirstName).IsRequired();
         builder.Property(x => x.LastName).IsRequired();
         builder.Property(x => x.Email).IsRequired();
-        builder.Property(x => x.ProfilePhotoData).HasColumnType("bytea");
-        builder.Property(x => x.ProfilePhotoContentType).HasMaxLength(32);
+        // 200 cobre com folga "{prefixo}/{guid}/{guid}.jpg" (~90 chars) e deixa espaço para
+        // um prefixo de ambiente mais longo sem precisar de nova migration.
+        builder.Property(x => x.ProfilePhotoKey).HasMaxLength(200);
         builder.Property(x => x.ProfilePhotoUpdatedAt);
         builder.Property(x => x.ProfileVisibility)
             .HasConversion<short>()

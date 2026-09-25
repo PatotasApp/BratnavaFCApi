@@ -66,12 +66,13 @@ public sealed class CalendarController : GroupAuthorizedController
         return ToResponse(result);
     }
 
-    /// <summary>Remove permanentemente um evento. Apenas GodMode.</summary>
+    /// <summary>Remove permanentemente um evento. Somente admins do grupo.</summary>
     [HttpDelete("group/{groupId:guid}/events/{eventId:guid}")]
-    [Authorize(Roles = "GodMode")]
     public async Task<IActionResult> DeleteEvent(
         Guid groupId, Guid eventId, CancellationToken ct)
     {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+
         var result = await _service.DeleteEventAsync(groupId, eventId, ct);
         return ToResponse(result);
     }

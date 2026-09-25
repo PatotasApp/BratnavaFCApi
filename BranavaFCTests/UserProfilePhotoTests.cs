@@ -5,36 +5,36 @@ namespace BranavaFC.Tests;
 public sealed class UserProfilePhotoTests
 {
     [Fact]
-    public void SetProfilePhoto_StoresImageMetadata()
+    public void SetProfilePhoto_StoresObjectKey()
     {
         var user = CreateUser();
-        var bytes = new byte[] { 0xFF, 0xD8, 0xFF, 0x00 };
 
-        user.SetProfilePhoto(bytes, "image/jpeg");
+        user.SetProfilePhoto("development/3f2a/8c1d.jpg");
 
-        Assert.Same(bytes, user.ProfilePhotoData);
-        Assert.Equal("image/jpeg", user.ProfilePhotoContentType);
+        Assert.Equal("development/3f2a/8c1d.jpg", user.ProfilePhotoKey);
         Assert.NotNull(user.ProfilePhotoUpdatedAt);
     }
 
     [Fact]
-    public void RemoveProfilePhoto_ClearsStoredImage()
+    public void RemoveProfilePhoto_ClearsStoredKey()
     {
         var user = CreateUser();
-        user.SetProfilePhoto(new byte[] { 1 }, "image/jpeg");
+        user.SetProfilePhoto("development/3f2a/8c1d.jpg");
 
         user.RemoveProfilePhoto();
 
-        Assert.Null(user.ProfilePhotoData);
-        Assert.Null(user.ProfilePhotoContentType);
+        Assert.Null(user.ProfilePhotoKey);
         Assert.Null(user.ProfilePhotoUpdatedAt);
     }
 
-    [Fact]
-    public void SetProfilePhoto_RejectsEmptyImage()
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void SetProfilePhoto_RejectsBlankObjectKey(string objectKey)
     {
         var user = CreateUser();
-        Assert.Throws<InvalidOperationException>(() => user.SetProfilePhoto([], "image/jpeg"));
+
+        Assert.Throws<InvalidOperationException>(() => user.SetProfilePhoto(objectKey));
     }
 
     private static UserEntity CreateUser() => new(

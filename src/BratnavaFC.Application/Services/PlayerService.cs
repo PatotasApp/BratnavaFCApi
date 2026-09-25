@@ -1,9 +1,10 @@
-using BratnavaFC.Application.Abstractions;
+﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Dtos.Players;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
+using BratnavaFC.Infrastructure.Cloudflare;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -17,19 +18,22 @@ public class PlayerService : IPlayerService
     private readonly AppDbContext _context;
     private readonly IPushService _push;
     private readonly IMatchService _matchService;
+    private readonly IImageStorageService _images;
 
     public PlayerService(
         IRepositoryBase<PlayerEntity> repository,
         ILogger<PlayerService> logger,
         AppDbContext context,
         IPushService push,
-        IMatchService matchService)
+        IMatchService matchService,
+        IImageStorageService images)
     {
         _repository   = repository;
         _logger       = logger;
         _context      = context;
         _push         = push;
         _matchService = matchService;
+        _images = images;
     }
 
     public async Task<Result<PlayerDto>> CreateAsync(CreatePlayerDto request, CancellationToken cancellationToken)
@@ -257,9 +261,8 @@ public class PlayerService : IPlayerService
                 p.Status,
                 GroupName = p.Group.Name,
                 p.IsGuest,
-                HasPhoto = p.User != null && p.User.ProfilePhotoData != null,
-                PhotoUpdatedAt = p.User != null ? p.User.ProfilePhotoUpdatedAt : null,
-                GroupLogoUpdatedAt = p.Group.LogoUpdatedAt,
+                PhotoKey = p.User != null ? p.User.ProfilePhotoKey : null,
+                GroupLogoKey = p.Group.LogoKey,
             })
             .ToListAsync(cancellationToken);
 
@@ -273,12 +276,8 @@ public class PlayerService : IPlayerService
             p.Status,
             p.GroupName,
             p.IsGuest,
-            p.HasPhoto
-                ? $"/api/Users/{p.UserId}/photo?v={p.PhotoUpdatedAt?.ToUnixTimeMilliseconds()}"
-                : null,
-            p.GroupLogoUpdatedAt.HasValue
-                ? $"/api/Groups/{p.GroupId}/logo?v={p.GroupLogoUpdatedAt.Value.ToUnixTimeMilliseconds()}"
-                : null
+            p.PhotoKey != null ? _images.BuildPublicUrl(p.PhotoKey) : null,
+            p.GroupLogoKey != null ? _images.BuildPublicUrl(p.GroupLogoKey) : null
         )).ToList();
 
         return Result<IReadOnlyList<MyPlayerDto>>.Ok(list);
@@ -449,7 +448,7 @@ public class PlayerService : IPlayerService
 
     // ── Mapeamento ────────────────────────────────────────────────────────────
 
-    private static PlayerDto MapToDto(PlayerEntity player) => new(
+    private PlayerDto MapToDto(PlayerEntity player) => new(
         player.Id,
         player.Name,
         player.UserId,
@@ -462,8 +461,8 @@ public class PlayerService : IPlayerService
         player.AttackRating,
         player.DefenseRating,
         player.OverallRating,
-        player.User?.ProfilePhotoData is { Length: > 0 }
-            ? $"/api/Users/{player.User.Id}/photo?v={player.User.ProfilePhotoUpdatedAt?.ToUnixTimeMilliseconds()}"
+        player.User?.ProfilePhotoKey is { } photoKey
+            ? _images.BuildPublicUrl(photoKey)
             : null
     );
 }

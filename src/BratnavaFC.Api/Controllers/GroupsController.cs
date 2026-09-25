@@ -109,27 +109,9 @@ public class GroupsController : GroupAuthorizedController
             return BadRequest("A logo deve ter no máximo 5 MB.");
 
         await using var stream = file.OpenReadStream();
-        using var buffer = new MemoryStream((int)file.Length);
-        await stream.CopyToAsync(buffer, cancellationToken);
 
-        var result = await _groupService.SetLogoAsync(
-            groupId, buffer.ToArray(), file.ContentType, cancellationToken);
+        var result = await _groupService.SetLogoAsync(groupId, stream, cancellationToken);
         return ToResponse(result);
-    }
-
-    [AllowAnonymous]
-    [HttpGet("{groupId:guid}/logo")]
-    public async Task<IActionResult> GetLogoAsync(Guid groupId, CancellationToken cancellationToken)
-    {
-        var result = await _groupService.GetLogoAsync(groupId, cancellationToken);
-        if (!result.Success || result.Data == default)
-            return ToResponse(result);
-
-        var (data, contentType, updatedAt) = result.Data;
-        Response.Headers.CacheControl = "public,max-age=3600,must-revalidate";
-        Response.Headers.ETag = $"\"{updatedAt.ToUnixTimeMilliseconds()}\"";
-        Response.Headers.LastModified = updatedAt.ToString("R");
-        return File(data, contentType);
     }
 
     [HttpDelete("{groupId:guid}/logo")]
