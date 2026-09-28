@@ -56,9 +56,12 @@ public class TeamGenerationController : BaseApiController
 
     [HttpGet("visual-stats/{groupId:guid}")]
     [ProducesResponseType(typeof(ApiResponse<PlayerVisualStatsReport>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetVisualStats([FromRoute] Guid groupId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetVisualStats(
+        [FromRoute] Guid groupId,
+        [FromQuery] bool includeGuests = true,
+        CancellationToken cancellationToken = default)
     {
-        var report = await _playerStats.GetVisualReportAsync(groupId, cancellationToken);
+        var report = await _playerStats.GetVisualReportAsync(groupId, includeGuests, cancellationToken);
         return ToResponse(Result<PlayerVisualStatsReport>.Ok(report));
     }
 
