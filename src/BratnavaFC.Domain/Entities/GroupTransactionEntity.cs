@@ -1,4 +1,4 @@
-using BratnavaFC.Domain.Enums;
+﻿using BratnavaFC.Domain.Enums;
 
 namespace BratnavaFC.Domain.Entities;
 

@@ -284,13 +284,30 @@ public static class InfrastructureDependencyInjection
            && !string.IsNullOrWhiteSpace(configuration[$"{R2Options.SectionName}:EndpointUrl"]);
 
     /// <summary>
-    /// Inicializa o Firebase Admin para push e custom claims. A validação dos ID tokens usa o
-    /// ProjectId configurado separadamente e, portanto, continua disponível em Development
-    /// mesmo quando não há credencial administrativa local.
+    /// Inicializa o Firebase Admin para push e custom claims. O ProjectId usado pela validação
+    /// dos ID tokens sai daqui: é o project_id de dentro deste JSON. Preencher Firebase:ProjectId
+    /// no appsettings vence este valor — é escotilha para rodar sem credencial administrativa
+    /// alguma, não o caminho normal.
     /// </summary>
     private static void AddFirebase(this IServiceCollection services, ILogger logger)
     {
         var serviceAccountJson = Environment.GetEnvironmentVariable("FIREBASE_SERVICE_ACCOUNT_JSON");
+
+        // Par local da variável acima: o caminho do arquivo em vez do conteúdo. Existe
+        // porque o JSON tem quebras de linha dentro da chave privada e fica intratável
+        // numa variável de ambiente — é por isso que o padrão do Google
+        // (GOOGLE_APPLICATION_CREDENTIALS) também é um caminho, não o conteúdo. O Fly
+        // usa a inline porque secret lá é string; na máquina do desenvolvedor, o caminho.
+        //
+        // A inline tem precedência: onde as duas existirem, vale a do ambiente.
+        var serviceAccountJsonPath = Environment.GetEnvironmentVariable("FIREBASE_SERVICE_ACCOUNT_JSON_PATH");
+
+        if (string.IsNullOrWhiteSpace(serviceAccountJson)
+            && !string.IsNullOrWhiteSpace(serviceAccountJsonPath)
+            && File.Exists(serviceAccountJsonPath))
+        {
+            serviceAccountJson = File.ReadAllText(serviceAccountJsonPath);
+        }
 
         try
         {
@@ -315,7 +332,7 @@ public static class InfrastructureDependencyInjection
             logger.LogWarning(
                 ex,
                 "[Firebase] Não pôde ser inicializado. Push notifications estarão indisponíveis. " +
-                "Verifique FIREBASE_SERVICE_ACCOUNT_JSON.");
+                "Verifique FIREBASE_SERVICE_ACCOUNT_JSON ou FIREBASE_SERVICE_ACCOUNT_JSON_PATH.");
         }
     }
 

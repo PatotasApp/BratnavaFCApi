@@ -458,6 +458,130 @@ public class UserService : IUserService
             updatedAt));
     }
 
+    /// <summary>
+    /// Exclusão definitiva da conta, exigida pela Google Play.
+    ///
+    /// A ORDEM importa e é contraintuitiva: o Firebase é apagado ANTES do SQL. Se fosse o
+    /// contrário e o Firebase falhasse, a pessoa ainda conseguiria logar, e o
+    /// UserProvisioningService criaria uma linha nova em branco no primeiro acesso — ela
+    /// "some" e volta como um fantasma vazio. No sentido atual, uma falha no meio deixa a
+    /// pessoa sem acesso e o dado intacto até alguém limpar. Falhar fechado é melhor que
+    /// falhar aberto.
+    ///
+    /// O que sobrevive à exclusão: o jogador vira convidado e mantém nome, gols e
+    /// estatísticas — é o histórico da PATOTA, não só o dele, e é o que permite revincular
+    /// a conta no futuro. Essa retenção precisa estar declarada na política de privacidade.
+    /// </summary>
+    public async Task<Result<List<AccountDeletionBlockerDto>>> DeleteMyAccountAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var user = await _repository.GetByIdIncludingInactiveAsync(userId, cancellationToken);
+        if (user is null)
+            return Result<List<AccountDeletionBlockerDto>>.Fail("Usuário não encontrado.", ResultStatus.NotFound);
+
+        var blockers = await FindSoleAdminGroupsAsync(userId, cancellationToken);
+        if (blockers.Count > 0)
+        {
+            return Result<List<AccountDeletionBlockerDto>>.FailWith(
+                blockers,
+                $"Você é o único administrador de {blockers.Count} patota(s). " +
+                "Promova outro administrador antes de excluir sua conta.",
+                ResultStatus.Conflict);
+        }
+
+        if (!string.IsNullOrWhiteSpace(user.FirebaseUid))
+        {
+            try
+            {
+                await FirebaseAuth.DefaultInstance.DeleteUserAsync(user.FirebaseUid, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[Users] Falha ao apagar o usuário {UserId} no Firebase. Exclusão abortada.", userId);
+                return Result<List<AccountDeletionBlockerDto>>.Fail(
+                    "Não foi possível excluir a conta agora. Tente novamente.");
+            }
+        }
+
+        var photoKey = user.ProfilePhotoKey;
+
+        await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
+
+        await _db.Players
+            .Where(x => x.UserId == userId)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.IsGuest, true)
+                .SetProperty(x => x.UserId, (Guid?)null), cancellationToken);
+
+        await _db.Groups
+            .Where(x => x.CreatedByUserId == userId)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.CreatedByUserId, (Guid?)null), cancellationToken);
+
+        await _db.Polls
+            .Where(x => x.CreatedByUserId == userId)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.CreatedByUserId, (Guid?)null), cancellationToken);
+
+        await _db.CalendarEvents
+            .Where(x => x.CreatedByUserId == userId)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.CreatedByUserId, (Guid?)null), cancellationToken);
+
+        await _db.GroupTransactions
+            .Where(x => x.CreatedByUserId == userId)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.CreatedByUserId, (Guid?)null), cancellationToken);
+
+        await _db.MonthlyPayments
+            .Where(x => x.MarkedByAdminId == userId)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.MarkedByAdminId, (Guid?)null), cancellationToken);
+
+        await _db.ExtraChargePayments
+            .Where(x => x.MarkedByAdminId == userId)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.MarkedByAdminId, (Guid?)null), cancellationToken);
+
+        await _db.ExtraCharges
+            .Where(x => x.CreatedByAdminId == userId)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.CreatedByAdminId, (Guid?)null), cancellationToken);
+
+        await _db.MatchBets.Where(x => x.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+        await _db.UserBetBalances.Where(x => x.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+        await _db.ReplayLikes.Where(x => x.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+        await _db.ReplayFavorites.Where(x => x.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+        await _db.UserNotifications.Where(x => x.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+
+        await _db.Users.Where(x => x.Id == userId).ExecuteDeleteAsync(cancellationToken);
+
+        await tx.CommitAsync(cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(photoKey))
+        {
+            try
+            {
+                await _images.DeleteAsync(photoKey, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[Users] Avatar do usuário excluído {UserId} não pôde ser removido do R2.", userId);
+            }
+        }
+
+        _logger.LogInformation("[Users] Conta {UserId} excluída a pedido do próprio usuário.", userId);
+
+        return Result<List<AccountDeletionBlockerDto>>.Ok([], "Conta excluída com sucesso.");
+    }
+
+    /// <summary>
+    /// Patotas onde ele é o único administrador. Conta os admins e compara: ser admin entre
+    /// vários não trava, porque a patota continua administrável por quem ficar.
+    /// </summary>
+    private async Task<List<AccountDeletionBlockerDto>> FindSoleAdminGroupsAsync(
+        Guid userId,
+        CancellationToken cancellationToken) =>
+        await _db.Groups
+            .AsNoTracking()
+            .Where(g => g.Admins.Any(a => a.UserId == userId) && g.Admins.Count == 1)
+            .Select(g => new AccountDeletionBlockerDto(g.Id, g.Name))
+            .ToListAsync(cancellationToken);
+
     public async Task<Result> RemovePhotoAsync(Guid userId, CancellationToken cancellationToken)
     {
         var user = await _repository.GetByIdIncludingInactiveAsync(userId, cancellationToken);

@@ -1,4 +1,4 @@
-using BratnavaFC.Domain.Common;
+﻿using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Dtos.Users;
 
@@ -30,6 +30,14 @@ public interface IUserService
     Task<Result> UpdateAsync(Guid userId, UpdateUserDto dto, CancellationToken cancellationToken);
 
     Task<Result<UserPhotoDto>> SetPhotoAsync(Guid userId, Stream image, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Exclusão definitiva da conta pelo próprio usuário, exigida pela Google Play.
+    ///
+    /// Recusa com <see cref="ResultStatus.Conflict"/> e a lista de patotas quando ele é o
+    /// ÚNICO administrador de alguma — sem isso ela ficaria sem ninguém para administrá-la.
+    /// </summary>
+    Task<Result<List<AccountDeletionBlockerDto>>> DeleteMyAccountAsync(Guid userId, CancellationToken cancellationToken);
     Task<Result> RemovePhotoAsync(Guid userId, CancellationToken cancellationToken);
 
     Task<Result> InactivateAsync(Guid userId, CancellationToken cancellationToken);

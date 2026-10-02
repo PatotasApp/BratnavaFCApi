@@ -1,4 +1,4 @@
-namespace BratnavaFC.Domain.Entities;
+﻿namespace BratnavaFC.Domain.Entities;
 public class PollEntity : BaseEntity
 {
     public Guid GroupId { get; private set; }

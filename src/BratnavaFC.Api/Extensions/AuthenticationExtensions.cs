@@ -1,4 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
+﻿using System.IdentityModel.Tokens.Jwt;
 using BratnavaFC.Infrastructure.Firebase;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -12,24 +12,23 @@ public static class AuthenticationExtensions
     /// são baixadas e rotacionadas pelo próprio middleware a partir do discovery document
     /// em {Authority}/.well-known/openid-configuration — não há chave simétrica local.
     /// </summary>
-    public static IServiceCollection AddJwtAuthentication(
-        this IServiceCollection services,
-        IConfiguration configuration)
+    public static IServiceCollection AddJwtAuthentication(this IServiceCollection services)
     {
-        // Validar um ID token exige somente o identificador público do projeto; a
-        // credencial administrativa é necessária para push/custom claims, não para o
-        // middleware JWT. Isso mantém a autenticação local funcionando mesmo quando o
-        // Firebase Admin está propositalmente indisponível no ambiente de desenvolvimento.
-        var configuredProjectId = configuration["Firebase:ProjectId"]?.Trim();
-        var projectId = !string.IsNullOrWhiteSpace(configuredProjectId)
-            ? configuredProjectId
-            : FirebaseProjectId.FromInitializedApp();
+        // Validar um ID token exige somente o identificador público do projeto — a credencial
+        // administrativa serve a push e custom claims, não ao middleware JWT. Mesmo assim o
+        // projectId sai do service account JSON e de mais lugar nenhum: ter uma segunda fonte
+        // em appsettings permitia que as duas discordassem em silêncio, e o sintoma era todo
+        // request respondendo 401 sem dizer por quê — o Admin SDK falando com um projeto e o
+        // validador esperando token de outro.
+        //
+        // Exige AddInfrastructure() antes desta chamada, que é quem inicializa o FirebaseApp.
+        var projectId = FirebaseProjectId.FromInitializedApp();
 
         if (string.IsNullOrWhiteSpace(projectId))
             throw new InvalidOperationException(
-                "ProjectId do Firebase não resolvido. Configure Firebase:ProjectId " +
-                "(Firebase__ProjectId em variável de ambiente) ou " +
-                "FIREBASE_SERVICE_ACCOUNT_JSON.");
+                "ProjectId do Firebase não resolvido: o Firebase Admin não inicializou. " +
+                "Defina FIREBASE_SERVICE_ACCOUNT_JSON (conteúdo) ou " +
+                "FIREBASE_SERVICE_ACCOUNT_JSON_PATH (caminho do arquivo).");
 
         var issuer = $"https://securetoken.google.com/{projectId}";
 
