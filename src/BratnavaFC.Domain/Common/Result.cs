@@ -1,4 +1,4 @@
-namespace BratnavaFC.Domain.Common;
+﻿namespace BratnavaFC.Domain.Common;
 
 public abstract class ResultBase
 {
@@ -27,6 +27,17 @@ public class Result<T> : ResultBase
     {
         Success = false, Error = error, Status = status, Errors = errors ?? []
     };
+
+    /// <summary>
+    /// Recusa que carrega dado. Existe porque uma recusa acionável precisa dizer o QUE
+    /// travou — não basta a mensagem, o cliente tem que conseguir levar a pessoa até lá.
+    /// </summary>
+    public static Result<T> FailWith(T data, string error,
+        ResultStatus status = ResultStatus.BadRequest,
+        List<string>? errors = null) => new()
+    {
+        Success = false, Data = data, Error = error, Status = status, Errors = errors ?? []
+    };
 }
 
 public class Result : ResultBase
@@ -54,4 +65,10 @@ public enum ResultStatus
     Unauthorized = 401,
     Forbidden    = 403,
     NotFound     = 404,
+
+    /// <summary>
+    /// O pedido é válido, mas conflita com o estado atual — e o próprio usuário pode
+    /// resolver. Usado na exclusão de conta quando ela deixaria uma patota sem admin.
+    /// </summary>
+    Conflict     = 409,
 }

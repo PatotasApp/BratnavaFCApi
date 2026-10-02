@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos.Users;
 using BratnavaFC.Domain.Enums;
@@ -137,6 +137,26 @@ public sealed class UsersController : BaseApiController
         await using var stream = file.OpenReadStream();
 
         var result = await _userService.SetPhotoAsync(userId, stream, cancellationToken);
+        return ToResponse(result);
+    }
+
+    /// <summary>
+    /// Exclusão definitiva da própria conta, exigida pela Google Play para qualquer app com
+    /// cadastro. O alvo vem do token, nunca da rota — mesmo motivo do me/photo: um userId
+    /// escolhido pelo cliente transformaria a autorização em "comparar o que ele mandou com
+    /// quem ele é".
+    ///
+    /// Responde 409 com a lista de patotas quando ele é o único administrador de alguma.
+    /// A lista é acionável de propósito: o cliente leva a pessoa até cada uma para promover
+    /// outro administrador.
+    /// </summary>
+    [HttpDelete("me")]
+    public async Task<IActionResult> DeleteMyAccountAsync(CancellationToken cancellationToken)
+    {
+        if (!TryGetInternalUserId(out var userId))
+            return Unauthorized();
+
+        var result = await _userService.DeleteMyAccountAsync(userId, cancellationToken);
         return ToResponse(result);
     }
 

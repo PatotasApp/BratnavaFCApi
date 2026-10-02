@@ -1,4 +1,4 @@
-using BratnavaFC.Api.Extensions;
+﻿using BratnavaFC.Api.Extensions;
 using BratnavaFC.Application;
 using BratnavaFC.Infrastructure;
 using Serilog;
@@ -41,8 +41,9 @@ try
     builder.Services.AddApplication(builder.Configuration, builder.Environment);
 
     builder.Services.AddApiPresentation(builder.Environment, builder.Configuration);
-    // A validação JWT usa o ProjectId configurado e não depende da credencial administrativa.
-    builder.Services.AddJwtAuthentication(builder.Configuration);
+    // Depois de AddInfrastructure: o ProjectId usado na validação do JWT sai do service
+    // account JSON que ela carrega, e de mais lugar nenhum.
+    builder.Services.AddJwtAuthentication();
     builder.Services.AddRealtime(builder.Environment);
 
     // Health checks estão implementados em Api/HealthChecks e Api/Extensions/HealthCheckExtensions,

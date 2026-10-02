@@ -1,4 +1,4 @@
-namespace BratnavaFC.Domain.Entities;
+﻿namespace BratnavaFC.Domain.Entities;
 
 public sealed class ExtraChargeEntity : BaseEntity
 {
@@ -30,7 +30,8 @@ public sealed class ExtraChargeEntity : BaseEntity
     public string? Description      { get; private set; }
     public decimal Amount           { get; private set; }
     public DateOnly? DueDate        { get; private set; }
-    public Guid    CreatedByAdminId { get; private set; }
+    /// <summary>Admin que criou a cobrança. Null quando ele excluiu a conta.</summary>
+    public Guid?   CreatedByAdminId { get; private set; }
     public bool    IsCancelled      { get; private set; }
 
     // Navegação
