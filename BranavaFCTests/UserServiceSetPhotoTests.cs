@@ -133,7 +133,7 @@ public sealed class UserServiceSetPhotoTests
         storage.Setup(x => x.BuildPublicUrl(It.IsAny<string>()))
                .Returns((string key) => $"{TestImageStorage.BaseUrl}/{key}");
 
-        var sut = new UserService(db, repo.Object, Mock.Of<ILogger<UserService>>(), storage.Object);
+        var sut = new UserService(db, repo.Object, Mock.Of<ILogger<UserService>>(), storage.Object, GroupServiceTestDoubles.GroupServiceStub());
         return (sut, user, repo, storage);
     }
 }

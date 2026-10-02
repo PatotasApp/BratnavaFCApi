@@ -21,7 +21,7 @@ namespace BranavaFC.Tests;
 public class UserServiceUserNameSearchTests
 {
     private static UserService Sut(AppDbContext db)
-        => new(db, Mock.Of<IRepositoryBase<UserEntity>>(), Mock.Of<ILogger<UserService>>(), TestImageStorage.Create());
+        => new(db, Mock.Of<IRepositoryBase<UserEntity>>(), Mock.Of<ILogger<UserService>>(), TestImageStorage.Create(), GroupServiceTestDoubles.GroupServiceStub());
 
     private static UserEntity User(string userName, string email, string first = "Primeiro", string last = "Ultimo")
         => new(userName, first, last, email, "hash", null, null);

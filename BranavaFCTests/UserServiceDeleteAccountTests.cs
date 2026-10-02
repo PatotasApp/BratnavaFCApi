@@ -25,12 +25,17 @@ namespace BranavaFC.Tests;
 public sealed class UserServiceDeleteAccountTests
 {
     // ── A recusa, e a garantia de que ela não destrói nada ────────────────────
+    //
+    // A recusa só existe para proteger QUEM FICA. Por isso todo teste desta seção coloca
+    // outra conta na patota: sem ela não há ninguém para desamparar, e a saída é liberada
+    // (a patota some junto, coberto em GroupServiceAbandonedTests).
 
     [Fact]
     public async Task DeleteMyAccountAsync_WhenUserIsTheOnlyAdminOfAGroup_Fails()
     {
         var (sut, db, user, _) = await BuildAsync(nameof(DeleteMyAccountAsync_WhenUserIsTheOnlyAdminOfAGroup_Fails));
-        await SeedGroupAsync(db, "Pelada de Quinta", adminIds: new[] { user.Id });
+        var group = await SeedGroupAsync(db, "Pelada de Quinta", adminIds: new[] { user.Id });
+        await SeedOtherMemberAsync(db, group, "mariana");
 
         var result = await sut.DeleteMyAccountAsync(user.Id, CancellationToken.None);
 
@@ -48,11 +53,12 @@ public sealed class UserServiceDeleteAccountTests
     {
         var (sut, db, user, _) = await BuildAsync(nameof(DeleteMyAccountAsync_WhenRefused_ChangesNothing));
         var group = await SeedGroupAsync(db, "Pelada de Quinta", adminIds: new[] { user.Id });
+        await SeedOtherMemberAsync(db, group, "mariana");
         var player = await SeedPlayerAsync(db, group.Id, user);
 
         await sut.DeleteMyAccountAsync(user.Id, CancellationToken.None);
 
-        (await db.Users.CountAsync()).Should().Be(1, "o usuário não pode ter sido apagado");
+        (await db.Users.CountAsync()).Should().Be(2, "nem o usuário nem a outra conta podem ter sido apagados");
 
         var reloaded = await db.Players.AsNoTracking().FirstAsync(p => p.Id == player.Id);
         reloaded.UserId.Should().Be(user.Id, "o jogador não pode ter sido desvinculado");
@@ -63,8 +69,8 @@ public sealed class UserServiceDeleteAccountTests
     public async Task DeleteMyAccountAsync_ListsEveryGroupWhereUserIsTheOnlyAdmin()
     {
         var (sut, db, user, _) = await BuildAsync(nameof(DeleteMyAccountAsync_ListsEveryGroupWhereUserIsTheOnlyAdmin));
-        await SeedGroupAsync(db, "Pelada de Quinta", adminIds: new[] { user.Id });
-        await SeedGroupAsync(db, "Bratnava FC", adminIds: new[] { user.Id });
+        await SeedOtherMemberAsync(db, await SeedGroupAsync(db, "Pelada de Quinta", adminIds: new[] { user.Id }), "mariana");
+        await SeedOtherMemberAsync(db, await SeedGroupAsync(db, "Bratnava FC", adminIds: new[] { user.Id }), "caio");
 
         var result = await sut.DeleteMyAccountAsync(user.Id, CancellationToken.None);
 
@@ -194,7 +200,7 @@ public sealed class UserServiceDeleteAccountTests
             .ReturnsAsync(user);
 
         var storage = new Mock<IImageStorageService>();
-        var sut = new UserService(db, repo.Object, Mock.Of<ILogger<UserService>>(), storage.Object);
+        var sut = new UserService(db, repo.Object, Mock.Of<ILogger<UserService>>(), storage.Object, GroupServiceTestDoubles.GroupServiceStub());
 
         return (sut, db, user, storage);
     }
@@ -216,6 +222,17 @@ public sealed class UserServiceDeleteAccountTests
         db.Groups.Add(group);
         await db.SaveChangesAsync();
         return group;
+    }
+
+    /// <summary>
+    /// Outra conta na patota, como jogador comum. É ela que torna a recusa necessária: sem
+    /// ninguém para ficar desamparado, a saída é liberada.
+    /// </summary>
+    private static async Task SeedOtherMemberAsync(AppDbContext db, GroupEntity group, string userName)
+    {
+        var other = await SeedUserAsync(db, userName, $"{userName}@test.com");
+        db.Players.Add(new PlayerEntity(userName, other.Id, group.Id, 0, false, false, Status.Active));
+        await db.SaveChangesAsync();
     }
 
     private static async Task<PlayerEntity> SeedPlayerAsync(AppDbContext db, Guid groupId, UserEntity user)

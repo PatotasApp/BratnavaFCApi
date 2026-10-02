@@ -9,6 +9,15 @@ public interface IGroupService
     Task<Result<Guid>> CreateAsync(CreateGroupDto request, CancellationToken cancellationToken);
     Task<Result> UpdateAsync(Guid groupId, UpdateGroupDto request, CancellationToken cancellationToken);
     Task<Result> DeleteAsync(Guid groupId, CancellationToken cancellationToken);
+
+    /// <summary>Patotas que ficarão sem nenhuma conta quando este usuário sair delas.</summary>
+    Task<List<Guid>> FindAbandonedByAsync(Guid userId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Apaga patotas na ordem que as chaves estrangeiras RESTRICT exigem, sem abrir transação:
+    /// quem chama decide o escopo.
+    /// </summary>
+    Task DeleteManyAsync(IReadOnlyCollection<Guid> groupIds, CancellationToken cancellationToken);
     Task<Result<GroupDto>> GetByIdAsync(Guid groupId, CancellationToken cancellationToken);
     Task<Result<List<GroupDto>>> GetByAdminIdAsync(Guid adminId, CancellationToken cancellationToken);
     Task<Result<PagedResultDto<GroupDto>>> GetAllGroupsAsync(int page, int pageSize, CancellationToken cancellationToken);

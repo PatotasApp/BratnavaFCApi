@@ -23,7 +23,7 @@ namespace BranavaFC.Tests;
 public class UserServiceMeTests
 {
     private static UserService Sut(AppDbContext db)
-        => new(db, Mock.Of<IRepositoryBase<UserEntity>>(), Mock.Of<ILogger<UserService>>(), TestImageStorage.Create());
+        => new(db, Mock.Of<IRepositoryBase<UserEntity>>(), Mock.Of<ILogger<UserService>>(), TestImageStorage.Create(), GroupServiceTestDoubles.GroupServiceStub());
 
     /// <summary>
     /// A topbar renderiza o avatar do usuário logado a partir do /me. Antes ela lia de

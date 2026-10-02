@@ -95,46 +95,10 @@ public class GroupService : IGroupService
         await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);
         try
         {
-            var group = await _context.Groups
-                .FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken);
-
-            if (group == null)
+            if (!await _context.Groups.AnyAsync(g => g.Id == groupId, cancellationToken))
                 return Result.Fail("Grupo não encontrado.", ResultStatus.NotFound);
 
-            // 1. Partidas → cascateia MatchPlayers, Votes e Goals (MatchId = Cascade)
-            var matches = await _context.Matches
-                .Where(m => m.GroupId == groupId)
-                .ToListAsync(cancellationToken);
-            _context.Matches.RemoveRange(matches);
-            await _context.SaveChangesAsync(cancellationToken);
-
-            // 2. Cores do time (FK GroupId = Restrict, precisa remoção explícita)
-            var colors = await _context.TeamColors
-                .Where(c => c.GroupId == groupId)
-                .ToListAsync(cancellationToken);
-            _context.TeamColors.RemoveRange(colors);
-            await _context.SaveChangesAsync(cancellationToken);
-
-            // 3. Configurações do grupo (FK GroupId = Restrict)
-            var settings = await _context.GroupSettings
-                .Where(s => s.GroupId == groupId)
-                .FirstOrDefaultAsync(cancellationToken);
-            if (settings != null)
-            {
-                _context.GroupSettings.Remove(settings);
-                await _context.SaveChangesAsync(cancellationToken);
-            }
-
-            // 4. Jogadores (MatchPlayers já removidos no passo 1)
-            var players = await _context.Players
-                .Where(p => p.GroupId == groupId)
-                .ToListAsync(cancellationToken);
-            _context.Players.RemoveRange(players);
-            await _context.SaveChangesAsync(cancellationToken);
-
-            // 5. Grupo (GroupAdmins e GroupInvites cascateiam automaticamente)
-            _context.Groups.Remove(group);
-            await _context.SaveChangesAsync(cancellationToken);
+            await DeleteManyAsync([groupId], cancellationToken);
 
             await tx.CommitAsync(cancellationToken);
 
@@ -145,6 +109,77 @@ public class GroupService : IGroupService
             _logger.LogError(ex, "Error trying to delete group with cascade. GroupId={GroupId}", groupId);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Patotas que ficarão sem nenhuma conta quando <paramref name="userId"/> sair delas.
+    ///
+    /// "Conta" é o que importa, não "jogador": convidado é só um nome no histórico, não tem
+    /// login e não administra nada. Uma patota que fica com convidados e mais ninguém está tão
+    /// abandonada quanto uma vazia — ninguém consegue administrá-la, porque adicionar admin
+    /// exige já ser admin, e só o GodMode a alcançaria.
+    ///
+    /// Dois caminhos perguntam isto: sair da patota (PlayerService.LeaveGroupAsync) e excluir
+    /// a conta (UserService.DeleteMyAccountAsync). Nos dois o desfecho é o mesmo, então a regra
+    /// mora aqui e não em cada um.
+    /// </summary>
+    public async Task<List<Guid>> FindAbandonedByAsync(Guid userId, CancellationToken cancellationToken)
+        => await _context.Groups
+            .AsNoTracking()
+            .Where(g => !g.Admins.Any(a => a.UserId != userId)
+                     && !_context.Players.Any(p => p.GroupId == g.Id
+                                                && p.UserId != null
+                                                && p.UserId != userId))
+            .Select(g => g.Id)
+            .ToListAsync(cancellationToken);
+
+    /// <summary>
+    /// Apaga patotas na ordem que o banco exige, SEM abrir transação: quem chama decide o
+    /// escopo. O <see cref="DeleteAsync"/> abre a dele; os dois caminhos de saída já estão
+    /// dentro de uma.
+    ///
+    /// Cinco tabelas apontam para Groups com ON DELETE RESTRICT — Matches, MatchPlayers, Goals,
+    /// TeamColors e GroupSettings — e GroupSettings existe para toda patota, então um DELETE
+    /// direto em Groups falharia sempre. As demais (Players, Polls, GroupAdmins, GroupInvites,
+    /// pagamentos, lançamentos) cascateiam sozinhas. Apagar Matches já leva MatchPlayers, Votes
+    /// e Goals pelo CASCADE de MatchId.
+    ///
+    /// É a única implementação dessa ordem no projeto, de propósito: enquanto existir uma só,
+    /// uma FK nova com RESTRICT só precisa ser aprendida aqui.
+    ///
+    /// Por entidades rastreadas e não ExecuteDelete: é o que já estava em produção, continua
+    /// visível para a suíte (o provider InMemory não traduz ExecuteDelete) e o volume é o de
+    /// uma patota.
+    ///
+    /// Um SaveChanges só. A versão anterior salvava a cada nível por medo do RESTRICT, mas o
+    /// EF ordena as deleções pela topologia das relações que ele conhece — dependente antes
+    /// de principal — e emite os comandos já na ordem certa. Verificado contra Postgres real
+    /// com partidas, escalações, cores e configurações no mesmo grupo.
+    /// </summary>
+    public async Task DeleteManyAsync(IReadOnlyCollection<Guid> groupIds, CancellationToken cancellationToken)
+    {
+        if (groupIds.Count == 0)
+            return;
+
+        // Partidas levam MatchPlayers, Votes e Goals pelo CASCADE de MatchId; a patota leva
+        // GroupAdmins, GroupInvites, Polls e os financeiros. Carregadas aqui só as quatro que
+        // o banco se recusa a cascatear (FK GroupId = Restrict), mais a própria patota.
+        _context.Matches.RemoveRange(
+            await _context.Matches.Where(x => groupIds.Contains(x.GroupId)).ToListAsync(cancellationToken));
+
+        _context.TeamColors.RemoveRange(
+            await _context.TeamColors.Where(x => groupIds.Contains(x.GroupId)).ToListAsync(cancellationToken));
+
+        _context.GroupSettings.RemoveRange(
+            await _context.GroupSettings.Where(x => groupIds.Contains(x.GroupId)).ToListAsync(cancellationToken));
+
+        _context.Players.RemoveRange(
+            await _context.Players.Where(x => groupIds.Contains(x.GroupId)).ToListAsync(cancellationToken));
+
+        _context.Groups.RemoveRange(
+            await _context.Groups.Where(x => groupIds.Contains(x.Id)).ToListAsync(cancellationToken));
+
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<Result> InactivateAsync(Guid groupId, CancellationToken cancellationToken)
