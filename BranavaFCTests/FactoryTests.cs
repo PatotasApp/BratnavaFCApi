@@ -67,7 +67,7 @@ public class FactoryTests
             CancellationToken cancellationToken = default)
             => Task.FromResult(Result<List<PlayerStats>>.Ok(new List<PlayerStats>()));
 
-        public Task<PlayerVisualStatsReport> GetVisualReportAsync(Guid groupId, CancellationToken cancellationToken = default)
+        public Task<PlayerVisualStatsReport> GetVisualReportAsync(Guid groupId, bool includeGuests = true, CancellationToken cancellationToken = default)
             => Task.FromResult(new PlayerVisualStatsReport
             {
                 GroupId = groupId,

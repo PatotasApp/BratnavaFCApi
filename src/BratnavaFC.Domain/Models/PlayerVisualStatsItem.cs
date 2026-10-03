@@ -14,6 +14,7 @@ namespace BratnavaFC.Domain.Models
 
         public Status Status { get; init; }
         public bool IsGoalkeeper { get; init; }
+        public bool IsGuest { get; init; }
 
         public int GamesPlayed { get; init; }
         public int Wins { get; init; }

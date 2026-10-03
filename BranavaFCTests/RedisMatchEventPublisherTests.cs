@@ -28,6 +28,8 @@ public class RedisMatchEventPublisherTests
         var groupId = Guid.NewGuid();
         var matchId = Guid.NewGuid();
         var eventTime = new DateTimeOffset(2026, 7, 21, 21, 0, 0, TimeSpan.FromHours(-3));
+        // O outbox grava o horário já com -3h (horário de parede da câmera/DVR).
+        var expectedEventTime = eventTime.ToUniversalTime().AddHours(-3);
 
         var result = await sut.PublishAsync(
             groupId,
@@ -44,7 +46,7 @@ public class RedisMatchEventPublisherTests
         outbox.GroupId.Should().Be(groupId);
         outbox.MatchId.Should().Be(matchId);
         outbox.Type.Should().Be(MatchEventType.GolTimeA);
-        outbox.EventTime.Should().Be(eventTime.ToUniversalTime());
+        outbox.EventTime.Should().Be(expectedEventTime);
         outbox.SecondsBeforeStart.Should().Be(8);
         outbox.DurationSeconds.Should().Be(20);
         outbox.Status.Should().Be("Pending");
@@ -62,7 +64,7 @@ public class RedisMatchEventPublisherTests
         streamFields.RootElement.GetProperty("groupId").GetString().Should().Be(groupId.ToString());
         streamFields.RootElement.GetProperty("matchId").GetString().Should().Be(matchId.ToString());
         streamFields.RootElement.GetProperty("type").GetString().Should().Be("GolTimeA");
-        streamFields.RootElement.GetProperty("eventTime").GetString().Should().Be(eventTime.ToUniversalTime().ToString("O"));
+        streamFields.RootElement.GetProperty("eventTime").GetString().Should().Be(expectedEventTime.ToString("O"));
         streamFields.RootElement.GetProperty("secondsBeforeStart").GetInt32().Should().Be(8);
         streamFields.RootElement.GetProperty("durationSeconds").GetInt32().Should().Be(20);
     }
@@ -80,6 +82,8 @@ public class RedisMatchEventPublisherTests
             "replay_events");
 
         var eventTime = new DateTimeOffset(2026, 7, 21, 21, 0, 0, TimeSpan.FromHours(-3));
+        // O outbox grava o horário já com -3h (horário de parede da câmera/DVR).
+        var expectedEventTime = eventTime.ToUniversalTime().AddHours(-3);
 
         var result = await sut.PublishAsync(
             Guid.NewGuid(),
@@ -94,6 +98,6 @@ public class RedisMatchEventPublisherTests
         var outbox = await db.ReplayEventOutbox.SingleAsync();
         outbox.Type.Should().Be(MatchEventType.GolTimeA);
         outbox.EventTime.Offset.Should().Be(TimeSpan.Zero);
-        outbox.EventTime.Should().Be(eventTime.ToUniversalTime());
+        outbox.EventTime.Should().Be(expectedEventTime);
     }
 }

@@ -160,6 +160,7 @@ internal sealed class FakeStatsService : IPlayerStatsService
 
     public Task<PlayerVisualStatsReport> GetVisualReportAsync(
         Guid groupId,
+        bool includeGuests = true,
         CancellationToken cancellationToken = default)
         => Task.FromResult(new PlayerVisualStatsReport
         {

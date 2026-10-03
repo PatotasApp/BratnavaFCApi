@@ -15,6 +15,12 @@ public class RedisMatchEventPublisher : IMatchEventPublisher
     private readonly ILogger<RedisMatchEventPublisher> _logger;
     private readonly string _streamKey;
 
+    // A câmera/DVR grava em horário de Brasília (UTC-3) e o worker de replay lê o
+    // eventTime como horário de parede (ignora o fuso). Por isso o evento é gravado
+    // no outbox já com 3h a menos: entra pronto para ser interpretado corretamente,
+    // sem precisar subtrair 3h manualmente depois.
+    private const int BrasiliaUtcOffsetHours = -3;
+
     private static readonly JsonSerializerOptions _jsonOpts = new()
     {
         Converters = { new JsonStringEnumConverter() },
@@ -35,7 +41,9 @@ public class RedisMatchEventPublisher : IMatchEventPublisher
 
     public async Task<string> PublishAsync(Guid groupId, Guid matchId, MatchEventType type, int secondsBeforeStart, int durationSeconds, DateTimeOffset? eventTime = null, CancellationToken ct = default)
     {
-        var replayEventTime = (eventTime ?? DateTimeOffset.UtcNow).ToUniversalTime();
+        var replayEventTime = (eventTime ?? DateTimeOffset.UtcNow)
+            .ToUniversalTime()
+            .AddHours(BrasiliaUtcOffsetHours);
 
         var payload = JsonSerializer.Serialize(new
         {

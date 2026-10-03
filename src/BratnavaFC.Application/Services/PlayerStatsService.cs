@@ -119,12 +119,14 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
     public async Task<PlayerVisualStatsReport> GetVisualReportAsync(
         Guid groupId,
+        bool includeGuests = true,
         CancellationToken cancellationToken = default)
     {
-        // (mantem do jeito que voce ja tinha; aqui usamos PlayerEntity do banco, ok)
+        // A regra de incluir/excluir convidados é do backend: o front (app e site)
+        // apenas informa includeGuests e renderiza o que voltar (já ranqueado).
         var players = await _context.Players
             .AsNoTracking()
-            .Where(p => p.GroupId == groupId && !p.IsGuest)
+            .Where(p => p.GroupId == groupId && (includeGuests || !p.IsGuest))
             .ToListAsync(cancellationToken);
 
         if (players.Count == 0)
@@ -214,6 +216,7 @@ public sealed class PlayerStatsService : IPlayerStatsService
                 Name = pl.Name,
                 Status = pl.Status,
                 IsGoalkeeper = pl.IsGoalkeeper,
+                IsGuest = pl.IsGuest,
 
                 GamesPlayed = acc.MatchesPlayed,
                 Wins = acc.Wins,
