@@ -10,6 +10,9 @@ public interface IGroupService
     Task<Result> UpdateAsync(Guid groupId, UpdateGroupDto request, CancellationToken cancellationToken);
     Task<Result> DeleteAsync(Guid groupId, CancellationToken cancellationToken);
 
+    /// <summary>Encerra a patota a pedido de um administrador dela.</summary>
+    Task<Result> DeleteByAdminAsync(Guid groupId, Guid requestingUserId, CancellationToken cancellationToken);
+
     /// <summary>Patotas que ficarão sem nenhuma conta quando este usuário sair delas.</summary>
     Task<List<Guid>> FindAbandonedByAsync(Guid userId, CancellationToken cancellationToken);
 

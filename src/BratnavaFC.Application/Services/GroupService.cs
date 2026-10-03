@@ -112,6 +112,39 @@ public class GroupService : IGroupService
     }
 
     /// <summary>
+    /// Encerra a patota a pedido de quem a administra.
+    ///
+    /// O <see cref="DeleteAsync"/> não confere quem está pedindo — é o caminho do GodMode, e
+    /// manter os dois separados deixa explícito que este aqui tem dono e aquele não.
+    ///
+    /// Não há trava por quantidade de gente, de propósito: proibir criaria patota-zumbi que
+    /// ninguém consegue encerrar. O que protege é a fricção na interface, como em GitHub,
+    /// Slack e Discord. O que a trava impede, isso sim, é destruir SEM QUERER — e para isso
+    /// a exclusão saiu do fluxo de saída, que era onde o acidente morava.
+    /// </summary>
+    public async Task<Result> DeleteByAdminAsync(Guid groupId, Guid requestingUserId, CancellationToken cancellationToken)
+    {
+        var ehAdmin = await _context.Groups
+            .AnyAsync(g => g.Id == groupId && g.Admins.Any(a => a.UserId == requestingUserId), cancellationToken);
+
+        if (!ehAdmin)
+        {
+            // Não distingue "não existe" de "não é admin": quem não administra a patota não
+            // precisa descobrir se ela existe.
+            return await _context.Groups.AnyAsync(g => g.Id == groupId, cancellationToken)
+                ? Result.Fail("Apenas administradores podem encerrar a patota.", ResultStatus.Forbidden)
+                : Result.Fail("Grupo não encontrado.", ResultStatus.NotFound);
+        }
+
+        _logger.LogWarning(
+            "[Groups] Patota {GroupId} encerrada pelo administrador {UserId}.",
+            groupId,
+            requestingUserId);
+
+        return await DeleteAsync(groupId, cancellationToken);
+    }
+
+    /// <summary>
     /// Patotas que ficarão sem nenhuma conta quando <paramref name="userId"/> sair delas.
     ///
     /// "Conta" é o que importa, não "jogador": convidado é só um nome no histórico, não tem
@@ -933,16 +966,35 @@ public class GroupService : IGroupService
             if (group is null)
                 return Result.Fail("Grupo não encontrado.", ResultStatus.NotFound);
 
-            if (group.CreatedByUserId != requestingUserId)
+            // Pelo papel de admin, não por CreatedByUserId. Quem criou é fato histórico e a
+            // coluna é anulável: uma patota cujo criador excluiu a conta ficava com criador
+            // nulo e NINGUÉM mais conseguia passar por aqui — nem para transferir, nem para
+            // encerrar. Administrar é do papel, não de quem fundou.
+            if (!group.Admins.Any(a => a.UserId == requestingUserId))
                 return Result.Fail("Sem permissão para esta operação.", ResultStatus.Forbidden);
 
-            // Opção 1: Deletar o grupo
+            // Opção 1: encerrar a patota — só quando não há mais ninguém para perder nada.
+            //
+            // Sair e destruir são atos diferentes, e misturá-los era o risco: quem só queria
+            // sair ficava a dois cliques de apagar o histórico de todo mundo, e quando não
+            // havia ninguém elegível para promover a exclusão virava a ÚNICA saída oferecida.
+            // É o padrão de GitHub e Slack: sair exige transferir; encerrar é ação própria,
+            // em outro lugar, com confirmação por digitação.
             if (dto.DeleteGroup)
             {
-                var deleteResult = await DeleteAsync(groupId, cancellationToken);
-                return deleteResult.Success
-                    ? Result.Ok("Grupo removido com sucesso.")
-                    : deleteResult;
+                var abandonadas = await FindAbandonedByAsync(requestingUserId, cancellationToken);
+
+                if (!abandonadas.Contains(groupId))
+                    return Result.Fail(
+                        "Há outras pessoas nesta patota. Para sair, promova outro administrador " +
+                        "ou transfira a administração. Encerrar a patota é feito nas configurações.",
+                        ResultStatus.Conflict);
+
+                await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);
+                await DeleteManyAsync([groupId], cancellationToken);
+                await tx.CommitAsync(cancellationToken);
+
+                return Result.Ok("Patota encerrada: você era a última pessoa nela.");
             }
 
             // Localizar o player do criador neste grupo

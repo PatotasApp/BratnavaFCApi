@@ -36,11 +36,22 @@ public class GroupsController : GroupAuthorizedController
         return ToResponse(result);
     }
 
+    /// <summary>
+    /// Encerra a patota definitivamente. Ação própria, separada de sair: o fluxo de saída
+    /// nunca destrói nada, e quem só quer sair não deve esbarrar nisto.
+    ///
+    /// Aberta a qualquer administrador da patota — antes era exclusiva do GodMode, o que
+    /// deixava os próprios donos sem como encerrar o que criaram. A proteção contra o
+    /// acidente é a fricção na interface (digitar o nome e ver quantas pessoas perdem o
+    /// histórico), não a ausência do caminho; é o que GitHub, Slack e Discord fazem.
+    /// </summary>
     [HttpDelete("{groupId:guid}")]
-    [Authorize(Roles = "GodMode")]
     public async Task<IActionResult> DeleteGroupAsync(Guid groupId, CancellationToken cancellationToken)
     {
-        var result = await _groupService.DeleteAsync(groupId, cancellationToken);
+        var requestingUserId = GetCurrentUserId();
+        if (requestingUserId == null) return Unauthorized();
+
+        var result = await _groupService.DeleteByAdminAsync(groupId, requestingUserId.Value, cancellationToken);
         return ToResponse(result);
     }
 
