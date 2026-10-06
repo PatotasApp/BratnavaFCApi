@@ -19,6 +19,7 @@ public class PlayerService : IPlayerService
     private readonly IPushService _push;
     private readonly IMatchService _matchService;
     private readonly IImageStorageService _images;
+    private readonly IGroupService _groups;
 
     public PlayerService(
         IRepositoryBase<PlayerEntity> repository,
@@ -26,7 +27,8 @@ public class PlayerService : IPlayerService
         AppDbContext context,
         IPushService push,
         IMatchService matchService,
-        IImageStorageService images)
+        IImageStorageService images,
+        IGroupService groups)
     {
         _repository   = repository;
         _logger       = logger;
@@ -34,6 +36,7 @@ public class PlayerService : IPlayerService
         _push         = push;
         _matchService = matchService;
         _images = images;
+        _groups = groups;
     }
 
     public async Task<Result<PlayerDto>> CreateAsync(CreatePlayerDto request, CancellationToken cancellationToken)
@@ -294,6 +297,23 @@ public class PlayerService : IPlayerService
 
         var playerName = player.Name;
         var groupId    = player.GroupId;
+
+        // Se ele é a última conta da patota, ela vai embora junto. Sem isto a patota ficava
+        // com zero admins e nenhuma conta: ninguém mais conseguiria administrá-la, porque
+        // adicionar admin exige já ser admin — e no app ela continuava listada para quem
+        // acabou de sair. Era assim que nasciam as patotas órfãs no banco.
+        //
+        // Consultado ANTES de desvincular: é o vínculo deste jogador que diz se ele ainda
+        // está lá.
+        var abandonadas = await _groups.FindAbandonedByAsync(requestingUserId, cancellationToken);
+
+        if (abandonadas.Contains(groupId))
+        {
+            await _groups.DeleteManyAsync([groupId], cancellationToken);
+
+            // O jogador saiu junto com a patota; não há o que atualizar nem quem notificar.
+            return Result.Ok("Patota removida: você era o último participante.");
+        }
 
         player.SetIsGuest(true);
         player.ClearUser();

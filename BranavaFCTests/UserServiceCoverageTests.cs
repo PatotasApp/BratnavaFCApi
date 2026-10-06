@@ -20,7 +20,8 @@ public class UserServiceCoverageTests
             db,
             new RepositoryBase<UserEntity>(db),
             Mock.Of<ILogger<UserService>>(),
-            TestImageStorage.Create());
+            TestImageStorage.Create(),
+            GroupServiceTestDoubles.GroupServiceStub());
 
     private static UserEntity User(string userName, string first, string last, string email,
         UserRole role = UserRole.User)

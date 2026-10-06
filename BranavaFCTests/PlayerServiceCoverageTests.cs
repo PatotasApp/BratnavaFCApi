@@ -31,7 +31,8 @@ public class PlayerServiceCoverageTests
             db,
             push ?? Mock.Of<IPushService>(),
             matchService ?? MatchServiceMock().Object,
-            TestImageStorage.Create());
+            TestImageStorage.Create(),
+            GroupServiceTestDoubles.GroupServiceStub());
 
     private static MatchEntity MatchWithStatus(Guid groupId, MatchStatus status)
     {

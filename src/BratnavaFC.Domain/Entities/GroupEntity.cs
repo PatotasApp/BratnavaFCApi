@@ -4,7 +4,15 @@ public class GroupEntity : InactivatableEntity
 {
     public string Name { get; private set; } = null!;
     public DateTimeOffset? ScheduleMatchDate { get; private set; }
-    public Guid CreatedByUserId { get; private set; }
+    /// <summary>
+    /// Dono da patota. NULO significa que o criador excluiu a conta — a patota continua
+    /// existindo e sendo administrada pelos admins, só deixa de ter dono.
+    ///
+    /// É posse, não autoria: o <see cref="TransferCreator"/> reaponta este campo quando
+    /// alguém passa a patota adiante. Por isso ele nunca vira uma lápide com nome; quem
+    /// exibe mostra "Usuário deletado" quando encontra nulo.
+    /// </summary>
+    public Guid? CreatedByUserId { get; private set; }
     /// <summary>
     /// Caminho do objeto no bucket de imagens do R2, no formato
     /// <c>logos/{groupId}/{guid}.png</c>. Guardamos a KEY, não a URL: o host público vive em

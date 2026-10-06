@@ -21,17 +21,20 @@ public class UserService : IUserService
     private readonly IRepositoryBase<UserEntity> _repository;
     private readonly ILogger<UserService> _logger;
     private readonly IImageStorageService _images;
+    private readonly IGroupService _groups;
 
     public UserService(
         AppDbContext db,
         IRepositoryBase<UserEntity> repository,
         ILogger<UserService> logger,
-        IImageStorageService images)
+        IImageStorageService images,
+        IGroupService groups)
     {
         _repository = repository;
         _logger = logger;
         _db = db;
         _images = images;
+        _groups = groups;
     }
 
     public async Task<Result<MeDto>> GetMeAsync(Guid userId, string? tokenEmail, CancellationToken cancellationToken)
@@ -457,6 +460,174 @@ public class UserService : IUserService
             _images.BuildPublicUrl(objectKey),
             updatedAt));
     }
+
+    /// <summary>
+    /// Exclusão definitiva da conta, exigida pela Google Play.
+    ///
+    /// A ORDEM importa e é contraintuitiva: o Firebase é apagado ANTES do SQL. Se fosse o
+    /// contrário e o Firebase falhasse, a pessoa ainda conseguiria logar, e o
+    /// UserProvisioningService criaria uma linha nova em branco no primeiro acesso — ela
+    /// "some" e volta como um fantasma vazio. No sentido atual, uma falha no meio deixa a
+    /// pessoa sem acesso e o dado intacto até alguém limpar. Falhar fechado é melhor que
+    /// falhar aberto.
+    ///
+    /// O que sobrevive à exclusão: o jogador vira convidado e mantém nome, gols e
+    /// estatísticas — é o histórico da PATOTA, não só o dele, e é o que permite revincular
+    /// a conta no futuro. Essa retenção precisa estar declarada na política de privacidade.
+    /// </summary>
+    public async Task<Result<List<AccountDeletionBlockerDto>>> DeleteMyAccountAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var user = await _repository.GetByIdIncludingInactiveAsync(userId, cancellationToken);
+        if (user is null)
+            return Result<List<AccountDeletionBlockerDto>>.Fail("Usuário não encontrado.", ResultStatus.NotFound);
+
+        var blockers = await FindSoleAdminGroupsAsync(userId, cancellationToken);
+        if (blockers.Count > 0)
+        {
+            return Result<List<AccountDeletionBlockerDto>>.FailWith(
+                blockers,
+                $"Você é o único administrador de {blockers.Count} patota(s). " +
+                "Promova outro administrador antes de excluir sua conta.",
+                ResultStatus.Conflict);
+        }
+
+        if (!string.IsNullOrWhiteSpace(user.FirebaseUid))
+        {
+            try
+            {
+                await FirebaseAuth.DefaultInstance.DeleteUserAsync(user.FirebaseUid, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[Users] Falha ao apagar o usuário {UserId} no Firebase. Exclusão abortada.", userId);
+                return Result<List<AccountDeletionBlockerDto>>.Fail(
+                    "Não foi possível excluir a conta agora. Tente novamente.");
+            }
+        }
+
+        var photoKey = user.ProfilePhotoKey;
+
+        await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
+
+        // Tudo abaixo roda como UPDATE/DELETE em conjunto, dentro da transação aberta acima:
+        // ExecuteUpdate e ExecuteDelete usam a mesma conexão, então participam dela. Nada é
+        // carregado para a memória e o change tracker não é consultado — por isso também não
+        // passam pelos métodos da entidade, e o setter privado deixa de ser obstáculo.
+        //
+        // O preço está nos testes: o provider InMemory da suíte não traduz nenhuma das duas.
+        // Os casos que exercitam a exclusão bem-sucedida estão marcados como Skip em
+        // UserServiceDeleteAccountTests, à espera de Postgres real. Os de recusa continuam
+        // valendo, porque retornam antes de qualquer escrita.
+
+        // Patotas que ficam sem ninguém somem junto. Precisa ser o primeiro passo: é o vínculo
+        // dos jogadores que identifica quem ainda está lá, e ele é desfeito logo abaixo.
+        await _groups.DeleteManyAsync(
+            await _groups.FindAbandonedByAsync(userId, cancellationToken),
+            cancellationToken);
+
+        // Jogadores viram convidados: o histórico da patota continua de pé, sem identidade.
+        // Mesmo movimento do LeaveGroupAsync, aplicado a todas as patotas de uma vez.
+        await _db.Players
+            .Where(x => x.UserId == userId)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.IsGuest, true)
+                .SetProperty(x => x.UserId, (Guid?)null), cancellationToken);
+
+        // Autoria de conteúdo que a patota continua usando: o registro fica, o autor sai.
+        // Quem exibir esses campos mostra "Usuário deletado" ao encontrar nulo. A patota
+        // sobrevive sem dono — só é possível porque Groups.CreatedByUserId virou anulável.
+        await _db.Groups
+            .Where(x => x.CreatedByUserId == userId)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.CreatedByUserId, (Guid?)null), cancellationToken);
+
+        await _db.Polls
+            .Where(x => x.CreatedByUserId == userId)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.CreatedByUserId, (Guid?)null), cancellationToken);
+
+        await _db.CalendarEvents
+            .Where(x => x.CreatedByUserId == userId)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.CreatedByUserId, (Guid?)null), cancellationToken);
+
+        await _db.GroupTransactions
+            .Where(x => x.CreatedByUserId == userId)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.CreatedByUserId, (Guid?)null), cancellationToken);
+
+        // Estas três não têm chave estrangeira: sem isto, apontariam para um usuário
+        // inexistente. São trilha de auditoria financeira, então o lançamento fica e some só
+        // o autor. ExtraCharges foi a última descoberta — uma varredura de todas as colunas
+        // de usuário contra o Postgres a flagrou órfã depois de um teste ponta a ponta.
+        await _db.MonthlyPayments
+            .Where(x => x.MarkedByAdminId == userId)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.MarkedByAdminId, (Guid?)null), cancellationToken);
+
+        await _db.ExtraChargePayments
+            .Where(x => x.MarkedByAdminId == userId)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.MarkedByAdminId, (Guid?)null), cancellationToken);
+
+        await _db.ExtraCharges
+            .Where(x => x.CreatedByAdminId == userId)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.CreatedByAdminId, (Guid?)null), cancellationToken);
+
+        // Dado pessoal sem valor para a patota. Aposta e saldo são moeda fictícia; curtida sem
+        // dono não significa nada; notificação é pessoal. MatchBetSelections sai junto com
+        // MatchBets, pelo CASCADE do banco.
+        await _db.MatchBets.Where(x => x.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+        await _db.UserBetBalances.Where(x => x.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+        await _db.ReplayLikes.Where(x => x.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+        await _db.ReplayFavorites.Where(x => x.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+        await _db.UserNotifications.Where(x => x.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+
+        // GroupAdmins, GroupFinanceiros, GroupInvites, PushTokens e UserAbsences saem pelo
+        // CASCADE do banco — inclusive as funções de quem administra sem jogar. E a ausência
+        // indo embora anula MatchPlayers.AutoRejectedByAbsenceId, por SET NULL.
+        //
+        // Pelo contexto e não pelo repositório: a operação atravessa uma dúzia de tabelas, e
+        // salvar pelo repositório de UserEntity seria porta estreita para mudança larga.
+        await _db.Users.Where(x => x.Id == userId).ExecuteDeleteAsync(cancellationToken);
+
+        await tx.CommitAsync(cancellationToken);
+
+        // Depois do commit e best-effort: objeto órfão custa alguns KB, derrubar a exclusão
+        // que a pessoa pediu custa a exclusão — e a política exige que ela funcione.
+        if (!string.IsNullOrWhiteSpace(photoKey))
+        {
+            try
+            {
+                await _images.DeleteAsync(photoKey, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[Users] Avatar do usuário excluído {UserId} não pôde ser removido do R2.", userId);
+            }
+        }
+
+        _logger.LogInformation("[Users] Conta {UserId} excluída a pedido do próprio usuário.", userId);
+
+        return Result<List<AccountDeletionBlockerDto>>.Ok([], "Conta excluída com sucesso.");
+    }
+
+    /// <summary>
+    /// Patotas onde ele é o único administrador. Conta os admins e compara: ser admin entre
+    /// vários não trava, porque a patota continua administrável por quem ficar.
+    /// </summary>
+    private async Task<List<AccountDeletionBlockerDto>> FindSoleAdminGroupsAsync(
+        Guid userId,
+        CancellationToken cancellationToken) =>
+        await _db.Groups
+            .AsNoTracking()
+            .Where(g => g.Admins.Any(a => a.UserId == userId)
+                     && g.Admins.Count == 1
+                     // Só trava se SOBRAR alguém. Numa patota onde ele é a única conta não há
+                     // quem promover — a mensagem pediria o impossível e a pessoa ficaria presa
+                     // entre excluir a patota na mão ou não excluir a conta. Essa patota é
+                     // apagada junto, por AbandonedGroupCleanup.
+                     && _db.Players.Any(p => p.GroupId == g.Id
+                                          && p.UserId != null
+                                          && p.UserId != userId))
+            .Select(g => new AccountDeletionBlockerDto(g.Id, g.Name))
+            .ToListAsync(cancellationToken);
 
     public async Task<Result> RemovePhotoAsync(Guid userId, CancellationToken cancellationToken)
     {

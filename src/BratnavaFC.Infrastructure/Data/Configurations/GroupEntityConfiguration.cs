@@ -13,7 +13,7 @@ public class GroupEntityConfiguration : IEntityTypeConfiguration<GroupEntity>
 
         builder.Property(x => x.Name).IsRequired();
 
-        builder.Property(x => x.CreatedByUserId).IsRequired();
+        builder.Property(x => x.CreatedByUserId);
         builder.Property(x => x.LogoKey).HasMaxLength(200);
         builder.Property(x => x.LogoUpdatedAt);
 
