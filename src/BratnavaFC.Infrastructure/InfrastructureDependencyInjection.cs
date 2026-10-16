@@ -242,11 +242,17 @@ public static class InfrastructureDependencyInjection
         IHostEnvironment environment,
         bool isDevelopment)
     {
+        var isExplicitlyDisabled = configuration.GetValue<bool?>(
+            $"{ImageStorageOptions.SectionName}:Enabled") == false;
+
         // Em Development o R2 é OPCIONAL, não proibido. Sem credencial — o caso normal — o
         // NoOp mantém a API de pé. Mas quando as chaves estão presentes (user-secrets, para
         // testar upload local contra o bucket de desenvolvimento), usamos o R2 de verdade:
         // sem isso não haveria como exercitar o fluxo de foto fora de um deploy.
-        if (isDevelopment && !IsImageStorageConfigured(configuration))
+        // O desligamento explícito também permite executar localmente com o pipeline de
+        // Production sem copiar credenciais e bucket de imagens para a máquina. Em produção
+        // real o padrão continua habilitado e a validação abaixo segue fail-fast.
+        if (isExplicitlyDisabled || (isDevelopment && !IsImageStorageConfigured(configuration)))
         {
             services.AddSingleton<IImageStorageService>(sp =>
                 new NoOpImageStorageService(

@@ -4,6 +4,8 @@ public sealed class ImageStorageOptions
 {
     public const string SectionName = "Cloudflare:R2:Images";
 
+    public bool Enabled { get; set; } = true;
+
     /// <summary>Um bucket por ambiente: bratnava-development / bratnava-production.</summary>
     public string BucketName { get; set; } = "";
 

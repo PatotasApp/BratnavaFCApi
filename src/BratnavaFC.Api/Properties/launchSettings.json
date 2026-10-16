@@ -25,7 +25,11 @@
       "launchBrowser": true,
       "launchUrl": "swagger",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Production",
+        "Firebase__ProjectId": "production-2153f",
+        "Cloudflare__R2__Images__Enabled": "false",
+        "Swagger__Enabled": "true",
+        "Diagnostics__DetailedErrors": "true"
       }
     },
     "network": {

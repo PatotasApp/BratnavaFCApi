@@ -101,6 +101,26 @@ public class EnvironmentGateTests
         Resolve<IReplayUrlService>("Development").Should().BeOfType<NoOpReplayUrlService>();
     }
 
+    [Fact]
+    public void Production_com_storage_de_imagens_desabilitado_usa_no_op()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=test;Username=u;Password=p;",
+                ["Cloudflare:R2:Images:Enabled"] = "false",
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddInfrastructure(configuration, new FakeEnvironment("Production"), NullLogger.Instance);
+
+        services.BuildServiceProvider()
+            .GetRequiredService<IImageStorageService>()
+            .Should().BeOfType<NoOpImageStorageService>();
+    }
+
     // ── Agendamento e handlers de job ────────────────────────────────────────
 
     [Theory]
