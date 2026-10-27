@@ -73,7 +73,7 @@ public sealed class CampeonatoFluxoTests : IClassFixture<CampeonatoPostgresFixtu
         var details = await Details(sut, groupId, id);
         details.Games.Should().HaveCount(3).And.OnlyContain(g => g.Status == ChampionshipGameStatus.Finished);
         details.Standings.Should().HaveCount(3);
-        details.TopScorers.Sum(s => s.Count).Should().Be(3);
+        details.TopScorers.Sum(s => s.Goals).Should().Be(3);
 
         // MVP do campeonato: todos que jogaram votam no artilheiro do time A.
         var teamAPlayers = details.Teams.First(t => t.Id == a).PlayerIds;

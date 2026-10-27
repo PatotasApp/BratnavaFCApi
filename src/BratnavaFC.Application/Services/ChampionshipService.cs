@@ -76,12 +76,12 @@ public sealed class ChampionshipService : IChampionshipService
 
         var topScorers = goals.Where(g => !g.IsOwnGoal)
             .GroupBy(g => playerIdByMatchPlayerId[g.ScorerMatchPlayerId])
-            .Select(g => new ChampionshipPlayerCountDto(g.Key, g.Count()))
-            .OrderByDescending(x => x.Count).ToList();
+            .Select(g => new ChampionshipScorerDto(g.Key, g.Count()))
+            .OrderByDescending(x => x.Goals).ToList();
         var topAssists = goals.Where(g => !g.IsOwnGoal && g.AssistMatchPlayerId.HasValue)
             .GroupBy(g => playerIdByMatchPlayerId[g.AssistMatchPlayerId!.Value])
-            .Select(g => new ChampionshipPlayerCountDto(g.Key, g.Count()))
-            .OrderByDescending(x => x.Count).ToList();
+            .Select(g => new ChampionshipAssistDto(g.Key, g.Count()))
+            .OrderByDescending(x => x.Assists).ToList();
 
         var mvps = championship.Rules.MvpMode == MvpMode.PerGame
             ? games.SelectMany(g => g.Players).Where(mp => mp.IsMvp == true).Select(mp => mp.PlayerId).Distinct().ToList()

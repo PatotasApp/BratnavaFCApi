@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace BratnavaFC.Domain.Championships;
 
 /// <summary>Como o campeonato aparece no histórico e nas estatísticas gerais.</summary>
@@ -100,6 +102,7 @@ public sealed record ChampionshipRuleSet(
         if (ChampionshipEnd is not null) _ = ToChampionshipEndOptions();
     }
 
+    [JsonIgnore]
     public int MinimumTeams => Format == ChampionshipFormat.WinnerStays ? 3 : 2;
 
     public GameEndOptions ToGameEndOptions() => new(

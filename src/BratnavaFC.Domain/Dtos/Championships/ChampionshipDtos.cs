@@ -103,7 +103,9 @@ public sealed record ChampionshipStandingDto(
     int Points,
     decimal PointsPerGame);
 
-public sealed record ChampionshipPlayerCountDto(Guid PlayerId, int Count);
+public sealed record ChampionshipScorerDto(Guid PlayerId, int Goals);
+
+public sealed record ChampionshipAssistDto(Guid PlayerId, int Assists);
 
 public sealed record ChampionshipMyVoteDto(Guid? GameId, Guid VotedPlayerId);
 
@@ -122,8 +124,8 @@ public sealed record ChampionshipDetailsDto(
     IReadOnlyList<ChampionshipStandingDto> Standings,
     Guid? CurrentGameId,
     IReadOnlyList<Guid> WaitingTeamIds,
-    IReadOnlyList<ChampionshipPlayerCountDto> TopScorers,
-    IReadOnlyList<ChampionshipPlayerCountDto> TopAssists,
+    IReadOnlyList<ChampionshipScorerDto> TopScorers,
+    IReadOnlyList<ChampionshipAssistDto> TopAssists,
     IReadOnlyList<Guid> MvpPlayerIds,
     InviteResponse? MyInviteResponse,
     bool CanVote,
