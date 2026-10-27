@@ -47,3 +47,27 @@ Presets prontos: "Fica quem ganha clássico", "Troca quem ganhou 2".
 ## Ainda em aberto
 - Mínimo de jogos para receber o resultado da colocação.
 - Sorteio para N times: começar simples (cobra por nota) ou esperar o novo algoritmo "Jogo Parelho" (em discussão separada).
+
+## Fase 3: como cada regra conta nas estatísticas (implementado em 27/10/2026)
+Só campeonatos **finalizados** contam. Tudo sai de uma fonte única (`ChampionshipStatsSource`), então histórico, relatório visual, spotlight e conquistas sempre batem entre si.
+
+| Regra | Efeito |
+|---|---|
+| Consolidado | 1 item no histórico e **1 partida** para cada jogador que jogou ao menos 1 jogo. |
+| Jogos separados | Cada jogo vira 1 partida (com selo do campeonato). |
+| Só no campeonato | Não aparece em nenhum histórico nem estatística geral. |
+| Resultado por jogo | V/E/D pelo placar (empate decidido nos pênaltis continua empate nas estatísticas). |
+| Colocação | Cada jogador recebe o resultado da posição do time dele (no consolidado: 1 vez; nos jogos separados: em cada jogo). Abaixo do mínimo de jogos: só presença. |
+| Vitória para todos | Vitória para todos que jogaram. |
+| Só presença | Conta a partida, sem V/E/D; não avança nem quebra sequências (invencibilidade, vitórias seguidas). |
+| Gols não contam | Gols, assistências, gols contra **e feitos** (hat-trick, clean sheet...) ficam fora; seguem visíveis só no campeonato. |
+| MVP não conta | MVPs e votos ficam fora. |
+
+**Decisões técnicas (revisáveis pelo Luis):**
+- **Feitos são por jogo, nunca da soma.** 3 gols em 3 jogos diferentes não são hat-trick. No consolidado, cada feito conta no máximo 1 vez (o campeonato vale 1 partida).
+- **MVP por jogo no consolidado conta no máximo 1** (vale 1 partida).
+- **Time do jogador no consolidado:** o time do último jogo dele (quem trocou de time fica com o time final).
+- **MVP do campeonato nos jogos separados:** fica no último jogo do jogador.
+- **Sorteio de times:** jogos de campeonato só entram com "Entra no sorteio" ligado, e pelo placar real.
+- **Team builder** (formações): só entram jogos que contam exatamente como partidas normais (jogos separados + V/E/D por jogo + gols e MVP contando). Nos outros modos o jogo não é uma partida normal entre 2 formações.
+- **Clientes antigos:** o histórico só traz campeonatos com `includeChampionships=true`. App/site que ainda não conhecem campeonato continuam vendo só partidas. Nas estatísticas (relatório, conquistas) o campeonato conta para todos.

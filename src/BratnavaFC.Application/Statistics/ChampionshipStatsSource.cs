@@ -6,8 +6,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BratnavaFC.Application.Statistics;
 
-/// <summary>Uma unidade de estatística vinda de um campeonato, com o que o histórico precisa mostrar.</summary>
-public sealed record ChampionshipUnit(StatMatch Stat, ChampionshipEntity Championship, MatchEntity? Game);
+/// <summary>
+/// Uma unidade de estatística vinda de um campeonato, com o que o histórico precisa mostrar.
+/// AnchorMatchId: partida real à qual a linha de contribuição se prende (FK para Matches):
+/// o próprio jogo, ou, no consolidado, o último jogo do campeonato.
+/// </summary>
+public sealed record ChampionshipUnit(StatMatch Stat, ChampionshipEntity Championship, MatchEntity? Game, Guid AnchorMatchId);
 
 /// <summary>
 /// Fase 3: transforma cada campeonato FINALIZADO em unidades de estatística conforme as regras dele.
@@ -54,10 +58,10 @@ public sealed class ChampionshipStatsSource
             if (champGames.Count == 0) continue;
 
             if (championship.Rules.HistoryMode == HistoryMode.Consolidated)
-                units.Add(new ChampionshipUnit(Consolidated(championship, champGames), championship, null));
+                units.Add(new ChampionshipUnit(Consolidated(championship, champGames), championship, null, champGames[^1].Id));
             else
                 units.AddRange(SeparateGames(championship, champGames)
-                    .Select(x => new ChampionshipUnit(x.Stat, championship, x.Game)));
+                    .Select(x => new ChampionshipUnit(x.Stat, championship, x.Game, x.Game.Id)));
         }
 
         return units;

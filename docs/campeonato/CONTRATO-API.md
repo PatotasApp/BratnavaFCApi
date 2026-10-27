@@ -1,6 +1,6 @@
 # Contrato da API do campeonato (Fases 1 e 2)
 
-Status: **v3 (27/10/2026) — implementado no backend (Fases 1 e 2)**. O backend implementa isto na Fase 1/2 e os clientes (Flutter e web) constroem em cima.
+Status: **v4 (27/10/2026) — implementado no backend (Fases 1, 2 e 3)**. O backend implementa isto na Fase 1/2 e os clientes (Flutter e web) constroem em cima.
 Mudanças no contrato: só por quem faz o backend, anotadas no histórico no fim deste arquivo.
 
 ## Convenções (as mesmas da API atual)
@@ -136,12 +136,34 @@ Mudanças no contrato: só por quem faz o backend, anotadas no histórico no fim
 { "teamAId", "teamBId", "reason": "Fica quem ganha: Azul ganhou e fica; entra Verde", "waitingTeamIds": [] }
 ```
 
+## Histórico com campeonatos (Fase 3)
+Os três endpoints de histórico aceitam `?includeChampionships=true` (padrão `false`, para clientes antigos não receberem itens que não sabem abrir):
+- `GET api/Matches/group/{groupId}/history`
+- `GET api/Matches/group/{groupId}/player-recent`
+- `GET api/Matches/group/{groupId}/player-history`
+
+Com o parâmetro, os itens de campeonato vêm misturados às partidas, por data, com campos extras (só presentes nesses itens):
+
+```jsonc
+// MatchHistoryItemDto (history)
+{ /* campos de sempre */, "kind": "championship" | "championshipGame", "championshipId", "championshipName",
+  "championTeamName", "championTeamColorHex", "ruleBadges": [...] }
+
+// PlayerRecentMatchDto (player-recent / player-history)
+{ /* campos de sempre */, "kind": "championship" | "championshipGame", "championshipId", "championshipName",
+  "playerResult": "W" | "D" | "L" | "N" }
+```
+- `kind = "championship"` (consolidado): `id`/`matchId` é o **id do campeonato**; abrir pela tela do campeonato. Placar vem 0x0 e não deve ser mostrado; no item do jogador, `teamAColorHex`/`teamAColorName` são a cor e o nome do time dele, e o resultado está em `playerResult` (pela regra, não pelo placar).
+- `kind = "championshipGame"`: `id`/`matchId` é o **id do jogo**; placar e cores são do jogo, mas abrir pela tela do campeonato (`championshipId`), porque o detalhe de partida não enxerga jogos de campeonato.
+- `playerResult = "N"`: só presença (sem V/E/D).
+- Gols/assistências/MVP do jogador nesses itens já seguem a regra do campeonato (se não contam, vêm 0/false).
+
 ## Fora deste contrato (fases seguintes)
 - Apostas do campeonato (mesma tela de apostas; categorias time campeão, menos vazado, artilheiro, maior assistente, MVP).
-- Card 🏆 no histórico e estatísticas conforme as regras (Fase 3).
 - Tempo real (SignalR) para a tela ao vivo: por enquanto o cliente faz polling de `GET /{id}` a cada ~5 s na tela ao vivo.
 
 ## Histórico
 - v1 (27/10/2026): primeira versão.
 - v2 (27/10/2026): **corrigido `InviteResponse`** (1 None · 2 Rejected · 3 Accepted, como no resto da API).
 - v3 (27/10/2026): implementado. Mudanças: goleiro passou para `PATCH /{id}/goalkeeper` (por time, vale para os próximos jogos); `myInviteResponse` é null para quem não participa; `photoUrl` ainda vem null; `POST /` responde `{ id }` com 201; `teams/draw` é provisório (goleiros primeiro, depois "cobra" pela nota).
+- v4 (27/10/2026): Fase 3. Histórico com `includeChampionships` e campos `kind`, `championshipId`, `championshipName`, `championTeamName`, `championTeamColorHex`, `ruleBadges`, `playerResult`. Nada mudou nos endpoints do campeonato.

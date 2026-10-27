@@ -69,10 +69,34 @@ Motor mesclado nesta branch (`51048fa`). Contrato: [CONTRATO-API.md](CONTRATO-AP
 - Sem notificações push nem tempo real (o cliente faz polling).
 - Ausências (`UserAbsence`) ainda não recusam o convite do campeonato automaticamente.
 - Respostas às 4 perguntas de regra do motor (seção abaixo).
-- **Fase 3** (estatísticas respeitando as regras): começou pelo mapeamento dos leitores e parou no disco cheio. Nada da Fase 3 foi escrito ainda.
+## Fase 3 — Estatísticas respeitando as regras ✅ (27/10/2026)
+Regras de contagem: [DECISOES.md](DECISOES.md), seção "Fase 3". Contrato do histórico: [CONTRATO-API.md](CONTRATO-API.md) v4.
 
-## ⚠️ Disco cheio (27/10, ~16h)
-O C: chegou a 0 GB livres no meio da Fase 3. `ChampionshipRuleSet.cs` foi truncado e restaurado do git; nenhum outro arquivo foi afetado. Para liberar espaço, apaguei só o `bin/obj` do worktree do motor (já mesclado). **Antes de continuar, é preciso liberar espaço** (builds e testes escrevem centenas de MB).
+| # | Passo | Status |
+|---|---|---|
+| 1 | Retrato golden das estatísticas sem campeonato, **antes** de refatorar (`Golden/estatisticas-sem-campeonato.txt`) | ✅ |
+| 2 | Fonte única `StatMatch` + `ChampionshipStatsSource` (campeonatos finalizados → unidades pelas regras) | ✅ |
+| 3 | Relatório visual e spotlight lendo da fonte única | ✅ golden idêntico |
+| 4 | Conquistas/projeções com linhas de campeonato (`ForChampionship`, resultado "N" = só presença) | ✅ |
+| 5 | Histórico geral, recentes e histórico do jogador com `?includeChampionships=true` | ✅ |
+| 6 | Sorteio (`EnrichPlayersAsync`) só com `IncludeInTeamDraw`; team builder só com jogos que contam como partida normal | ✅ |
+| 7 | Reconstrução das conquistas ao finalizar o campeonato | ✅ |
+| 8 | Matriz `CampeonatoEstatisticasTests`: 8 combinações de regras + campeonato não finalizado; histórico = relatório = conquistas, jogador a jogador | ✅ |
+| 9 | Suíte completa | ✅ 1575 aprovados, 0 falhas |
+
+### Para quem continuar
+- Arquivos: `src/BratnavaFC.Application/Statistics/` (`StatMatch`, `ChampionshipStatsSource`, `ChampionshipHistoryItems`).
+- A linha de contribuição do consolidado fica presa ao **último jogo** do campeonato (FK para `Matches`). O Postgres pegou isso; o banco em memória não pegaria.
+- O retrato golden só deve mudar de propósito: `UPDATE_GOLDEN=1 dotnet test --filter EstatisticasSemCampeonato`.
+- **Os clientes (Flutter/web) ainda não usam `includeChampionships`**: falta o card 🏆 no histórico e o tratamento de `kind` nas listas do jogador.
+
+### Próximos passos
+- Cores dos times (pedido do Luis) e ligar o sorteio de N times da outra IA.
+- Apostas do campeonato (mesma tela; time campeão, menos vazado, artilheiro, maior assistente, MVP).
+- Clientes: card 🏆 no histórico + `kind` nas listas do jogador (bom para a outra IA, seguindo o contrato v4).
+
+## Disco cheio (27/10, ~16h) — resolvido
+O C: chegou a 0 GB livres no meio da Fase 3. `ChampionshipRuleSet.cs` foi truncado e restaurado do git; nenhum outro arquivo foi afetado. O Luis autorizou a limpeza de caches (NuGet, npm, Gradle) e de imagens/emuladores Android sem uso: ~49 GB liberados.
 
 ## Trabalho paralelo
 - **Motor de formatos e classificação** ✅: outra IA, branch `feature/campeonato-motor` (commits `c068138` + `87033ce`), worktree `C:\Users\lhnme\source\repos\BratnavaFCApi-campeonato-motor`.

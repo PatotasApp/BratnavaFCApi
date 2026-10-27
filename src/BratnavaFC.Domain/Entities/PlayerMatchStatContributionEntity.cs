@@ -55,7 +55,7 @@ public sealed class PlayerMatchStatContributionEntity : BaseEntity
     }
 
     /// <summary>
-    /// Linha de um campeonato (Fase 3). <paramref name="result"/> pode ser "N" (só presença:
+    /// Linha de um campeonato (Fase 3), presa a uma partida real (no consolidado, o último jogo). <paramref name="result"/> pode ser "N" (só presença:
     /// conta o jogo, sem V/E/D). Os feitos vêm prontos porque, no consolidado, a unidade junta
     /// vários jogos e hat-trick/clean sheet são por jogo, nunca da soma.
     /// </summary>

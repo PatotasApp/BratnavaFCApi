@@ -69,7 +69,7 @@ public sealed class ConquistaProjectionService : IConquistaProjectionService
 
         // Campeonatos finalizados entram conforme as regras de cada um (Fase 3).
         var units = await new ChampionshipStatsSource(_db).GetUnitsAsync(groupId, ct);
-        contributions.AddRange(BuildChampionshipContributions(units.Select(u => u.Stat)));
+        contributions.AddRange(BuildChampionshipContributions(units));
 
         await using var transaction = await _db.Database.BeginTransactionAsync(ct);
         await _db.PlayerMatchStatContributions.Where(x => x.GroupId == groupId).ExecuteDeleteAsync(ct);
@@ -81,10 +81,11 @@ public sealed class ConquistaProjectionService : IConquistaProjectionService
         await transaction.CommitAsync(ct);
     }
 
-    private static IEnumerable<PlayerMatchStatContributionEntity> BuildChampionshipContributions(IEnumerable<StatMatch> units)
+    private static IEnumerable<PlayerMatchStatContributionEntity> BuildChampionshipContributions(IEnumerable<ChampionshipUnit> championshipUnits)
     {
-        foreach (var unit in units)
+        foreach (var championshipUnit in championshipUnits)
         {
+            var unit = championshipUnit.Stat;
             var season = TimeZoneInfo.ConvertTime(unit.PlayedAt, BrazilTz).Year;
             foreach (var side in unit.Sides)
             {
@@ -101,7 +102,7 @@ public sealed class ConquistaProjectionService : IConquistaProjectionService
                         p.IsGoalkeeper && side.GoalsAgainst == 0 ? 1 : 0);
 
                     yield return PlayerMatchStatContributionEntity.ForChampionship(
-                        unit.Id, unit.GroupId, p.PlayerId, season, unit.PlayedAt, ResultCode(p.Result),
+                        championshipUnit.AnchorMatchId, unit.GroupId, p.PlayerId, season, unit.PlayedAt, ResultCode(p.Result),
                         p.IsGoalkeeper, goals, assists, p.IsMvp ? 1 : 0, ownGoals,
                         feats.HatTricks, feats.Pokers, feats.FiveGoalGames, feats.GoalAndAssistGames,
                         feats.ThreeAssistGames, feats.CleanSheets);
