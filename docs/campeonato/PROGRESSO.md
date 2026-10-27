@@ -64,7 +64,8 @@ Motor mesclado nesta branch (`51048fa`). Contrato: [CONTRATO-API.md](CONTRATO-AP
 
 ### Pendências
 - `photoUrl` dos participantes ainda vem null.
-- Sorteio de N times é provisório (goleiros primeiro, depois "cobra" pela nota).
+- Sorteio de N times é provisório (goleiros primeiro, depois "cobra" pela nota). O sorteio real está no [PROMPT-OUTRA-IA-4.md](PROMPT-OUTRA-IA-4.md) (outra IA, branch `feature/campeonato-sorteio`); depois eu ligo no `DrawTeamsAsync`.
+- Cores dos times (pedido do Luis, 27/10): falta sortear cores aleatórias como nas partidas, avisar quando houver mais times que cores ativas, e permitir trocar nome/cor do time depois de iniciado. Fazer logo após a Fase 3.
 - Sem notificações push nem tempo real (o cliente faz polling).
 - Ausências (`UserAbsence`) ainda não recusam o convite do campeonato automaticamente.
 - Respostas às 4 perguntas de regra do motor (seção abaixo).
