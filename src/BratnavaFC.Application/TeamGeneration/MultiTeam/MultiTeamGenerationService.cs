@@ -54,6 +54,8 @@ public sealed class MultiTeamGenerationService
         HashSet<Guid> goalkeeperSet = goalkeeperIds.ToHashSet();
         List<Guid> startingGoalkeepers = players
             .Where(player => goalkeeperSet.Contains(player.Id))
+            .OrderByDescending(player => strengths[player.Id])
+            .ThenBy(player => player.Id)
             .Take(teamCount)
             .Select(player => player.Id)
             .ToList();

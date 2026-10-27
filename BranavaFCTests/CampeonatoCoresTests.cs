@@ -1,4 +1,5 @@
 using BratnavaFC.Application.Services;
+using BratnavaFC.Application.TeamGeneration.MultiTeam;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Championships;
 using BratnavaFC.Domain.Entities;
@@ -135,7 +136,7 @@ public sealed class CampeonatoCoresTests : IClassFixture<CampeonatoPostgresFixtu
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
 
-        var sut = new ChampionshipService(db);
+        var sut = new ChampionshipService(db, new MultiTeamGenerationService(new FakeStatsService([])));
         var id = Ok(await sut.CreateAsync(group.Id, new CreateChampionshipDto("Torneio", new DateTime(2026, 12, 20, 13, 0, 0, DateTimeKind.Utc), "Arena", null), Ct)).Id;
         Ok(await sut.OpenAcceptationAsync(group.Id, id, Ct));
         foreach (var p in players)

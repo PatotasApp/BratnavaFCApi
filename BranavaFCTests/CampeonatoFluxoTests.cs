@@ -1,5 +1,6 @@
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
+using BratnavaFC.Application.TeamGeneration.MultiTeam;
 using BratnavaFC.Domain.Championships;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Championships;
@@ -26,7 +27,7 @@ public sealed class CampeonatoFluxoTests : IClassFixture<CampeonatoPostgresFixtu
     {
         await using var db = await _fixture.CreateDatabaseAsync(nameof(FicaQuemGanha_FluxoCompleto_ClassificaVotaEFinaliza));
         var (groupId, players) = await SeedGroupAsync(db, 9);
-        var sut = new ChampionshipService(db);
+        var sut = new ChampionshipService(db, new MultiTeamGenerationService(new FakeStatsService([])));
 
         var id = Ok(await sut.CreateAsync(groupId, new CreateChampionshipDto("Torneio de Natal", Day(), "Arena", null), Ct)).Id;
         Ok(await sut.OpenAcceptationAsync(groupId, id, Ct));
@@ -107,7 +108,7 @@ public sealed class CampeonatoFluxoTests : IClassFixture<CampeonatoPostgresFixtu
     {
         await using var db = await _fixture.CreateDatabaseAsync(nameof(TodosContraTodosMaisFinal_EmpateNaFinalExigePenaltis_EColocacao));
         var (groupId, players) = await SeedGroupAsync(db, 8);
-        var sut = new ChampionshipService(db);
+        var sut = new ChampionshipService(db, new MultiTeamGenerationService(new FakeStatsService([])));
 
         var rules = ChampionshipEntity.DefaultRules with
         {
@@ -152,7 +153,7 @@ public sealed class CampeonatoFluxoTests : IClassFixture<CampeonatoPostgresFixtu
     {
         await using var db = await _fixture.CreateDatabaseAsync(nameof(RegrasInvalidas_SaoRecusadas_ECancelarApagaJogosAbertos));
         var (groupId, players) = await SeedGroupAsync(db, 6);
-        var sut = new ChampionshipService(db);
+        var sut = new ChampionshipService(db, new MultiTeamGenerationService(new FakeStatsService([])));
 
         var invalid = ChampionshipEntity.DefaultRules with { ResultMode = ResultMode.PerGame };
         var refused = await sut.CreateAsync(groupId, new CreateChampionshipDto("X", Day(), "Arena", invalid), Ct);
