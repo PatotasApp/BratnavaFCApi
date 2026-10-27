@@ -1,6 +1,6 @@
 # Contrato da API do campeonato (Fases 1 e 2)
 
-Status: **v4 (27/10/2026) — implementado no backend (Fases 1, 2 e 3)**. O backend implementa isto na Fase 1/2 e os clientes (Flutter e web) constroem em cima.
+Status: **v5 (27/10/2026) — implementado no backend (Fases 1, 2 e 3 + cores)**. O backend implementa isto na Fase 1/2 e os clientes (Flutter e web) constroem em cima.
 Mudanças no contrato: só por quem faz o backend, anotadas no histórico no fim deste arquivo.
 
 ## Convenções (as mesmas da API atual)
@@ -83,9 +83,11 @@ Mudanças no contrato: só por quem faz o backend, anotadas no histórico no fim
 ### Times [admin]
 | Método | Rota | Corpo |
 |---|---|---|
-| POST | `/{id}/teams/draw` | `{ "teamCount": 3 }` → `DefineTeamsDto` sugerido (não salva) |
+| POST | `/{id}/teams/draw` | `{ "teamCount": 3 }` → `DefineTeamsDto` sugerido (não salva); cores sorteadas entre as ativas da patota; `message` avisa se houver menos cores que times |
 | PUT | `/{id}/teams` | `DefineTeamsDto` (vai para TeamDraw e salva) |
 | PATCH | `/{id}/players/{playerId}/team` | `{ "teamId": "guid" }` (atrasado/troca; não muda jogos já feitos) |
+| POST | `/{id}/teams/colors/draw` | — (sorteia cores ativas da patota, sem repetir; `message` traz o aviso se faltarem cores) |
+| PATCH | `/{id}/teams/{teamId}` | `{ "name": "Azul", "colorId": "guid\|null" }` (renomear/trocar cor até finalizar; vale para os próximos jogos) |
 
 ### Jogos [admin]
 | Método | Rota | Corpo |
@@ -167,3 +169,4 @@ Com o parâmetro, os itens de campeonato vêm misturados às partidas, por data,
 - v2 (27/10/2026): **corrigido `InviteResponse`** (1 None · 2 Rejected · 3 Accepted, como no resto da API).
 - v3 (27/10/2026): implementado. Mudanças: goleiro passou para `PATCH /{id}/goalkeeper` (por time, vale para os próximos jogos); `myInviteResponse` é null para quem não participa; `photoUrl` ainda vem null; `POST /` responde `{ id }` com 201; `teams/draw` é provisório (goleiros primeiro, depois "cobra" pela nota).
 - v4 (27/10/2026): Fase 3. Histórico com `includeChampionships` e campos `kind`, `championshipId`, `championshipName`, `championTeamName`, `championTeamColorHex`, `ruleBadges`, `playerResult`. Nada mudou nos endpoints do campeonato.
+- v5 (27/10/2026): cores dos times. `POST /{id}/teams/colors/draw` e `PATCH /{id}/teams/{teamId}`; `teams/draw` sorteia as cores. Só cores **ativas da própria patota** são aceitas (em `PUT /teams` também). Quando há menos cores que times, a resposta tem `success: true` e o aviso vem em `message` (ex.: "Ha so 2 cor(es) ativa(s) para 3 times: 1 time(s) ficaram sem cor. Cadastre mais cores em Cores dos times."). O cliente deve mostrar esse `message` ao admin.

@@ -19,6 +19,8 @@ public sealed record DefineTeamsDto(List<DefineTeamDto> Teams);
 
 public sealed record MovePlayerDto(Guid? TeamId);
 
+public sealed record UpdateChampionshipTeamDto(string Name, Guid? ColorId);
+
 public sealed record CreateChampionshipGameDto(Guid TeamAId, Guid TeamBId);
 
 public sealed record ChampionshipGoalDto(Guid ScorerPlayerId, Guid? AssistPlayerId, bool IsOwnGoal, int? TimeSeconds);

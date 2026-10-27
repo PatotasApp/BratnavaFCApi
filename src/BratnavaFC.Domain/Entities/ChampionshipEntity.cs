@@ -207,6 +207,39 @@ public class ChampionshipEntity : BaseEntity
         Status = ChampionshipStatus.TeamDraw;
     }
 
+    /// <summary>
+    /// Renomeia ou troca a cor de um time, inclusive com o campeonato em andamento.
+    /// Vale para os próximos jogos; os jogos já criados guardam as cores com que foram jogados.
+    /// </summary>
+    public void UpdateTeam(Guid teamId, string name, Guid? colorId)
+    {
+        EnsureTeamsEditable();
+        var team = Teams.FirstOrDefault(t => t.Id == teamId)
+            ?? throw new InvalidOperationException("Time nao encontrado neste campeonato.");
+
+        if (colorId.HasValue && Teams.Any(t => t.Id != teamId && t.ColorId == colorId))
+            throw new InvalidOperationException("Dois times nao podem ter a mesma cor.");
+
+        team.Rename(name);
+        team.SetColor(colorId);
+    }
+
+    /// <summary>Aplica as cores sorteadas (ou nenhuma) a cada time. As cores não podem repetir.</summary>
+    public void SetTeamColors(IReadOnlyDictionary<Guid, Guid?> colorByTeam)
+    {
+        EnsureTeamsEditable();
+        var colors = colorByTeam.Values.Where(c => c.HasValue).ToList();
+        if (colors.Count != colors.Distinct().Count())
+            throw new InvalidOperationException("Dois times nao podem ter a mesma cor.");
+
+        foreach (var team in Teams)
+            team.SetColor(colorByTeam.TryGetValue(team.Id, out var color) ? color : null);
+    }
+
+    private void EnsureTeamsEditable() =>
+        EnsureStatusIn("So e possivel alterar os times depois de definidos e antes de finalizar o campeonato.",
+            ChampionshipStatus.TeamDraw, ChampionshipStatus.InProgress, ChampionshipStatus.PostGame);
+
     /// <summary>Troca o time de um jogador (ex.: chegou atrasado). Não altera jogos já feitos.</summary>
     public void MovePlayer(Guid playerId, Guid? teamId)
     {

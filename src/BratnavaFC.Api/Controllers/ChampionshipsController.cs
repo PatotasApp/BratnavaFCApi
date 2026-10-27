@@ -105,6 +105,14 @@ public class ChampionshipsController : GroupAuthorizedController
     public Task<IActionResult> MovePlayer(Guid groupId, Guid championshipId, Guid playerId, [FromBody] MovePlayerDto dto, CancellationToken ct) =>
         AsAdmin(groupId, ct, () => _service.MovePlayerAsync(groupId, championshipId, playerId, dto.TeamId, ct));
 
+    [HttpPost("{championshipId:guid}/teams/colors/draw")]
+    public Task<IActionResult> DrawTeamColors(Guid groupId, Guid championshipId, CancellationToken ct) =>
+        AsAdmin(groupId, ct, () => _service.DrawTeamColorsAsync(groupId, championshipId, ct));
+
+    [HttpPatch("{championshipId:guid}/teams/{teamId:guid}")]
+    public Task<IActionResult> UpdateTeam(Guid groupId, Guid championshipId, Guid teamId, [FromBody] UpdateChampionshipTeamDto dto, CancellationToken ct) =>
+        AsAdmin(groupId, ct, () => _service.UpdateTeamAsync(groupId, championshipId, teamId, dto, ct));
+
     [HttpPatch("{championshipId:guid}/goalkeeper")]
     public Task<IActionResult> SetGoalkeeper(Guid groupId, Guid championshipId, [FromBody] SetGameGoalkeeperDto dto, CancellationToken ct) =>
         AsAdmin(groupId, ct, () => _service.SetTeamGoalkeeperAsync(groupId, championshipId, dto, ct));

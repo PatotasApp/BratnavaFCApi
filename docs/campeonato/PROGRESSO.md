@@ -90,8 +90,15 @@ Regras de contagem: [DECISOES.md](DECISOES.md), seção "Fase 3". Contrato do hi
 - O retrato golden só deve mudar de propósito: `UPDATE_GOLDEN=1 dotnet test --filter EstatisticasSemCampeonato`.
 - **Os clientes (Flutter/web) ainda não usam `includeChampionships`**: falta o card 🏆 no histórico e o tratamento de `kind` nas listas do jogador.
 
+## Cores dos times ✅ (27/10/2026)
+- Sorteio de cores entre as cores **ativas da patota**, sem repetir (`POST /{id}/teams/colors/draw`); `teams/draw` também sorteia.
+- Aviso em `message` quando há menos cores que times (os que sobram ficam sem cor).
+- Renomear/trocar cor do time até finalizar (`PATCH /{id}/teams/{teamId}`); vale para os próximos jogos, e os jogos já jogados guardam a cor original.
+- `CampeonatoCoresTests` (4 testes, Postgres). Contrato v5.
+- Achado fora do campeonato (não corrigido): o sorteio de cores das **partidas** (`MatchService`, `SetTeamColorsRandomly`) usa `_context.TeamColors` sem filtrar patota nem cor ativa, então pode sortear a cor de outra patota.
+
 ### Próximos passos
-- Cores dos times (pedido do Luis) e ligar o sorteio de N times da outra IA.
+- Ligar o sorteio de N times da outra IA (prompt 4).
 - Apostas do campeonato (mesma tela; time campeão, menos vazado, artilheiro, maior assistente, MVP).
 - Clientes: card 🏆 no histórico + `kind` nas listas do jogador (bom para a outra IA, seguindo o contrato v4).
 

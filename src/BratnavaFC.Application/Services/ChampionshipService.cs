@@ -242,11 +242,7 @@ public sealed class ChampionshipService : IChampionshipService
         static double Strength(PlayerEntity p) =>
             p.OverallRating ?? (p.GuestStarRating.HasValue ? p.GuestStarRating.Value * 2 : (double)p.SkillPoints);
 
-        var colors = await _db.TeamColors.AsNoTracking()
-            .Where(c => c.GroupId == groupId && c.IsActive)
-            .OrderBy(c => c.Name)
-            .Take(teamCount)
-            .ToListAsync(ct);
+        var colors = (await ActiveColorsShuffledAsync(groupId, ct)).Take(teamCount).ToList();
 
         var teams = Enumerable.Range(0, teamCount).Select(i => new DefineTeamDto(
             i < colors.Count ? colors[i].Name : $"Time {i + 1}",
@@ -271,16 +267,13 @@ public sealed class ChampionshipService : IChampionshipService
             teams[teamIndex].PlayerIds.Add(field[i].PlayerId);
         }
 
-        return Result<DefineTeamsDto>.Ok(new DefineTeamsDto(teams));
+        return Result<DefineTeamsDto>.Ok(new DefineTeamsDto(teams), ColorShortageWarning(teamCount, colors.Count));
     }
 
     public Task<Result> DefineTeamsAsync(Guid groupId, Guid championshipId, DefineTeamsDto dto, CancellationToken ct) =>
         Mutate(groupId, championshipId, ct, async c =>
         {
-            var colorIds = dto.Teams.Where(t => t.ColorId.HasValue).Select(t => t.ColorId!.Value).ToList();
-            var validColors = await _db.TeamColors.CountAsync(tc => tc.GroupId == groupId && colorIds.Contains(tc.Id), ct);
-            if (validColors != colorIds.Distinct().Count())
-                throw new InvalidOperationException("Cor de time invalida para esta patota.");
+            await EnsureActiveGroupColorsAsync(groupId, dto.Teams.Select(t => t.ColorId), ct);
 
             c.DefineTeams(dto.Teams
                 .Select(t => new ChampionshipEntity.TeamSpec(t.Name, t.ColorId, t.PlayerIds ?? [], t.GoalkeeperPlayerId))
@@ -293,6 +286,59 @@ public sealed class ChampionshipService : IChampionshipService
             c.MovePlayer(playerId, teamId);
             return Task.CompletedTask;
         });
+
+    /// <summary>
+    /// Sorteia as cores dos times entre as cores ativas da patota, sem repetir. Com menos cores
+    /// que times, os que sobram ficam sem cor e a resposta traz o aviso. Vale para os próximos jogos.
+    /// </summary>
+    public async Task<Result> DrawTeamColorsAsync(Guid groupId, Guid championshipId, CancellationToken ct)
+    {
+        string? warning = null;
+        var result = await Mutate(groupId, championshipId, ct, async c =>
+        {
+            var colors = await ActiveColorsShuffledAsync(groupId, ct);
+            var teams = c.Teams.OrderBy(t => t.Order).ToList();
+            c.SetTeamColors(teams
+                .Select((team, i) => (team.Id, Color: i < colors.Count ? colors[i].Id : (Guid?)null))
+                .ToDictionary(x => x.Id, x => x.Color));
+            warning = ColorShortageWarning(teams.Count, colors.Count);
+        });
+
+        return result.Success ? Result.Ok(warning ?? "Cores sorteadas.") : result;
+    }
+
+    public Task<Result> UpdateTeamAsync(Guid groupId, Guid championshipId, Guid teamId, UpdateChampionshipTeamDto dto, CancellationToken ct) =>
+        Mutate(groupId, championshipId, ct, async c =>
+        {
+            await EnsureActiveGroupColorsAsync(groupId, [dto.ColorId], ct);
+            c.UpdateTeam(teamId, dto.Name, dto.ColorId);
+        });
+
+    private async Task<List<TeamColorEntity>> ActiveColorsShuffledAsync(Guid groupId, CancellationToken ct)
+    {
+        var colors = await _db.TeamColors.AsNoTracking()
+            .Where(c => c.GroupId == groupId && c.IsActive)
+            .ToListAsync(ct);
+        return colors.OrderBy(_ => Random.Shared.Next()).ToList();
+    }
+
+    /// <summary>Só cores ativas da própria patota podem ser usadas.</summary>
+    private async Task EnsureActiveGroupColorsAsync(Guid groupId, IEnumerable<Guid?> colorIds, CancellationToken ct)
+    {
+        var ids = colorIds.Where(id => id.HasValue).Select(id => id!.Value).Distinct().ToList();
+        if (ids.Count == 0) return;
+
+        var valid = await _db.TeamColors.CountAsync(tc => tc.GroupId == groupId && tc.IsActive && ids.Contains(tc.Id), ct);
+        if (valid != ids.Count)
+            throw new InvalidOperationException("Cor de time invalida: use uma cor ativa desta patota.");
+    }
+
+    /// <summary>Aviso para o admin quando há menos cores ativas que times.</summary>
+    private static string? ColorShortageWarning(int teamCount, int colorCount) =>
+        colorCount >= teamCount
+            ? null
+            : $"Ha so {colorCount} cor(es) ativa(s) para {teamCount} times: {teamCount - colorCount} time(s) ficaram sem cor. " +
+              "Cadastre mais cores em Cores dos times.";
 
     public Task<Result> SetTeamGoalkeeperAsync(Guid groupId, Guid championshipId, SetGameGoalkeeperDto dto, CancellationToken ct) =>
         Mutate(groupId, championshipId, ct, c =>

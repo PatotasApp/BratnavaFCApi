@@ -28,4 +28,12 @@ public class ChampionshipTeamEntity : BaseEntity
     public int? FinalPosition { get; private set; }
 
     internal void SetFinalPosition(int? position) => FinalPosition = position;
+
+    internal void Rename(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("Nome do time e obrigatorio.");
+        Name = name.Trim();
+    }
+
+    internal void SetColor(Guid? colorId) => ColorId = colorId;
 }

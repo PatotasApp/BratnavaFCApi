@@ -22,6 +22,8 @@ public interface IChampionshipService
     Task<Result<DefineTeamsDto>> DrawTeamsAsync(Guid groupId, Guid championshipId, int teamCount, CancellationToken ct);
     Task<Result> DefineTeamsAsync(Guid groupId, Guid championshipId, DefineTeamsDto dto, CancellationToken ct);
     Task<Result> MovePlayerAsync(Guid groupId, Guid championshipId, Guid playerId, Guid? teamId, CancellationToken ct);
+    Task<Result> DrawTeamColorsAsync(Guid groupId, Guid championshipId, CancellationToken ct);
+    Task<Result> UpdateTeamAsync(Guid groupId, Guid championshipId, Guid teamId, UpdateChampionshipTeamDto dto, CancellationToken ct);
 
     Task<Result> StartAsync(Guid groupId, Guid championshipId, CancellationToken ct);
     Task<Result<ChampionshipGameCreatedDto>> CreateGameAsync(Guid groupId, Guid championshipId, CreateChampionshipGameDto dto, CancellationToken ct);
