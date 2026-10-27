@@ -10,6 +10,9 @@ public class VoteEntityConfiguration : IEntityTypeConfiguration<VoteEntity>
     {
         builder.HasKey(x => x.Id);
 
+        // Mesmo filtro da partida: votos de jogos de campeonato ficam fora das consultas comuns.
+        builder.HasQueryFilter(x => x.Match!.ChampionshipId == null);
+
         builder.HasOne(x => x.Match)
             .WithMany(x => x.Votes)
             .HasForeignKey(x => x.MatchId)

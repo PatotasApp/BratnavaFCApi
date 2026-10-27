@@ -116,6 +116,45 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.ToTable("CalendarEvents");
                 });
 
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.ChampionshipEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PlaceName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("PlayedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<short>("Status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0);
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GroupId", "PlayedAt");
+
+                    b.ToTable("Championships");
+                });
+
             modelBuilder.Entity("BratnavaFC.Domain.Entities.ExtraChargeEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -661,6 +700,9 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<DateTime?>("ActualStartTime")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("ChampionshipId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("CreateDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -698,6 +740,8 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ChampionshipId");
 
                     b.HasIndex("LinkedPollId");
 
@@ -1917,6 +1961,17 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Navigation("Category");
                 });
 
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.ChampionshipEntity", b =>
+                {
+                    b.HasOne("BratnavaFC.Domain.Entities.GroupEntity", "Group")
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Group");
+                });
+
             modelBuilder.Entity("BratnavaFC.Domain.Entities.ExtraChargeEntity", b =>
                 {
                     b.HasOne("BratnavaFC.Domain.Entities.GroupEntity", "Group")
@@ -2084,6 +2139,11 @@ namespace BratnavaFC.Infrastructure.Migrations
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.MatchEntity", b =>
                 {
+                    b.HasOne("BratnavaFC.Domain.Entities.ChampionshipEntity", "Championship")
+                        .WithMany("Matches")
+                        .HasForeignKey("ChampionshipId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("BratnavaFC.Domain.Entities.GroupEntity", "Group")
                         .WithMany()
                         .HasForeignKey("GroupId")
@@ -2104,6 +2164,8 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("TeamBColorId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Championship");
 
                     b.Navigation("Group");
 
@@ -2344,6 +2406,11 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Navigation("VotedFor");
 
                     b.Navigation("Voter");
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.ChampionshipEntity", b =>
+                {
+                    b.Navigation("Matches");
                 });
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.ExtraChargeEntity", b =>

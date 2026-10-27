@@ -57,5 +57,10 @@ public class MatchEntityConfiguration : IEntityTypeConfiguration<MatchEntity>
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(x => new { x.GroupId, x.PlayedAt });
+        builder.HasIndex(x => x.ChampionshipId);
+
+        // Jogos de campeonato só aparecem para quem pede explicitamente (IgnoreQueryFilters),
+        // para não entrarem em histórico e estatísticas sem respeitar as regras do campeonato.
+        builder.HasQueryFilter(x => x.ChampionshipId == null);
     }
 }

@@ -48,6 +48,7 @@ public class AppDbContext : DbContext
     public DbSet<PlayerMatchStatContributionEntity> PlayerMatchStatContributions => Set<PlayerMatchStatContributionEntity>();
     public DbSet<PlayerStatProjectionEntity> PlayerStatProjections => Set<PlayerStatProjectionEntity>();
     public DbSet<SeasonTitleEntity> SeasonTitles => Set<SeasonTitleEntity>();
+    public DbSet<ChampionshipEntity> Championships => Set<ChampionshipEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -70,6 +71,7 @@ public class AppDbContext : DbContext
         modelBuilder.ApplyConfiguration(new PlayerMatchStatContributionEntityConfiguration());
         modelBuilder.ApplyConfiguration(new PlayerStatProjectionEntityConfiguration());
         modelBuilder.ApplyConfiguration(new SeasonTitleEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new ChampionshipEntityConfiguration());
 
         // ── Users / Groups ───────────────────────────────────────────────────
         modelBuilder.ApplyConfiguration(new PlayerEntityConfiguration());

@@ -197,8 +197,15 @@ public class GroupService : IGroupService
         // Partidas levam MatchPlayers, Votes e Goals pelo CASCADE de MatchId; a patota leva
         // GroupAdmins, GroupInvites, Polls e os financeiros. Carregadas aqui só as quatro que
         // o banco se recusa a cascatear (FK GroupId = Restrict), mais a própria patota.
+        // IgnoreQueryFilters: jogos de campeonato também são partidas da patota e têm de sair
+        // junto. Campeonatos também apontam para Groups com Restrict; o EF apaga os jogos
+        // (dependentes) antes do campeonato.
         _context.Matches.RemoveRange(
-            await _context.Matches.Where(x => groupIds.Contains(x.GroupId)).ToListAsync(cancellationToken));
+            await _context.Matches.IgnoreQueryFilters()
+                .Where(x => groupIds.Contains(x.GroupId)).ToListAsync(cancellationToken));
+
+        _context.Championships.RemoveRange(
+            await _context.Championships.Where(x => groupIds.Contains(x.GroupId)).ToListAsync(cancellationToken));
 
         _context.TeamColors.RemoveRange(
             await _context.TeamColors.Where(x => groupIds.Contains(x.GroupId)).ToListAsync(cancellationToken));

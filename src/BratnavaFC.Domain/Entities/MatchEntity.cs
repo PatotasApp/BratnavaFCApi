@@ -49,6 +49,21 @@ public class MatchEntity : BaseEntity
         UpdateDate   = DateTime.UtcNow;
     }
 
+    /// <summary>
+    /// Campeonato ao qual este jogo pertence. Null para partidas comuns.
+    /// Jogos de campeonato ficam fora das consultas de partidas por filtro global.
+    /// </summary>
+    public Guid? ChampionshipId { get; private set; }
+    public ChampionshipEntity? Championship { get; private set; }
+
+    public void AssignToChampionship(Guid championshipId)
+    {
+        EnsureStatus(MatchStatus.Created, "So e possivel vincular a partida a um campeonato quando ela esta Created.");
+        if (championshipId == Guid.Empty) throw new InvalidOperationException("ChampionshipId e obrigatorio.");
+
+        ChampionshipId = championshipId;
+    }
+
     public void OpenAcceptation()
     {
         EnsureStatus(MatchStatus.Created, "So e possivel abrir acceptation quando a partida esta Created.");

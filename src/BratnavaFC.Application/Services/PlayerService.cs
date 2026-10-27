@@ -149,7 +149,9 @@ public class PlayerService : IPlayerService
 
             // A player who appeared in any match past the pre-game phase is part of match
             // history and must not be deleted (they'd leave orphaned stats / goals / votes).
+            // IgnoreQueryFilters: jogos de campeonato também contam como histórico.
             var hasMatchHistory = await _context.MatchPlayers
+                .IgnoreQueryFilters()
                 .AnyAsync(
                     mp => mp.PlayerId == playerId &&
                           mp.Match!.Status != MatchStatus.Created &&
@@ -162,6 +164,7 @@ public class PlayerService : IPlayerService
             // Remove any pending pre-game invitations before deleting the player row,
             // otherwise the FK on MatchPlayers.PlayerId would reject the DELETE.
             var preGameInvites = await _context.MatchPlayers
+                .IgnoreQueryFilters()
                 .Where(mp => mp.PlayerId == playerId)
                 .ToListAsync(cancellationToken);
 

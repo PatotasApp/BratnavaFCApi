@@ -11,6 +11,9 @@ public class MatchPlayerEntityConfiguration : IEntityTypeConfiguration<MatchPlay
     {
         builder.HasKey(x => x.Id);
 
+        // Mesmo filtro da partida: MatchPlayers também é consultado direto (sinergia, apostas).
+        builder.HasQueryFilter(x => x.Match!.ChampionshipId == null);
+
         builder.Property(x => x.InviteResponse)
             .HasDefaultValue(InviteResponse.None);
 

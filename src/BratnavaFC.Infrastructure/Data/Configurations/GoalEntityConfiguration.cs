@@ -9,6 +9,9 @@ public class GoalEntityConfiguration : IEntityTypeConfiguration<GoalEntity>
     public void Configure(EntityTypeBuilder<GoalEntity> builder)
     {
         builder.HasKey(x => x.Id);
+
+        // Mesmo filtro da partida: gols de jogos de campeonato ficam fora das consultas comuns.
+        builder.HasQueryFilter(x => x.Match!.ChampionshipId == null);
         builder.Property(x => x.Id).ValueGeneratedNever();
 
         builder.Property(x => x.MatchId).IsRequired();
