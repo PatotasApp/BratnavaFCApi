@@ -34,11 +34,13 @@ public enum MvpMode
     None = 3
 }
 
-public sealed record WinnerStaysRule(int ConsecutiveWinsLimit, WinnerStaysTieRule TieRule);
+/// <summary>LimitRule: quem sai ao atingir o limite de vitórias seguidas (com 3 times, sempre só o vencedor).</summary>
+public sealed record WinnerStaysRule(
+    int ConsecutiveWinsLimit,
+    WinnerStaysTieRule TieRule,
+    WinnerStaysLimitRule LimitRule = WinnerStaysLimitRule.WinnerLeaves);
 
 public sealed record GameEndRule(int? TimeLimitMinutes, int? GoalLimit);
-
-public sealed record ChampionshipEndRule(ChampionshipEndMode Mode, int? TotalTimeMinutes, int? NumberOfGames);
 
 public sealed record StandingsRule(
     StandingMode Mode,
@@ -49,6 +51,7 @@ public sealed record StandingsRule(
 /// <summary>
 /// Regras escolhidas pelo admin ao criar o campeonato. Também é o DTO do contrato
 /// (ChampionshipRulesDto). As partes de formato viram as opções do motor.
+/// Não há fim automático: o campeonato termina quando o admin clica em "Encerrar campeonato".
 /// </summary>
 public sealed record ChampionshipRuleSet(
     HistoryMode HistoryMode,
@@ -63,7 +66,6 @@ public sealed record ChampionshipRuleSet(
     int RoundRobinTurns,
     WinnerStaysRule? WinnerStays,
     GameEndRule GameEnd,
-    ChampionshipEndRule? ChampionshipEnd,
     StandingsRule Standings)
 {
     /// <summary>Lança InvalidOperationException com a mensagem do primeiro problema.</summary>
@@ -95,11 +97,16 @@ public sealed record ChampionshipRuleSet(
         if (Format == ChampionshipFormat.WinnerStays && WinnerStays is null)
             throw new InvalidOperationException("Informe as regras do fica quem ganha.");
 
+        if (WinnerStays is not null && !Enum.IsDefined(WinnerStays.LimitRule))
+            throw new InvalidOperationException("Regra de limite de vitorias invalida.");
+
+        if (Standings?.Tiebreakers is { Count: > 0 } criteria && criteria[0] != TiebreakerCriteria.Points)
+            throw new InvalidOperationException("Pontos tem de ser o primeiro criterio de classificacao.");
+
         // As opções do motor validam o restante (pontos, desempates, tempos e limites).
         _ = ToGameEndOptions();
         _ = ToStandingsRules();
         if (WinnerStays is not null) _ = ToWinnerStaysOptions();
-        if (ChampionshipEnd is not null) _ = ToChampionshipEndOptions();
     }
 
     [JsonIgnore]
@@ -115,20 +122,7 @@ public sealed record ChampionshipRuleSet(
     public WinnerStaysOptions ToWinnerStaysOptions() =>
         WinnerStays is null
             ? throw new InvalidOperationException("Informe as regras do fica quem ganha.")
-            : new WinnerStaysOptions(WinnerStays.ConsecutiveWinsLimit, WinnerStays.TieRule);
-
-    public ChampionshipEndOptions? ToChampionshipEndOptions() => ChampionshipEnd?.Mode switch
-    {
-        null => null,
-        ChampionshipEndMode.TotalTime => ChampionshipEndOptions.ByTotalTime(
-            TimeSpan.FromMinutes(ChampionshipEnd.TotalTimeMinutes
-                ?? throw new InvalidOperationException("Informe o tempo total do campeonato."))),
-        ChampionshipEndMode.NumberOfGames => ChampionshipEndOptions.ByNumberOfGames(
-            ChampionshipEnd.NumberOfGames
-                ?? throw new InvalidOperationException("Informe o numero de jogos do campeonato.")),
-        ChampionshipEndMode.EqualGamesForAllTeams => ChampionshipEndOptions.WhenAllTeamsHaveEqualGames(),
-        _ => throw new InvalidOperationException("Regra de fim do campeonato invalida.")
-    };
+            : new WinnerStaysOptions(WinnerStays.ConsecutiveWinsLimit, WinnerStays.TieRule, WinnerStays.LimitRule);
 
     /// <summary>Resultado de quem terminou em <paramref name="position"/> (1 = campeão).</summary>
     public PlacementResult ResultForPosition(int position)

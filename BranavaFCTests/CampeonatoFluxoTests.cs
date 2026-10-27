@@ -103,49 +103,48 @@ public sealed class CampeonatoFluxoTests : IClassFixture<CampeonatoPostgresFixtu
     }
 
     [Fact]
-    public async Task MataMata_QuatroTimes_EmpateExigePenaltis_EColocacaoPorFase()
+    public async Task TodosContraTodosMaisFinal_EmpateNaFinalExigePenaltis_EColocacao()
     {
-        await using var db = await _fixture.CreateDatabaseAsync(nameof(MataMata_QuatroTimes_EmpateExigePenaltis_EColocacaoPorFase));
+        await using var db = await _fixture.CreateDatabaseAsync(nameof(TodosContraTodosMaisFinal_EmpateNaFinalExigePenaltis_EColocacao));
         var (groupId, players) = await SeedGroupAsync(db, 8);
         var sut = new ChampionshipService(db);
 
-        var rules = ChampionshipEntity.DefaultRules with { Format = ChampionshipFormat.Knockout, WinnerStays = null, MvpMode = MvpMode.PerGame };
-        var id = Ok(await sut.CreateAsync(groupId, new CreateChampionshipDto("Mata-mata", Day(), "Arena", rules), Ct)).Id;
-        var teams = await SetupTeamsAsync(sut, groupId, id, players, teamCount: 4);
+        var rules = ChampionshipEntity.DefaultRules with
+        {
+            Format = ChampionshipFormat.RoundRobinWithFinal, WinnerStays = null, MvpMode = MvpMode.PerGame,
+            Standings = ChampionshipEntity.DefaultRules.Standings with { Mode = StandingMode.TotalPoints }
+        };
+        var id = Ok(await sut.CreateAsync(groupId, new CreateChampionshipDto("Com final", Day(), "Arena", rules), Ct)).Id;
+        await SetupTeamsAsync(sut, groupId, id, players, teamCount: 4);
 
-        // Semifinais: T1 x T2 (empate, pênaltis T2) e T3 x T4 (T3).
-        var semi1 = Ok(await sut.CreateGameAsync(groupId, id, new CreateChampionshipGameDto(teams[0], teams[1]), Ct)).GameId;
-        (await sut.EndGameAsync(groupId, id, semi1, new EndChampionshipGameDto(null), Ct)).Success
-            .Should().BeFalse("empate no mata-mata precisa de vencedor");
-        Ok(await sut.EndGameAsync(groupId, id, semi1, new EndChampionshipGameDto(teams[1]), Ct));
-        await PlayAsync(db, sut, groupId, id, teams[2], teams[3], goalsA: 1, goalsB: 0);
+        // Fase de grupos: 6 jogos; o "time A" de cada jogo sugerido vence por 1x0.
+        for (var i = 0; i < 6; i++)
+        {
+            var next = Ok(await sut.GetNextGameAsync(groupId, id, Ct))!;
+            next.Reason.Should().StartWith("Proximo jogo da tabela");
+            await PlayAsync(db, sut, groupId, id, next.TeamAId, next.TeamBId, goalsA: 1, goalsB: 0);
+        }
 
+        var standings = (await Details(sut, groupId, id)).Standings;
         var final = Ok(await sut.GetNextGameAsync(groupId, id, Ct))!;
-        new[] { final.TeamAId, final.TeamBId }.Should().BeEquivalentTo(new[] { teams[1], teams[2] });
-        await PlayAsync(db, sut, groupId, id, final.TeamAId, final.TeamBId,
-            goalsA: final.TeamAId == teams[2] ? 3 : 1, goalsB: final.TeamBId == teams[2] ? 3 : 1);
-        Ok(await sut.GetNextGameAsync(groupId, id, Ct)).Should().BeNull("o mata-mata acabou");
+        final.Reason.Should().StartWith("Final");
+        new[] { final.TeamAId, final.TeamBId }.Should().BeEquivalentTo(standings.Take(2).Select(s => s.TeamId));
+
+        // Final empatada: precisa dos pênaltis.
+        var finalGame = Ok(await sut.CreateGameAsync(groupId, id, new CreateChampionshipGameDto(final.TeamAId, final.TeamBId), Ct)).GameId;
+        (await sut.EndGameAsync(groupId, id, finalGame, new EndChampionshipGameDto(null), Ct)).Success
+            .Should().BeFalse("empate na final precisa de vencedor");
+        Ok(await sut.EndGameAsync(groupId, id, finalGame, new EndChampionshipGameDto(final.TeamBId), Ct));
+        Ok(await sut.GetNextGameAsync(groupId, id, Ct)).Should().BeNull("tabela e final jogadas");
 
         Ok(await sut.FinishAsync(groupId, id, Ct));
-
-        // MVP por jogo: voto no jogo da final.
-        var details = await Details(sut, groupId, id);
-        var finalGame = details.Games.Single(g => g.Order == 3);
-        var scorer = finalGame.Goals.First(g => !g.IsOwnGoal).ScorerPlayerId;
-        var voter = players.First(p => p.Id != scorer && details.Players.Any(x => x.PlayerId == p.Id && x.TeamId != null));
-        Ok(await sut.VoteAsync(groupId, id, voter.UserId!.Value, new ChampionshipVoteDto(scorer, finalGame.Id), Ct));
-        (await sut.VoteAsync(groupId, id, voter.UserId!.Value, new ChampionshipVoteDto(scorer, null), Ct))
-            .Success.Should().BeFalse("MVP por jogo exige o jogo");
-
         Ok(await sut.FinalizeAsync(groupId, id, new FinalizeChampionshipDto(null), Ct));
 
-        details = await Details(sut, groupId, id);
-        var position = details.Teams.ToDictionary(t => t.Id, t => t.FinalPosition);
-        position[teams[2]].Should().Be(1);
-        position[teams[1]].Should().Be(2);
-        position[teams[0]].Should().Be(3);
-        position[teams[3]].Should().Be(3, "quem cai na semifinal divide o 3º lugar");
-        details.MvpPlayerIds.Should().Equal(scorer);
+        var position = (await Details(sut, groupId, id)).Teams.ToDictionary(t => t.Id, t => t.FinalPosition);
+        position[final.TeamBId].Should().Be(1, "venceu a final nos pênaltis");
+        position[final.TeamAId].Should().Be(2);
+        foreach (var other in standings.Skip(2))
+            position[other.TeamId].Should().Be(other.Position, "os demais ficam pela classificação");
     }
 
     [Fact]
@@ -159,6 +158,20 @@ public sealed class CampeonatoFluxoTests : IClassFixture<CampeonatoPostgresFixtu
         var refused = await sut.CreateAsync(groupId, new CreateChampionshipDto("X", Day(), "Arena", invalid), Ct);
         refused.Success.Should().BeFalse();
         refused.Error.Should().Contain("Resultado por jogo");
+
+        var pointsNotFirst = ChampionshipEntity.DefaultRules with
+        {
+            Standings = ChampionshipEntity.DefaultRules.Standings with
+            {
+                Tiebreakers = [TiebreakerCriteria.GoalDifference, TiebreakerCriteria.Points]
+            }
+        };
+        (await sut.CreateAsync(groupId, new CreateChampionshipDto("X", Day(), "Arena", pointsNotFirst), Ct))
+            .Error.Should().Contain("Pontos tem de ser o primeiro");
+
+        var knockout = ChampionshipEntity.DefaultRules with { Format = (ChampionshipFormat)3 };
+        (await sut.CreateAsync(groupId, new CreateChampionshipDto("X", Day(), "Arena", knockout), Ct))
+            .Error.Should().Be("Formato invalido.", "o mata-mata foi descartado");
 
         var id = Ok(await sut.CreateAsync(groupId, new CreateChampionshipDto("Y", Day(), "Arena", null), Ct)).Id;
         var teams = await SetupTeamsAsync(sut, groupId, id, players, teamCount: 3);

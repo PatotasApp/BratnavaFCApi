@@ -42,6 +42,44 @@ public sealed class ChampionshipEngineWinnerStaysTests
     }
 
     [Fact]
+    public void GetState_LimitWithBothLeaving_FourTeams_SendsBothToQueueAndPullsNextTwo()
+    {
+        var state = WinnerStaysEngine.GetState(
+            new[] { TeamA, TeamB, TeamC, TeamD },
+            new[]
+            {
+                new ChampionshipMatch(TeamA, TeamB, 1, 0),
+                new ChampionshipMatch(TeamA, TeamC, 2, 0)
+            },
+            new WinnerStaysOptions(2, WinnerStaysTieRule.LongestOnFieldLeaves, WinnerStaysLimitRule.BothLeave));
+
+        Assert.Equal(new WinnerStaysNextGame(TeamD, TeamB), state.NextGame);
+        Assert.Equal(new[] { TeamA, TeamC }, state.WaitingQueue);
+        Assert.Null(state.ConsecutiveWinnerId);
+    }
+
+    [Fact]
+    public void GetState_LimitWithBothLeaving_ThreeTeams_FallsBackToWinnerLeaving()
+    {
+        // Com 3 times só há 1 esperando: não dá para saírem os dois.
+        var history = new[]
+        {
+            new ChampionshipMatch(TeamA, TeamB, 1, 0),
+            new ChampionshipMatch(TeamA, TeamC, 2, 0)
+        };
+
+        var bothLeave = WinnerStaysEngine.GetState(new[] { TeamA, TeamB, TeamC }, history,
+            new WinnerStaysOptions(2, WinnerStaysTieRule.LongestOnFieldLeaves, WinnerStaysLimitRule.BothLeave));
+        var winnerLeaves = WinnerStaysEngine.GetState(new[] { TeamA, TeamB, TeamC }, history,
+            new WinnerStaysOptions(2, WinnerStaysTieRule.LongestOnFieldLeaves, WinnerStaysLimitRule.WinnerLeaves));
+
+        Assert.Equal(new WinnerStaysNextGame(TeamB, TeamC), bothLeave.NextGame);
+        Assert.Equal(new[] { TeamA }, bothLeave.WaitingQueue);
+        Assert.Equal(winnerLeaves.NextGame, bothLeave.NextGame);
+        Assert.Equal(winnerLeaves.WaitingQueue, bothLeave.WaitingQueue);
+    }
+
+    [Fact]
     public void GetState_DrawWithBothLeaving_PullsFirstTwoWaitingTeams()
     {
         var state = WinnerStaysEngine.GetState(

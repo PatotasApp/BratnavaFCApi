@@ -483,13 +483,10 @@ public sealed class ChampionshipService : IChampionshipService
         var rules = c.Rules;
         var names = c.Teams.ToDictionary(t => t.Id, t => t.Name);
 
+        // Não há fim automático: o admin encerra o campeonato pelo botão. A sugestão só
+        // acaba quando o próprio formato acaba (tabela e final jogadas).
         try
         {
-            var end = rules.ToChampionshipEndOptions();
-            var elapsed = c.StartedAt.HasValue ? DateTime.UtcNow - c.StartedAt.Value : TimeSpan.Zero;
-            if (end is not null && history.Count > 0 && ChampionshipEndEvaluator.ShouldEnd(end, teamIds, history, elapsed))
-                return null;
-
             switch (rules.Format)
             {
                 case ChampionshipFormat.WinnerStays:
@@ -516,21 +513,6 @@ public sealed class ChampionshipService : IChampionshipService
                     }
 
                     return null;
-                }
-                case ChampionshipFormat.Knockout:
-                {
-                    var round = KnockoutEngine.CreateRound(teamIds);
-                    var consumed = 0;
-                    while (history.Count - consumed >= round.Games.Count)
-                    {
-                        if (round.IsFinal) return null;
-                        var results = history.Skip(consumed).Take(round.Games.Count).ToList();
-                        consumed += round.Games.Count;
-                        round = KnockoutEngine.CreateNextRound(round, results);
-                    }
-
-                    var game = round.Games[history.Count - consumed];
-                    return Suggestion((game.TeamAId, game.TeamBId), round.IsFinal ? "Final" : $"Mata-mata, fase {round.RoundNumber}", teamIds);
                 }
                 default:
                     return null;
@@ -570,7 +552,6 @@ public sealed class ChampionshipService : IChampionshipService
         var rules = c.Rules;
         return rules.Format switch
         {
-            ChampionshipFormat.Knockout => true,
             ChampionshipFormat.WinnerStays => rules.WinnerStays?.TieRule == WinnerStaysTieRule.PenaltyShootout,
             ChampionshipFormat.RoundRobinWithFinal =>
                 (game.ChampionshipGameOrder ?? 0) > RoundRobinScheduleGenerator
@@ -580,8 +561,8 @@ public sealed class ChampionshipService : IChampionshipService
     }
 
     /// <summary>
-    /// Posição final de cada time. Mata-mata: campeão, vice e depois quem caiu mais tarde.
-    /// Todos contra todos + final: os dois da final e depois a classificação. Demais: classificação.
+    /// Posição final de cada time. Todos contra todos + final: os dois da final e depois a
+    /// classificação. Demais: classificação.
     /// </summary>
     private static Dictionary<Guid, int> FinalPositions(
         ChampionshipEntity c, IReadOnlyList<MatchEntity> games, IReadOnlyList<Guid>? externalOrder)
@@ -591,25 +572,6 @@ public sealed class ChampionshipService : IChampionshipService
         var rules = c.Rules;
         var standings = StandingsCalculator.Calculate(teamIds, history, rules.ToStandingsRules(), externalOrder);
         var byStanding = standings.ToDictionary(s => s.TeamId, s => s.Position);
-
-        if (rules.Format == ChampionshipFormat.Knockout)
-        {
-            // Rodada em que cada time foi eliminado; o campeão "cai" depois de todos.
-            var eliminatedAt = teamIds.ToDictionary(id => id, _ => int.MaxValue);
-            var round = KnockoutEngine.CreateRound(teamIds);
-            var consumed = 0;
-            while (history.Count - consumed >= round.Games.Count && round.Games.Count > 0)
-            {
-                var results = history.Skip(consumed).Take(round.Games.Count).ToList();
-                foreach (var result in results)
-                    if (result.LoserId is Guid loser) eliminatedAt[loser] = round.RoundNumber;
-                consumed += round.Games.Count;
-                if (round.IsFinal) break;
-                round = KnockoutEngine.CreateNextRound(round, results);
-            }
-
-            return RankBy(teamIds, id => eliminatedAt[id]);
-        }
 
         if (rules.Format == ChampionshipFormat.RoundRobinWithFinal)
         {
@@ -626,20 +588,6 @@ public sealed class ChampionshipService : IChampionshipService
         }
 
         return byStanding;
-    }
-
-    /// <summary>Maior chave = melhor. Empatados dividem a posição (1, 2, 2, 4...).</summary>
-    private static Dictionary<Guid, int> RankBy(IReadOnlyList<Guid> teamIds, Func<Guid, int> key)
-    {
-        var ordered = teamIds.OrderByDescending(key).ToList();
-        var positions = new Dictionary<Guid, int>();
-        for (var i = 0; i < ordered.Count; i++)
-        {
-            positions[ordered[i]] = i > 0 && key(ordered[i]) == key(ordered[i - 1])
-                ? positions[ordered[i - 1]]
-                : i + 1;
-        }
-        return positions;
     }
 
     private static bool CanVote(ChampionshipEntity c, ChampionshipPlayerEntity? me, IReadOnlyList<MatchEntity> games)

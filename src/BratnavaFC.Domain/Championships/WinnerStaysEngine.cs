@@ -48,16 +48,7 @@ public static class WinnerStaysEngine
 
                 if (options.TieRule == WinnerStaysTieRule.BothLeave)
                 {
-                    var leavingTeams = field.OrderBy(teamId => enteredFieldAt[teamId]).ToArray();
-                    foreach (var leavingTeam in leavingTeams)
-                    {
-                        enteredFieldAt.Remove(leavingTeam);
-                        queue.Enqueue(leavingTeam);
-                    }
-
-                    field.Clear();
-                    AddNextTeam(field, queue, enteredFieldAt, ref nextEntryOrder);
-                    AddNextTeam(field, queue, enteredFieldAt, ref nextEntryOrder);
+                    BothLeave(field, queue, enteredFieldAt, ref nextEntryOrder);
                 }
                 else
                 {
@@ -85,7 +76,12 @@ public static class WinnerStaysEngine
                                      consecutiveWins >= options.ConsecutiveWinsLimit;
             if (winnerReachedLimit)
             {
-                ReplaceTeam(winnerId.Value, field, queue, enteredFieldAt, ref nextEntryOrder);
+                // "Saem os dois" precisa de 2 times esperando; com 3 times sai só o vencedor.
+                if (options.LimitRule == WinnerStaysLimitRule.BothLeave && teams.Length >= 4)
+                    BothLeave(field, queue, enteredFieldAt, ref nextEntryOrder);
+                else
+                    ReplaceTeam(winnerId.Value, field, queue, enteredFieldAt, ref nextEntryOrder);
+
                 consecutiveWinnerId = null;
                 consecutiveWins = 0;
             }
@@ -101,6 +97,25 @@ public static class WinnerStaysEngine
             consecutiveWinnerId,
             consecutiveWins,
             games.Length);
+    }
+
+    /// <summary>Os dois saem para o fim da fila, na ordem em que entraram em campo, e entram os próximos.</summary>
+    private static void BothLeave(
+        List<Guid> field,
+        Queue<Guid> queue,
+        Dictionary<Guid, int> enteredFieldAt,
+        ref int nextEntryOrder)
+    {
+        var leavingTeams = field.OrderBy(teamId => enteredFieldAt[teamId]).ToArray();
+        foreach (var leavingTeam in leavingTeams)
+        {
+            enteredFieldAt.Remove(leavingTeam);
+            queue.Enqueue(leavingTeam);
+        }
+
+        field.Clear();
+        AddNextTeam(field, queue, enteredFieldAt, ref nextEntryOrder);
+        AddNextTeam(field, queue, enteredFieldAt, ref nextEntryOrder);
     }
 
     private static void ReplaceTeam(
