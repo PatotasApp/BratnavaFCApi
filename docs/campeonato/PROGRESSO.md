@@ -95,7 +95,7 @@ Regras de contagem: [DECISOES.md](DECISOES.md), seção "Fase 3". Contrato do hi
 - Aviso em `message` quando há menos cores que times (os que sobram ficam sem cor).
 - Renomear/trocar cor do time até finalizar (`PATCH /{id}/teams/{teamId}`); vale para os próximos jogos, e os jogos já jogados guardam a cor original.
 - `CampeonatoCoresTests` (4 testes, Postgres). Contrato v5.
-- Achado fora do campeonato (não corrigido): o sorteio de cores das **partidas** (`MatchService`, `SetTeamColorsRandomly`) usa `_context.TeamColors` sem filtrar patota nem cor ativa, então pode sortear a cor de outra patota.
+- Corrigido também nas **partidas normais** (`MatchService.SetTeamColorsAsync`): o sorteio e a escolha manual aceitavam cor de qualquer patota e cor inativa. Agora só cores ativas da própria patota (3 testes em `MatchServiceCoverageTests`, que falham na versão antiga).
 
 ### Próximos passos
 - Ligar o sorteio de N times da outra IA (prompt 4).

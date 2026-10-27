@@ -679,6 +679,81 @@ public sealed class MatchServiceCoverageTests
     }
 
     [Fact]
+    public async Task SetTeamColorsAsync_WhenRandomize_ShouldUseOnlyActiveColorsOfTheGroup()
+    {
+        await using var db = DbContextFactory.Create(nameof(SetTeamColorsAsync_WhenRandomize_ShouldUseOnlyActiveColorsOfTheGroup));
+        var sut = CreateSut(db);
+
+        var group = await SeedGroupAsync(db);
+        var other = await SeedGroupAsync(db, "Outra patota");
+        var azul = new TeamColorEntity(group.Id, "Azul", "#0000FF");
+        var verde = new TeamColorEntity(group.Id, "Verde", "#00FF00");
+        var inativa = new TeamColorEntity(group.Id, "Inativa", "#123456");
+        inativa.Inactivate();
+        db.TeamColors.AddRange(azul, verde, inativa,
+            new TeamColorEntity(other.Id, "Vermelho", "#FF0000"),
+            new TeamColorEntity(other.Id, "Preto", "#000000"),
+            new TeamColorEntity(other.Id, "Branco", "#FFFFFF"));
+        await db.SaveChangesAsync();
+
+        var (match, _) = await SeedMatchAsync(db, group.Id, 2, MatchStatus.MatchMaking);
+
+        // Antes sorteava entre as cores de todas as patotas (inclusive inativas).
+        for (var i = 0; i < 20; i++)
+        {
+            var result = await sut.SetTeamColorsAsync(group.Id, match.Id, null, null, randomize: true, CancellationToken.None);
+            result.Success.Should().BeTrue();
+
+            var reloaded = await db.Matches.AsNoTracking().FirstAsync(m => m.Id == match.Id);
+            new[] { reloaded.TeamAColorId!.Value, reloaded.TeamBColorId!.Value }
+                .Should().BeEquivalentTo(new[] { azul.Id, verde.Id });
+        }
+    }
+
+    [Fact]
+    public async Task SetTeamColorsAsync_WhenRandomizeWithOnlyOneActiveColorInGroup_ShouldThrow()
+    {
+        await using var db = DbContextFactory.Create(nameof(SetTeamColorsAsync_WhenRandomizeWithOnlyOneActiveColorInGroup_ShouldThrow));
+        var sut = CreateSut(db);
+
+        var group = await SeedGroupAsync(db);
+        var other = await SeedGroupAsync(db, "Outra patota");
+        db.TeamColors.AddRange(
+            new TeamColorEntity(group.Id, "Azul", "#0000FF"),
+            new TeamColorEntity(other.Id, "Vermelho", "#FF0000"));
+        await db.SaveChangesAsync();
+
+        var (match, _) = await SeedMatchAsync(db, group.Id, 2, MatchStatus.MatchMaking);
+
+        var act = () => sut.SetTeamColorsAsync(group.Id, match.Id, null, null, randomize: true, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>("a cor de outra patota não pode completar o sorteio");
+    }
+
+    [Fact]
+    public async Task SetTeamColorsAsync_WhenColorIsFromOtherGroupOrInactive_ShouldFail()
+    {
+        await using var db = DbContextFactory.Create(nameof(SetTeamColorsAsync_WhenColorIsFromOtherGroupOrInactive_ShouldFail));
+        var sut = CreateSut(db);
+
+        var group = await SeedGroupAsync(db);
+        var other = await SeedGroupAsync(db, "Outra patota");
+        var deOutra = new TeamColorEntity(other.Id, "Vermelho", "#FF0000");
+        var inativa = new TeamColorEntity(group.Id, "Inativa", "#123456");
+        inativa.Inactivate();
+        var azul = new TeamColorEntity(group.Id, "Azul", "#0000FF");
+        db.TeamColors.AddRange(deOutra, inativa, azul);
+        await db.SaveChangesAsync();
+
+        var (match, _) = await SeedMatchAsync(db, group.Id, 2, MatchStatus.MatchMaking);
+
+        (await sut.SetTeamColorsAsync(group.Id, match.Id, deOutra.Id, null, randomize: false, CancellationToken.None))
+            .Error.Should().Be("Cor do time A nao encontrada.");
+        (await sut.SetTeamColorsAsync(group.Id, match.Id, azul.Id, inativa.Id, randomize: false, CancellationToken.None))
+            .Error.Should().Be("Cor do time B nao encontrada.");
+    }
+
+    [Fact]
     public async Task SetTeamColorsAsync_WhenTeamAColorNotFound_ShouldFail()
     {
         await using var db = DbContextFactory.Create(nameof(SetTeamColorsAsync_WhenTeamAColorNotFound_ShouldFail));

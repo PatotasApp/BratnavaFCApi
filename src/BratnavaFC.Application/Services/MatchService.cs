@@ -620,7 +620,10 @@ public sealed class MatchService : IMatchService
 
         if (randomize)
         {
-            var colors = await _context.TeamColors.AsNoTracking().ToListAsync(ct);
+            // Só cores ativas da própria patota (antes sorteava entre as cores de todas as patotas).
+            var colors = await _context.TeamColors.AsNoTracking()
+                .Where(c => c.GroupId == groupId && c.IsActive)
+                .ToListAsync(ct);
             match.SetTeamColorsRandomly(colors);
             await _context.SaveChangesAsync(ct);
             return Result.Ok("Partida atualizada com sucesso.");
@@ -628,13 +631,13 @@ public sealed class MatchService : IMatchService
 
         if (teamAColorId.HasValue)
         {
-            var colorCheck = await EnsureTeamColorExistsAsync(teamAColorId.Value, "Cor do time A nao encontrada.", ct);
+            var colorCheck = await EnsureTeamColorExistsAsync(groupId, teamAColorId.Value, "Cor do time A nao encontrada.", ct);
             if (!colorCheck.Success) return colorCheck;
         }
 
         if (teamBColorId.HasValue)
         {
-            var colorCheck = await EnsureTeamColorExistsAsync(teamBColorId.Value, "Cor do time B nao encontrada.", ct);
+            var colorCheck = await EnsureTeamColorExistsAsync(groupId, teamBColorId.Value, "Cor do time B nao encontrada.", ct);
             if (!colorCheck.Success) return colorCheck;
         }
 
@@ -890,11 +893,12 @@ public sealed class MatchService : IMatchService
         return Result.Ok();
     }
 
-    private async Task<Result> EnsureTeamColorExistsAsync(Guid colorId, string errorMessage, CancellationToken ct)
+    /// <summary>A cor tem de ser uma cor ativa da própria patota.</summary>
+    private async Task<Result> EnsureTeamColorExistsAsync(Guid groupId, Guid colorId, string errorMessage, CancellationToken ct)
     {
         var exists = await _context.TeamColors
             .AsNoTracking()
-            .AnyAsync(c => c.Id == colorId, ct);
+            .AnyAsync(c => c.Id == colorId && c.GroupId == groupId && c.IsActive, ct);
 
         if (!exists)
             return Result.Fail(errorMessage, ResultStatus.NotFound);
