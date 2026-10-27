@@ -61,10 +61,9 @@ public sealed class CampeonatoContratoTests
         Keys(json).Should().BeEquivalentTo(
             "historyMode", "resultMode", "placementResults", "mvpMode", "mvpCountsInGeneralStats",
             "goalsCountInGeneralStats", "includeInTeamDraw", "minGamesForPlacementResult", "format",
-            "roundRobinTurns", "winnerStays", "gameEnd", "championshipEnd", "standings");
-        Keys(json["winnerStays"]!.AsObject()).Should().BeEquivalentTo("consecutiveWinsLimit", "tieRule");
+            "roundRobinTurns", "winnerStays", "gameEnd", "standings");
+        Keys(json["winnerStays"]!.AsObject()).Should().BeEquivalentTo("consecutiveWinsLimit", "tieRule", "limitRule");
         Keys(json["gameEnd"]!.AsObject()).Should().BeEquivalentTo("timeLimitMinutes", "goalLimit");
-        Keys(json["championshipEnd"]!.AsObject()).Should().BeEquivalentTo("mode", "totalTimeMinutes", "numberOfGames");
         Keys(json["standings"]!.AsObject()).Should().BeEquivalentTo("mode", "winPoints", "drawPoints", "tiebreakers");
 
         // O app manda as regras e a API tem de ler de volta exatamente o mesmo conteúdo.

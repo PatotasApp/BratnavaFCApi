@@ -25,9 +25,8 @@ public class ChampionshipEntity : BaseEntity
         MinGamesForPlacementResult: 1,
         Format: ChampionshipFormat.WinnerStays,
         RoundRobinTurns: 1,
-        WinnerStays: new WinnerStaysRule(0, WinnerStaysTieRule.LongestOnFieldLeaves),
+        WinnerStays: new WinnerStaysRule(0, WinnerStaysTieRule.LongestOnFieldLeaves, WinnerStaysLimitRule.WinnerLeaves),
         GameEnd: new GameEndRule(10, 2),
-        ChampionshipEnd: new ChampionshipEndRule(ChampionshipEndMode.TotalTime, 120, null),
         Standings: new StandingsRule(StandingMode.PointsPerGame, 3, 1,
             [TiebreakerCriteria.Points, TiebreakerCriteria.GoalDifference, TiebreakerCriteria.GoalsFor,
              TiebreakerCriteria.HeadToHead, TiebreakerCriteria.ExternalDecision]));

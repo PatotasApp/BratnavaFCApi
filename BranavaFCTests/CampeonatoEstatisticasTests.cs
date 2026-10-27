@@ -161,8 +161,7 @@ public sealed class CampeonatoEstatisticasTests : IClassFixture<CampeonatoPostgr
             GoalsCountInGeneralStats = caso.GoalsCount,
             MvpCountsInGeneralStats = caso.MvpCount,
             Format = ChampionshipFormat.RoundRobin,
-            WinnerStays = null,
-            ChampionshipEnd = null
+            WinnerStays = null
         };
 
         var sut = new ChampionshipService(db, new ConquistaProjectionService(db));

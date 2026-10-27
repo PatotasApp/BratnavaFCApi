@@ -44,9 +44,14 @@ Presets prontos: "Fica quem ganha clássico", "Troca quem ganhou 2".
 - Para receber o resultado da colocação, o jogador precisa ter jogado pelo menos 1 jogo (mínimo exato ainda a definir).
 - Quem chega atrasado entra num time sem mexer na classificação.
 
-## Ainda em aberto
-- Mínimo de jogos para receber o resultado da colocação.
-- Sorteio para N times: começar simples (cobra por nota) ou esperar o novo algoritmo "Jogo Parelho" (em discussão separada).
+## Respostas do Luis (27/10/2026, tarde)
+- **Fica quem ganha com limite:** vira parâmetro (`limitRule`): sai só o vencedor **ou** saem os dois. Com 3 times "saem os dois" é impossível e vira "sai só o vencedor" automaticamente.
+- **Fim do campeonato:** sem regra automática. O admin clica em **"Encerrar campeonato"**; aí abre a votação do MVP do campeonato; depois o admin finaliza.
+- **Mata-mata:** descartado ("mata-mata na verdade é um todos contra todos"). Formatos: fica quem ganha, todos contra todos, todos contra todos + final.
+- **Desempate:** Pontos é sempre o 1º critério.
+- **Mínimo de jogos para a colocação:** o admin escolhe na criação (padrão 1).
+- **Estatística:** o campeonato conta como **uma partida** para fins de cálculo (confirmado).
+- **Time de quem trocou de time:** o do último jogo (confirmado). **Team builder:** só jogos que contam como partida normal (confirmado).
 
 ## Fase 3: como cada regra conta nas estatísticas (implementado em 27/10/2026)
 Só campeonatos **finalizados** contam. Tudo sai de uma fonte única (`ChampionshipStatsSource`), então histórico, relatório visual, spotlight e conquistas sempre batem entre si.

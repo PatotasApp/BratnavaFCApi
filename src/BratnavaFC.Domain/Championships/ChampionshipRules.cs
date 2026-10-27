@@ -4,7 +4,7 @@ public enum ChampionshipFormat
 {
     RoundRobin = 1,
     WinnerStays = 2,
-    Knockout = 3,
+    // 3 era o mata-mata, descartado pelo Luis (27/10/2026): não reutilizar o número.
     RoundRobinWithFinal = 4
 }
 
@@ -13,6 +13,13 @@ public enum WinnerStaysTieRule
     BothLeave = 1,
     LongestOnFieldLeaves = 2,
     PenaltyShootout = 3
+}
+
+/// <summary>Quem sai quando o time que fica atinge o limite de vitórias seguidas.</summary>
+public enum WinnerStaysLimitRule
+{
+    WinnerLeaves = 1, // sai só o vencedor; o perdedor fica
+    BothLeave = 2     // saem os dois (com 3 times é impossível: vira WinnerLeaves)
 }
 
 public enum StandingMode
@@ -30,26 +37,24 @@ public enum TiebreakerCriteria
     ExternalDecision = 5
 }
 
-public enum ChampionshipEndMode
-{
-    TotalTime = 1,
-    NumberOfGames = 2,
-    EqualGamesForAllTeams = 3
-}
-
 public sealed record WinnerStaysOptions
 {
-    public WinnerStaysOptions(int consecutiveWinsLimit, WinnerStaysTieRule tieRule)
+    public WinnerStaysOptions(
+        int consecutiveWinsLimit,
+        WinnerStaysTieRule tieRule,
+        WinnerStaysLimitRule limitRule = WinnerStaysLimitRule.WinnerLeaves)
     {
         if (consecutiveWinsLimit < 0)
             throw new InvalidOperationException("O limite de vitorias seguidas nao pode ser negativo.");
 
         ConsecutiveWinsLimit = consecutiveWinsLimit;
         TieRule = tieRule;
+        LimitRule = limitRule;
     }
 
     public int ConsecutiveWinsLimit { get; }
     public WinnerStaysTieRule TieRule { get; }
+    public WinnerStaysLimitRule LimitRule { get; }
 }
 
 public sealed record GameEndOptions
@@ -69,39 +74,6 @@ public sealed record GameEndOptions
 
     public TimeSpan? TimeLimit { get; }
     public int? GoalLimit { get; }
-}
-
-public sealed record ChampionshipEndOptions
-{
-    private ChampionshipEndOptions(ChampionshipEndMode mode, TimeSpan? totalTime, int? numberOfGames)
-    {
-        Mode = mode;
-        TotalTime = totalTime;
-        NumberOfGames = numberOfGames;
-    }
-
-    public ChampionshipEndMode Mode { get; }
-    public TimeSpan? TotalTime { get; }
-    public int? NumberOfGames { get; }
-
-    public static ChampionshipEndOptions ByTotalTime(TimeSpan totalTime)
-    {
-        if (totalTime <= TimeSpan.Zero)
-            throw new InvalidOperationException("O tempo total do campeonato deve ser maior que zero.");
-
-        return new ChampionshipEndOptions(ChampionshipEndMode.TotalTime, totalTime, null);
-    }
-
-    public static ChampionshipEndOptions ByNumberOfGames(int numberOfGames)
-    {
-        if (numberOfGames <= 0)
-            throw new InvalidOperationException("O numero de jogos deve ser maior que zero.");
-
-        return new ChampionshipEndOptions(ChampionshipEndMode.NumberOfGames, null, numberOfGames);
-    }
-
-    public static ChampionshipEndOptions WhenAllTeamsHaveEqualGames() =>
-        new(ChampionshipEndMode.EqualGamesForAllTeams, null, null);
 }
 
 public sealed record StandingsRules
