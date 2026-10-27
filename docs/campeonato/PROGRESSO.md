@@ -39,7 +39,7 @@ Branch: `feature/campeonato-fase0-blindagem` (a partir de `main` @ 9863c15). Sem
 2. Docker ligado; `dotnet test ./BranavaFCTests/BranavaFC.Tests.csproj`.
 3. Próximo: ver a seção das Fases 1 e 2 abaixo.
 
-## Fases 1 e 2 — Backend do campeonato ⏳ implementado, falta rodar contra Postgres
+## Fases 1 e 2 — Backend do campeonato ✅ (27/10/2026)
 Motor mesclado nesta branch (`51048fa`). Contrato: [CONTRATO-API.md](CONTRATO-API.md) **v3** (implementado).
 
 | # | Passo | Status |
@@ -49,8 +49,8 @@ Motor mesclado nesta branch (`51048fa`). Contrato: [CONTRATO-API.md](CONTRATO-AP
 | 3 | Persistência: 3 tabelas novas + colunas em `Matches`; migração única `AddChampionships` (substitui a da Fase 0, que nunca foi publicada) | ✅ |
 | 4 | `ChampionshipService` (presença, sorteio provisório, times, jogos, próximo jogo pelo motor, classificação, MVP, finalização, cancelamento) | ✅ |
 | 5 | `ChampionshipsController` em `api/championships/group/{groupId}` | ✅ |
-| 6 | Testes de fluxo (`CampeonatoFluxoTests`): fica quem ganha completo, mata-mata 4 times, regras inválidas e cancelamento | ⚠️ passam em memória; **falta rodar no Postgres** (o Docker Desktop do Luis caiu durante a sessão) |
-| 7 | Suíte sem Postgres | ✅ 1555 aprovados, 0 falhas |
+| 6 | Testes de fluxo (`CampeonatoFluxoTests`): fica quem ganha completo, mata-mata 4 times, regras inválidas e cancelamento | ✅ passam no Postgres real (Testcontainers) |
+| 7 | Suíte completa | ✅ 1562 aprovados, 0 falhas, 7 ignorados (já eram) |
 
 ### Como funciona (resumo para quem continuar)
 - **Regras** (`Domain/Championships/ChampionshipRuleSet.cs`): um record que é o próprio DTO do contrato, guardado como `jsonb` em `Championships.RulesJson`. `Validate()` usa as opções do motor. `DefaultRules` = fica quem ganha, conta como 1 partida, 1º V · 2º E · 3º+ D, MVP do campeonato, fora do sorteio.
@@ -63,7 +63,6 @@ Motor mesclado nesta branch (`51048fa`). Contrato: [CONTRATO-API.md](CONTRATO-AP
 - Ids das tabelas novas com `ValueGeneratedNever`: filho novo em agregado rastreado vira INSERT (não UPDATE). Gols novos são marcados como `Added` à mão.
 
 ### Pendências
-- **Rodar `dotnet test` com o Docker de pé** (testes `Category=Postgres`).
 - `photoUrl` dos participantes ainda vem null.
 - Sorteio de N times é provisório (goleiros primeiro, depois "cobra" pela nota).
 - Sem notificações push nem tempo real (o cliente faz polling).
