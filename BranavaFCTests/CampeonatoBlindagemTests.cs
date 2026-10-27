@@ -18,15 +18,19 @@ namespace BranavaFC.Tests;
 /// <summary>Um Postgres descartável por classe; cada teste cria o próprio banco.</summary>
 public sealed class CampeonatoPostgresFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
+    private PostgreSqlContainer _postgres = null!;
+
+    // Criado só no InitializeAsync: Build() já valida o Docker, e falhar no construtor
+    // esconde o motivo atrás de "constructor parameters did not have matching fixture data".
+    private static PostgreSqlContainer BuildContainer() => new PostgreSqlBuilder()
         .WithImage("postgres:17-alpine")
         .WithDatabase("bratnava_tests")
         .WithUsername("postgres")
         .WithPassword("postgres")
         .Build();
 
-    public Task InitializeAsync() => _postgres.StartAsync();
-    public Task DisposeAsync() => _postgres.DisposeAsync().AsTask();
+    public Task InitializeAsync() => (_postgres = BuildContainer()).StartAsync();
+    public Task DisposeAsync() => _postgres is null ? Task.CompletedTask : _postgres.DisposeAsync().AsTask();
 
     public async Task<AppDbContext> CreateDatabaseAsync(string name)
     {
@@ -356,6 +360,7 @@ public sealed class CampeonatoIgnoreQueryFiltersTests
     {
         "src/BratnavaFC.Application/Services/GroupService.cs",   // exclusão de patota
         "src/BratnavaFC.Application/Services/PlayerService.cs",  // exclusão de jogador
+        "src/BratnavaFC.Application/Services/ChampionshipService.cs", // única porta dos jogos (GamesQuery)
         // GetByIdIncludingInactiveAsync (anterior à Fase 0): hoje só chamado para patota,
         // jogador e usuário. Não usar com MatchEntity sem rever este teste.
         "src/BratnavaFC.Infrastructure/Repositories/RepositoryBase.cs",

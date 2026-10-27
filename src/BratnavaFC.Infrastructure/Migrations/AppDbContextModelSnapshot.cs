@@ -140,6 +140,13 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<DateTime>("PlayedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("RulesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<short>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("smallint")
@@ -153,6 +160,121 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.HasIndex("GroupId", "PlayedAt");
 
                     b.ToTable("Championships");
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.ChampionshipPlayerEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ChampionshipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("DidNotPlay")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("InviteResponse")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
+                    b.Property<bool>("IsGoalkeeper")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsMvp")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("PlayerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("TeamId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlayerId");
+
+                    b.HasIndex("ChampionshipId", "PlayerId")
+                        .IsUnique();
+
+                    b.ToTable("ChampionshipPlayers");
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.ChampionshipTeamEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ChampionshipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ColorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("FinalPosition")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChampionshipId");
+
+                    b.HasIndex("ColorId");
+
+                    b.ToTable("ChampionshipTeams");
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.ChampionshipVoteEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ChampionshipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("GameId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("VotedPlayerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("VoterPlayerId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChampionshipId", "GameId", "VoterPlayerId")
+                        .IsUnique();
+
+                    b.ToTable("ChampionshipVotes");
                 });
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.ExtraChargeEntity", b =>
@@ -700,7 +822,19 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<DateTime?>("ActualStartTime")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("ChampionshipExternalWinnerTeamId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("ChampionshipGameOrder")
+                        .HasColumnType("integer");
+
                     b.Property<Guid?>("ChampionshipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ChampionshipTeamAId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ChampionshipTeamBId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreateDate")
@@ -1972,6 +2106,48 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Navigation("Group");
                 });
 
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.ChampionshipPlayerEntity", b =>
+                {
+                    b.HasOne("BratnavaFC.Domain.Entities.ChampionshipEntity", null)
+                        .WithMany("Players")
+                        .HasForeignKey("ChampionshipId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("BratnavaFC.Domain.Entities.PlayerEntity", "Player")
+                        .WithMany()
+                        .HasForeignKey("PlayerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Player");
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.ChampionshipTeamEntity", b =>
+                {
+                    b.HasOne("BratnavaFC.Domain.Entities.ChampionshipEntity", null)
+                        .WithMany("Teams")
+                        .HasForeignKey("ChampionshipId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("BratnavaFC.Domain.Entities.TeamColorEntity", "Color")
+                        .WithMany()
+                        .HasForeignKey("ColorId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Color");
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.ChampionshipVoteEntity", b =>
+                {
+                    b.HasOne("BratnavaFC.Domain.Entities.ChampionshipEntity", null)
+                        .WithMany("Votes")
+                        .HasForeignKey("ChampionshipId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("BratnavaFC.Domain.Entities.ExtraChargeEntity", b =>
                 {
                     b.HasOne("BratnavaFC.Domain.Entities.GroupEntity", "Group")
@@ -2411,6 +2587,12 @@ namespace BratnavaFC.Infrastructure.Migrations
             modelBuilder.Entity("BratnavaFC.Domain.Entities.ChampionshipEntity", b =>
                 {
                     b.Navigation("Matches");
+
+                    b.Navigation("Players");
+
+                    b.Navigation("Teams");
+
+                    b.Navigation("Votes");
                 });
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.ExtraChargeEntity", b =>

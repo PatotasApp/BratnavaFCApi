@@ -37,11 +37,39 @@ Branch: `feature/campeonato-fase0-blindagem` (a partir de `main` @ 9863c15). Sem
 ### Como retomar
 1. `git switch feature/campeonato-fase0-blindagem` dentro de `BratnavaFCApi`.
 2. Docker ligado; `dotnet test ./BranavaFCTests/BranavaFC.Tests.csproj`.
-3. Próximo: **Fase 1** (ver PLANO.md).
+3. Próximo: ver a seção das Fases 1 e 2 abaixo.
 
-## Fase 1 — Backend do campeonato ⏳
-- Contrato da API escrito: [CONTRATO-API.md](CONTRATO-API.md) v1. Clientes constroem em cima dele.
-- Implementação ainda não começou: aguardando o merge do motor nesta branch (o Luis precisa aprovar).
+## Fases 1 e 2 — Backend do campeonato ⏳ implementado, falta rodar contra Postgres
+Motor mesclado nesta branch (`51048fa`). Contrato: [CONTRATO-API.md](CONTRATO-API.md) **v3** (implementado).
+
+| # | Passo | Status |
+|---|---|---|
+| 1 | Merge do motor | ✅ |
+| 2 | Domínio: `ChampionshipRuleSet`, times, participantes, votos, fluxo completo | ✅ |
+| 3 | Persistência: 3 tabelas novas + colunas em `Matches`; migração única `AddChampionships` (substitui a da Fase 0, que nunca foi publicada) | ✅ |
+| 4 | `ChampionshipService` (presença, sorteio provisório, times, jogos, próximo jogo pelo motor, classificação, MVP, finalização, cancelamento) | ✅ |
+| 5 | `ChampionshipsController` em `api/championships/group/{groupId}` | ✅ |
+| 6 | Testes de fluxo (`CampeonatoFluxoTests`): fica quem ganha completo, mata-mata 4 times, regras inválidas e cancelamento | ⚠️ passam em memória; **falta rodar no Postgres** (o Docker Desktop do Luis caiu durante a sessão) |
+| 7 | Suíte sem Postgres | ✅ 1555 aprovados, 0 falhas |
+
+### Como funciona (resumo para quem continuar)
+- **Regras** (`Domain/Championships/ChampionshipRuleSet.cs`): um record que é o próprio DTO do contrato, guardado como `jsonb` em `Championships.RulesJson`. `Validate()` usa as opções do motor. `DefaultRules` = fica quem ganha, conta como 1 partida, 1º V · 2º E · 3º+ D, MVP do campeonato, fora do sorteio.
+- **Fluxo** (`ChampionshipEntity`): Created → Acceptation (convida todos os ativos não convidados) → TeamDraw (`DefineTeams`) → InProgress (`Start`, trava as regras) → PostGame (`Finish`, votação) → Finalized (posições + MVP com a `MvpTieRule` da patota). `Cancel` só sem jogo encerrado.
+- **Jogos**: `CreateGame` monta uma `MatchEntity` com `ChampionshipId`, times A/B, ordem, escalação atual (sem `DidNotPlay`), goleiros e cores, e já inicia. `EndGame` encerra e finaliza o placar na hora; MVP fica para o fim do campeonato. Um jogo por vez.
+- **Próximo jogo**: motor conforme o formato (fica quem ganha, tabela, final, mata-mata). Se o admin criar jogos fora da ordem, a sugestão vira null e ele escolhe na mão.
+- **Empate**: exige vencedor externo (pênaltis) no mata-mata, na final do "todos contra todos + final" e no fica quem ganha com regra de pênaltis.
+- **Posição final**: mata-mata = campeão, vice, depois quem caiu mais tarde (empatados dividem); com final = final + classificação; demais = classificação.
+- **Acesso aos jogos**: só `ChampionshipService.GamesQuery()` ignora o filtro global (na allowlist do teste de arquitetura).
+- Ids das tabelas novas com `ValueGeneratedNever`: filho novo em agregado rastreado vira INSERT (não UPDATE). Gols novos são marcados como `Added` à mão.
+
+### Pendências
+- **Rodar `dotnet test` com o Docker de pé** (testes `Category=Postgres`).
+- `photoUrl` dos participantes ainda vem null.
+- Sorteio de N times é provisório (goleiros primeiro, depois "cobra" pela nota).
+- Sem notificações push nem tempo real (o cliente faz polling).
+- Ausências (`UserAbsence`) ainda não recusam o convite do campeonato automaticamente.
+- Respostas às 4 perguntas de regra do motor (seção abaixo).
+- **Próximo: Fase 3** (estatísticas respeitando as regras) e apostas do campeonato.
 
 ## Trabalho paralelo
 - **Motor de formatos e classificação** ✅: outra IA, branch `feature/campeonato-motor` (commits `c068138` + `87033ce`), worktree `C:\Users\lhnme\source\repos\BratnavaFCApi-campeonato-motor`.

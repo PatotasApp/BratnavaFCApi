@@ -1,6 +1,6 @@
 # Contrato da API do campeonato (Fases 1 e 2)
 
-Status: **rascunho v1 (27/10/2026)**. O backend implementa isto na Fase 1/2 e os clientes (Flutter e web) constroem em cima.
+Status: **v3 (27/10/2026) — implementado no backend (Fases 1 e 2)**. O backend implementa isto na Fase 1/2 e os clientes (Flutter e web) constroem em cima.
 Mudanças no contrato: só por quem faz o backend, anotadas no histórico no fim deste arquivo.
 
 ## Convenções (as mesmas da API atual)
@@ -23,7 +23,7 @@ Mudanças no contrato: só por quem faz o backend, anotadas no histórico no fim
 | `TiebreakerCriteria` | 1 Points · 2 GoalDifference · 3 GoalsFor · 4 HeadToHead · 5 ExternalDecision |
 | `ChampionshipEndMode` | 1 TotalTime · 2 NumberOfGames · 3 EqualGamesForAllTeams |
 | `ChampionshipGameStatus` | 1 InProgress · 2 Finished |
-| `InviteResponse` | 0 None · 1 Accepted · 2 Rejected (igual ao das partidas) |
+| `InviteResponse` | 1 None · 2 Rejected · 3 Accepted (igual ao das partidas) |
 
 ## Regras — `ChampionshipRulesDto`
 ```json
@@ -94,7 +94,7 @@ Mudanças no contrato: só por quem faz o backend, anotadas no histórico no fim
 | POST | `/{id}/games` | `{ "teamAId": "guid", "teamBId": "guid" }` → `{ "gameId": "guid" }` (já começa) |
 | POST | `/{id}/games/{gameId}/goals` | `{ "scorerPlayerId", "assistPlayerId"?, "isOwnGoal", "timeSeconds"? }` |
 | DELETE | `/{id}/games/{gameId}/goals/{goalId}` | — |
-| PATCH | `/{id}/games/{gameId}/goalkeeper` | `{ "teamId", "playerId" }` |
+| PATCH | `/{id}/goalkeeper` | `{ "teamId", "playerId" }` (goleiro do time nos **próximos** jogos; o jogo em andamento não muda) |
 | POST | `/{id}/games/{gameId}/end` | `{ "externalWinnerTeamId"? }` (pênaltis/decisão em empate) |
 | POST | `/{id}/finish` | — (PostGame: abre votação de MVP) |
 
@@ -113,7 +113,7 @@ Mudanças no contrato: só por quem faz o backend, anotadas no histórico no fim
 // ChampionshipDetailsDto
 { "id", "name", "playedAt", "placeName", "status", "rules": ChampionshipRulesDto,
   "rulesLocked": false, "ruleBadges": [...],
-  "players": [ { "playerId", "name", "photoUrl", "isGuest", "isGoalkeeper", "inviteResponse", "teamId": null, "didNotPlay": false } ],
+  "players": [ { "playerId", "name", "photoUrl" /* por enquanto sempre null */, "isGuest", "isGoalkeeper", "inviteResponse", "teamId": null, "didNotPlay": false } ],
   "teams": [ { "id", "name", "colorId", "colorHex", "finalPosition": null, "playerIds": ["guid"] } ],
   "games": [ { "id", "order", "teamAId", "teamBId", "teamAGoals", "teamBGoals", "externalWinnerTeamId": null,
                "status", "startedAt", "goals": [ { "id", "scorerPlayerId", "assistPlayerId", "isOwnGoal", "timeSeconds" } ] } ],
@@ -124,7 +124,7 @@ Mudanças no contrato: só por quem faz o backend, anotadas no histórico no fim
   "topScorers": [ { "playerId", "goals" } ],
   "topAssists": [ { "playerId", "assists" } ],
   "mvpPlayerIds": [],
-  "myInviteResponse": 0, "canVote": false, "myVotes": [ { "gameId": null, "votedPlayerId" } ] }
+  "myInviteResponse": 1 /* null se o usuário não participa */, "canVote": false, "myVotes": [ { "gameId": null, "votedPlayerId" } ] }
 
 // CreateChampionshipDto / UpdateChampionshipDto
 { "name", "playedAt", "placeName", "rules": ChampionshipRulesDto }
@@ -143,3 +143,5 @@ Mudanças no contrato: só por quem faz o backend, anotadas no histórico no fim
 
 ## Histórico
 - v1 (27/10/2026): primeira versão.
+- v2 (27/10/2026): **corrigido `InviteResponse`** (1 None · 2 Rejected · 3 Accepted, como no resto da API).
+- v3 (27/10/2026): implementado. Mudanças: goleiro passou para `PATCH /{id}/goalkeeper` (por time, vale para os próximos jogos); `myInviteResponse` é null para quem não participa; `photoUrl` ainda vem null; `POST /` responde `{ id }` com 201; `teams/draw` é provisório (goleiros primeiro, depois "cobra" pela nota).

@@ -64,6 +64,36 @@ public class MatchEntity : BaseEntity
         ChampionshipId = championshipId;
     }
 
+    /// <summary>Times do campeonato que jogam este jogo: Time A (Team 1) e Time B (Team 2).</summary>
+    public Guid? ChampionshipTeamAId { get; private set; }
+    public Guid? ChampionshipTeamBId { get; private set; }
+
+    /// <summary>Ordem do jogo dentro do campeonato (1, 2, 3...).</summary>
+    public int? ChampionshipGameOrder { get; private set; }
+
+    /// <summary>Vencedor decidido fora do placar (pênaltis/sorteio) quando o jogo empata.</summary>
+    public Guid? ChampionshipExternalWinnerTeamId { get; private set; }
+
+    internal void SetChampionshipGame(Guid teamAId, Guid teamBId, int order)
+    {
+        if (ChampionshipId is null)
+            throw new InvalidOperationException("A partida nao pertence a um campeonato.");
+
+        ChampionshipTeamAId = teamAId;
+        ChampionshipTeamBId = teamBId;
+        ChampionshipGameOrder = order;
+    }
+
+    internal void SetChampionshipExternalWinner(Guid? teamId)
+    {
+        if (teamId.HasValue && teamId != ChampionshipTeamAId && teamId != ChampionshipTeamBId)
+            throw new InvalidOperationException("O vencedor deve ser um dos times do jogo.");
+        if (teamId.HasValue && TeamAGoals != TeamBGoals)
+            throw new InvalidOperationException("O vencedor so pode ser informado quando o jogo empata.");
+
+        ChampionshipExternalWinnerTeamId = teamId;
+    }
+
     public void OpenAcceptation()
     {
         EnsureStatus(MatchStatus.Created, "So e possivel abrir acceptation quando a partida esta Created.");
