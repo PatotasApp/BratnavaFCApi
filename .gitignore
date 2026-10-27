@@ -12,3 +12,6 @@
 
 # Saída de cobertura de testes
 **/TestResults/
+
+# Processos e logs do ambiente local de validação
+.local-run/
