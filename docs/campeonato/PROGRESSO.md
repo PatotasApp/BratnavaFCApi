@@ -68,7 +68,10 @@ Motor mesclado nesta branch (`51048fa`). Contrato: [CONTRATO-API.md](CONTRATO-AP
 - Sem notificações push nem tempo real (o cliente faz polling).
 - Ausências (`UserAbsence`) ainda não recusam o convite do campeonato automaticamente.
 - Respostas às 4 perguntas de regra do motor (seção abaixo).
-- **Próximo: Fase 3** (estatísticas respeitando as regras) e apostas do campeonato.
+- **Fase 3** (estatísticas respeitando as regras): começou pelo mapeamento dos leitores e parou no disco cheio. Nada da Fase 3 foi escrito ainda.
+
+## ⚠️ Disco cheio (27/10, ~16h)
+O C: chegou a 0 GB livres no meio da Fase 3. `ChampionshipRuleSet.cs` foi truncado e restaurado do git; nenhum outro arquivo foi afetado. Para liberar espaço, apaguei só o `bin/obj` do worktree do motor (já mesclado). **Antes de continuar, é preciso liberar espaço** (builds e testes escrevem centenas de MB).
 
 ## Trabalho paralelo
 - **Motor de formatos e classificação** ✅: outra IA, branch `feature/campeonato-motor` (commits `c068138` + `87033ce`), worktree `C:\Users\lhnme\source\repos\BratnavaFCApi-campeonato-motor`.
@@ -78,4 +81,9 @@ Motor mesclado nesta branch (`51048fa`). Contrato: [CONTRATO-API.md](CONTRATO-AP
     2. "Todos jogaram a mesma quantidade" encerra **no primeiro momento** em que as contagens empatam. O esperado não seria "acabou o tempo, joga até igualar"?
     3. Mata-mata com nº ímpar: quem passa direto é **o último da lista**. Deveria ser o melhor colocado/sorteado?
     4. Desempate: hoje "Pontos" pode ficar em qualquer posição da lista; travar como 1º critério?
-- **Telas do campeonato no app Flutter** ⏳: prompt em [PROMPT-OUTRA-IA-2.md](PROMPT-OUTRA-IA-2.md). Worktree `C:\Users\lhnme\source\repos\BratnavaFCApp-campeonato`, branch `feature/campeonato-telas`, progresso em `docs\campeonato-telas\PROGRESSO.md` daquele worktree.
+- **Telas do campeonato no app Flutter** ✅: outra IA, branch `feature/campeonato-telas` (`515a2bd` + `33cd4a8`), worktree `C:\Users\lhnme\source\repos\BratnavaFCApp-campeonato`.
+  - Validado em 27/10: só arquivos da feature + menu/rota/flag; flag ligada em dev e desligada em prod; rotas idênticas ao `ChampionshipsController`; enums e chaves JSON iguais ao contrato.
+  - A revisão achou dois desvios **no backend**, já corrigidos em `1f49cd1`: `topScorers`/`topAssists` com `count` em vez de `goals`/`assists`, e `minimumTeams` vazando no JSON das regras. Novo `CampeonatoContratoTests` trava as chaves.
+  - O `flutter test` não rodou aqui (sem memória/disco na máquina); vale o relatório dela: 115 aprovados.
+  - Pendência dela: o convidado é adicionado digitando o ID (falta um seletor de jogadores).
+- **Telas do campeonato no front web** ⬜: prompt em [PROMPT-OUTRA-IA-3.md](PROMPT-OUTRA-IA-3.md). Mandar só depois de liberar disco.
