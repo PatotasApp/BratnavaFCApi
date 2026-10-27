@@ -39,5 +39,16 @@ Branch: `feature/campeonato-fase0-blindagem` (a partir de `main` @ 9863c15). Sem
 2. Docker ligado; `dotnet test ./BranavaFCTests/BranavaFC.Tests.csproj`.
 3. Próximo: **Fase 1** (ver PLANO.md).
 
+## Fase 1 — Backend do campeonato ⏳
+- Contrato da API escrito: [CONTRATO-API.md](CONTRATO-API.md) v1. Clientes constroem em cima dele.
+- Implementação ainda não começou: aguardando o merge do motor nesta branch (o Luis precisa aprovar).
+
 ## Trabalho paralelo
-- **Motor de formatos e classificação:** outra IA, branch `feature/campeonato-motor`, worktree `C:\Users\lhnme\source\repos\BratnavaFCApi-campeonato-motor`. Progresso dela em `docs\campeonato-motor\PROGRESSO.md` daquele worktree.
+- **Motor de formatos e classificação** ✅: outra IA, branch `feature/campeonato-motor` (commits `c068138` + `87033ce`), worktree `C:\Users\lhnme\source\repos\BratnavaFCApi-campeonato-motor`.
+  - Validado em 27/10: 24 testes do motor e 1554 da suíte passando, só arquivos em `src/BratnavaFC.Domain/Championships/` e `BranavaFCTests/ChampionshipEngine*`, sem arquivo em comum com esta branch (merge limpo).
+  - Revisão: código bom. Perguntas de produto para o Luis antes de ajustar:
+    1. Fica quem ganha com limite: hoje **sai só o vencedor** e o perdedor fica. Com 4+ times, deveriam **sair os dois**?
+    2. "Todos jogaram a mesma quantidade" encerra **no primeiro momento** em que as contagens empatam. O esperado não seria "acabou o tempo, joga até igualar"?
+    3. Mata-mata com nº ímpar: quem passa direto é **o último da lista**. Deveria ser o melhor colocado/sorteado?
+    4. Desempate: hoje "Pontos" pode ficar em qualquer posição da lista; travar como 1º critério?
+- **Telas do campeonato no app Flutter** ⏳: prompt em [PROMPT-OUTRA-IA-2.md](PROMPT-OUTRA-IA-2.md). Worktree `C:\Users\lhnme\source\repos\BratnavaFCApp-campeonato`, branch `feature/campeonato-telas`, progresso em `docs\campeonato-telas\PROGRESSO.md` daquele worktree.

@@ -8,6 +8,7 @@ Pasta de passagem: qualquer pessoa ou IA que pegar este trabalho deve começar p
 | [PLANO.md](PLANO.md) | Arquitetura e as fases 0 a 5. |
 | [PROGRESSO.md](PROGRESSO.md) | O que já foi feito, o que falta, e como retomar. **Atualizar sempre.** |
 | [PARALELO.md](PARALELO.md) | Trabalhos que outra IA pode fazer ao mesmo tempo sem conflito. |
+| [CONTRATO-API.md](CONTRATO-API.md) | Endpoints, DTOs e enums do campeonato (fonte da verdade dos clientes). |
 
 ## Contexto em 5 linhas
 - Repositórios: `BratnavaFCApi` (C# .NET 8, EF Core, Postgres), `BratnavaFCApp` (Flutter, app principal) e `BratnavaFCFront` (React + Vite, cliente gerado em `src/api/generated`).
