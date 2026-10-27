@@ -433,6 +433,8 @@ public sealed class CampeonatoIgnoreQueryFiltersTests
         "src/BratnavaFC.Application/Services/GroupService.cs",   // exclusão de patota
         "src/BratnavaFC.Application/Services/PlayerService.cs",  // exclusão de jogador
         "src/BratnavaFC.Application/Services/ChampionshipService.cs", // única porta dos jogos (GamesQuery)
+        "src/BratnavaFC.Application/Statistics/ChampionshipStatsSource.cs", // campeonatos finalizados → estatísticas pelas regras
+        "src/BratnavaFC.Application/Services/TeamBuilderService.cs", // só ids já filtrados pela ChampionshipStatsSource
         // GetByIdIncludingInactiveAsync (anterior à Fase 0): hoje só chamado para patota,
         // jogador e usuário. Não usar com MatchEntity sem rever este teste.
         "src/BratnavaFC.Infrastructure/Repositories/RepositoryBase.cs",

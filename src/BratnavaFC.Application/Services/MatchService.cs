@@ -1,4 +1,5 @@
 ﻿using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Statistics;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Constants;
 using BratnavaFC.Domain.Dtos;
@@ -1802,7 +1803,8 @@ public sealed class MatchService : IMatchService
         int take,
         int skip,
         CancellationToken cancellationToken,
-        Guid? playerId = null)
+        Guid? playerId = null,
+        bool includeChampionships = false)
     {
         if (groupId == Guid.Empty)
             return Result<PagedResultDto<MatchHistoryItemDto>>.Fail("GroupId e obrigatorio.");
@@ -1825,10 +1827,14 @@ public sealed class MatchService : IMatchService
 
         var total = await query.CountAsync(cancellationToken);
 
+        // Com campeonatos, a página é montada em memória depois de juntar as duas fontes.
+        var fetchSkip = includeChampionships ? 0 : skip;
+        var fetchTake = includeChampionships ? skip + take : take;
+
         var items = await query
             .OrderByDescending(m => m.PlayedAt)
-            .Skip(skip)
-            .Take(take)
+            .Skip(fetchSkip)
+            .Take(fetchTake)
             .Select(m => new MatchHistoryItemDto(
                 m.Id,
                 m.PlayedAt,
@@ -1844,9 +1850,25 @@ public sealed class MatchService : IMatchService
                     .ToList(),
                 m.LinkedPollId,
                 m.LinkedPoll != null ? m.LinkedPoll.Title : null,
-                m.LinkedPoll != null ? m.LinkedPoll.Type : null
+                m.LinkedPoll != null ? m.LinkedPoll.Type : null,
+                null, null, null, null, null, null // campos de campeonato (árvore de expressão não aceita opcionais)
             ))
             .ToListAsync(cancellationToken);
+
+        if (includeChampionships)
+        {
+            var units = (await new ChampionshipStatsSource(_context).GetUnitsAsync(groupId, cancellationToken))
+                .Where(u => !playerId.HasValue || u.Stat.AllPlayers.Any(p => p.PlayerId == playerId.Value))
+                .ToList();
+
+            total += units.Count;
+            items = items
+                .Concat(units.Select(ChampionshipHistoryItems.ToHistoryItem))
+                .OrderByDescending(i => i.PlayedAt)
+                .Skip(skip)
+                .Take(take)
+                .ToList();
+        }
 
         var page = take > 0 ? (skip / take) + 1 : 1;
         return Result<PagedResultDto<MatchHistoryItemDto>>.Ok(
@@ -1857,7 +1879,8 @@ public sealed class MatchService : IMatchService
         Guid groupId,
         Guid playerId,
         int take,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool includeChampionships = false)
     {
         take = take <= 0 ? 5 : Math.Min(take, 20);
 
@@ -1944,6 +1967,9 @@ public sealed class MatchService : IMatchService
             );
         }).ToList();
 
+        if (includeChampionships)
+            result = await MergeChampionshipItemsAsync(groupId, playerId, result, null, take, ct);
+
         return Result<IReadOnlyList<PlayerRecentMatchDto>>.Ok(result);
     }
 
@@ -1951,7 +1977,8 @@ public sealed class MatchService : IMatchService
         Guid groupId,
         Guid playerId,
         int? year,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool includeChampionships = false)
     {
         var query = _context.Matches
             .AsNoTracking()
@@ -2016,7 +2043,28 @@ public sealed class MatchService : IMatchService
             IsPlayerMvp:    m.IsPlayerMvp
         )).ToList();
 
+        if (includeChampionships)
+            result = await MergeChampionshipItemsAsync(groupId, playerId, result, year, 500, ct);
+
         return Result<IReadOnlyList<PlayerRecentMatchDto>>.Ok(result);
+    }
+
+    /// <summary>
+    /// Junta à lista do jogador os campeonatos (ou jogos de campeonato) que contam para ele,
+    /// pelas regras de cada campeonato (Fase 3), e reaplica ordem e limite.
+    /// </summary>
+    private async Task<List<PlayerRecentMatchDto>> MergeChampionshipItemsAsync(
+        Guid groupId, Guid playerId, List<PlayerRecentMatchDto> items, int? year, int take, CancellationToken ct)
+    {
+        var championshipItems = (await new ChampionshipStatsSource(_context).GetUnitsAsync(groupId, ct))
+            .Where(u => !year.HasValue || u.Stat.PlayedAt.Year == year.Value)
+            .Select(u => ChampionshipHistoryItems.ToPlayerItem(u, playerId))
+            .OfType<PlayerRecentMatchDto>();
+
+        return items.Concat(championshipItems)
+            .OrderByDescending(i => i.PlayedAt)
+            .Take(take)
+            .ToList();
     }
 
     private PlayerInMatchDto ToPlayerDto(MatchPlayerEntity mp) => new()

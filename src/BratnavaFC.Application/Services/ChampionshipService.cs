@@ -20,8 +20,13 @@ namespace BratnavaFC.Application.Services;
 public sealed class ChampionshipService : IChampionshipService
 {
     private readonly AppDbContext _db;
+    private readonly IConquistaProjectionService? _projection;
 
-    public ChampionshipService(AppDbContext db) => _db = db;
+    public ChampionshipService(AppDbContext db, IConquistaProjectionService? projection = null)
+    {
+        _db = db;
+        _projection = projection;
+    }
 
     // ── Consulta ─────────────────────────────────────────────────────────────
 
@@ -403,8 +408,9 @@ public sealed class ChampionshipService : IChampionshipService
             c.Vote(voter.PlayerId, dto.VotedPlayerId, dto.GameId);
         });
 
-    public Task<Result> FinalizeAsync(Guid groupId, Guid championshipId, FinalizeChampionshipDto dto, CancellationToken ct) =>
-        Mutate(groupId, championshipId, ct, async c =>
+    public async Task<Result> FinalizeAsync(Guid groupId, Guid championshipId, FinalizeChampionshipDto dto, CancellationToken ct)
+    {
+        var result = await Mutate(groupId, championshipId, ct, async c =>
         {
             var games = await LoadGamesAsync(championshipId, tracking: true, ct);
             var positions = FinalPositions(c, games, dto.ExternalDecisionTeamOrder);
@@ -412,6 +418,13 @@ public sealed class ChampionshipService : IChampionshipService
             var settings = await _db.GroupSettings.AsNoTracking().FirstOrDefaultAsync(s => s.GroupId == groupId, ct);
             c.Finalize(positions, games, settings?.MvpTieRule ?? MvpTieRule.AllMvp, settings?.MvpTieMaxPlayers ?? 2);
         });
+
+        // Finalizado, o campeonato passa a contar nas estatísticas gerais (conforme as regras).
+        if (result.Success && _projection is not null)
+            await _projection.RebuildGroupAsync(groupId, ct);
+
+        return result;
+    }
 
     // ── Formato: próximo jogo, empates e colocação final ─────────────────────
 

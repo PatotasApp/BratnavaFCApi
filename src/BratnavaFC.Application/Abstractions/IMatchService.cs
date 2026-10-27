@@ -66,7 +66,7 @@ public interface IMatchService
     Task<Result> SyncPlayerIntoActiveMatchesAsync(Guid groupId, Guid playerId, CancellationToken ct);
 
     Task<Result> RewindOneStepAsync(Guid groupId, Guid matchId, CancellationToken ct);
-    Task<Result<PagedResultDto<MatchHistoryItemDto>>> GetHistoryAsync(Guid groupId, int take, int skip, CancellationToken cancellationToken, Guid? playerId = null);
+    Task<Result<PagedResultDto<MatchHistoryItemDto>>> GetHistoryAsync(Guid groupId, int take, int skip, CancellationToken cancellationToken, Guid? playerId = null, bool includeChampionships = false);
 
     Task<Result> AddGuestToMatchAsync(Guid groupId, Guid matchId, AddGuestToMatchDto dto, CancellationToken ct);
 
@@ -74,13 +74,15 @@ public interface IMatchService
         Guid groupId,
         Guid playerId,
         int take,
-        CancellationToken ct);
+        CancellationToken ct,
+        bool includeChampionships = false);
 
     Task<Result<IReadOnlyList<PlayerRecentMatchDto>>> GetPlayerHistoryAsync(
         Guid groupId,
         Guid playerId,
         int? year,
-        CancellationToken ct);
+        CancellationToken ct,
+        bool includeChampionships = false);
 
     Task<Result<List<ReplayClipDto>>> GetReplaysAsync(Guid groupId, Guid matchId, Guid? userId, CancellationToken ct);
     Task<(bool IsLiked, int LikeCount)> ToggleLikeAsync(Guid clipId, Guid userId, CancellationToken ct);

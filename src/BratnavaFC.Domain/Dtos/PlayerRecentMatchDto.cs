@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 
 namespace BratnavaFC.Domain.Dtos;
 
@@ -26,5 +27,13 @@ public sealed record PlayerRecentMatchDto(
     int  PlayerGoals,
     int  PlayerAssists,
     int  PlayerOwnGoals,
-    bool IsPlayerMvp
+    bool IsPlayerMvp,
+
+    // Modo Campeonato (Fase 3). Só vêm quando a lista inclui campeonatos (includeChampionships=true).
+    // Kind: "championship" (consolidado) ou "championshipGame". PlayerResult: "W", "D", "L" ou "N"
+    // (só presença) — no consolidado o resultado vem da regra do campeonato, não do placar.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Kind = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? ChampionshipId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ChampionshipName = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PlayerResult = null
 );

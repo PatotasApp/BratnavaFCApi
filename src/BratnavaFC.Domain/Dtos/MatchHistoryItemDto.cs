@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Text.Json.Serialization;
 
 namespace BratnavaFC.Domain.Dtos;
 
@@ -15,5 +16,15 @@ public sealed record MatchHistoryItemDto(
     IReadOnlyList<Guid> PlayerIds,
     Guid? LinkedPollId = null,
     string? LinkedPollTitle = null,
-    string? LinkedPollType = null
+    string? LinkedPollType = null,
+
+    // Modo Campeonato (Fase 3). Só vêm quando a lista inclui campeonatos (includeChampionships=true);
+    // partidas comuns não ganham esses campos no JSON.
+    // Kind: "championship" (consolidado: 1 card) ou "championshipGame" (jogo que conta como partida).
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Kind = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? ChampionshipId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ChampionshipName = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ChampionTeamName = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ChampionTeamColorHex = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? RuleBadges = null
 );

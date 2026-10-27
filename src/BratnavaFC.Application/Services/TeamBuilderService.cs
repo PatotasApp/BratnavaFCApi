@@ -1,4 +1,5 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Statistics;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.TeamBuilder;
 using BratnavaFC.Domain.Enums;
@@ -37,9 +38,14 @@ public sealed class TeamBuilderService : ITeamBuilderService
         var playerIdSet = playerIds.ToHashSet();
         var n           = playerIds.Count;
 
-        var matchIds = await _db.Matches
+        // Jogos de campeonato só entram quando a regra os trata exatamente como partidas
+        // normais (Fase 3). Com os ids já filtrados, as consultas abaixo ignoram o filtro global.
+        var championshipGameIds = await new ChampionshipStatsSource(_db).GetFullyCountingGameIdsAsync(groupId, ct);
+
+        var matchIds = await _db.Matches.IgnoreQueryFilters()
             .Where(m => m.GroupId == groupId && m.Status == MatchStatus.Finalized)
-            .Where(m => _db.MatchPlayers
+            .Where(m => m.ChampionshipId == null || championshipGameIds.Contains(m.Id))
+            .Where(m => _db.MatchPlayers.IgnoreQueryFilters()
                 .Count(mp => mp.MatchId == m.Id
                           && playerIdSet.Contains(mp.PlayerId)
                           && mp.InviteResponse == InviteResponse.Accepted
@@ -51,7 +57,7 @@ public sealed class TeamBuilderService : ITeamBuilderService
             return Result<TeamBuilderStatsDto>.Ok(
                 new TeamBuilderStatsDto { NeverPlayedTogether = true, Players = players });
 
-        var matchData = await _db.Matches
+        var matchData = await _db.Matches.IgnoreQueryFilters()
             .Where(m => matchIds.Contains(m.Id))
             .Select(m => new
             {
@@ -135,7 +141,7 @@ public sealed class TeamBuilderService : ITeamBuilderService
         }
 
         // Todos os gols válidos das partidas (contagem por jogador + pares de assistência)
-        var goals = await _db.Goals
+        var goals = await _db.Goals.IgnoreQueryFilters()
             .Where(g => matchIds.Contains(g.MatchId) && !g.IsOwnGoal)
             .Select(g => new { g.ScorerMatchPlayerId, g.AssistMatchPlayerId })
             .ToListAsync(ct);

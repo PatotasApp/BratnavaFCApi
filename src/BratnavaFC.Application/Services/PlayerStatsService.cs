@@ -1,4 +1,5 @@
 ﻿using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Statistics;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Entities;
@@ -34,6 +35,12 @@ public sealed class PlayerStatsService : IPlayerStatsService
 
         // Only the last 20 finalized matches that include at least one of the players requested.
         var matches = await LoadRecentFinalizedMatchesAsync(playerIds, cancellationToken);
+
+        // Jogos de campeonato só entram no sorteio quando a regra do campeonato permite
+        // (IncludeInTeamDraw, desligado por padrão), e pelo placar real de cada jogo.
+        var drawGames = await new ChampionshipStatsSource(_context).GetTeamDrawGamesAsync(playerIds, cancellationToken);
+        if (drawGames.Count > 0)
+            matches = matches.Concat(drawGames).OrderByDescending(m => m.PlayedAt).Take(20).ToList();
 
         // Carrega ratings diretamente do banco para garantir o valor mais atualizado
         var playerRatingMap = await _context.Players
@@ -152,48 +159,33 @@ public sealed class PlayerStatsService : IPlayerStatsService
             .Include(m => m.Votes)
             .ToListAsync(cancellationToken);
 
-        var matchesFiltered = matches
-            .Select(m =>
-            {
-                var (teamA, teamB) = GetTeams(m, groupId, playerIds);
-                return new { Match = m, TeamA = teamA, TeamB = teamB };
-            })
-            .Where(x => x.TeamA.Count > 0 || x.TeamB.Count > 0)
+        // Fonte única: partidas comuns + unidades de campeonato conforme as regras dele.
+        var units = matches.Select(StatMatch.FromMatch)
+            .Concat((await new ChampionshipStatsSource(_context).GetUnitsAsync(groupId, cancellationToken)).Select(u => u.Stat))
+            .Where(u => u.AllPlayers.Any(p => playerIds.Contains(p.PlayerId)))
             .ToList();
 
-        var totalMatches = matchesFiltered.Count;
-        var totalFinalized = matchesFiltered.Count(x => x.Match.Status == MatchStatus.Finalized);
-        var totalWithScore = matchesFiltered.Count(x => x.Match.TeamAGoals.HasValue && x.Match.TeamBGoals.HasValue);
+        var totalMatches = units.Count;
+        var totalFinalized = units.Count;
+        var totalWithScore = units.Count(u => u.HasScore);
 
         var perPlayer = InitializePlayerAccumulators(playerIds);
         var mvpCounts = playerIds.ToDictionary(id => id, _ => 0);
         var mvpVoteCounts = playerIds.ToDictionary(id => id, _ => 0);
         var pairTotals = new Dictionary<PairKey, PairAccumulator>();
 
-        foreach (var x in matchesFiltered)
+        foreach (var unit in units)
         {
-            var mpIdToPlayerId = x.Match.Players
-                .Where(mp => playerIds.Contains(mp.PlayerId) && !mp.DidNotPlay)
-                .ToDictionary(mp => mp.Id, mp => mp.PlayerId);
-
-            foreach (var vote in x.Match.Votes ?? [])
+            foreach (var votedPlayerId in unit.MvpVotesFor)
             {
-                if (mpIdToPlayerId.TryGetValue(vote.VotedForId, out var votedPlayerId)
-                    && mvpVoteCounts.ContainsKey(votedPlayerId))
+                if (mvpVoteCounts.ContainsKey(votedPlayerId))
                     mvpVoteCounts[votedPlayerId]++;
             }
         }
 
-        foreach (var x in matchesFiltered)
+        foreach (var unit in units)
         {
-            ProcessMatchForVisual(
-                x.Match,
-                x.TeamA,
-                x.TeamB,
-                playerIds,
-                perPlayer,
-                pairTotals,
-                mvpCounts);
+            ProcessUnitForVisual(unit, playerIds, perPlayer, pairTotals, mvpCounts);
         }
 
         var playerNameById = players.ToDictionary(p => p.Id, p => p.Name);
@@ -280,6 +272,11 @@ public sealed class PlayerStatsService : IPlayerStatsService
             .Include(m => m.Goals)
             .ToListAsync(cancellationToken);
 
+        // Fonte única: partidas comuns + unidades de campeonato conforme as regras dele.
+        var units = matches.Select(StatMatch.FromMatch)
+            .Concat((await new ChampionshipStatsSource(_context).GetUnitsAsync(groupId, cancellationToken)).Select(u => u.Stat))
+            .ToList();
+
         // Accumulators
         var perPlayer      = InitializePlayerAccumulators(playerIds);
         var pairTotals     = new Dictionary<PairKey, PairAccumulator>();
@@ -287,49 +284,38 @@ public sealed class PlayerStatsService : IPlayerStatsService
         var assistPairs    = new Dictionary<(Guid scorer, Guid assister), int>();
         var mvpCounts      = playerIds.ToDictionary(id => id, _ => 0);
 
-        foreach (var match in matches)
+        foreach (var unit in units)
         {
-            var (teamA, teamB) = GetTeams(match, groupId, playerIds);
-            if (teamA.Count == 0 && teamB.Count == 0) continue;
+            var sides = unit.Sides
+                .Select(side => (Side: side, Ids: TrackedIds(side, playerIds)))
+                .ToList();
+            if (sides.All(x => x.Ids.Count == 0)) continue;
 
             // ── MVP ──
-            foreach (var mp in teamA.Concat(teamB))
-                if (mp.IsMvp == true && mvpCounts.ContainsKey(mp.PlayerId))
-                    mvpCounts[mp.PlayerId]++;
-
-            var outcome = GetMatchOutcome(match);
+            foreach (var p in unit.AllPlayers)
+                if (p.IsMvp && mvpCounts.ContainsKey(p.PlayerId))
+                    mvpCounts[p.PlayerId]++;
 
             // ── Per-player W/L/T ──
-            foreach (var mp in teamA.Concat(teamB).GroupBy(p => p.PlayerId).Select(g => g.First()))
+            foreach (var p in unit.AllPlayers.GroupBy(p => p.PlayerId).Select(g => g.First()))
             {
-                var pid = mp.PlayerId;
-                if (!perPlayer.TryGetValue(pid, out var acc)) continue;
-                acc.MatchesPlayed++;
-                if (outcome.HasScore)
-                {
-                    if (outcome.IsTie) acc.Ties++;
-                    else
-                    {
-                        bool inA = teamA.Any(x => x.PlayerId == pid);
-                        if (inA && outcome.WinningTeam == MatchWinningTeam.TeamA) acc.Wins++;
-                        else if (!inA && teamB.Any(x => x.PlayerId == pid) && outcome.WinningTeam == MatchWinningTeam.TeamB) acc.Wins++;
-                        else acc.Losses++;
-                    }
-                }
-                perPlayer[pid] = acc;
+                if (!perPlayer.TryGetValue(p.PlayerId, out var acc)) continue;
+                CountResult(acc, p.Result);
+                perPlayer[p.PlayerId] = acc;
             }
 
             // ── Synergy (same team) ──
-            bool isTie = outcome.HasScore && outcome.IsTie;
-            AddTeamSynergy(teamA, outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamA, isTie, pairTotals);
-            AddTeamSynergy(teamB, outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamB, isTie, pairTotals);
+            foreach (var (side, ids) in sides)
+                AddTeamSynergy(ids, side.Result == StatResult.Win, side.Result == StatResult.Draw, pairTotals);
 
-            // ── Head-to-head (opposite teams) ──
-            if (outcome.HasScore && !outcome.IsTie)
+            // ── Head-to-head (opposite teams): só quando os lados se enfrentaram de verdade ──
+            if (unit.IsHeadToHead && sides.Count == 2
+                && sides[0].Side.Result is StatResult.Win or StatResult.Loss
+                && sides[1].Side.Result is StatResult.Win or StatResult.Loss)
             {
-                var idsA = teamA.Select(p => p.PlayerId).Distinct().ToList();
-                var idsB = teamB.Select(p => p.PlayerId).Distinct().ToList();
-                bool aWon = outcome.WinningTeam == MatchWinningTeam.TeamA;
+                var idsA = sides[0].Ids;
+                var idsB = sides[1].Ids;
+                bool aWon = sides[0].Side.Result == StatResult.Win;
 
                 foreach (var pidA in idsA)
                     foreach (var pidB in idsB)
@@ -352,34 +338,31 @@ public sealed class PlayerStatsService : IPlayerStatsService
             }
 
             // ── Goals / assists ──
-            var mpIdToPlayerId = match.Players
-                .Where(mp => playerIds.Contains(mp.PlayerId) && !mp.DidNotPlay)
-                .ToDictionary(mp => mp.Id, mp => mp.PlayerId);
-
-            foreach (var goal in match.Goals ?? [])
+            foreach (var goal in unit.Goals)
             {
+                var scorerPid = goal.ScorerPlayerId;
+                var scorerTracked = scorerPid.HasValue && playerIds.Contains(scorerPid.Value);
+
                 if (goal.IsOwnGoal)
                 {
-                    if (mpIdToPlayerId.TryGetValue(goal.ScorerMatchPlayerId, out var pid)
-                        && perPlayer.TryGetValue(pid, out var acc))
-                    { acc.OwnGoals++; perPlayer[pid] = acc; }
+                    if (scorerTracked && perPlayer.TryGetValue(scorerPid!.Value, out var acc))
+                    { acc.OwnGoals++; perPlayer[scorerPid.Value] = acc; }
                     continue;
                 }
 
-                if (mpIdToPlayerId.TryGetValue(goal.ScorerMatchPlayerId, out var scorerPid)
-                    && perPlayer.TryGetValue(scorerPid, out var gAcc))
-                { gAcc.Goals++; perPlayer[scorerPid] = gAcc; }
+                if (scorerTracked && perPlayer.TryGetValue(scorerPid!.Value, out var gAcc))
+                { gAcc.Goals++; perPlayer[scorerPid.Value] = gAcc; }
 
-                if (goal.AssistMatchPlayerId.HasValue
-                    && mpIdToPlayerId.TryGetValue(goal.AssistMatchPlayerId.Value, out var assistPid)
+                if (goal.AssistPlayerId is Guid assistPid
+                    && playerIds.Contains(assistPid)
                     && perPlayer.TryGetValue(assistPid, out var aAcc))
                 {
                     aAcc.Assists++; perPlayer[assistPid] = aAcc;
 
                     // track per-pair assist
-                    if (mpIdToPlayerId.TryGetValue(goal.ScorerMatchPlayerId, out var sp))
+                    if (scorerTracked)
                     {
-                        var apKey = (scorer: sp, assister: assistPid);
+                        var apKey = (scorer: scorerPid!.Value, assister: assistPid);
                         assistPairs[apKey] = assistPairs.TryGetValue(apKey, out var c) ? c + 1 : 1;
                     }
                 }
@@ -618,20 +601,19 @@ public sealed class PlayerStatsService : IPlayerStatsService
         }
 
         bool isTieBasic = outcome.HasScore && outcome.IsTie;
-        AddTeamSynergy(teamA, outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamA, isTieBasic, pairTotals);
-        AddTeamSynergy(teamB, outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamB, isTieBasic, pairTotals);
+        AddTeamSynergy(teamA.Select(p => p.PlayerId), outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamA, isTieBasic, pairTotals);
+        AddTeamSynergy(teamB.Select(p => p.PlayerId), outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamB, isTieBasic, pairTotals);
     }
 
-    private static void ProcessMatchForVisual(
-        MatchEntity match,
-        IReadOnlyList<MatchPlayerEntity> teamA,
-        IReadOnlyList<MatchPlayerEntity> teamB,
+    private static void ProcessUnitForVisual(
+        StatMatch unit,
         HashSet<Guid> trackedPlayerIds,
         Dictionary<Guid, PlayerAccumulator> perPlayer,
         Dictionary<PairKey, PairAccumulator> pairTotals,
         Dictionary<Guid, int> mvpCounts)
     {
-        var participants = teamA.Concat(teamB)
+        var participants = unit.AllPlayers
+            .Where(p => trackedPlayerIds.Contains(p.PlayerId))
             .GroupBy(p => p.PlayerId)
             .Select(g => g.First())
             .ToList();
@@ -639,83 +621,57 @@ public sealed class PlayerStatsService : IPlayerStatsService
         if (participants.Count == 0)
             return;
 
-        foreach (var mp in participants)
+        foreach (var p in participants)
         {
-            if (mp.IsMvp == true && mvpCounts.ContainsKey(mp.PlayerId))
-                mvpCounts[mp.PlayerId]++;
+            if (p.IsMvp && mvpCounts.ContainsKey(p.PlayerId))
+                mvpCounts[p.PlayerId]++;
         }
 
-        var outcome = GetMatchOutcome(match);
-
-        foreach (var mp in participants)
+        foreach (var p in participants)
         {
-            var playerId = mp.PlayerId;
-            if (!perPlayer.TryGetValue(playerId, out var acc))
+            if (!perPlayer.TryGetValue(p.PlayerId, out var acc))
                 continue;
 
-            acc.MatchesPlayed++;
-
-            if (outcome.HasScore)
-            {
-                if (outcome.IsTie)
-                {
-                    acc.Ties++;
-                }
-                else
-                {
-                    var isInA = teamA.Any(x => x.PlayerId == playerId);
-                    var isInB = !isInA && teamB.Any(x => x.PlayerId == playerId);
-
-                    if (isInA && outcome.WinningTeam == MatchWinningTeam.TeamA) acc.Wins++;
-                    else if (isInB && outcome.WinningTeam == MatchWinningTeam.TeamB) acc.Wins++;
-                    else acc.Losses++;
-                }
-            }
-
-            perPlayer[playerId] = acc;
+            CountResult(acc, p.Result);
+            perPlayer[p.PlayerId] = acc;
         }
 
-        bool isTieVisual = outcome.HasScore && outcome.IsTie;
-        AddTeamSynergy(teamA, outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamA, isTieVisual, pairTotals);
-        AddTeamSynergy(teamB, outcome.HasScore && !outcome.IsTie && outcome.WinningTeam == MatchWinningTeam.TeamB, isTieVisual, pairTotals);
+        foreach (var side in unit.Sides)
+            AddTeamSynergy(TrackedIds(side, trackedPlayerIds), side.Result == StatResult.Win, side.Result == StatResult.Draw, pairTotals);
 
         // ── Gols / assistências / gols-contra ─────────────────────────────
-        // mapeia MatchPlayerEntity.Id → PlayerId para os jogadores rastreados (excluindo DidNotPlay)
-        var mpIdToPlayerId = match.Players
-            .Where(mp => trackedPlayerIds.Contains(mp.PlayerId) && !mp.DidNotPlay)
-            .ToDictionary(mp => mp.Id, mp => mp.PlayerId);
-
-        foreach (var goal in match.Goals ?? [])
+        foreach (var goal in unit.Goals)
         {
+            var pid = goal.ScorerPlayerId;
+            var scorerTracked = pid.HasValue && trackedPlayerIds.Contains(pid.Value);
+
             if (goal.IsOwnGoal)
             {
-                if (mpIdToPlayerId.TryGetValue(goal.ScorerMatchPlayerId, out var pid)
-                    && perPlayer.TryGetValue(pid, out var acc))
+                if (scorerTracked && perPlayer.TryGetValue(pid!.Value, out var acc))
                 {
                     acc.OwnGoals++;
-                    perPlayer[pid] = acc;
+                    perPlayer[pid.Value] = acc;
                 }
             }
             else
             {
-                if (mpIdToPlayerId.TryGetValue(goal.ScorerMatchPlayerId, out var pid)
-                    && perPlayer.TryGetValue(pid, out var acc))
+                if (scorerTracked && perPlayer.TryGetValue(pid!.Value, out var acc))
                 {
                     acc.Goals++;
-                    perPlayer[pid] = acc;
+                    perPlayer[pid.Value] = acc;
                 }
 
-                if (goal.AssistMatchPlayerId.HasValue
-                    && mpIdToPlayerId.TryGetValue(goal.AssistMatchPlayerId.Value, out var aPid)
+                if (goal.AssistPlayerId is Guid aPid
+                    && trackedPlayerIds.Contains(aPid)
                     && perPlayer.TryGetValue(aPid, out var aAcc))
                 {
                     aAcc.Assists++;
                     perPlayer[aPid] = aAcc;
 
                     // Track assist direction between this pair (both must be tracked players)
-                    if (perPlayer.ContainsKey(pid) && aPid != pid)
+                    if (scorerTracked && aPid != pid!.Value)
                     {
-                        var pairKey = PairKey.Create(aPid, pid);
+                        var pairKey = PairKey.Create(aPid, pid.Value);
                         if (!pairTotals.TryGetValue(pairKey, out var pairAcc))
                             pairAcc = PairAccumulator.Empty;
                         // aPid gave the assist TO pid
@@ -728,13 +684,31 @@ public sealed class PlayerStatsService : IPlayerStatsService
         }
     }
 
+    /// <summary>Conta a presença e o resultado. None (sem placar ou "só presença") conta só a presença.</summary>
+    private static void CountResult(PlayerAccumulator acc, StatResult result)
+    {
+        acc.MatchesPlayed++;
+        switch (result)
+        {
+            case StatResult.Win: acc.Wins++; break;
+            case StatResult.Draw: acc.Ties++; break;
+            case StatResult.Loss: acc.Losses++; break;
+        }
+    }
+
+    private static List<Guid> TrackedIds(StatSide side, HashSet<Guid> trackedPlayerIds) => side.Players
+        .Select(p => p.PlayerId)
+        .Where(trackedPlayerIds.Contains)
+        .Distinct()
+        .ToList();
+
     private static void AddTeamSynergy(
-        IReadOnlyList<MatchPlayerEntity> teamPlayers,
+        IEnumerable<Guid> teamPlayerIds,
         bool teamWon,
         bool isTie,
         Dictionary<PairKey, PairAccumulator> pairTotals)
     {
-        var ids = teamPlayers.Select(p => p.PlayerId).Distinct().ToList();
+        var ids = teamPlayerIds.Distinct().ToList();
         if (ids.Count < 2) return;
 
         for (int i = 0; i < ids.Count; i++)

@@ -58,6 +58,8 @@ public sealed class PlayerStatProjectionEntity : BaseEntity
         var clean = 0;
         foreach (var row in rows)
         {
+            // "N" = só presença (regra do campeonato): não avança nem quebra sequências.
+            if (row.Result == "N") continue;
             unbeaten = row.Result == "L" ? 0 : unbeaten + 1;
             wins = row.Result == "W" ? wins + 1 : 0;
             clean = row.CleanSheets > 0 ? clean + 1 : 0;

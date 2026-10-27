@@ -812,10 +812,11 @@ public class MatchesController : GroupAuthorizedController
         [FromQuery] int take = 20,
         [FromQuery] int skip = 0,
         [FromQuery] Guid? playerId = null,
+        [FromQuery] bool includeChampionships = false,
         CancellationToken cancellationToken = default)
     {
         if (!await IsGroupMemberAsync(groupId, _db, cancellationToken)) return Forbid();
-        var result = await _service.GetHistoryAsync(groupId, take, skip, cancellationToken, playerId);
+        var result = await _service.GetHistoryAsync(groupId, take, skip, cancellationToken, playerId, includeChampionships);
         if (!result.Success) return BadRequest(new { error = result.Error });
         return Ok(result);
     }
@@ -829,11 +830,12 @@ public class MatchesController : GroupAuthorizedController
         Guid groupId,
         [FromQuery] Guid playerId,
         [FromQuery] int take = 3,
+        [FromQuery] bool includeChampionships = false,
         CancellationToken ct = default)
     {
         if (playerId == Guid.Empty) return BadRequest(new { error = "playerId é obrigatório." });
 
-        var items = await _service.GetPlayerRecentMatchesAsync(groupId, playerId, take, ct);
+        var items = await _service.GetPlayerRecentMatchesAsync(groupId, playerId, take, ct, includeChampionships);
         return Ok(items);
     }
 
@@ -842,6 +844,7 @@ public class MatchesController : GroupAuthorizedController
         Guid groupId,
         [FromQuery] Guid playerId,
         [FromQuery] int? year = null,
+        [FromQuery] bool includeChampionships = false,
         CancellationToken ct = default)
     {
         if (playerId == Guid.Empty) return BadRequest(new { error = "playerId é obrigatório." });
@@ -859,7 +862,7 @@ public class MatchesController : GroupAuthorizedController
             if (!ownsPlayer) return Forbid();
         }
 
-        var items = await _service.GetPlayerHistoryAsync(groupId, playerId, year, ct);
+        var items = await _service.GetPlayerHistoryAsync(groupId, playerId, year, ct, includeChampionships);
         return Ok(items);
     }
 

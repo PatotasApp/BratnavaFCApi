@@ -1,4 +1,5 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Statistics;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
@@ -66,6 +67,10 @@ public sealed class ConquistaProjectionService : IConquistaProjectionService
 
         var contributions = BuildContributions(matches);
 
+        // Campeonatos finalizados entram conforme as regras de cada um (Fase 3).
+        var units = await new ChampionshipStatsSource(_db).GetUnitsAsync(groupId, ct);
+        contributions.AddRange(BuildChampionshipContributions(units.Select(u => u.Stat)));
+
         await using var transaction = await _db.Database.BeginTransactionAsync(ct);
         await _db.PlayerMatchStatContributions.Where(x => x.GroupId == groupId).ExecuteDeleteAsync(ct);
 
@@ -75,6 +80,43 @@ public sealed class ConquistaProjectionService : IConquistaProjectionService
         await ReplaceProjectionsAsync(groupId, contributions, ct);
         await transaction.CommitAsync(ct);
     }
+
+    private static IEnumerable<PlayerMatchStatContributionEntity> BuildChampionshipContributions(IEnumerable<StatMatch> units)
+    {
+        foreach (var unit in units)
+        {
+            var season = TimeZoneInfo.ConvertTime(unit.PlayedAt, BrazilTz).Year;
+            foreach (var side in unit.Sides)
+            {
+                foreach (var p in side.Players)
+                {
+                    var goals = unit.Goals.Count(g => !g.IsOwnGoal && g.ScorerPlayerId == p.PlayerId);
+                    var assists = unit.Goals.Count(g => !g.IsOwnGoal && g.AssistPlayerId == p.PlayerId);
+                    var ownGoals = unit.Goals.Count(g => g.IsOwnGoal && g.ScorerPlayerId == p.PlayerId);
+
+                    // Jogo separado: feitos do próprio jogo. Consolidado: feitos já apurados por jogo.
+                    var feats = p.Feats ?? new StatFeats(
+                        goals == 3 ? 1 : 0, goals == 4 ? 1 : 0, goals >= 5 ? 1 : 0,
+                        goals > 0 && assists > 0 ? 1 : 0, assists >= 3 ? 1 : 0,
+                        p.IsGoalkeeper && side.GoalsAgainst == 0 ? 1 : 0);
+
+                    yield return PlayerMatchStatContributionEntity.ForChampionship(
+                        unit.Id, unit.GroupId, p.PlayerId, season, unit.PlayedAt, ResultCode(p.Result),
+                        p.IsGoalkeeper, goals, assists, p.IsMvp ? 1 : 0, ownGoals,
+                        feats.HatTricks, feats.Pokers, feats.FiveGoalGames, feats.GoalAndAssistGames,
+                        feats.ThreeAssistGames, feats.CleanSheets);
+                }
+            }
+        }
+    }
+
+    private static string ResultCode(StatResult result) => result switch
+    {
+        StatResult.Win => "W",
+        StatResult.Draw => "D",
+        StatResult.Loss => "L",
+        _ => "N"
+    };
 
     private static List<PlayerMatchStatContributionEntity> BuildContributions(
         IEnumerable<MatchEntity> matches)

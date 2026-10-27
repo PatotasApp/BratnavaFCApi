@@ -53,4 +53,35 @@ public sealed class PlayerMatchStatContributionEntity : BaseEntity
         GoalAndAssistGames = goals > 0 && assists > 0 ? 1 : 0;
         ThreeAssistGames = assists >= 3 ? 1 : 0;
     }
+
+    /// <summary>
+    /// Linha de um campeonato (Fase 3). <paramref name="result"/> pode ser "N" (só presença:
+    /// conta o jogo, sem V/E/D). Os feitos vêm prontos porque, no consolidado, a unidade junta
+    /// vários jogos e hat-trick/clean sheet são por jogo, nunca da soma.
+    /// </summary>
+    public static PlayerMatchStatContributionEntity ForChampionship(
+        Guid unitId, Guid groupId, Guid playerId, int season, DateTimeOffset playedAt, string result,
+        bool isGoalkeeper, int goals, int assists, int mvps, int ownGoals,
+        int hatTricks, int pokers, int fiveGoalGames, int goalAndAssistGames, int threeAssistGames, int cleanSheets) => new()
+    {
+        MatchId = unitId,
+        GroupId = groupId,
+        PlayerId = playerId,
+        Season = season,
+        PlayedAt = playedAt,
+        Result = result,
+        IsGoalkeeper = isGoalkeeper,
+        Games = 1,
+        Wins = result == "W" ? 1 : 0,
+        Goals = goals,
+        Assists = assists,
+        Mvps = mvps,
+        OwnGoals = ownGoals,
+        CleanSheets = cleanSheets,
+        HatTricks = hatTricks,
+        Pokers = pokers,
+        FiveGoalGames = fiveGoalGames,
+        GoalAndAssistGames = goalAndAssistGames,
+        ThreeAssistGames = threeAssistGames
+    };
 }
