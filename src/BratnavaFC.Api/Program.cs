@@ -18,6 +18,11 @@ try
     // No servidor publicado esta fonte é vazia e os secrets continuam vindo do ambiente.
     builder.Configuration.AddUserSecrets<Program>(optional: true);
 
+    // AddUserSecrets acima é adicionado depois das fontes padrão e, sem recolocar as
+    // variáveis de ambiente por último, acaba sobrescrevendo configurações explícitas do
+    // processo. Isso fazia uma execução local ignorar ConnectionStrings__DefaultConnection.
+    builder.Configuration.AddEnvironmentVariables();
+
     builder.Host.UseSerilog((context, services, loggerConfiguration) => loggerConfiguration
         .ReadFrom.Configuration(context.Configuration)
         .ReadFrom.Services(services)
