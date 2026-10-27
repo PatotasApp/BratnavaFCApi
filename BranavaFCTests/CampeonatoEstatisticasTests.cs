@@ -1,5 +1,6 @@
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
+using BratnavaFC.Application.TeamGeneration.MultiTeam;
 using BratnavaFC.Domain.Championships;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
@@ -164,7 +165,10 @@ public sealed class CampeonatoEstatisticasTests : IClassFixture<CampeonatoPostgr
             WinnerStays = null
         };
 
-        var sut = new ChampionshipService(db, new ConquistaProjectionService(db));
+        var sut = new ChampionshipService(
+            db,
+            new MultiTeamGenerationService(new FakeStatsService([])),
+            new ConquistaProjectionService(db));
         var id = Ok(await sut.CreateAsync(group.Id, new CreateChampionshipDto("Torneio", new DateTime(2026, 12, 20, 13, 0, 0, DateTimeKind.Utc), "Arena", rules), Ct)).Id;
         Ok(await sut.OpenAcceptationAsync(group.Id, id, Ct));
         foreach (var p in players)

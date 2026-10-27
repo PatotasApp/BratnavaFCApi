@@ -1,6 +1,8 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.TeamGeneration.MultiTeam;
 using BratnavaFC.Domain.Championships;
 using BratnavaFC.Domain.Common;
+using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Dtos.Championships;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
@@ -20,11 +22,16 @@ namespace BratnavaFC.Application.Services;
 public sealed class ChampionshipService : IChampionshipService
 {
     private readonly AppDbContext _db;
+    private readonly MultiTeamGenerationService _multiTeamGeneration;
     private readonly IConquistaProjectionService? _projection;
 
-    public ChampionshipService(AppDbContext db, IConquistaProjectionService? projection = null)
+    public ChampionshipService(
+        AppDbContext db,
+        MultiTeamGenerationService multiTeamGeneration,
+        IConquistaProjectionService? projection = null)
     {
         _db = db;
+        _multiTeamGeneration = multiTeamGeneration ?? throw new ArgumentNullException(nameof(multiTeamGeneration));
         _projection = projection;
     }
 
@@ -222,10 +229,7 @@ public sealed class ChampionshipService : IChampionshipService
 
     // ── Times ────────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Sugestão provisória de times (não salva): goleiros primeiro, um por time, e os demais
-    /// em "cobra" pela nota. Será trocada pelo algoritmo novo de sorteio para N times.
-    /// </summary>
+    /// <summary>Sugere times equilibrados, sem salvar, usando a mesma força do sorteio da patota.</summary>
     public async Task<Result<DefineTeamsDto>> DrawTeamsAsync(Guid groupId, Guid championshipId, int teamCount, CancellationToken ct)
     {
         var championship = await LoadAsync(groupId, championshipId, tracking: false, ct);
@@ -239,33 +243,36 @@ public sealed class ChampionshipService : IChampionshipService
         if (confirmed.Count < teamCount)
             return Result<DefineTeamsDto>.Fail("Ha menos jogadores confirmados do que times.");
 
-        static double Strength(PlayerEntity p) =>
-            p.OverallRating ?? (p.GuestStarRating.HasValue ? p.GuestStarRating.Value * 2 : (double)p.SkillPoints);
-
         var colors = (await ActiveColorsShuffledAsync(groupId, ct)).Take(teamCount).ToList();
 
-        var teams = Enumerable.Range(0, teamCount).Select(i => new DefineTeamDto(
+        var players = confirmed
+            .Select(participant => new PlayerRequestDto(
+                participant.PlayerId,
+                participant.Player!.Name,
+                participant.IsGoalkeeper,
+                participant.Player.GuestStarRating))
+            .ToList();
+        var goalkeeperIds = confirmed
+            .Where(participant => participant.IsGoalkeeper)
+            .Select(participant => participant.PlayerId)
+            .ToList();
+        var draw = await _multiTeamGeneration.GenerateAsync(
+            players, teamCount, MultiTeamStrategy.Balanced, goalkeeperIds, ct: ct);
+        if (!draw.Success)
+        {
+            return Result<DefineTeamsDto>.Fail(
+                draw.Error ?? "Nao foi possivel sortear os times.", draw.Status, draw.Errors);
+        }
+
+        var option = draw.Data?.Options.FirstOrDefault();
+        if (option is null)
+            return Result<DefineTeamsDto>.Fail("Nao foi possivel montar uma opcao de times.");
+
+        var teams = option.Teams.Select((team, i) => new DefineTeamDto(
             i < colors.Count ? colors[i].Name : $"Time {i + 1}",
             i < colors.Count ? colors[i].Id : null,
-            [],
-            null)).ToList();
-
-        var goalkeepers = confirmed.Where(p => p.IsGoalkeeper).OrderByDescending(p => Strength(p.Player!)).ToList();
-        var assignedGoalkeepers = goalkeepers.Take(teamCount).ToList();
-        for (var i = 0; i < assignedGoalkeepers.Count; i++)
-        {
-            teams[i].PlayerIds.Add(assignedGoalkeepers[i].PlayerId);
-            teams[i] = teams[i] with { GoalkeeperPlayerId = assignedGoalkeepers[i].PlayerId };
-        }
-
-        var field = confirmed.Except(assignedGoalkeepers).OrderByDescending(p => Strength(p.Player!)).ToList();
-        for (var i = 0; i < field.Count; i++)
-        {
-            var round = i / teamCount;
-            var slot = i % teamCount;
-            var teamIndex = round % 2 == 0 ? slot : teamCount - 1 - slot;
-            teams[teamIndex].PlayerIds.Add(field[i].PlayerId);
-        }
+            team.PlayerIds.ToList(),
+            team.GoalkeeperPlayerId)).ToList();
 
         return Result<DefineTeamsDto>.Ok(new DefineTeamsDto(teams), ColorShortageWarning(teamCount, colors.Count));
     }

@@ -106,8 +106,16 @@ public class ChampionshipsController : GroupAuthorizedController
         AsAdmin(groupId, ct, () => _service.MovePlayerAsync(groupId, championshipId, playerId, dto.TeamId, ct));
 
     [HttpPost("{championshipId:guid}/teams/colors/draw")]
-    public Task<IActionResult> DrawTeamColors(Guid groupId, Guid championshipId, CancellationToken ct) =>
-        AsAdmin(groupId, ct, () => _service.DrawTeamColorsAsync(groupId, championshipId, ct));
+    public async Task<IActionResult> DrawTeamColors(Guid groupId, Guid championshipId, CancellationToken ct)
+    {
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
+
+        var result = await _service.DrawTeamColorsAsync(groupId, championshipId, ct);
+        var response = result.Success
+            ? Result<object?>.Ok(null, result.Message)
+            : Result<object?>.Fail(result.Error ?? "Falha ao sortear as cores.", result.Status, result.Errors);
+        return ToResponse(response);
+    }
 
     [HttpPatch("{championshipId:guid}/teams/{teamId:guid}")]
     public Task<IActionResult> UpdateTeam(Guid groupId, Guid championshipId, Guid teamId, [FromBody] UpdateChampionshipTeamDto dto, CancellationToken ct) =>

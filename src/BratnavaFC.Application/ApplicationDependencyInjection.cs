@@ -1,6 +1,7 @@
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Application.TeamGeneration;
+using BratnavaFC.Application.TeamGeneration.MultiTeam;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Infrastructure;
 using Hangfire;
@@ -84,6 +85,7 @@ public static class ApplicationDependencyInjection
         services.AddScoped<IPlayerService, PlayerService>();
         services.AddScoped<IGroupService, GroupService>();
         services.AddScoped<TeamGenerationService>();
+        services.AddScoped<MultiTeamGenerationService>();
         services.AddScoped<IGroupSettingsService, GroupSettingsService>();
         services.AddScoped<ICalendarService, CalendarService>();
         services.AddScoped<IFinancialTransactionService, FinancialTransactionService>();
