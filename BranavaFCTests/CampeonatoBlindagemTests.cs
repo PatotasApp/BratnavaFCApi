@@ -84,6 +84,78 @@ public sealed class CampeonatoBlindagemTests : IClassFixture<CampeonatoPostgresF
         (await db.Matches.IgnoreQueryFilters().CountAsync(m => m.ChampionshipId != null)).Should().Be(4);
     }
 
+    /// <summary>
+    /// Retrato "golden" das estatísticas de uma patota sem campeonato, gravado antes da Fase 3.
+    /// A Fase 3 refatora os leitores para uma fonte única; sem campeonato, nada pode mudar.
+    /// Para regravar de propósito: UPDATE_GOLDEN=1 dotnet test --filter EstatisticasSemCampeonato.
+    /// </summary>
+    [Fact]
+    public async Task EstatisticasSemCampeonato_IguaisAoRetratoGolden()
+    {
+        await using var db = await _fixture.CreateDatabaseAsync(nameof(EstatisticasSemCampeonato_IguaisAoRetratoGolden));
+        var (group, players) = await SeedRegularHistoryAsync(db);
+
+        var snapshot = await SnapshotAsync(db, group.Id, players);
+        var matches = await db.Matches.AsNoTracking().OrderBy(m => m.PlayedAt).ToListAsync();
+
+        // Ids mudam a cada execução: troca cada Guid por um rótulo estável.
+        var labels = new Dictionary<string, string> { [group.Id.ToString()] = "G" };
+        foreach (var p in players) labels[p.Id.ToString()] = "P:" + p.Name;
+        foreach (var m in matches) labels[m.Id.ToString()] = "M:" + m.PlayedAt.ToString("MM-dd");
+
+        // "conquistas" depende da temporada atual (ano corrente) e fica fora do retrato.
+        var normalized = snapshot
+            .Where(kv => kv.Key != "conquistas")
+            .OrderBy(kv => kv.Key, StringComparer.Ordinal)
+            .Select(kv => $"{kv.Key} = {Canonical(GuidPattern.Replace(kv.Value, g => labels.GetValueOrDefault(g.Value, "?")))}")
+            .ToList();
+        var actual = string.Join("\n", normalized) + "\n";
+
+        var path = Path.Combine(GoldenDir(), "estatisticas-sem-campeonato.txt");
+        if (Environment.GetEnvironmentVariable("UPDATE_GOLDEN") == "1" || !File.Exists(path))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllTextAsync(path, actual);
+        }
+
+        var expected = (await File.ReadAllTextAsync(path)).Replace("\r\n", "\n");
+        var expectedLines = expected.Split('\n');
+        var actualLines = actual.Split('\n');
+        var diff = actualLines.Where((line, i) => i >= expectedLines.Length || expectedLines[i] != line)
+            .Select(line => line.Split(" = ")[0]).ToList();
+        diff.Should().BeEmpty("as estatísticas sem campeonato não podem mudar (saídas diferentes: " + string.Join(", ", diff) + ")");
+        actualLines.Length.Should().Be(expectedLines.Length);
+    }
+
+    /// <summary>
+    /// Ordena arrays e chaves de forma canônica: listas ordenadas por Guid mudariam de ordem
+    /// a cada execução. O retrato compara valores, não a ordem das listas.
+    /// </summary>
+    private static string Canonical(string json)
+    {
+        static JsonNode? Sort(JsonNode? node) => node switch
+        {
+            JsonObject obj => new JsonObject(obj.OrderBy(kv => kv.Key, StringComparer.Ordinal)
+                .Select(kv => KeyValuePair.Create(kv.Key, Sort(kv.Value?.DeepClone())))),
+            JsonArray arr => new JsonArray(arr.Select(n => Sort(n?.DeepClone()))
+                .OrderBy(n => n?.ToJsonString() ?? "null", StringComparer.Ordinal).ToArray()),
+            _ => node?.DeepClone()
+        };
+        return Sort(JsonNode.Parse(json))?.ToJsonString() ?? "null";
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex GuidPattern =
+        new("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+
+    /// <summary>Pasta Golden no código-fonte (não no bin), para o arquivo ir para o git.</summary>
+    private static string GoldenDir()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "BranavaFC.Tests.csproj")))
+            dir = dir.Parent;
+        return Path.Combine(dir?.FullName ?? throw new InvalidOperationException("Projeto de testes não encontrado."), "Golden");
+    }
+
     [Fact]
     public async Task JogosDeCampeonatoAbertos_NaoContamNoLimiteDePartidasSimultaneas()
     {
