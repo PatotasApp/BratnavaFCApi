@@ -203,6 +203,18 @@ public class ChampionshipsController : GroupAuthorizedController
     public Task<IActionResult> Vote(Guid groupId, Guid championshipId, [FromBody] ChampionshipVoteDto dto, CancellationToken ct) =>
         AsMember(groupId, ct, userId => _service.VoteAsync(groupId, championshipId, userId, dto, ct));
 
+    [HttpPost("{championshipId:guid}/admin-vote")]
+    public Task<IActionResult> AdminVote(Guid groupId, Guid championshipId, [FromBody] ChampionshipAdminVoteDto dto, CancellationToken ct) =>
+        AsAdmin(groupId, ct, () => _service.AdminVoteAsync(groupId, championshipId, dto, ct));
+
+    /// <summary>Parciais da votação do MVP: só o admin acompanha.</summary>
+    [HttpGet("{championshipId:guid}/votes")]
+    public async Task<IActionResult> Votes(Guid groupId, Guid championshipId, CancellationToken ct)
+    {
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
+        return ToResponse(await _service.GetVotesAsync(groupId, championshipId, ct));
+    }
+
     [HttpPost("{championshipId:guid}/finalize")]
     public Task<IActionResult> Finalize(Guid groupId, Guid championshipId, [FromBody] FinalizeChampionshipDto? dto, CancellationToken ct) =>
         AsAdmin(groupId, ct, () => _service.FinalizeAsync(groupId, championshipId, dto ?? new FinalizeChampionshipDto(null), ct));

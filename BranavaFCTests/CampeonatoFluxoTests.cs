@@ -558,6 +558,35 @@ public sealed class CampeonatoFluxoTests : IClassFixture<CampeonatoPostgresFixtu
         Ok(await sut.VoteAsync(groupId, id, voter.UserId!.Value, new ChampionshipVoteDto(playerOfA, gameId), Ct));
     }
 
+    [Fact]
+    public async Task MvpDoCampeonato_AdminVotaPorOutroJogador_EParciaisMostramOVoto()
+    {
+        await using var db = await _fixture.CreateDatabaseAsync(nameof(MvpDoCampeonato_AdminVotaPorOutroJogador_EParciaisMostramOVoto));
+        var (groupId, players) = await SeedGroupAsync(db, 9);
+        var sut = new ChampionshipService(db, new MultiTeamGenerationService(new FakeStatsService([])));
+
+        var rules = ChampionshipEntity.DefaultRules with { Format = ChampionshipFormat.RoundRobin, WinnerStays = null, MvpMode = MvpMode.PerChampionship };
+        var id = Ok(await sut.CreateAsync(groupId, new CreateChampionshipDto("Copa", Day(), "Arena", rules), Ct)).Id;
+        var teams = await SetupTeamsAsync(sut, groupId, id, players, teamCount: 3);
+        await PlayAsync(db, sut, groupId, id, teams[0], teams[1], goalsA: 1, goalsB: 0);
+        Ok(await sut.FinishAsync(groupId, id, Ct));
+
+        var details = await Details(sut, groupId, id);
+        var voter = details.Teams.Single(t => t.Id == teams[1]).PlayerIds.First();
+        var voted = details.Teams.Single(t => t.Id == teams[0]).PlayerIds.First();
+
+        var before = Ok(await sut.GetVotesAsync(groupId, id, Ct));
+        before.Votes.Should().BeEmpty();
+        before.VoterPlayerIds.Should().HaveCount(9).And.Contain(voter);
+
+        Ok(await sut.AdminVoteAsync(groupId, id, new ChampionshipAdminVoteDto(voter, voted, null), Ct));
+        (await sut.AdminVoteAsync(groupId, id, new ChampionshipAdminVoteDto(voter, voted, null), Ct))
+            .Error.Should().Be("Esse jogador ja votou.");
+
+        var after = Ok(await sut.GetVotesAsync(groupId, id, Ct));
+        after.Votes.Should().ContainSingle().Which.Should().Be(new ChampionshipVoteRowDto(voter, voted, null));
+    }
+
     private static async Task<List<Guid>> SetupTeamsAsync(
         ChampionshipService sut, Guid groupId, Guid id, IReadOnlyList<PlayerEntity> players, int teamCount)
     {

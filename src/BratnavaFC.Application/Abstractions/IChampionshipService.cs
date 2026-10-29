@@ -42,5 +42,7 @@ public interface IChampionshipService
         Guid groupId, Guid championshipId, Guid gameId, Guid? userId, ChampionshipGameEventRequestDto dto, CancellationToken ct);
 
     Task<Result> VoteAsync(Guid groupId, Guid championshipId, Guid userId, ChampionshipVoteDto dto, CancellationToken ct);
+    Task<Result> AdminVoteAsync(Guid groupId, Guid championshipId, ChampionshipAdminVoteDto dto, CancellationToken ct);
+    Task<Result<ChampionshipVotesDto>> GetVotesAsync(Guid groupId, Guid championshipId, CancellationToken ct);
     Task<Result> FinalizeAsync(Guid groupId, Guid championshipId, FinalizeChampionshipDto dto, CancellationToken ct);
 }

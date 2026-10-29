@@ -88,6 +88,14 @@ public sealed record ChampionshipReplaysDto(
 
 public sealed record ChampionshipVoteDto(Guid VotedPlayerId, Guid? GameId);
 
+/// <summary>Admin vota por outro jogador (como na partida).</summary>
+public sealed record ChampionshipAdminVoteDto(Guid VoterPlayerId, Guid VotedPlayerId, Guid? GameId);
+
+public sealed record ChampionshipVoteRowDto(Guid VoterPlayerId, Guid VotedPlayerId, Guid? GameId);
+
+/// <summary>Parciais da votação (só admin): votos dados e quem pode votar.</summary>
+public sealed record ChampionshipVotesDto(IReadOnlyList<ChampionshipVoteRowDto> Votes, IReadOnlyList<Guid> VoterPlayerIds);
+
 public sealed record FinalizeChampionshipDto(List<Guid>? ExternalDecisionTeamOrder);
 
 public sealed record ChampionshipCreatedDto(Guid Id);
@@ -189,7 +197,9 @@ public sealed record ChampionshipDetailsDto(
     InviteResponse? MyInviteResponse,
     bool CanVote,
     IReadOnlyList<ChampionshipMyVoteDto> MyVotes,
-    Guid? LinkedPollId = null);
+    Guid? LinkedPollId = null,
+    /// <summary>Jogador do usuário no campeonato (null se não participa).</summary>
+    Guid? MyPlayerId = null);
 
 public sealed record NextGameSuggestionDto(
     Guid TeamAId,

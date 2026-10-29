@@ -158,7 +158,8 @@ public sealed class ChampionshipService : IChampionshipService
             me?.InviteResponse,
             CanVote(championship, me, games),
             myVotes,
-            championship.LinkedPollId);
+            championship.LinkedPollId,
+            me?.PlayerId);
 
         return Result<ChampionshipDetailsDto>.Ok(dto);
     }
@@ -661,20 +662,45 @@ public sealed class ChampionshipService : IChampionshipService
         {
             var voter = c.Players.FirstOrDefault(p => p.Player?.UserId == userId)
                 ?? throw new InvalidOperationException("Voce nao participa deste campeonato.");
-
-            if (dto.GameId.HasValue)
-            {
-                var games = await LoadGamesAsync(championshipId, tracking: false, ct);
-                var game = games.FirstOrDefault(g => g.Id == dto.GameId.Value)
-                    ?? throw new InvalidOperationException("Jogo nao encontrado neste campeonato.");
-                // Só quem jogou por um dos dois times: jogos importados de partidas antigas
-                // guardam também os convites sem time (Team 0), que não jogaram.
-                if (!game.Players.Any(mp => mp.PlayerId == dto.VotedPlayerId && mp.Team is 1 or 2 && !mp.DidNotPlay))
-                    throw new InvalidOperationException("Esse jogador nao jogou esse jogo.");
-            }
-
-            c.Vote(voter.PlayerId, dto.VotedPlayerId, dto.GameId);
+            await VoteForAsync(c, voter.PlayerId, dto.VotedPlayerId, dto.GameId, ct);
         });
+
+    /// <summary>Admin vota por um jogador que ainda não votou (como na partida).</summary>
+    public Task<Result> AdminVoteAsync(Guid groupId, Guid championshipId, ChampionshipAdminVoteDto dto, CancellationToken ct) =>
+        Mutate(groupId, championshipId, ct, c => VoteForAsync(c, dto.VoterPlayerId, dto.VotedPlayerId, dto.GameId, ct));
+
+    private async Task VoteForAsync(ChampionshipEntity c, Guid voterPlayerId, Guid votedPlayerId, Guid? gameId, CancellationToken ct)
+    {
+        if (gameId.HasValue)
+        {
+            var games = await LoadGamesAsync(c.Id, tracking: false, ct);
+            var game = games.FirstOrDefault(g => g.Id == gameId.Value)
+                ?? throw new InvalidOperationException("Jogo nao encontrado neste campeonato.");
+            // Só quem jogou por um dos dois times: jogos importados de partidas antigas
+            // guardam também os convites sem time (Team 0), que não jogaram.
+            if (!game.Players.Any(mp => mp.PlayerId == votedPlayerId && mp.Team is 1 or 2 && !mp.DidNotPlay))
+                throw new InvalidOperationException("Esse jogador nao jogou esse jogo.");
+        }
+
+        c.Vote(voterPlayerId, votedPlayerId, gameId);
+    }
+
+    /// <summary>Parciais para o admin: votos dados e quem pode votar (jogou, não é convidado).</summary>
+    public async Task<Result<ChampionshipVotesDto>> GetVotesAsync(Guid groupId, Guid championshipId, CancellationToken ct)
+    {
+        var championship = await LoadAsync(groupId, championshipId, tracking: false, ct);
+        if (championship is null) return NotFound<ChampionshipVotesDto>();
+
+        var votes = championship.Votes
+            .Select(v => new ChampionshipVoteRowDto(v.VoterPlayerId, v.VotedPlayerId, v.GameId))
+            .ToList();
+        var voters = championship.Players
+            .Where(p => p.Player?.IsGuest != true && p.TeamId is not null && !p.DidNotPlay)
+            .OrderBy(p => p.Player?.Name)
+            .Select(p => p.PlayerId)
+            .ToList();
+        return Result<ChampionshipVotesDto>.Ok(new ChampionshipVotesDto(votes, voters));
+    }
 
     public async Task<Result> FinalizeAsync(Guid groupId, Guid championshipId, FinalizeChampionshipDto dto, CancellationToken ct)
     {
