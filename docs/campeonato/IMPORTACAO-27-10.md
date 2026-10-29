@@ -63,10 +63,12 @@ A ideia é **transformar as 3 partidas existentes**, mantendo os mesmos ids, par
 3. Ligar as 3 partidas ao campeonato: `ChampionshipId`, `ChampionshipTeamAId`/`BId` pela cor, `ChampionshipGameOrder` 1 a 3 e `Status` 6 (Finalized). Com isso elas saem das listas de partidas comuns, pelo filtro global.
 4. Conferir no app e no site: classificação, card no histórico, votação de MVP. Finalizar pelo app.
 
-**Em produção**, só depois do deploy das migrações do campeonato. Mesmo roteiro, com backup antes.
+**Em produção**, só depois que a `feature/campeonato-integracao-local` for para a `main` (o deploy aplica as migrações que faltam). Mesmo roteiro, com backup antes.
 
-## ⚠️ Produção já tem migrações do campeonato
-A leitura de `__EFMigrationsHistory` mostrou em produção `20261027184007_AddChampionships` e `20261029001454_AddChampionshipGameEvents` (as colunas `Championship*` existem e estão vazias em `Matches`). A segunda só existe na branch `feature/campeonato-integracao-local`. Causa provável: `dotnet ef database update` usa a conexão padrão dos user secrets (`ConnectionStrings:DefaultConnection`), que é a **produção**. As duas só acrescentam tabelas/colunas nulas. Antes de qualquer novo `database update`, apontar explicitamente para o banco local.
+## Produção já tem o campeonato (deploy de 28/10)
+Em 28/10, a pedido do Luis, a `main` foi para produção até o commit `6bdc626` (hoje a `origin/main` está em `8daffce`). O deploy (`fly-deploy.yml`) aplica as migrações antes de publicar. Por isso a produção já tem `AddChampionships` e `AddChampionshipGameEvents`. Antes do deploy foram feitos a tag `pre-campeonato-20261027` e o backup `BratnavaFC-db-backups\prod-antes-campeonato-20261027-201620.dump`.
+
+As migrações mais novas (`AddShowChampionshipsInHistory`, `AddChampionshipLinkedPoll`, `AddReplayClipChampionship`, `AddChampionshipBets`) só estão na `feature/campeonato-integracao-local` e no banco local. Para importar em produção, essa branch precisa ir antes para a `main` (o deploy aplica as migrações).
 
 ## Pendente
 - **Nome do campeonato:** ainda não definido (sugestão: "Campeonato 27/10").
