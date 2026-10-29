@@ -94,11 +94,20 @@ As migrações mais novas (`AddShowChampionshipsInHistory`, `AddChampionshipLink
 6. Ligar "Mostrar campeonatos no histórico" na patota (a migração cria desligado).
 7. App: ligar a flag em `config/prod.json`, gerar e publicar nas lojas. Até sair, o app atual só não mostra o campeonato; as estatísticas já contam para todos.
 
-### Script de produção: atualizar no lugar, sem apagar nada
-- As 3 partidas: só `UPDATE` (campeonato, times, ordem 1–3, status 6, `LinkedPollId` vai para o campeonato). Placar, cores, `ActualStartTime`, datas e ids ficam iguais.
-- `MatchPlayers`: **nada é apagado**, nem os convites sem time e as 5 recusas da J3. As estatísticas só leem quem tem time.
-- Ficam como estão, ligados aos mesmos ids: 66 pedidos de replay, 9 lembretes agendados (já passados) e 136 notificações dos usuários.
-- Única mudança visível: as 3 partidas saem das listas de partidas comuns (passam a ser jogos do campeonato). Notificações antigas que abrem a partida podem dar "Partida não encontrada".
+### Script de produção: cópia, sem tocar nas partidas originais
+Decisão do Luis (29/10): em produção **nenhuma das 3 partidas é alterada ou apagada**. O script `scripts/importar-campeonato-27-10.sql`:
+- cria o campeonato, os 3 times, os 15 participantes e **3 jogos novos copiados** das originais (mesmo placar, cores, datas e início), com os 30 jogadores que tinham time;
+- liga a enquete do dia também ao campeonato (ela continua na J3 original);
+- **só faz INSERT**. Ids fixos: pode rodar de novo sem duplicar;
+- **trava de entrada:** se placar, cores ou status das originais mudaram, aborta sem gravar nada;
+- **trava de saída:** confere 15 participantes, 5 por time com 1 goleiro, 3 jogos, 30 jogadores e as originais intactas; senão desfaz tudo.
 
-## Para produção (não é o mesmo script)
-O script local **apaga e recria** as partidas. Em produção isso apagaria os 66 pedidos de replay ligados a elas. Lá o roteiro tem de **atualizar** as 3 partidas no lugar (ligar ao campeonato, status 6, tirar a enquete do jogo) e apagar só os `MatchPlayers` sem time, depois da `feature/campeonato-integracao-local` ir para a `main` e com backup antes.
+As originais estão como Ended (4) e nunca foram finalizadas, então **não contam em estatística**: nada fica em dobro. Elas continuam visíveis na lista de partidas até serem apagadas.
+
+**Depois de consolidado** (campeonato finalizado e conferido), apagar as 3 originais num passo separado. Antes de apagar, decidir o que fazer com o que só existe nelas: os 66 pedidos de replay (todos pendentes), 9 lembretes, 136 notificações, os convites sem time e as 5 recusas da J3.
+
+### Ensaio (29/10/2026) ✅
+Banco separado `bratnavafc_dev_ensaio`, restaurado do backup local e com os dados **atuais da produção** de tudo o que é ligado às 3 partidas (lidos em modo somente leitura). Comparação por contagem e hash de cada tabela:
+- 1ª execução: só **+1 campeonato, +3 jogos, +30 jogadores**. Partidas originais (linha inteira), 75 jogadores, 66 pedidos de replay, 9 lembretes, 136 notificações e a enquete: **idênticos**.
+- 2ª execução: **nada mudou**.
+- Trava de entrada: com um placar alterado, abortou com "as 3 partidas não estão como na leitura de 29/10" e **nada foi gravado**.
