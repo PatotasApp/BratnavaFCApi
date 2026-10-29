@@ -525,6 +525,39 @@ public sealed class CampeonatoFluxoTests : IClassFixture<CampeonatoPostgresFixtu
     private static async Task<ChampionshipDetailsDto> Details(ChampionshipService sut, Guid groupId, Guid id) =>
         Ok(await sut.GetAsync(groupId, id, null, Ct));
 
+    /// <summary>
+    /// Jogos importados de partidas antigas (ex.: 27/10) guardam também os convites sem time.
+    /// No MVP por jogo, só pode ser votado quem jogou aquele jogo por um dos dois times.
+    /// </summary>
+    [Fact]
+    public async Task MvpPorJogo_ConviteSemTimeNoJogo_NaoPodeSerVotado()
+    {
+        await using var db = await _fixture.CreateDatabaseAsync(nameof(MvpPorJogo_ConviteSemTimeNoJogo_NaoPodeSerVotado));
+        var (groupId, players) = await SeedGroupAsync(db, 9);
+        var sut = new ChampionshipService(db, new MultiTeamGenerationService(new FakeStatsService([])));
+
+        var rules = ChampionshipEntity.DefaultRules with { Format = ChampionshipFormat.RoundRobin, WinnerStays = null, MvpMode = MvpMode.PerGame };
+        var id = Ok(await sut.CreateAsync(groupId, new CreateChampionshipDto("Importado", Day(), "Arena", rules), Ct)).Id;
+        var teams = await SetupTeamsAsync(sut, groupId, id, players, teamCount: 3);
+        await PlayAsync(db, sut, groupId, id, teams[0], teams[1], goalsA: 1, goalsB: 0);
+
+        var details = await Details(sut, groupId, id);
+        var gameId = details.Games.Single().Id;
+        var outsider = details.Teams.Single(t => t.Id == teams[2]).PlayerIds.First();
+        var playerOfA = details.Teams.Single(t => t.Id == teams[0]).PlayerIds.First();
+        var voter = players.Single(p => p.Id == details.Teams.Single(t => t.Id == teams[1]).PlayerIds.First());
+
+        // Como na importação: o jogador do time C aparece no jogo só como convite (Team 0).
+        await db.Database.ExecuteSqlInterpolatedAsync($@"
+            INSERT INTO ""MatchPlayers"" (""Id"", ""MatchId"", ""PlayerId"", ""GroupId"", ""Team"", ""InviteResponse"", ""IsGoalkeeper"", ""DidNotPlay"", ""CreateDate"")
+            VALUES ({Guid.NewGuid()}, {gameId}, {outsider}, {groupId}, 0, 1, false, false, now())");
+
+        Ok(await sut.FinishAsync(groupId, id, Ct));
+        (await sut.VoteAsync(groupId, id, voter.UserId!.Value, new ChampionshipVoteDto(outsider, gameId), Ct))
+            .Error.Should().Be("Esse jogador nao jogou esse jogo.");
+        Ok(await sut.VoteAsync(groupId, id, voter.UserId!.Value, new ChampionshipVoteDto(playerOfA, gameId), Ct));
+    }
+
     private static async Task<List<Guid>> SetupTeamsAsync(
         ChampionshipService sut, Guid groupId, Guid id, IReadOnlyList<PlayerEntity> players, int teamCount)
     {

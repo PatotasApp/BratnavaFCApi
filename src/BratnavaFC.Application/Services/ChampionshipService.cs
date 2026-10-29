@@ -667,7 +667,9 @@ public sealed class ChampionshipService : IChampionshipService
                 var games = await LoadGamesAsync(championshipId, tracking: false, ct);
                 var game = games.FirstOrDefault(g => g.Id == dto.GameId.Value)
                     ?? throw new InvalidOperationException("Jogo nao encontrado neste campeonato.");
-                if (game.Players.All(mp => mp.PlayerId != dto.VotedPlayerId))
+                // Só quem jogou por um dos dois times: jogos importados de partidas antigas
+                // guardam também os convites sem time (Team 0), que não jogaram.
+                if (!game.Players.Any(mp => mp.PlayerId == dto.VotedPlayerId && mp.Team is 1 or 2 && !mp.DidNotPlay))
                     throw new InvalidOperationException("Esse jogador nao jogou esse jogo.");
             }
 
