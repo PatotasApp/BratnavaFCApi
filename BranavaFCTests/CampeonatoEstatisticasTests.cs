@@ -136,13 +136,36 @@ public sealed class CampeonatoEstatisticasTests : IClassFixture<CampeonatoPostgr
         Ok(await CreateMatchService(db).GetHistoryAsync(groupId, 100, 0, Ct, includeChampionships: true)).Total.Should().Be(0);
     }
 
+    [Fact]
+    public async Task PatotaSemCampeonatosNoHistorico_ListasNaoTrazem_MasEstatisticasContam()
+    {
+        await using var db = await _fixture.CreateDatabaseAsync(nameof(PatotaSemCampeonatosNoHistorico_ListasNaoTrazem_MasEstatisticasContam));
+        var caso = Casos.Cast<object[]>().Select(x => (Caso)x[0]).First();
+        var (groupId, teams) = await PlayChampionshipAsync(db, caso, showInHistory: false);
+        db.ChangeTracker.Clear();
+        var matches = CreateMatchService(db);
+        var playerId = teams[0][0];
+
+        Ok(await matches.GetHistoryAsync(groupId, 100, 0, Ct, includeChampionships: true)).Total.Should().Be(0);
+        Ok(await matches.GetPlayerHistoryAsync(groupId, playerId, null, Ct, includeChampionships: true)).Should().BeEmpty();
+        Ok(await matches.GetPlayerRecentMatchesAsync(groupId, playerId, 5, Ct, includeChampionships: true)).Should().BeEmpty();
+
+        // A opção só esconde das listas: as estatísticas seguem as regras do campeonato.
+        var visual = (await new PlayerStatsService(db).GetVisualReportAsync(groupId)).Players.Single(p => p.PlayerId == playerId);
+        visual.GamesPlayed.Should().Be(caso.PorTime[0].G);
+    }
+
     // ── Cenário ──────────────────────────────────────────────────────────────
 
     private static async Task<(Guid groupId, List<List<Guid>> teams)> PlayChampionshipAsync(
-        AppDbContext db, Caso caso, bool finalize = true)
+        AppDbContext db, Caso caso, bool finalize = true, bool showInHistory = true)
     {
         var group = new GroupEntity("Bratnava FC", null, Guid.NewGuid());
         db.Groups.Add(group);
+        // "Mostrar campeonatos no histórico" da patota: sem ela, as listas não trazem campeonatos.
+        var settings = new GroupSettingsEntity(group.Id, 10, 20, null, null, null);
+        settings.SetShowChampionshipsInHistory(showInHistory);
+        db.GroupSettings.Add(settings);
         var players = new List<PlayerEntity>();
         for (var i = 0; i < 9; i++)
         {

@@ -100,6 +100,16 @@ public sealed class GroupSettingsEntity : BaseEntity
 
     public void SetShowPlayerStats(bool value) => ShowPlayerStats = value;
 
+    // ── Campeonatos no histórico ──────────────────────────────────────────────
+    /// <summary>
+    /// Se o admin quer os campeonatos nas listas de histórico (histórico de partidas,
+    /// últimas partidas do dashboard e histórico do jogador). Só mexe nas listas:
+    /// as estatísticas seguem as regras de cada campeonato.
+    /// </summary>
+    public bool ShowChampionshipsInHistory { get; private set; } = false;
+
+    public void SetShowChampionshipsInHistory(bool value) => ShowChampionshipsInHistory = value;
+
     public void SetStatsTabs(bool general, bool perMatch, bool classification)
     {
         if (!general && !perMatch && !classification)

@@ -56,6 +56,9 @@ public class GroupSettingsEntityConfiguration : IEntityTypeConfiguration<GroupSe
         builder.Property(x => x.ShowStatsClassificationTab)
             .HasDefaultValue(true);
 
+        builder.Property(x => x.ShowChampionshipsInHistory)
+            .HasDefaultValue(false);
+
         builder.HasIndex(x => x.GroupId).IsUnique();
     }
 }

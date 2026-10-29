@@ -39,6 +39,10 @@ public sealed class UpsertGroupSettingsDto
     public bool? ShowStatsPerMatchTab { get; set; }
     public bool? ShowStatsClassificationTab { get; set; }
 
+    // ── Campeonatos no histórico ──────────────────────────────────────────────
+    /// <summary>null = não alterar</summary>
+    public bool? ShowChampionshipsInHistory { get; set; }
+
     // ── Notificações configuráveis ────────────────────────────────────────────
     /// <summary>Dia do mês (1–28) para vencimento da mensalidade. Null = sem lembrete.</summary>
     public int? PaymentDueDay        { get; set; }

@@ -158,7 +158,7 @@ Mudanças no contrato: só por quem faz o backend, anotadas no histórico no fim
 ```
 
 ## Histórico com campeonatos (Fase 3)
-Os três endpoints de histórico aceitam `?includeChampionships=true` (padrão `false`, para clientes antigos não receberem itens que não sabem abrir):
+Os três endpoints de histórico aceitam `?includeChampionships=true` **e só trazem campeonatos se a patota tiver ligado "Mostrar campeonatos no histórico"** (`GroupSettings.showChampionshipsInHistory`, padrão `false`; v7.1). A opção só mexe nas listas: as estatísticas seguem as regras de cada campeonato de qualquer forma. Parâmetro (padrão `false`, para clientes antigos não receberem itens que não sabem abrir):
 - `GET api/Matches/group/{groupId}/history`
 - `GET api/Matches/group/{groupId}/player-recent`
 - `GET api/Matches/group/{groupId}/player-history`
@@ -191,3 +191,4 @@ Com o parâmetro, os itens de campeonato vêm misturados às partidas, por data,
 - v5 (27/10/2026): cores dos times. `POST /{id}/teams/colors/draw` e `PATCH /{id}/teams/{teamId}`; `teams/draw` sorteia as cores. Só cores **ativas da própria patota** são aceitas (em `PUT /teams` também). Quando há menos cores que times, a resposta tem `success: true` e o aviso vem em `message` (ex.: "Ha so 2 cor(es) ativa(s) para 3 times: 1 time(s) ficaram sem cor. Cadastre mais cores em Cores dos times."). O cliente deve mostrar esse `message` ao admin.
 - v6 (27/10/2026): respostas do Luis. **Removidos** o formato mata-mata (3) e `championshipEnd` (o fim é sempre o botão "Encerrar campeonato"). **Novo** `winnerStays.limitRule` (1 sai só o vencedor, 2 saem os dois; com 3 times o 2 vira 1). `standings.tiebreakers[0]` tem de ser Points. `minGamesForPlacementResult` vai para o wizard.
 - v7 (28/10/2026): **novo** `POST /{id}/step-back` (voltar etapa) e `POST /{id}/games/{gameId}/events` (lances para as câmeras, gravados em `ChampionshipGameEvents`; migration `AddChampionshipGameEvents`, só cria tabela).
+- v7.1 (28/10/2026): `GroupSettings.showChampionshipsInHistory` (padrão `false`): sem ela ligada, `includeChampionships=true` não traz campeonatos nas listas de histórico. Migration `AddShowChampionshipsInHistory` (só acrescenta coluna).

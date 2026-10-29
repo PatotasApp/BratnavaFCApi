@@ -1802,6 +1802,14 @@ public sealed class MatchService : IMatchService
         });
     }
 
+    /// <summary>
+    /// Campeonatos entram nas listas de histórico só se o cliente pedir
+    /// (<c>includeChampionships</c>) e a patota tiver ligado "Mostrar campeonatos no histórico".
+    /// </summary>
+    private async Task<bool> ChampionshipsInHistoryAsync(Guid groupId, bool requested, CancellationToken ct) =>
+        requested && await _context.GroupSettings.AsNoTracking()
+            .AnyAsync(s => s.GroupId == groupId && s.ShowChampionshipsInHistory, ct);
+
     public async Task<Result<PagedResultDto<MatchHistoryItemDto>>> GetHistoryAsync(
         Guid groupId,
         int take,
@@ -1812,6 +1820,8 @@ public sealed class MatchService : IMatchService
     {
         if (groupId == Guid.Empty)
             return Result<PagedResultDto<MatchHistoryItemDto>>.Fail("GroupId e obrigatorio.");
+
+        includeChampionships = await ChampionshipsInHistoryAsync(groupId, includeChampionships, cancellationToken);
 
         take = take <= 0 ? 20 : Math.Min(take, 100);
         skip = Math.Max(0, skip);
@@ -1886,6 +1896,7 @@ public sealed class MatchService : IMatchService
         CancellationToken ct,
         bool includeChampionships = false)
     {
+        includeChampionships = await ChampionshipsInHistoryAsync(groupId, includeChampionships, ct);
         take = take <= 0 ? 5 : Math.Min(take, 20);
 
         // Uma única query — traz tudo que o dashboard precisa
@@ -1984,6 +1995,7 @@ public sealed class MatchService : IMatchService
         CancellationToken ct,
         bool includeChampionships = false)
     {
+        includeChampionships = await ChampionshipsInHistoryAsync(groupId, includeChampionships, ct);
         var query = _context.Matches
             .AsNoTracking()
             .Where(m =>

@@ -44,6 +44,9 @@ public sealed class GroupSettingsDto
     public bool ShowStatsPerMatchTab { get; init; }
     public bool ShowStatsClassificationTab { get; init; }
 
+    // ── Campeonatos no histórico ──────────────────────────────────────────────
+    public bool ShowChampionshipsInHistory { get; init; }
+
     // ── Notificações configuráveis ────────────────────────────────────────────
     public int? PaymentDueDay        { get; init; }
     public int? AutoFinalizeMvpHours { get; init; }
