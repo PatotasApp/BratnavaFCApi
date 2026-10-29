@@ -162,10 +162,54 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.ToTable("Championships");
                 });
 
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.ChampionshipGameEventEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ChampionshipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("ElapsedSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("EventTimeUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GameId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("QueueId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("TeamId")
+                        .HasColumnType("uuid");
+
+                    b.Property<short>("Type")
+                        .HasColumnType("smallint");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GameId");
+
+                    b.HasIndex("ChampionshipId", "GameId", "EventTimeUtc");
+
+                    b.ToTable("ChampionshipGameEvents");
+                });
+
             modelBuilder.Entity("BratnavaFC.Domain.Entities.ChampionshipPlayerEntity", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("ChampionshipId")
@@ -210,7 +254,6 @@ namespace BratnavaFC.Infrastructure.Migrations
             modelBuilder.Entity("BratnavaFC.Domain.Entities.ChampionshipTeamEntity", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("ChampionshipId")
@@ -248,7 +291,6 @@ namespace BratnavaFC.Infrastructure.Migrations
             modelBuilder.Entity("BratnavaFC.Domain.Entities.ChampionshipVoteEntity", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("ChampionshipId")
@@ -2104,6 +2146,21 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Group");
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.ChampionshipGameEventEntity", b =>
+                {
+                    b.HasOne("BratnavaFC.Domain.Entities.ChampionshipEntity", null)
+                        .WithMany()
+                        .HasForeignKey("ChampionshipId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("BratnavaFC.Domain.Entities.MatchEntity", null)
+                        .WithMany()
+                        .HasForeignKey("GameId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.ChampionshipPlayerEntity", b =>

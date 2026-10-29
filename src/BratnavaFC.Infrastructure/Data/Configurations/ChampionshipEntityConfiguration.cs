@@ -104,3 +104,27 @@ public sealed class ChampionshipVoteEntityConfiguration : IEntityTypeConfigurati
         builder.HasIndex(x => new { x.ChampionshipId, x.GameId, x.VoterPlayerId }).IsUnique();
     }
 }
+
+public sealed class ChampionshipGameEventEntityConfiguration : IEntityTypeConfiguration<ChampionshipGameEventEntity>
+{
+    public void Configure(EntityTypeBuilder<ChampionshipGameEventEntity> builder)
+    {
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.Type).HasConversion<short>().IsRequired();
+        builder.Property(x => x.QueueId).HasMaxLength(200);
+
+        builder.HasOne<ChampionshipEntity>()
+            .WithMany()
+            .HasForeignKey(x => x.ChampionshipId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // O jogo é uma partida: Restrict, como em ChampionshipEntity.Matches.
+        builder.HasOne<MatchEntity>()
+            .WithMany()
+            .HasForeignKey(x => x.GameId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(x => new { x.ChampionshipId, x.GameId, x.EventTimeUtc });
+    }
+}

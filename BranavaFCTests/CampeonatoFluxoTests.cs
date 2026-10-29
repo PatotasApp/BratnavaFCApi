@@ -185,6 +185,134 @@ public sealed class CampeonatoFluxoTests : IClassFixture<CampeonatoPostgresFixtu
         (await db.Championships.SingleAsync()).Status.Should().Be(ChampionshipStatus.Cancelled);
     }
 
+    [Fact]
+    public async Task VoltarEtapa_DesfazCadaEtapaEPermiteRefazer()
+    {
+        await using var db = await _fixture.CreateDatabaseAsync(nameof(VoltarEtapa_DesfazCadaEtapaEPermiteRefazer));
+        var (groupId, players) = await SeedGroupAsync(db, 6);
+        var sut = new ChampionshipService(db, new MultiTeamGenerationService(new FakeStatsService([])));
+        var id = Ok(await sut.CreateAsync(groupId, new CreateChampionshipDto("Volta", Day(), "Arena", null), Ct)).Id;
+
+        (await sut.StepBackAsync(groupId, id, Ct)).Error.Should().Be("Nao ha etapa anterior.");
+
+        // Presença → Criado: a lista sai inteira e pode ser aberta de novo.
+        Ok(await sut.OpenAcceptationAsync(groupId, id, Ct));
+        Ok(await sut.StepBackAsync(groupId, id, Ct));
+        db.ChangeTracker.Clear();
+        var details = await Details(sut, groupId, id);
+        details.Status.Should().Be(ChampionshipStatus.Created);
+        details.Players.Should().BeEmpty();
+
+        // Times → Presença: os times somem, as presenças ficam.
+        Ok(await sut.OpenAcceptationAsync(groupId, id, Ct));
+        foreach (var p in players)
+            Ok(await sut.RespondInviteAsync(groupId, id, p.Id, accept: true, Ct));
+        Ok(await sut.DefineTeamsAsync(groupId, id, Ok(await sut.DrawTeamsAsync(groupId, id, 3, Ct)), Ct));
+        Ok(await sut.StepBackAsync(groupId, id, Ct));
+        db.ChangeTracker.Clear();
+        details = await Details(sut, groupId, id);
+        details.Status.Should().Be(ChampionshipStatus.Acceptation);
+        details.Teams.Should().BeEmpty();
+        details.Players.Should().HaveCount(6).And.OnlyContain(p => p.TeamId == null && !p.IsGoalkeeper
+            && p.InviteResponse == InviteResponse.Accepted);
+
+        // Em andamento → Times, só antes do 1º jogo: as regras voltam a ser editáveis.
+        Ok(await sut.DefineTeamsAsync(groupId, id, Ok(await sut.DrawTeamsAsync(groupId, id, 3, Ct)), Ct));
+        Ok(await sut.StartAsync(groupId, id, Ct));
+        Ok(await sut.StepBackAsync(groupId, id, Ct));
+        db.ChangeTracker.Clear();
+        (await Details(sut, groupId, id)).RulesLocked.Should().BeFalse();
+        Ok(await sut.UpdateAsync(groupId, id, new UpdateChampionshipDto("Volta 2", Day(), "Arena", ChampionshipEntity.DefaultRules), Ct));
+
+        Ok(await sut.StartAsync(groupId, id, Ct));
+        var teams = (await Details(sut, groupId, id)).Teams.Select(t => t.Id).ToList();
+        await PlayAsync(db, sut, groupId, id, teams[0], teams[1], goalsA: 1, goalsB: 0);
+        (await sut.StepBackAsync(groupId, id, Ct)).Error.Should().Be("So e possivel voltar antes do 1º jogo.");
+
+        // Pós-jogo → Em andamento: os votos são descartados.
+        Ok(await sut.FinishAsync(groupId, id, Ct));
+        var voted = (await Details(sut, groupId, id)).Teams.First(t => t.Id == teams[0]).PlayerIds.First();
+        var voter = players.First(p => p.Id != voted);
+        Ok(await sut.VoteAsync(groupId, id, voter.UserId!.Value, new ChampionshipVoteDto(voted, null), Ct));
+        Ok(await sut.StepBackAsync(groupId, id, Ct));
+        db.ChangeTracker.Clear();
+        details = Ok(await sut.GetAsync(groupId, id, voter.UserId, Ct));
+        details.Status.Should().Be(ChampionshipStatus.InProgress);
+        details.MyVotes.Should().BeEmpty();
+        (await db.ChampionshipVotes.CountAsync()).Should().Be(0);
+
+        // Finalizado → Pós-jogo: tira colocação e MVP; finalizar de novo funciona.
+        Ok(await sut.FinishAsync(groupId, id, Ct));
+        Ok(await sut.VoteAsync(groupId, id, voter.UserId!.Value, new ChampionshipVoteDto(voted, null), Ct));
+        Ok(await sut.FinalizeAsync(groupId, id, new FinalizeChampionshipDto(null), Ct));
+        (await Details(sut, groupId, id)).MvpPlayerIds.Should().Equal(voted);
+        Ok(await sut.StepBackAsync(groupId, id, Ct));
+        db.ChangeTracker.Clear();
+        details = await Details(sut, groupId, id);
+        details.Status.Should().Be(ChampionshipStatus.PostGame);
+        details.MvpPlayerIds.Should().BeEmpty();
+        details.Teams.Should().OnlyContain(t => t.FinalPosition == null);
+        Ok(await sut.FinalizeAsync(groupId, id, new FinalizeChampionshipDto(null), Ct));
+        (await Details(sut, groupId, id)).Status.Should().Be(ChampionshipStatus.Finalized);
+    }
+
+    [Fact]
+    public async Task LanceParaCameras_GravaCampeonatoJogoTimeETempo()
+    {
+        await using var db = await _fixture.CreateDatabaseAsync(nameof(LanceParaCameras_GravaCampeonatoJogoTimeETempo));
+        var (groupId, players) = await SeedGroupAsync(db, 6);
+        var publisher = new FakeEventPublisher();
+        var sut = new ChampionshipService(db, new MultiTeamGenerationService(new FakeStatsService([])), null, publisher);
+        var id = Ok(await sut.CreateAsync(groupId, new CreateChampionshipDto("Cameras", Day(), "Arena", null), Ct)).Id;
+        var teams = await SetupTeamsAsync(sut, groupId, id, players, teamCount: 3);
+        var gameId = Ok(await sut.CreateGameAsync(groupId, id, new CreateChampionshipGameDto(teams[0], teams[1]), Ct)).GameId;
+        db.ChangeTracker.Clear();
+        var startedAt = (await Details(sut, groupId, id)).Games.Single().StartedAt!.Value;
+
+        var at = new DateTimeOffset(DateTime.SpecifyKind(startedAt, DateTimeKind.Utc)).AddSeconds(95);
+        var goal = Ok(await sut.PublishGameEventAsync(groupId, id, gameId, players[0].UserId,
+            new ChampionshipGameEventRequestDto(MatchEventType.GolTimeB, EventTime: at), Ct));
+        goal.TeamId.Should().Be(teams[1]);
+        goal.ElapsedSeconds.Should().Be(95);
+        goal.QueueId.Should().Be("fila-1");
+
+        var play = Ok(await sut.PublishGameEventAsync(groupId, id, gameId, null,
+            new ChampionshipGameEventRequestDto(MatchEventType.Jogada), Ct));
+        play.TeamId.Should().BeNull();
+
+        // O recorte vai pelo canal das partidas, com o id do jogo.
+        publisher.Calls.Should().HaveCount(2).And.OnlyContain(c => c.GroupId == groupId && c.MatchId == gameId);
+        publisher.Calls[0].Type.Should().Be(MatchEventType.GolTimeB);
+
+        db.ChangeTracker.Clear();
+        var saved = await db.ChampionshipGameEvents.OrderByDescending(e => e.Type).ToListAsync(); // GolTimeB (4) antes de Jogada (2)
+        saved.Should().HaveCount(2).And.OnlyContain(e => e.ChampionshipId == id && e.GameId == gameId);
+        saved[0].Should().BeEquivalentTo(new { Type = MatchEventType.GolTimeB, TeamId = (Guid?)teams[1], ElapsedSeconds = (int?)95,
+            CreatedByUserId = players[0].UserId });
+
+        (await sut.PublishGameEventAsync(groupId, id, gameId, null,
+            new ChampionshipGameEventRequestDto(MatchEventType.Gol), Ct)).Success.Should().BeFalse("só GolTimeA, GolTimeB ou Jogada");
+        (await sut.PublishGameEventAsync(groupId, id, Guid.NewGuid(), null,
+            new ChampionshipGameEventRequestDto(MatchEventType.Jogada), Ct)).Success.Should().BeFalse("jogo de outro campeonato");
+
+        Ok(await sut.EndGameAsync(groupId, id, gameId, new EndChampionshipGameDto(null), Ct));
+        (await sut.PublishGameEventAsync(groupId, id, gameId, null,
+            new ChampionshipGameEventRequestDto(MatchEventType.Jogada), Ct)).Error.Should().Be("Esse jogo nao esta em andamento.");
+        publisher.Calls.Should().HaveCount(2);
+    }
+
+    private sealed class FakeEventPublisher : BratnavaFC.Infrastructure.Redis.IMatchEventPublisher
+    {
+        public List<(Guid GroupId, Guid MatchId, MatchEventType Type)> Calls { get; } = [];
+
+        public Task<string> PublishAsync(Guid groupId, Guid matchId, MatchEventType type, int secondsBeforeStart,
+            int durationSeconds, DateTimeOffset? eventTime = null, CancellationToken ct = default)
+        {
+            Calls.Add((groupId, matchId, type));
+            return Task.FromResult($"fila-{Calls.Count}");
+        }
+    }
+
     // ── Auxiliares ───────────────────────────────────────────────────────────
 
     private static DateTime Day() => new(2026, 12, 20, 13, 0, 0, DateTimeKind.Utc);

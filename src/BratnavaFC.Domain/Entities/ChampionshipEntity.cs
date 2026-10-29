@@ -447,6 +447,60 @@ public class ChampionshipEntity : BaseEntity
         };
     }
 
+    /// <summary>
+    /// Volta para a etapa anterior. <paramref name="games"/> são os jogos já criados
+    /// (com os jogadores, para tirar o MVP por jogo ao reabrir um finalizado).
+    /// </summary>
+    public void StepBack(IReadOnlyList<MatchEntity> games)
+    {
+        ArgumentNullException.ThrowIfNull(games);
+
+        switch (Status)
+        {
+            case ChampionshipStatus.Acceptation:
+                // A lista de presença sai inteira; OpenAcceptation recria.
+                Players.Clear();
+                Status = ChampionshipStatus.Created;
+                break;
+
+            case ChampionshipStatus.TeamDraw:
+                foreach (var participant in Players)
+                    participant.AssignTeam(null, false);
+                Teams.Clear();
+                Status = ChampionshipStatus.Acceptation;
+                break;
+
+            case ChampionshipStatus.InProgress:
+                if (games.Count > 0)
+                    throw new InvalidOperationException("So e possivel voltar antes do 1º jogo.");
+                StartedAt = null;
+                Status = ChampionshipStatus.TeamDraw;
+                break;
+
+            case ChampionshipStatus.PostGame:
+                // Os votos eram do encerramento; com mais jogos, a votação recomeça.
+                Votes.Clear();
+                Status = ChampionshipStatus.InProgress;
+                break;
+
+            case ChampionshipStatus.Finalized:
+                foreach (var team in Teams)
+                    team.SetFinalPosition(null);
+                foreach (var participant in Players)
+                    participant.SetMvp(false);
+                if (Rules.MvpMode == MvpMode.PerGame)
+                {
+                    foreach (var mp in games.SelectMany(g => g.Players))
+                        mp.RevokeMvp();
+                }
+                Status = ChampionshipStatus.PostGame;
+                break;
+
+            default:
+                throw new InvalidOperationException("Nao ha etapa anterior.");
+        }
+    }
+
     public void Cancel()
     {
         if (Status is ChampionshipStatus.Finalized or ChampionshipStatus.Cancelled)

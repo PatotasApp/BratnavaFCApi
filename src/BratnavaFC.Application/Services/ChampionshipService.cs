@@ -7,6 +7,7 @@ using BratnavaFC.Domain.Dtos.Championships;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
+using BratnavaFC.Infrastructure.Redis;
 using Microsoft.EntityFrameworkCore;
 
 namespace BratnavaFC.Application.Services;
@@ -24,15 +25,18 @@ public sealed class ChampionshipService : IChampionshipService
     private readonly AppDbContext _db;
     private readonly MultiTeamGenerationService _multiTeamGeneration;
     private readonly IConquistaProjectionService? _projection;
+    private readonly IMatchEventPublisher? _eventPublisher;
 
     public ChampionshipService(
         AppDbContext db,
         MultiTeamGenerationService multiTeamGeneration,
-        IConquistaProjectionService? projection = null)
+        IConquistaProjectionService? projection = null,
+        IMatchEventPublisher? eventPublisher = null)
     {
         _db = db;
         _multiTeamGeneration = multiTeamGeneration ?? throw new ArgumentNullException(nameof(multiTeamGeneration));
         _projection = projection;
+        _eventPublisher = eventPublisher;
     }
 
     // ── Consulta ─────────────────────────────────────────────────────────────
@@ -477,6 +481,81 @@ public sealed class ChampionshipService : IChampionshipService
             await _projection.RebuildGroupAsync(groupId, ct);
 
         return result;
+    }
+
+    // ── Voltar etapa e lances ────────────────────────────────────────────────
+
+    public async Task<Result> StepBackAsync(Guid groupId, Guid championshipId, CancellationToken ct)
+    {
+        var wasFinalized = false;
+        var result = await Mutate(groupId, championshipId, ct, async c =>
+        {
+            wasFinalized = c.Status == ChampionshipStatus.Finalized;
+            var games = await LoadGamesAsync(championshipId, tracking: true, ct);
+            c.StepBack(games);
+        });
+
+        // Reaberto, o campeonato deixa de contar nas estatísticas até ser finalizado de novo.
+        if (result.Success && wasFinalized && _projection is not null)
+            await _projection.RebuildGroupAsync(groupId, ct);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Marca um lance para as câmeras. O pedido de recorte vai pelo mesmo publicador das
+    /// partidas, com matchId = id do jogo (o jogo é uma partida); o lance fica gravado com
+    /// campeonato, jogo, time e o tempo do jogo para achar a gravação depois.
+    /// </summary>
+    public async Task<Result<ChampionshipGameEventCreatedDto>> PublishGameEventAsync(
+        Guid groupId, Guid championshipId, Guid gameId, Guid? userId, ChampionshipGameEventRequestDto dto, CancellationToken ct)
+    {
+        if (dto.Type is not (MatchEventType.GolTimeA or MatchEventType.GolTimeB or MatchEventType.Jogada))
+            return Result<ChampionshipGameEventCreatedDto>.Fail("Tipo de lance invalido: use GolTimeA, GolTimeB ou Jogada.");
+        if (_eventPublisher is null)
+            return Result<ChampionshipGameEventCreatedDto>.Fail("Marcacao de lances indisponivel neste ambiente.");
+
+        var championship = await _db.Championships.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.GroupId == groupId && c.Id == championshipId, ct);
+        if (championship is null) return NotFound<ChampionshipGameEventCreatedDto>();
+
+        var game = await GamesQuery().AsNoTracking()
+            .FirstOrDefaultAsync(m => m.Id == gameId && m.ChampionshipId == championshipId, ct);
+        if (game is null)
+            return Result<ChampionshipGameEventCreatedDto>.Fail("Jogo nao encontrado neste campeonato.", ResultStatus.NotFound);
+        if (game.Status != MatchStatus.Started)
+            return Result<ChampionshipGameEventCreatedDto>.Fail("Esse jogo nao esta em andamento.");
+
+        var eventTime = (dto.EventTime ?? DateTimeOffset.UtcNow).UtcDateTime;
+        int? elapsed = game.ActualStartTime is { } start
+            ? Math.Max(0, (int)(eventTime - DateTime.SpecifyKind(start, DateTimeKind.Utc)).TotalSeconds)
+            : null;
+        var teamId = dto.Type switch
+        {
+            MatchEventType.GolTimeA => game.ChampionshipTeamAId,
+            MatchEventType.GolTimeB => game.ChampionshipTeamBId,
+            _ => null
+        };
+
+        string queueId;
+        try
+        {
+            queueId = await _eventPublisher.PublishAsync(groupId, gameId, dto.Type, dto.SecondsBeforeStart,
+                dto.DurationSeconds, new DateTimeOffset(eventTime, TimeSpan.Zero), ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Result<ChampionshipGameEventCreatedDto>.Fail("Nao foi possivel avisar as cameras: " + ex.Message);
+        }
+
+        var entity = new ChampionshipGameEventEntity(
+            championshipId, gameId, dto.Type, teamId, eventTime, elapsed, queueId, userId);
+        _db.ChampionshipGameEvents.Add(entity);
+        await _db.SaveChangesAsync(ct);
+
+        return Result<ChampionshipGameEventCreatedDto>.Ok(
+            new ChampionshipGameEventCreatedDto(entity.Id, queueId, teamId, entity.EventTimeUtc, elapsed),
+            status: ResultStatus.Created);
     }
 
     // ── Formato: próximo jogo, empates e colocação final ─────────────────────

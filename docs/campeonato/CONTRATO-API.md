@@ -1,6 +1,6 @@
 # Contrato da API do campeonato (Fases 1 e 2)
 
-Status: **v6 (27/10/2026) — implementado no backend (Fases 1, 2 e 3 + cores + respostas do Luis)**. O backend implementa isto na Fase 1/2 e os clientes (Flutter e web) constroem em cima.
+Status: **v7 (28/10/2026) — implementado no backend (Fases 1, 2 e 3 + cores + respostas do Luis + voltar etapa e lances)**. O backend implementa isto na Fase 1/2 e os clientes (Flutter e web) constroem em cima.
 Mudanças no contrato: só por quem faz o backend, anotadas no histórico no fim deste arquivo.
 
 ## Convenções (as mesmas da API atual)
@@ -101,6 +101,23 @@ Mudanças no contrato: só por quem faz o backend, anotadas no histórico no fim
 | PATCH | `/{id}/goalkeeper` | `{ "teamId", "playerId" }` (goleiro do time nos **próximos** jogos; o jogo em andamento não muda) |
 | POST | `/{id}/games/{gameId}/end` | `{ "externalWinnerTeamId"? }` (pênaltis/decisão em empate) |
 | POST | `/{id}/finish` | — botão **"Encerrar campeonato"** (PostGame: abre a votação de MVP) |
+| POST | `/{id}/games/{gameId}/events` | `{ "type": "GolTimeA" \| "GolTimeB" \| "Jogada", "eventTime"?: "ISO-8601", "secondsBeforeStart"?: 15, "durationSeconds"?: 15 }` → `{ "id", "queueId", "teamId", "eventTime", "elapsedSeconds" }` (201). Lance para as câmeras; só com o jogo em andamento. `type` vai como **texto** (igual ao `POST api/Matches/.../events`). GolTimeA/B = times A/B **do jogo**. |
+
+### Voltar etapa [admin]
+| Método | Rota | Corpo |
+|---|---|---|
+| POST | `/{id}/step-back` | — volta para a etapa anterior (204; recusa 400 `{ error }`) |
+
+- Acceptation → Created: apaga a lista de presença (abrir a presença recria).
+- TeamDraw → Acceptation: desfaz os times; as presenças continuam.
+- InProgress → TeamDraw: **só antes do 1º jogo**; destrava as regras.
+- PostGame → InProgress: descarta os votos de MVP; dá para criar mais jogos.
+- Finalized → PostGame: tira colocação e MVP; o campeonato deixa de contar nas estatísticas até finalizar de novo.
+- Created / Cancelled: "Nao ha etapa anterior."
+
+### Lances para as câmeras
+- O pedido de recorte vai pelo mesmo publicador das partidas, com `matchId` = **id do jogo** (o jogo do campeonato é uma linha de `Matches`, então o worker das câmeras não muda).
+- Cada lance fica em `ChampionshipGameEvents`: campeonato, jogo, tipo, time do gol, horário (UTC), segundos desde o início do jogo, `queueId` e quem marcou.
 
 ### Encerramento
 | Método | Rota | Corpo |
@@ -173,3 +190,4 @@ Com o parâmetro, os itens de campeonato vêm misturados às partidas, por data,
 - v4 (27/10/2026): Fase 3. Histórico com `includeChampionships` e campos `kind`, `championshipId`, `championshipName`, `championTeamName`, `championTeamColorHex`, `ruleBadges`, `playerResult`. Nada mudou nos endpoints do campeonato.
 - v5 (27/10/2026): cores dos times. `POST /{id}/teams/colors/draw` e `PATCH /{id}/teams/{teamId}`; `teams/draw` sorteia as cores. Só cores **ativas da própria patota** são aceitas (em `PUT /teams` também). Quando há menos cores que times, a resposta tem `success: true` e o aviso vem em `message` (ex.: "Ha so 2 cor(es) ativa(s) para 3 times: 1 time(s) ficaram sem cor. Cadastre mais cores em Cores dos times."). O cliente deve mostrar esse `message` ao admin.
 - v6 (27/10/2026): respostas do Luis. **Removidos** o formato mata-mata (3) e `championshipEnd` (o fim é sempre o botão "Encerrar campeonato"). **Novo** `winnerStays.limitRule` (1 sai só o vencedor, 2 saem os dois; com 3 times o 2 vira 1). `standings.tiebreakers[0]` tem de ser Points. `minGamesForPlacementResult` vai para o wizard.
+- v7 (28/10/2026): **novo** `POST /{id}/step-back` (voltar etapa) e `POST /{id}/games/{gameId}/events` (lances para as câmeras, gravados em `ChampionshipGameEvents`; migration `AddChampionshipGameEvents`, só cria tabela).

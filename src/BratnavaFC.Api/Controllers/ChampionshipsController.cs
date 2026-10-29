@@ -150,6 +150,18 @@ public class ChampionshipsController : GroupAuthorizedController
     public Task<IActionResult> EndGame(Guid groupId, Guid championshipId, Guid gameId, [FromBody] EndChampionshipGameDto? dto, CancellationToken ct) =>
         AsAdmin(groupId, ct, () => _service.EndGameAsync(groupId, championshipId, gameId, dto ?? new EndChampionshipGameDto(null), ct));
 
+    [HttpPost("{championshipId:guid}/step-back")]
+    public Task<IActionResult> StepBack(Guid groupId, Guid championshipId, CancellationToken ct) =>
+        AsAdmin(groupId, ct, () => _service.StepBackAsync(groupId, championshipId, ct));
+
+    [HttpPost("{championshipId:guid}/games/{gameId:guid}/events")]
+    public async Task<IActionResult> PublishGameEvent(
+        Guid groupId, Guid championshipId, Guid gameId, [FromBody] ChampionshipGameEventRequestDto dto, CancellationToken ct)
+    {
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
+        return ToResponse(await _service.PublishGameEventAsync(groupId, championshipId, gameId, GetCurrentUserId(), dto, ct));
+    }
+
     [HttpPost("{championshipId:guid}/finish")]
     public Task<IActionResult> Finish(Guid groupId, Guid championshipId, CancellationToken ct) =>
         AsAdmin(groupId, ct, () => _service.FinishAsync(groupId, championshipId, ct));

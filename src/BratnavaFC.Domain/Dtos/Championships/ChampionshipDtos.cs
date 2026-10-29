@@ -1,4 +1,5 @@
 using BratnavaFC.Domain.Championships;
+using System.Text.Json.Serialization;
 using BratnavaFC.Domain.Enums;
 
 namespace BratnavaFC.Domain.Dtos.Championships;
@@ -28,6 +29,15 @@ public sealed record ChampionshipGoalDto(Guid ScorerPlayerId, Guid? AssistPlayer
 public sealed record SetGameGoalkeeperDto(Guid TeamId, Guid PlayerId);
 
 public sealed record EndChampionshipGameDto(Guid? ExternalWinnerTeamId);
+
+/// <summary>Lance para as câmeras: GolTimeA/GolTimeB (times A/B do jogo) ou Jogada.</summary>
+public sealed record ChampionshipGameEventRequestDto(
+    [property: JsonConverter(typeof(JsonStringEnumConverter))] MatchEventType Type,
+    int SecondsBeforeStart = 15,
+    int DurationSeconds = 15,
+    DateTimeOffset? EventTime = null);
+
+public sealed record ChampionshipGameEventCreatedDto(Guid Id, string QueueId, Guid? TeamId, DateTime EventTime, int? ElapsedSeconds);
 
 public sealed record ChampionshipVoteDto(Guid VotedPlayerId, Guid? GameId);
 
