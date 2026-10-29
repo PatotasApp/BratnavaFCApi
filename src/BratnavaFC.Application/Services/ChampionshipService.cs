@@ -7,6 +7,7 @@ using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Dtos.Championships;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
+using BratnavaFC.Infrastructure.Cloudflare;
 using BratnavaFC.Infrastructure.Data;
 using BratnavaFC.Infrastructure.Redis;
 using Microsoft.EntityFrameworkCore;
@@ -28,15 +29,18 @@ public sealed class ChampionshipService : IChampionshipService
     private readonly IConquistaProjectionService? _projection;
     private readonly IMatchEventPublisher? _eventPublisher;
     private readonly ChampionshipTeamDrawService? _teamDraw;
+    private readonly IReplayUrlService? _replayUrls;
 
     public ChampionshipService(
         AppDbContext db,
         MultiTeamGenerationService multiTeamGeneration,
         IConquistaProjectionService? projection = null,
         IMatchEventPublisher? eventPublisher = null,
-        ChampionshipTeamDrawService? teamDraw = null)
+        ChampionshipTeamDrawService? teamDraw = null,
+        IReplayUrlService? replayUrls = null)
     {
         _teamDraw = teamDraw;
+        _replayUrls = replayUrls;
         _db = db;
         _multiTeamGeneration = multiTeamGeneration ?? throw new ArgumentNullException(nameof(multiTeamGeneration));
         _projection = projection;
@@ -303,6 +307,61 @@ public sealed class ChampionshipService : IChampionshipService
         return Result<DefineTeamsDto>.Ok(new DefineTeamsDto(teams), ColorShortageWarning(teamCount, colors.Count));
     }
 
+    /// <summary>
+    /// Replays do campeonato por jogo, na ordem dos jogos. Com <paramref name="groupId"/> nulo é a
+    /// leitura pública do modo cinema (como a da partida, pelo id).
+    /// </summary>
+    public async Task<Result<ChampionshipReplaysDto>> GetReplaysAsync(Guid? groupId, Guid championshipId, CancellationToken ct)
+    {
+        var championship = await _db.Championships.AsNoTracking()
+            .Include(c => c.Teams)
+            .FirstOrDefaultAsync(c => c.Id == championshipId && (groupId == null || c.GroupId == groupId), ct);
+        if (championship is null) return NotFound<ChampionshipReplaysDto>();
+
+        var games = await GamesQuery().AsNoTracking()
+            .Where(m => m.ChampionshipId == championshipId)
+            .OrderBy(m => m.ChampionshipGameOrder)
+            .ToListAsync(ct);
+        var gameIds = games.Select(g => g.Id).ToList();
+        var clips = await _db.ReplayClips.AsNoTracking()
+            .Where(c => gameIds.Contains(c.MatchId))
+            .OrderBy(c => c.RecordedAt)
+            .ToListAsync(ct);
+        var colors = await _db.TeamColors.AsNoTracking()
+            .Where(c => c.GroupId == championship.GroupId)
+            .ToDictionaryAsync(c => c.Id, c => c.HexValue, ct);
+        var teams = championship.Teams.ToDictionary(t => t.Id);
+        string Name(Guid id) => teams.TryGetValue(id, out var t) ? t.Name : "Time";
+        string? Hex(Guid id) => teams.TryGetValue(id, out var t) && t.ColorId.HasValue ? colors.GetValueOrDefault(t.ColorId.Value) : null;
+
+        var result = games.Select(game =>
+        {
+            int order = game.ChampionshipGameOrder ?? 0, a = 0, b = 0;
+            var gameClips = clips.Where(c => c.MatchId == game.Id).Select(c =>
+            {
+                if (c.EventType is MatchEventType.GolTimeA) a++;
+                else if (c.EventType is MatchEventType.GolTimeB) b++;
+                var teamId = c.EventType switch
+                {
+                    MatchEventType.GolTimeA => game.ChampionshipTeamAId,
+                    MatchEventType.GolTimeB => game.ChampionshipTeamBId,
+                    _ => null,
+                };
+                return new ChampionshipReplayClipDto(
+                    c.Id, _replayUrls?.GeneratePresignedUrl(c.ObjectKey) ?? "", c.EventType.ToString(), c.RecordedAt,
+                    teamId, a, b, $"Jogo {order} - {a} x {b}");
+            }).ToList();
+            return new ChampionshipGameReplaysDto(
+                game.Id, order,
+                game.ChampionshipTeamAId!.Value, Name(game.ChampionshipTeamAId.Value), Hex(game.ChampionshipTeamAId.Value),
+                game.ChampionshipTeamBId!.Value, Name(game.ChampionshipTeamBId.Value), Hex(game.ChampionshipTeamBId.Value),
+                game.TeamAGoals, game.TeamBGoals, gameClips);
+        }).ToList();
+
+        return Result<ChampionshipReplaysDto>.Ok(new ChampionshipReplaysDto(
+            championship.Id, championship.Name, championship.PlayedAt, championship.PlaceName, result));
+    }
+
     /// <summary>Vincula (ou desvincula, com null) uma votação/evento da patota, como na partida.</summary>
     public Task<Result> SetLinkedPollAsync(Guid groupId, Guid championshipId, Guid? pollId, CancellationToken ct) =>
         Mutate(groupId, championshipId, ct, async c =>
@@ -498,7 +557,13 @@ public sealed class ChampionshipService : IChampionshipService
             : Result<ChampionshipGameCreatedDto>.Fail(result.Error ?? "Falha ao criar o jogo.", result.Status);
     }
 
-    public Task<Result> AddGoalAsync(Guid groupId, Guid championshipId, Guid gameId, ChampionshipGoalDto dto, CancellationToken ct) =>
+    public async Task<Result> AddGoalAsync(Guid groupId, Guid championshipId, Guid gameId, ChampionshipGoalDto dto, CancellationToken ct)
+    {
+        var result = await AddGoalCoreAsync(groupId, championshipId, gameId, dto, ct);
+        return result.Success ? await SyncLiveScoreAsync(gameId, ct) : result;
+    }
+
+    private Task<Result> AddGoalCoreAsync(Guid groupId, Guid championshipId, Guid gameId, ChampionshipGoalDto dto, CancellationToken ct) =>
         MutateGame(groupId, championshipId, gameId, ct, (_, game) =>
         {
             var scorer = game.Players.FirstOrDefault(mp => mp.PlayerId == dto.ScorerPlayerId)
@@ -518,14 +583,44 @@ public sealed class ChampionshipService : IChampionshipService
                 _db.Entry(goal).State = EntityState.Added;
         });
 
-    public Task<Result> RemoveGoalAsync(Guid groupId, Guid championshipId, Guid gameId, Guid goalId, CancellationToken ct) =>
-        MutateGame(groupId, championshipId, gameId, ct, (_, game) =>
+    public async Task<Result> RemoveGoalAsync(Guid groupId, Guid championshipId, Guid gameId, Guid goalId, CancellationToken ct)
+    {
+        var result = await MutateGame(groupId, championshipId, gameId, ct, (_, game) =>
         {
             var goal = game.Goals.FirstOrDefault(g => g.Id == goalId)
                 ?? throw new InvalidOperationException("Gol nao encontrado.");
             game.RemoveGoal(goalId);
             _db.Goals.Remove(goal);
         });
+        return result.Success ? await SyncLiveScoreAsync(gameId, ct) : result;
+    }
+
+    /// <summary>
+    /// Placar ao vivo = o maior entre os gols com autor e os botões "Gol Time A/B" das câmeras,
+    /// por time. Assim apertar o botão e depois dizer quem fez conta um gol só.
+    /// </summary>
+    private async Task<Result> SyncLiveScoreAsync(Guid gameId, CancellationToken ct)
+    {
+        var game = await GamesQuery().Include(m => m.Players).Include(m => m.Goals)
+            .FirstOrDefaultAsync(m => m.Id == gameId, ct);
+        if (game is null || game.Status != MatchStatus.Started) return Result.Ok();
+
+        var buttons = await _db.ChampionshipGameEvents.AsNoTracking()
+            .Where(e => e.GameId == gameId && (e.Type == MatchEventType.GolTimeA || e.Type == MatchEventType.GolTimeB))
+            .GroupBy(e => e.Type)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
+
+        var teamByMatchPlayer = game.Players.ToDictionary(p => p.Id, p => p.Team);
+        int byGoals(int team) => game.Goals.Count(g =>
+            teamByMatchPlayer.TryGetValue(g.ScorerMatchPlayerId, out var t) && (g.IsOwnGoal ? t != team : t == team));
+
+        game.SetChampionshipLiveScore(
+            Math.Max(byGoals(1), buttons.GetValueOrDefault(MatchEventType.GolTimeA)),
+            Math.Max(byGoals(2), buttons.GetValueOrDefault(MatchEventType.GolTimeB)));
+        await _db.SaveChangesAsync(ct);
+        return Result.Ok();
+    }
 
     public Task<Result> EndGameAsync(Guid groupId, Guid championshipId, Guid gameId, EndChampionshipGameDto dto, CancellationToken ct) =>
         Mutate(groupId, championshipId, ct, async c =>
@@ -660,6 +755,10 @@ public sealed class ChampionshipService : IChampionshipService
             championshipId, gameId, dto.Type, teamId, eventTime, elapsed, queueId, userId);
         _db.ChampionshipGameEvents.Add(entity);
         await _db.SaveChangesAsync(ct);
+
+        // Como na partida: o botão de gol já soma o gol no time.
+        if (teamId.HasValue)
+            await SyncLiveScoreAsync(gameId, ct);
 
         return Result<ChampionshipGameEventCreatedDto>.Ok(
             new ChampionshipGameEventCreatedDto(entity.Id, queueId, teamId, entity.EventTimeUtc, elapsed),

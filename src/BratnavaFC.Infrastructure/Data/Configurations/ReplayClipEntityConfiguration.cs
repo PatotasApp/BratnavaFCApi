@@ -35,6 +35,8 @@ public class ReplayClipEntityConfiguration : IEntityTypeConfiguration<ReplayClip
             .HasConversion<short>()
             .IsRequired();
 
+        builder.HasIndex(x => x.ChampionshipId);
+
         // Um mesmo arquivo não pode ser registrado duas vezes
         builder.HasIndex(x => x.ObjectKey).IsUnique();
 

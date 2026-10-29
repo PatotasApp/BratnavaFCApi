@@ -1572,6 +1572,9 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<Guid?>("ChampionshipId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("ContentType")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -1606,6 +1609,8 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ChampionshipId");
 
                     b.HasIndex("ObjectKey")
                         .IsUnique();

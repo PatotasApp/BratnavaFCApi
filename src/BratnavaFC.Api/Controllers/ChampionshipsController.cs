@@ -98,6 +98,13 @@ public class ChampionshipsController : GroupAuthorizedController
         return ToResponse(await _service.DrawTeamsAsync(groupId, championshipId, dto.TeamCount, ct));
     }
 
+    [HttpGet("{championshipId:guid}/replays")]
+    public async Task<IActionResult> GetReplays(Guid groupId, Guid championshipId, CancellationToken ct)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        return ToResponse(await _service.GetReplaysAsync(groupId, championshipId, ct));
+    }
+
     [HttpPatch("{championshipId:guid}/linked-poll")]
     public Task<IActionResult> SetLinkedPoll(Guid groupId, Guid championshipId, [FromBody] SetLinkedPollRequestDto dto, CancellationToken ct) =>
         AsAdmin(groupId, ct, () => _service.SetLinkedPollAsync(groupId, championshipId, dto.PollId, ct));

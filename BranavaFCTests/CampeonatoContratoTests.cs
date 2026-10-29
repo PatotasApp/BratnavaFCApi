@@ -36,7 +36,7 @@ public sealed class CampeonatoContratoTests
         Keys(json).Should().BeEquivalentTo(
             "id", "name", "playedAt", "placeName", "status", "rules", "rulesLocked", "ruleBadges", "players",
             "teams", "games", "standings", "currentGameId", "waitingTeamIds", "topScorers", "topAssists",
-            "mvpPlayerIds", "myInviteResponse", "canVote", "myVotes");
+            "mvpPlayerIds", "myInviteResponse", "canVote", "myVotes", "linkedPollId");
         Keys(First(json, "players")).Should().BeEquivalentTo(
             "playerId", "name", "photoUrl", "isGuest", "isGoalkeeper", "inviteResponse", "teamId", "didNotPlay");
         Keys(First(json, "teams")).Should().BeEquivalentTo("id", "name", "colorId", "colorHex", "finalPosition", "playerIds");

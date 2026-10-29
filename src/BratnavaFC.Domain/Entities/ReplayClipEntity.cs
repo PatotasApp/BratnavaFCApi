@@ -13,6 +13,11 @@ public sealed class ReplayClipEntity : BaseEntity
     public DateTimeOffset RecordedAt { get; private set; }
     public MatchEventType EventType { get; private set; }
 
+    /// <summary>Campeonato do jogo (o jogo é a partida de MatchId); nulo em partida comum.</summary>
+    public Guid? ChampionshipId { get; private set; }
+
+    public void LinkToChampionship(Guid? championshipId) => ChampionshipId = championshipId;
+
     // EF Core
     private ReplayClipEntity() { }
 

@@ -449,6 +449,55 @@ public sealed class CampeonatoFluxoTests : IClassFixture<CampeonatoPostgresFixtu
         publisher.Calls.Should().HaveCount(2);
     }
 
+    [Fact]
+    public async Task BotaoDeGol_SomaNoPlacar_AutorNaoContaDobrado_EReplaysPorJogo()
+    {
+        await using var db = await _fixture.CreateDatabaseAsync(nameof(BotaoDeGol_SomaNoPlacar_AutorNaoContaDobrado_EReplaysPorJogo));
+        var (groupId, players) = await SeedGroupAsync(db, 6);
+        var sut = new ChampionshipService(db, new MultiTeamGenerationService(new FakeStatsService([])), null, new FakeEventPublisher());
+        var id = Ok(await sut.CreateAsync(groupId, new CreateChampionshipDto("Placar", Day(), "Arena", null), Ct)).Id;
+        var teams = await SetupTeamsAsync(sut, groupId, id, players, teamCount: 3);
+        var gameId = Ok(await sut.CreateGameAsync(groupId, id, new CreateChampionshipGameDto(teams[0], teams[1]), Ct)).GameId;
+
+        async Task<(int?, int?)> Score()
+        {
+            db.ChangeTracker.Clear();
+            var g = (await Details(sut, groupId, id)).Games.Single(x => x.Id == gameId);
+            return (g.TeamAGoals, g.TeamBGoals);
+        }
+
+        // Dois toques em "Gol Time A" e um em "Gol Time B": 2 x 1, como na partida.
+        Ok(await sut.PublishGameEventAsync(groupId, id, gameId, null, new ChampionshipGameEventRequestDto(MatchEventType.GolTimeA), Ct));
+        Ok(await sut.PublishGameEventAsync(groupId, id, gameId, null, new ChampionshipGameEventRequestDto(MatchEventType.GolTimeA), Ct));
+        Ok(await sut.PublishGameEventAsync(groupId, id, gameId, null, new ChampionshipGameEventRequestDto(MatchEventType.GolTimeB), Ct));
+        (await Score()).Should().Be((2, 1));
+
+        // Dizer quem fez um dos gols do A não soma outro; o terceiro com autor soma.
+        var scorer = (await Details(sut, groupId, id)).Teams.Single(t => t.Id == teams[0]).PlayerIds.First();
+        Ok(await sut.AddGoalAsync(groupId, id, gameId, new ChampionshipGoalDto(scorer, null, false, null), Ct));
+        (await Score()).Should().Be((2, 1));
+        Ok(await sut.AddGoalAsync(groupId, id, gameId, new ChampionshipGoalDto(scorer, null, false, null), Ct));
+        Ok(await sut.AddGoalAsync(groupId, id, gameId, new ChampionshipGoalDto(scorer, null, false, null), Ct));
+        (await Score()).Should().Be((3, 1));
+
+        // Clipes que as câmeras devolvem: separados por jogo, com o placar do momento.
+        var t0 = DateTimeOffset.UtcNow;
+        db.ReplayClips.AddRange(
+            new ReplayClipEntity(groupId, gameId, "b", "k1", "video/mp4", "e1", t0, MatchEventType.GolTimeA),
+            new ReplayClipEntity(groupId, gameId, "b", "k2", "video/mp4", "e2", t0.AddSeconds(5), MatchEventType.Jogada),
+            new ReplayClipEntity(groupId, gameId, "b", "k3", "video/mp4", "e3", t0.AddSeconds(9), MatchEventType.GolTimeB));
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var replays = Ok(await sut.GetReplaysAsync(groupId, id, Ct));
+        var game = replays.Games.Single();
+        game.Order.Should().Be(1);
+        game.Clips.Select(c => c.Label).Should().Equal("Jogo 1 - 1 x 0", "Jogo 1 - 1 x 0", "Jogo 1 - 1 x 1");
+        game.Clips[0].TeamId.Should().Be(teams[0]);
+        Ok(await sut.GetReplaysAsync(null, id, Ct)).Games.Should().HaveCount(1, "a leitura pública do modo cinema");
+        (await sut.GetReplaysAsync(Guid.NewGuid(), id, Ct)).Success.Should().BeFalse("outra patota");
+    }
+
     private sealed class FakeEventPublisher : BratnavaFC.Infrastructure.Redis.IMatchEventPublisher
     {
         public List<(Guid GroupId, Guid MatchId, MatchEventType Type)> Calls { get; } = [];

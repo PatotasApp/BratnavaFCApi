@@ -23,11 +23,22 @@ public sealed class PublicReplaysController : ControllerBase
 
     private readonly AppDbContext _db;
     private readonly IReplayUrlService _replayUrls;
+    private readonly IChampionshipService? _championships;
 
-    public PublicReplaysController(AppDbContext db, IReplayUrlService replayUrls)
+    public PublicReplaysController(AppDbContext db, IReplayUrlService replayUrls, IChampionshipService? championships = null)
     {
         _db = db;
         _replayUrls = replayUrls;
+        _championships = championships;
+    }
+
+    // GET /api/public/championships/{championshipId}/replays — modo cinema do campeonato.
+    [HttpGet("championships/{championshipId:guid}/replays")]
+    public async Task<IActionResult> GetChampionshipReplays(Guid championshipId, CancellationToken ct)
+    {
+        if (_championships is null) return NotFound();
+        var result = await _championships.GetReplaysAsync(null, championshipId, ct);
+        return result.Success ? Ok(result.Data) : NotFound();
     }
 
     // GET /api/public/clips/{clipId}

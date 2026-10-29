@@ -82,6 +82,16 @@ Mudanças no contrato: só por quem faz o backend, anotadas no histórico no fim
 | PATCH | `/{id}/invite/reject` [admin] | `{ "playerId": "guid" }` |
 | POST | `/{id}/players/guest` [admin] | `{ "playerId": "guid" }` (já cadastrado) **ou** `{ "name", "isGoalkeeper", "guestStarRating"? }` (novo, como na partida: criado na patota e já confirmado) |
 
+### Sorteio e Times [admin] (v8, etapas como a formação da partida)
+Etapas: **Presença** → `POST /{id}/team-draw/open` → **Sorteio** (`status = TeamDraw` e `teams` vazio) → `PUT /{id}/teams` → **Times** (`TeamDraw` com times) → `POST /{id}/start`.
+
+| Método | Rota | Corpo |
+|---|---|---|
+| POST | `/{id}/team-draw/open` | — fecha a presença e vai para o Sorteio (exige confirmados ≥ mínimo de times) |
+| PATCH | `/{id}/players/{playerId}/goalkeeper` | `{ "isGoalkeeper": true }` — goleiros marcados **antes** do sorteio (Presença ou Sorteio) |
+| POST | `/{id}/teams/draw-options` | `{ "teamCount": 3, "strategyType": 1..5, "includeGoalkeepers": true, "colorIds"?: ["guid"\|null], "optionsCount"?: 3 }` → `{ "options": [{ "teams": DefineTeamDto[], "unassignedPlayerIds", "teamStrengths", "strengthDifference" }] }` (não salva). `strategyType` igual à partida: 1 Manual, 2 Aleatório, 3 Algoritmo, 4 Por vitórias, 5 Por perfil. Com 2 times usa as estratégias da partida. `colorIds` = cores da aba Cores na ordem dos times (as que faltam saem do sorteio). Manual devolve times vazios e todos em `unassignedPlayerIds`. |
+| PATCH | `/{id}/linked-poll` | `{ "pollId": "guid\|null" }` — votação/evento vinculado, como na partida (`linkedPollId` no detalhe) |
+
 ### Times [admin]
 | Método | Rota | Corpo |
 |---|---|---|
@@ -109,13 +119,22 @@ Mudanças no contrato: só por quem faz o backend, anotadas no histórico no fim
 | POST | `/{id}/step-back` | — volta para a etapa anterior (204; recusa 400 `{ error }`) |
 
 - Acceptation → Created: apaga a lista de presença (abrir a presença recria).
-- TeamDraw → Acceptation: desfaz os times; as presenças continuam.
+- TeamDraw com times (Times) → TeamDraw sem times (Sorteio): desfaz os times; goleiros marcados continuam (v8).
+- TeamDraw sem times (Sorteio) → Acceptation: as presenças continuam.
 - InProgress → TeamDraw: **só antes do 1º jogo**; destrava as regras.
 - PostGame → InProgress: descarta os votos de MVP; dá para criar mais jogos.
 - Finalized → PostGame: tira colocação e MVP; o campeonato deixa de contar nas estatísticas até finalizar de novo.
 - Created / Cancelled: "Nao ha etapa anterior."
 
+### Replays por jogo (v8)
+| Método | Rota | Retorno |
+|---|---|---|
+| GET | `/{id}/replays` | `{ championshipId, name, playedAt, placeName, games: [{ gameId, order, teamAId, teamAName, teamAColorHex, teamBId, teamBName, teamBColorHex, teamAGoals, teamBGoals, clips: [{ id, url, eventType, recordedAt, teamId, teamAGoals, teamBGoals, label }] }] }` — `label` = "Jogo 1 - 1 x 0" (placar daquele momento) |
+| GET | `/api/public/championships/{id}/replays` | o mesmo, sem login (modo cinema compartilhável) |
+
 ### Lances para as câmeras
+- **v8:** "Gol Time A/B" soma o gol no placar do jogo, como na partida. O placar ao vivo de cada time é o **maior** entre os botões de gol e os gols com autor (`POST /goals`), então dizer quem fez depois não conta em dobro.
+- **v8:** o clipe que as câmeras devolvem fica em `ReplayClips` com `MatchId` = jogo e `ChampionshipId` = campeonato.
 - O pedido de recorte vai pelo mesmo publicador das partidas, com `matchId` = **id do jogo** (o jogo do campeonato é uma linha de `Matches`, então o worker das câmeras não muda).
 - Cada lance fica em `ChampionshipGameEvents`: campeonato, jogo, tipo, time do gol, horário (UTC), segundos desde o início do jogo, `queueId` e quem marcou.
 
@@ -195,3 +214,4 @@ Com o parâmetro, os itens de campeonato vêm misturados às partidas, por data,
 - v7.2 (28/10/2026): itens `kind = "championship"` (histórico e listas do jogador) trazem `podium: [{ position, teamName, colorHex }]` (1º a 3º), para mostrar no lugar do placar.
 - v7.3 (28/10/2026): selos por extenso: "Colocação: 1º vitória, 2º empate, 3º+ derrota" (antes "1º V · 2º E · 3º D") e "Resultado de cada jogo" (antes "V/E/D por jogo").
 - v7.4 (28/10/2026): `POST /{id}/players/guest` aceita convidado novo pelo nome (`name`, `isGoalkeeper`, `guestStarRating` 1–5), como na partida.
+- v8 (29/10/2026): etapas como a partida. **Novos** `POST /{id}/team-draw/open`, `PATCH /{id}/players/{playerId}/goalkeeper`, `POST /{id}/teams/draw-options` (métodos da partida + nº de times), `PATCH /{id}/linked-poll`, `GET /{id}/replays` e `GET /api/public/championships/{id}/replays`. `PUT /teams` aceita time vazio (sorteio manual); `start` exige jogador em todo time. Gol Time A/B soma no placar. Migrations `AddChampionshipLinkedPoll` e `AddReplayClipChampionship` (só acrescentam colunas nulas). `POST /teams/draw` (v5) continua igual.

@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -178,6 +179,12 @@ public sealed class ReplayStreamConsumerService : BackgroundService
 
             await using var scope = _scopeFactory.CreateAsyncScope();
             var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            // Jogo de campeonato: o clipe também fica ligado ao campeonato (o jogo é a partida).
+            clip.LinkToChampionship(await context.Matches.IgnoreQueryFilters()
+                .Where(m => m.Id == clip.MatchId)
+                .Select(m => m.ChampionshipId)
+                .FirstOrDefaultAsync(ct));
 
             context.ReplayClips.Add(clip);
             await context.SaveChangesAsync(ct);

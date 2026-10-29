@@ -195,6 +195,15 @@ public class MatchEntity : BaseEntity
         TeamBGoals = teamBGoals;
     }
 
+    /// <summary>Placar ao vivo de jogo de campeonato (gols com autor e botões de gol das câmeras).</summary>
+    public void SetChampionshipLiveScore(int teamAGoals, int teamBGoals)
+    {
+        if (Status != MatchStatus.Started || ChampionshipId is null)
+            throw new InvalidOperationException("So e possivel ajustar o placar ao vivo de um jogo de campeonato em andamento.");
+        TeamAGoals = Math.Max(0, teamAGoals);
+        TeamBGoals = Math.Max(0, teamBGoals);
+    }
+
     public void IncrementReplayGoal(Domain.Enums.MatchEventType type)
     {
         if (Status != MatchStatus.Started)

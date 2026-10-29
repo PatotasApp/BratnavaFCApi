@@ -68,6 +68,24 @@ public sealed record ChampionshipGameEventRequestDto(
 
 public sealed record ChampionshipGameEventCreatedDto(Guid Id, string QueueId, Guid? TeamId, DateTime EventTime, int? ElapsedSeconds);
 
+/// <summary>
+/// Replays do campeonato separados por jogo (v8). <c>Label</c> traz o placar daquele momento,
+/// ex.: "Jogo 1 - 1 x 0", para o modo cinema do campeonato completo.
+/// </summary>
+public sealed record ChampionshipReplayClipDto(
+    Guid Id, string Url, string EventType, DateTimeOffset RecordedAt, Guid? TeamId, int TeamAGoals, int TeamBGoals, string Label);
+
+public sealed record ChampionshipGameReplaysDto(
+    Guid GameId, int Order,
+    Guid TeamAId, string TeamAName, string? TeamAColorHex,
+    Guid TeamBId, string TeamBName, string? TeamBColorHex,
+    int? TeamAGoals, int? TeamBGoals,
+    IReadOnlyList<ChampionshipReplayClipDto> Clips);
+
+public sealed record ChampionshipReplaysDto(
+    Guid ChampionshipId, string Name, DateTime PlayedAt, string PlaceName,
+    IReadOnlyList<ChampionshipGameReplaysDto> Games);
+
 public sealed record ChampionshipVoteDto(Guid VotedPlayerId, Guid? GameId);
 
 public sealed record FinalizeChampionshipDto(List<Guid>? ExternalDecisionTeamOrder);
