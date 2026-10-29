@@ -104,10 +104,17 @@ Decisão do Luis (29/10): em produção **nenhuma das 3 partidas é alterada ou 
 
 As originais estão como Ended (4) e nunca foram finalizadas, então **não contam em estatística**: nada fica em dobro. Elas continuam visíveis na lista de partidas até serem apagadas.
 
-**Depois de consolidado** (campeonato finalizado e conferido), apagar as 3 originais num passo separado. Antes de apagar, decidir o que fazer com o que só existe nelas: os 66 pedidos de replay (todos pendentes), 9 lembretes, 136 notificações, os convites sem time e as 5 recusas da J3.
+**Pedidos de replay (decisão do Luis, 29/10):** os 66 pedidos pendentes são **copiados para os jogos do campeonato** (cada um no jogo correspondente, com o id do jogo novo dentro do conteúdo enviado às câmeras) e viram 66 lances registrados no campeonato (tipo, time do gol, minuto). Os 66 originais passam a `Transferred`, para o processo das câmeras (que só envia `Pending`) não gerar clipe em dobro. É a única alteração fora dos INSERTs. Se algum original já tiver sido enviado, o script aborta sem gravar nada.
+
+O processo que lê esses pedidos não roda desde 21/10 (746 enviados até lá; os 66 de 27/10 são os únicos pendentes). Quando voltar, os clipes saem já nos jogos do campeonato, **se as câmeras ainda tiverem a gravação de 27/10**.
+
+**Ignorados (decisão do Luis):** lembretes (9), notificações (136), convites sem time e recusas. Os convites e recusas não são presença real: são os 10 convidados avulsos chamados automaticamente e, em cada jogo, os jogadores do time que estava de fora (as 5 "recusas" da J3 são o time Azul, que não jogou o jogo 3). Tudo isso fica só nas partidas originais.
+
+**Depois de consolidado** (campeonato finalizado e conferido), apagar as 3 originais num passo separado.
 
 ### Ensaio (29/10/2026) ✅
 Banco separado `bratnavafc_dev_ensaio`, restaurado do backup local e com os dados **atuais da produção** de tudo o que é ligado às 3 partidas (lidos em modo somente leitura). Comparação por contagem e hash de cada tabela:
-- 1ª execução: só **+1 campeonato, +3 jogos, +30 jogadores**. Partidas originais (linha inteira), 75 jogadores, 66 pedidos de replay, 9 lembretes, 136 notificações e a enquete: **idênticos**.
+- 1ª execução: só **+1 campeonato, +3 jogos, +30 jogadores, +66 pedidos de replay e +66 lances**; os 66 pedidos originais viraram `Transferred` (resto da linha idêntico). Partidas originais (linha inteira), 75 jogadores, 9 lembretes, 136 notificações e a enquete: **idênticos**.
+- Pedidos copiados: conteúdo aponta para o jogo novo, sem o id antigo; gols marcados por time batem com o placar de cada jogo (J1 4/3, J2 7/3, J3 5/4).
 - 2ª execução: **nada mudou**.
-- Trava de entrada: com um placar alterado, abortou com "as 3 partidas não estão como na leitura de 29/10" e **nada foi gravado**.
+- Travas de entrada: com um placar alterado, ou com um pedido original já enviado às câmeras, abortou e **nada foi gravado**. Um erro no meio (teste) também desfez tudo.
