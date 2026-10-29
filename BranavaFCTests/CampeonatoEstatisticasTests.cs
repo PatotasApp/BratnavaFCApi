@@ -85,6 +85,14 @@ public sealed class CampeonatoEstatisticasTests : IClassFixture<CampeonatoPostgr
 
         var history = Ok(await matches.GetHistoryAsync(groupId, 100, 0, Ct, includeChampionships: true));
         history.Total.Should().Be(caso.UnidadesNoHistorico);
+        if (caso.History == HistoryMode.Consolidated)
+        {
+            // Pódio no lugar do placar: 1º, 2º e 3º com nome e cor do time.
+            var podium = history.Items.Single().Podium!;
+            podium.Select(p => p.Position).Should().Equal(podium.Select(p => p.Position).Order());
+            podium.Should().HaveCount(3).And.OnlyContain(p => p.Position >= 1 && p.Position <= 3 && p.TeamName != "");
+            podium[0].TeamName.Should().Be(history.Items.Single().ChampionTeamName);
+        }
         Ok(await matches.GetHistoryAsync(groupId, 100, 0, Ct)).Total
             .Should().Be(0, "sem includeChampionships, clientes antigos não veem campeonato");
 
@@ -98,6 +106,8 @@ public sealed class CampeonatoEstatisticasTests : IClassFixture<CampeonatoPostgr
 
                 var playerHistory = Ok(await matches.GetPlayerHistoryAsync(groupId, playerId, null, Ct, includeChampionships: true));
                 playerHistory.Should().HaveCount(games, "histórico do jogador = jogos do relatório");
+                if (caso.History == HistoryMode.Consolidated && games > 0)
+                    playerHistory.Single().Podium.Should().HaveCount(3, "o item do jogador também traz o pódio");
                 Ok(await matches.GetHistoryAsync(groupId, 100, 0, Ct, playerId, includeChampionships: true)).Total.Should().Be(games);
 
                 if (games == 0)

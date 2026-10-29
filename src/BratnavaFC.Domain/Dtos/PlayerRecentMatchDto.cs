@@ -35,5 +35,7 @@ public sealed record PlayerRecentMatchDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Kind = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? ChampionshipId = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ChampionshipName = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PlayerResult = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PlayerResult = null,
+    // Pódio do campeonato consolidado (até 3º), no lugar do placar.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChampionshipPodiumItemDto>? Podium = null
 );

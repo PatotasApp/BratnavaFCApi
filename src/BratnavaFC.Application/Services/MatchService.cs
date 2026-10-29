@@ -1865,7 +1865,7 @@ public sealed class MatchService : IMatchService
                 m.LinkedPollId,
                 m.LinkedPoll != null ? m.LinkedPoll.Title : null,
                 m.LinkedPoll != null ? m.LinkedPoll.Type : null,
-                null, null, null, null, null, null // campos de campeonato (árvore de expressão não aceita opcionais)
+                null, null, null, null, null, null, null // campos de campeonato (árvore de expressão não aceita opcionais)
             ))
             .ToListAsync(cancellationToken);
 

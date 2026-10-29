@@ -26,5 +26,9 @@ public sealed record MatchHistoryItemDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ChampionshipName = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ChampionTeamName = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ChampionTeamColorHex = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? RuleBadges = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? RuleBadges = null,
+    // Pódio do campeonato consolidado (até 3º), no lugar do placar.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChampionshipPodiumItemDto>? Podium = null
 );
+
+public sealed record ChampionshipPodiumItemDto(int Position, string TeamName, string? ColorHex);

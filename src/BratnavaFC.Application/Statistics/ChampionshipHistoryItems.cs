@@ -1,4 +1,5 @@
 using BratnavaFC.Domain.Dtos;
+using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
 
 namespace BratnavaFC.Application.Statistics;
@@ -31,7 +32,8 @@ public static class ChampionshipHistoryItems
             c.Id, c.PlayedAt, 0, 0,
             (int)MatchStatus.Finalized, MatchStatus.Finalized.ToString(), c.PlaceName, null, null, playerIds,
             Kind: "championship", ChampionshipId: c.Id, ChampionshipName: c.Name,
-            ChampionTeamName: champion?.Name, ChampionTeamColorHex: champion?.Color?.HexValue, RuleBadges: badges);
+            ChampionTeamName: champion?.Name, ChampionTeamColorHex: champion?.Color?.HexValue, RuleBadges: badges,
+            Podium: Podium(c));
     }
 
     /// <summary>Item da lista do jogador, ou null se ele não conta nessa unidade.</summary>
@@ -73,8 +75,16 @@ public static class ChampionshipHistoryItems
             c.Id, c.PlayedAt, 0, 0,
             MatchStatus.Finalized.ToString(), c.PlaceName, team?.Color?.HexValue, team?.Name, null, null,
             1, playerGoals, playerAssists, playerOwnGoals, player.IsMvp,
-            Kind: "championship", ChampionshipId: c.Id, ChampionshipName: c.Name, PlayerResult: result);
+            Kind: "championship", ChampionshipId: c.Id, ChampionshipName: c.Name, PlayerResult: result,
+            Podium: Podium(c));
     }
+
+    /// <summary>Pódio do consolidado (1º a 3º), mostrado no lugar do placar.</summary>
+    private static List<ChampionshipPodiumItemDto> Podium(ChampionshipEntity c) => c.Teams
+        .Where(t => t.FinalPosition is >= 1 and <= 3)
+        .OrderBy(t => t.FinalPosition).ThenBy(t => t.Order)
+        .Select(t => new ChampionshipPodiumItemDto(t.FinalPosition!.Value, t.Name, t.Color?.HexValue))
+        .ToList();
 
     private static (string? Hex, string? Name) TeamColor(ChampionshipUnit unit, Guid? teamId)
     {
