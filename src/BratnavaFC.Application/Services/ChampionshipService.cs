@@ -47,6 +47,8 @@ public sealed class ChampionshipService : IChampionshipService
         _eventPublisher = eventPublisher;
     }
 
+    private ChampionshipBetService Bets => new(_db);
+
     // ── Consulta ─────────────────────────────────────────────────────────────
 
     public async Task<Result<List<ChampionshipSummaryDto>>> ListAsync(Guid groupId, CancellationToken ct)
@@ -203,6 +205,7 @@ public sealed class ChampionshipService : IChampionshipService
 
             _db.Matches.RemoveRange(games);
             c.Cancel();
+            await Bets.DiscardOpenBetsAsync(championshipId, ct);
         });
 
     // ── Presença ─────────────────────────────────────────────────────────────
@@ -456,6 +459,9 @@ public sealed class ChampionshipService : IChampionshipService
             c.DefineTeams(dto.Teams
                 .Select(t => new ChampionshipEntity.TeamSpec(t.Name, t.ColorId, t.PlayerIds ?? [], t.GoalkeeperPlayerId))
                 .ToList());
+
+            // Times novos: as apostas abertas apontavam para os times antigos.
+            await Bets.DiscardOpenBetsAsync(championshipId, ct);
         });
 
     public Task<Result> MovePlayerAsync(Guid groupId, Guid championshipId, Guid playerId, Guid? teamId, CancellationToken ct) =>
@@ -683,6 +689,10 @@ public sealed class ChampionshipService : IChampionshipService
         if (result.Success && _projection is not null)
             await _projection.RebuildGroupAsync(groupId, ct);
 
+        // Classificação e MVP definitivos: liquida as apostas.
+        if (result.Success)
+            await Bets.ResolveAsync(championshipId, ct);
+
         return result;
     }
 
@@ -694,9 +704,18 @@ public sealed class ChampionshipService : IChampionshipService
         var result = await Mutate(groupId, championshipId, ct, async c =>
         {
             wasFinalized = c.Status == ChampionshipStatus.Finalized;
+            var clearsTeams = c.Status == ChampionshipStatus.TeamDraw && c.Teams.Count > 0;
             var games = await LoadGamesAsync(championshipId, tracking: true, ct);
             c.StepBack(games);
+
+            // Times desfeitos: as apostas abertas apontavam para eles.
+            if (clearsTeams)
+                await Bets.DiscardOpenBetsAsync(championshipId, ct);
         });
+
+        // Reaberto, o resultado deixa de ser definitivo: estorna as apostas liquidadas.
+        if (result.Success && wasFinalized)
+            await Bets.UnresolveAsync(championshipId, ct);
 
         // Reaberto, o campeonato deixa de contar nas estatísticas até ser finalizado de novo.
         if (result.Success && wasFinalized && _projection is not null)

@@ -54,7 +54,7 @@ Mudanças no contrato: só por quem faz o backend, anotadas no histórico no fim
   - "Fica quem ganha clássico": format 2, limite 0, empate 2, pontos por jogo.
   - "Troca quem ganhou 2": format 2, limite 2, empate 2, `limitRule` 1, pontos por jogo.
   - Com `limitRule` 2 e só 3 times, o cliente avisa: "Com 3 times não dá para saírem os dois; sai só o vencedor."
-- O cliente mostra um **resumo em linguagem simples** antes de confirmar (ex.: "Conta como 1 partida · 1º vitória, 2º empate, 3º derrota · 1 MVP do campeonato"). Nome da regra 3: **"Vitória para todos"**, legenda *"Cada participante ganha 1 vitória nas estatísticas."*
+- O cliente mostra um **resumo em linguagem simples** antes de confirmar (ex.: "Conta como uma única partida · 1º vitória, 2º empate, 3º derrota · 1 MVP do campeonato"). Nome da regra 3: **"Vitória para todos"**, legenda *"Cada participante ganha 1 vitória nas estatísticas."*
 
 ## Endpoints
 
@@ -148,7 +148,7 @@ Etapas: **Presença** → `POST /{id}/team-draw/open` → **Sorteio** (`status =
 ```jsonc
 // ChampionshipSummaryDto
 { "id", "name", "playedAt", "placeName", "status", "teamCount", "gameCount",
-  "championTeamName": null, "championTeamColorHex": null, "ruleBadges": ["Conta como 1 partida", "Colocação: 1º vitória, 2º empate, 3º+ derrota", "MVP do campeonato"] }
+  "championTeamName": null, "championTeamColorHex": null, "ruleBadges": ["Conta como uma única partida", "Colocação: 1º vitória, 2º empate, 3º+ derrota", "MVP do campeonato"] }
 
 // ChampionshipDetailsDto
 { "id", "name", "playedAt", "placeName", "status", "rules": ChampionshipRulesDto,
@@ -198,8 +198,45 @@ Com o parâmetro, os itens de campeonato vêm misturados às partidas, por data,
 - `playerResult = "N"`: só presença (sem V/E/D).
 - Gols/assistências/MVP do jogador nesses itens já seguem a regra do campeonato (se não contam, vêm 0/false).
 
+## Apostas do campeonato (v9)
+Mesmo saldo de fichas, mesmo ranking (`GET api/bets/...leaderboard` de sempre) e mesmos limites das apostas de partida: 1 a 5 categorias, mínimo 30 por categoria, máximo 200 no total, bônus de 50 por participar. Sempre no campeonato inteiro: os jogos não aceitam aposta.
+
+| Método | Rota (`api/championships/group/{groupId}`) | Corpo / resposta |
+|---|---|---|
+| GET | `/bets/bettable` | `[{ championshipId, name, playedAt, placeName }]`: campeonatos aceitando apostas (seletor 🏆 da aba "Aposta Atual") |
+| GET | `/{id}/bets` | `ChampionshipBetContextDto` (abaixo) |
+| PUT | `/{id}/bets/mine` | `{ "selections": [{ "category": 1, "predictedId": "guid", "fichasWagered": 50 }] }` (cria ou substitui) |
+| DELETE | `/{id}/bets/mine` | — (só com as apostas abertas) |
+| GET | `/bets/history?page=1&pageSize=10` | página de `{ championshipId, name, playedAt, userBets: [ChampionshipUserBetDto] }` |
+
+`ChampionshipBetCategory`: 1 Champion (time campeão, **obrigatória**) · 2 LeastConcededGoalkeeper (goleiro menos vazado) · 3 TopScorer (artilheiro) · 4 TopAssister (maior assistente) · 5 Mvp (só se `mvpMode` ≠ 0). `predictedId` é o id do **time** na categoria 1 e o **playerId** nas demais.
+
+```jsonc
+// ChampionshipBetContextDto
+{
+  "championshipId": "guid", "name": "Torneio", "playedAt": "...",
+  "isOpen": true, "closedReason": null,          // fechado: "As apostas abrem quando os times forem definidos." etc.
+  "isResolved": false,
+  "minWagerPerCategory": 30, "maxWagerTotal": 200, "participationBonus": 50, "myBalance": 120,
+  "categories": [
+    { "category": 1, "multiplier": 2, "winnerIds": null,
+      "options": [{ "id": "teamId", "name": "Azul", "colorHex": "#0000FF", "teamId": "teamId" }] },
+    { "category": 3, "multiplier": 3, "winnerIds": null,
+      "options": [{ "id": "playerId", "name": "João", "colorHex": "#0000FF", "teamId": "teamId" }] }
+  ],
+  "myBet": { "userId", "userName", "isResolved", "selections": [{ "category", "predictedId", "predictedName", "fichasWagered", "fichasEarned", "isCorrect" }], "totalForChampionship": null },
+  "allBets": []                                  // só vem com as apostas fechadas
+}
+```
+- **Janela:** abre com os times definidos (`status` 2 e times montados) e fecha no `start`. Redefinir os times, desfazer os times (voltar etapa) ou cancelar **apaga as apostas abertas**.
+- **Opções:** campeão = times; goleiro = participantes marcados como goleiro; demais = participantes com time. Ninguém aposta em si mesmo nas categorias de jogador.
+- **Pagamento:** acerto no campeão = apostado × (nº de times − 1) (3 times: 2x; 4: 3x); acerto nas outras = 3x; erro = perde metade do apostado. Somado ao bônus de 50.
+- **Empate numa categoria:** quem apostou em qualquer um dos empatados acerta (`winnerIds` traz todos). Categoria sem ninguém (ex.: nenhum gol): ninguém acerta.
+- **Menos vazado:** menor média de gols sofridos por jogo no gol (vale o goleiro de cada jogo), só para quem foi goleiro em pelo menos metade dos jogos do time.
+- **MVP:** por campeonato = o MVP da votação; por jogo = quem teve mais MVPs.
+- **Liquidação:** ao finalizar (`POST /{id}/finalize`). Voltar de Finalizado (`step-back`) estorna o saldo; finalizar de novo liquida outra vez, sem contar em dobro.
+
 ## Fora deste contrato (fases seguintes)
-- Apostas do campeonato (mesma tela de apostas; categorias time campeão, menos vazado, artilheiro, maior assistente, MVP).
 - Tempo real (SignalR) para a tela ao vivo: por enquanto o cliente faz polling de `GET /{id}` a cada ~5 s na tela ao vivo.
 
 ## Histórico
@@ -215,3 +252,4 @@ Com o parâmetro, os itens de campeonato vêm misturados às partidas, por data,
 - v7.3 (28/10/2026): selos por extenso: "Colocação: 1º vitória, 2º empate, 3º+ derrota" (antes "1º V · 2º E · 3º D") e "Resultado de cada jogo" (antes "V/E/D por jogo").
 - v7.4 (28/10/2026): `POST /{id}/players/guest` aceita convidado novo pelo nome (`name`, `isGoalkeeper`, `guestStarRating` 1–5), como na partida.
 - v8 (29/10/2026): etapas como a partida. **Novos** `POST /{id}/team-draw/open`, `PATCH /{id}/players/{playerId}/goalkeeper`, `POST /{id}/teams/draw-options` (métodos da partida + nº de times), `PATCH /{id}/linked-poll`, `GET /{id}/replays` e `GET /api/public/championships/{id}/replays`. `PUT /teams` aceita time vazio (sorteio manual); `start` exige jogador em todo time. Gol Time A/B soma no placar. Migrations `AddChampionshipLinkedPoll` e `AddReplayClipChampionship` (só acrescentam colunas nulas). `POST /teams/draw` (v5) continua igual.
+- v9 (29/10/2026): **apostas do campeonato** (seção "Apostas do campeonato"). Migration `AddChampionshipBets` (2 tabelas novas). Selos do modo de histórico com os textos do Luis: "Conta como uma única partida", "Todas as partidas vão pro histórico", "Não vai pro histórico das partidas".

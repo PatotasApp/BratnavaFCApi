@@ -1,3 +1,4 @@
+using BratnavaFC.Application.Services;
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
@@ -15,11 +16,13 @@ namespace BratnavaFC.Api.Controllers;
 public class ChampionshipsController : GroupAuthorizedController
 {
     private readonly IChampionshipService _service;
+    private readonly ChampionshipBetService _bets;
     private readonly AppDbContext _db;
 
-    public ChampionshipsController(IChampionshipService service, AppDbContext db)
+    public ChampionshipsController(IChampionshipService service, ChampionshipBetService bets, AppDbContext db)
     {
         _service = service;
+        _bets = bets;
         _db = db;
     }
 
@@ -205,6 +208,40 @@ public class ChampionshipsController : GroupAuthorizedController
         AsAdmin(groupId, ct, () => _service.FinalizeAsync(groupId, championshipId, dto ?? new FinalizeChampionshipDto(null), ct));
 
     // ── Auxiliares ───────────────────────────────────────────────────────────
+
+    // ── Apostas (mesmo saldo das partidas) ───────────────────────────────────
+
+    /// <summary>Campeonatos aceitando apostas, para o seletor da aba "Aposta Atual" (🏆).</summary>
+    [HttpGet("bets/bettable")]
+    public async Task<IActionResult> Bettable(Guid groupId, CancellationToken ct)
+    {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
+        return ToResponse(Result<List<ChampionshipBettableDto>>.Ok(await _bets.GetBettableAsync(groupId, ct)));
+    }
+
+    [HttpGet("bets/history")]
+    public async Task<IActionResult> BetHistory(Guid groupId, [FromQuery] int page = 1, [FromQuery] int pageSize = 10, CancellationToken ct = default)
+    {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
+        return ToResponse(Result<PagedResultDto<ChampionshipBetHistoryDto>>.Ok(await _bets.GetHistoryAsync(groupId, page, pageSize, ct)));
+    }
+
+    [HttpGet("{championshipId:guid}/bets")]
+    public async Task<IActionResult> BetContext(Guid groupId, Guid championshipId, CancellationToken ct)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
+        return ToResponse(await _bets.GetContextAsync(groupId, championshipId, userId.Value, ct));
+    }
+
+    [HttpPut("{championshipId:guid}/bets/mine")]
+    public Task<IActionResult> PlaceBet(Guid groupId, Guid championshipId, [FromBody] PlaceChampionshipBetDto dto, CancellationToken ct) =>
+        AsMember(groupId, ct, userId => _bets.PlaceOrUpdateAsync(groupId, championshipId, userId, dto, ct));
+
+    [HttpDelete("{championshipId:guid}/bets/mine")]
+    public Task<IActionResult> DeleteBet(Guid groupId, Guid championshipId, CancellationToken ct) =>
+        AsMember(groupId, ct, userId => _bets.DeleteAsync(groupId, championshipId, userId, ct));
 
     private async Task<IActionResult> AsAdmin(Guid groupId, CancellationToken ct, Func<Task<Result>> action)
     {

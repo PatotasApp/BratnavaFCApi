@@ -97,7 +97,7 @@ public sealed class CampeonatoFluxoTests : IClassFixture<CampeonatoPostgresFixtu
         var summary = Ok(await sut.ListAsync(groupId, Ct)).Single();
         summary.GameCount.Should().Be(3);
         summary.ChampionTeamName.Should().NotBeNullOrEmpty();
-        summary.RuleBadges.Should().Contain("Conta como 1 partida").And.Contain("MVP do campeonato");
+        summary.RuleBadges.Should().Contain("Conta como uma única partida").And.Contain("MVP do campeonato");
 
         // Fase 0 continua valendo: nada disso aparece no histórico de partidas.
         db.ChangeTracker.Clear();

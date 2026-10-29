@@ -22,7 +22,7 @@ public sealed class CampeonatoContratoTests
         var id = Guid.NewGuid();
         var dto = new ChampionshipDetailsDto(
             id, "Torneio", DateTime.UtcNow, "Arena", ChampionshipStatus.InProgress,
-            ChampionshipEntity.DefaultRules, true, ["Conta como 1 partida"],
+            ChampionshipEntity.DefaultRules, true, ["Conta como uma única partida"],
             [new ChampionshipParticipantDto(id, "Ana", null, false, true, InviteResponse.Accepted, id, false)],
             [new ChampionshipTeamDto(id, "Azul", null, null, null, [id])],
             [new ChampionshipGameDto(id, 1, id, id, 1, 0, null, ChampionshipGameStatus.Finished, null,
@@ -75,7 +75,7 @@ public sealed class CampeonatoContratoTests
     public void Resumo_TemAsChavesDoContrato()
     {
         var dto = new ChampionshipSummaryDto(Guid.NewGuid(), "Torneio", DateTime.UtcNow, "Arena",
-            ChampionshipStatus.Finalized, 3, 5, "Azul", "#00F", ["Conta como 1 partida"]);
+            ChampionshipStatus.Finalized, 3, 5, "Azul", "#00F", ["Conta como uma única partida"]);
 
         Keys(JsonSerializer.SerializeToNode(dto, Web)!.AsObject()).Should().BeEquivalentTo(
             "id", "name", "playedAt", "placeName", "status", "teamCount", "gameCount",

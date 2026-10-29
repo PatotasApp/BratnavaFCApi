@@ -99,7 +99,6 @@ Regras de contagem: [DECISOES.md](DECISOES.md), seção "Fase 3". Contrato do hi
 
 ### Próximos passos
 - Ligar o sorteio de N times da outra IA (prompt 4).
-- Apostas do campeonato (mesma tela; time campeão, menos vazado, artilheiro, maior assistente, MVP).
 - Clientes: card 🏆 no histórico + `kind` nas listas do jogador (bom para a outra IA, seguindo o contrato v4).
 
 ## Disco cheio (27/10, ~16h) — resolvido
@@ -119,3 +118,11 @@ O C: chegou a 0 GB livres no meio da Fase 3. `ChampionshipRuleSet.cs` foi trunca
   - O `flutter test` não rodou aqui (sem memória/disco na máquina); vale o relatório dela: 115 aprovados.
   - Pendência dela: o convidado é adicionado digitando o ID (falta um seletor de jogadores).
 - **Telas do campeonato no front web** ⬜: prompt em [PROMPT-OUTRA-IA-3.md](PROMPT-OUTRA-IA-3.md). Mandar só depois de liberar disco.
+
+## Apostas do campeonato ✅ (29/10/2026)
+- `ChampionshipBetService` + `ChampionshipBetEntity`/`ChampionshipBetSelectionEntity` (migration `AddChampionshipBets`). Mesmo saldo (`UserBetBalanceEntity`), ranking e limites das apostas de partida.
+- Abre com os times definidos, fecha no início; redefinir/desfazer times ou cancelar apaga as abertas. Liquida ao finalizar; voltar de Finalizado estorna.
+- `BetService.RecalculateAllBalancesAsync` passou a somar as apostas de campeonato (antes apagaria esse saldo).
+- Endpoints e regras de pagamento no CONTRATO v9. `CampeonatoApostasTests` (3 testes, Postgres). Suíte: 1607 aprovados.
+- **Decisões minhas, revisáveis:** campeão paga (times − 1)x; demais categorias 3x; erro perde metade (como na partida).
+- **Clientes:** app e site ainda não têm a tela de apostas do campeonato.

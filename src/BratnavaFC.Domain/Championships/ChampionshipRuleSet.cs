@@ -139,9 +139,10 @@ public sealed record ChampionshipRuleSet(
         {
             HistoryMode switch
             {
-                HistoryMode.Consolidated => "Conta como 1 partida",
-                HistoryMode.SeparateGames => "Cada jogo conta como partida",
-                _ => "Fora das estatísticas"
+                // Textos escolhidos pelo Luis (29/10/2026); app e site usam os mesmos no wizard.
+                HistoryMode.Consolidated => "Conta como uma única partida",
+                HistoryMode.SeparateGames => "Todas as partidas vão pro histórico",
+                _ => "Não vai pro histórico das partidas"
             }
         };
 

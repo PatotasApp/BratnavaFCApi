@@ -31,7 +31,7 @@ public sealed class MultiTeamGenerationControllerTests
         await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase($"multi-team-controller-{Guid.NewGuid()}")
             .Options);
-        var controller = new ChampionshipsController(service.Object, db)
+        var controller = new ChampionshipsController(service.Object, new ChampionshipBetService(db), db)
         {
             ControllerContext = new ControllerContext
             {

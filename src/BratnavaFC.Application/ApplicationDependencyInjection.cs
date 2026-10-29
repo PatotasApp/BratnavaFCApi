@@ -99,6 +99,7 @@ public static class ApplicationDependencyInjection
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<ITeamBuilderService, TeamBuilderService>();
         services.AddScoped<IChampionshipService, ChampionshipService>();
+        services.AddScoped<ChampionshipBetService>();
     }
 
     private static void AddNotificationScheduling(

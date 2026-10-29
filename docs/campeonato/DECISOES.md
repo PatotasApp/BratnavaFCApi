@@ -4,7 +4,7 @@
 1. O campeonato é **separado das partidas**, com menu próprio. O admin cria escolhendo data e local, como num jogo normal.
 2. **Vai nos dois clientes:** app Flutter e front web.
 3. **Regras definidas na criação**, editáveis até o 1º jogo começar e travadas depois. Reabrir um campeonato finalizado é ação explícita do admin e reconstrói as projeções.
-4. As regras **aparecem na listagem de partidas/histórico** como selos ("Conta como 1 partida", "1º V · 2º E · 3º D", "MVP do campeonato"...).
+4. As regras **aparecem na listagem de partidas/histórico** como selos ("Conta como uma única partida", "1º V · 2º E · 3º D", "MVP do campeonato"...).
 5. **Estatísticas têm que obedecer as regras.** Se a regra diz "conta como 1 partida", não pode aparecer 3 partidas em lugar nenhum: histórico, dashboard, relatório visual, spotlight, conquistas, team builder, sorteio.
 
 ## Regras parametrizáveis
@@ -37,6 +37,7 @@ Presets prontos: "Fica quem ganha clássico", "Troca quem ganhou 2".
 - Empate numa categoria: quem apostou em qualquer um dos empatados acerta.
 - Menos vazado: menor média de gols sofridos por jogo no gol, com mínimo de jogos no gol (ex.: metade dos jogos do time). Vale o `IsGoalkeeper` de cada jogo.
 - MVP com regra "por jogo": vence quem teve mais MVPs.
+- Pagamento (29/10, revisável): campeão = apostado × (times − 1); demais = 3x; erro perde metade. Redefinir os times ou cancelar apaga as apostas abertas; voltar de Finalizado estorna.
 
 ## Justiça (sugestões aceitas como direção)
 - Conquistas tipo hat-trick/clean sheet são **por jogo**, nunca somadas entre jogos.

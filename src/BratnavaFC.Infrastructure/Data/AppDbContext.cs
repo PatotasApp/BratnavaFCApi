@@ -52,6 +52,8 @@ public class AppDbContext : DbContext
     public DbSet<ChampionshipTeamEntity> ChampionshipTeams => Set<ChampionshipTeamEntity>();
     public DbSet<ChampionshipPlayerEntity> ChampionshipPlayers => Set<ChampionshipPlayerEntity>();
     public DbSet<ChampionshipVoteEntity> ChampionshipVotes => Set<ChampionshipVoteEntity>();
+    public DbSet<ChampionshipBetEntity> ChampionshipBets => Set<ChampionshipBetEntity>();
+    public DbSet<ChampionshipBetSelectionEntity> ChampionshipBetSelections => Set<ChampionshipBetSelectionEntity>();
     public DbSet<ChampionshipGameEventEntity> ChampionshipGameEvents => Set<ChampionshipGameEventEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -79,6 +81,8 @@ public class AppDbContext : DbContext
         modelBuilder.ApplyConfiguration(new ChampionshipTeamEntityConfiguration());
         modelBuilder.ApplyConfiguration(new ChampionshipPlayerEntityConfiguration());
         modelBuilder.ApplyConfiguration(new ChampionshipVoteEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new ChampionshipBetEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new ChampionshipBetSelectionEntityConfiguration());
         modelBuilder.ApplyConfiguration(new ChampionshipGameEventEntityConfiguration());
 
         // ── Users / Groups ───────────────────────────────────────────────────

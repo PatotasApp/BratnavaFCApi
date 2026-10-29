@@ -14,9 +14,11 @@ public sealed class BetService : IBetService
     private readonly AppDbContext _db;
 
     /// <summary>Bônus de participação creditado a quem apostou, independente de acertos.</summary>
-    private const int ParticipationBonus = 50;
+    public const int ParticipationBonus = 50;
     /// <summary>Total máximo de fichas que pode ser apostado por partida.</summary>
-    private const int MaxWagerPerMatch = 200;
+    public const int MaxWagerPerMatch = 200;
+    /// <summary>Mínimo de fichas por categoria (partida e campeonato).</summary>
+    public const int MinWagerPerCategory = 30;
 
     public BetService(AppDbContext db) => _db = db;
 
@@ -197,8 +199,8 @@ public sealed class BetService : IBetService
 
         foreach (var sel in dto.Selections)
         {
-            if (sel.FichasWagered < 30)
-                return Result.Fail("Mínimo de 30 Bratnava Coins por categoria.");
+            if (sel.FichasWagered < MinWagerPerCategory)
+                return Result.Fail($"Mínimo de {MinWagerPerCategory} Bratnava Coins por categoria.");
 
             var validationError = ValidatePredictedValue(sel.Category, sel.PredictedValue);
             if (validationError is not null)
@@ -929,9 +931,13 @@ public sealed class BetService : IBetService
                 g => g.Count() * ParticipationBonus
                     + g.SelectMany(b => b.Selections).Sum(s => s.FichasEarned ?? 0));
 
+        // Apostas de campeonato usam o mesmo saldo e entram no recálculo.
+        var championshipTotals = await new ChampionshipBetService(_db).ResolvedTotalsAsync(ct);
+
         foreach (var bal in balances)
         {
             var correct = earnedByKey.TryGetValue((bal.GroupId, bal.UserId), out var earned) ? earned : 0;
+            correct += championshipTotals.GetValueOrDefault((bal.GroupId, bal.UserId));
             bal.ForceSetBalance(correct);
         }
 
