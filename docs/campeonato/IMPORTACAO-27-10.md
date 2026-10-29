@@ -49,7 +49,7 @@ A ordem está confirmada pelo início real (`ActualStartTime`). O jogo 3 é a pa
 ## Regras escolhidas pelo Luis (29/10)
 - **Histórico:** conta como **uma única partida** (`HistoryMode` 1, Consolidated).
 - **Resultado:** por colocação, **Preto vitória e os demais derrota** (`ResultMode` 2, `PlacementResults` [1 Win, 3 Loss]).
-- **MVP:** do campeonato, **com votação aberta** (`MvpMode` 1). Importa em **pós-jogo** (`Status` 4, PostGame); os jogadores votam e o admin finaliza pelo app.
+- **MVP:** do campeonato, **com votação aberta** (`MvpMode` 2, PerChampionship). Importa em **pós-jogo** (`Status` 4, PostGame); os jogadores votam e o admin finaliza pelo app.
 - **Formato:** todos contra todos, 1 turno (`Format` 1).
 - **Gols:** não existem gols individuais; `GoalsCountInGeneralStats` = false. Artilharia e assistências ficam vazias.
 - Demais: padrão (`MvpCountsInGeneralStats` true, `IncludeInTeamDraw` false, mínimo de 1 jogo para a colocação).
@@ -70,5 +70,12 @@ Em 28/10, a pedido do Luis, a `main` foi para produção até o commit `6bdc626`
 
 As migrações mais novas (`AddShowChampionshipsInHistory`, `AddChampionshipLinkedPoll`, `AddReplayClipChampionship`, `AddChampionshipBets`) só estão na `feature/campeonato-integracao-local` e no banco local. Para importar em produção, essa branch precisa ir antes para a `main` (o deploy aplica as migrações).
 
-## Pendente
-- **Nome do campeonato:** ainda não definido (sugestão: "Campeonato 27/10").
+## Importação no banco local ✅ (29/10/2026)
+- Nome **"Campeonato 27/10"**, id `bac18efd-395e-537c-8dff-122e7e273c57` (fixo, gerado do nome do evento). Times: Preto `aad22248-…`, Laranja `89e79b46-…`, Azul `67d84b57-…` (ordem 1, 2, 3).
+- Backup antes: `BratnavaFC-db-backups\dev-antes-import-27-10-20261029-092343.dump`.
+- Feito numa transação: a J3 antiga do banco local (de antes do jogo) foi trocada pela versão da produção; J1 e J2 foram copiadas; as 3 viraram jogos 1 a 3 (status 6) com só os 10 jogadores de cada jogo; a enquete passou para o campeonato.
+- Conferido no banco: 3 times de 5 com os goleiros certos, jogos na ordem, placares iguais à produção.
+- Próximo: abrir no app/site, conferir a classificação (Preto 1º), votar o MVP e finalizar.
+
+## Para produção (não é o mesmo script)
+O script local **apaga e recria** as partidas. Em produção isso apagaria os 66 pedidos de replay ligados a elas. Lá o roteiro tem de **atualizar** as 3 partidas no lugar (ligar ao campeonato, status 6, tirar a enquete do jogo) e apagar só os `MatchPlayers` sem time, depois da `feature/campeonato-integracao-local` ir para a `main` e com backup antes.
