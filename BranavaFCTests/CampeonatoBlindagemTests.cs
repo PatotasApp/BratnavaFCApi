@@ -130,11 +130,16 @@ public sealed class CampeonatoBlindagemTests : IClassFixture<CampeonatoPostgresF
     /// <summary>
     /// Ordena arrays e chaves de forma canônica: listas ordenadas por Guid mudariam de ordem
     /// a cada execução. O retrato compara valores, não a ordem das listas.
+    /// Números quebrados vão arredondados: Math.Exp/Log/Pow diferem nas últimas casas entre
+    /// Windows e Linux (o CI), e a sinergia do sorteio mudava só por isso.
     /// </summary>
     private static string Canonical(string json)
     {
         static JsonNode? Sort(JsonNode? node) => node switch
         {
+            JsonValue value when value.GetValueKind() == JsonValueKind.Number
+                && value.TryGetValue<double>(out var number) && number != Math.Floor(number)
+                => JsonValue.Create(Math.Round(number, 10)),
             JsonObject obj => new JsonObject(obj.OrderBy(kv => kv.Key, StringComparer.Ordinal)
                 .Select(kv => KeyValuePair.Create(kv.Key, Sort(kv.Value?.DeepClone())))),
             JsonArray arr => new JsonArray(arr.Select(n => Sort(n?.DeepClone()))
