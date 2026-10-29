@@ -75,7 +75,7 @@ As migrações mais novas (`AddShowChampionshipsInHistory`, `AddChampionshipLink
 - Backup antes: `BratnavaFC-db-backups\dev-antes-import-27-10-20261029-092343.dump`.
 - Feito numa transação: a J3 antiga do banco local (de antes do jogo) foi trocada pela versão da produção; J1 e J2 foram copiadas; as 3 viraram jogos 1 a 3 (status 6) com só os 10 jogadores de cada jogo; a enquete passou para o campeonato.
 - Conferido no banco: 3 times de 5 com os goleiros certos, jogos na ordem, placares iguais à produção.
-- Próximo: abrir no app/site, conferir a classificação (Preto 1º), votar o MVP e finalizar.
+- **Validado pelo Luis no ambiente local (29/10/2026).**
 
 ## Para produção (não é o mesmo script)
 O script local **apaga e recria** as partidas. Em produção isso apagaria os 66 pedidos de replay ligados a elas. Lá o roteiro tem de **atualizar** as 3 partidas no lugar (ligar ao campeonato, status 6, tirar a enquete do jogo) e apagar só os `MatchPlayers` sem time, depois da `feature/campeonato-integracao-local` ir para a `main` e com backup antes.
