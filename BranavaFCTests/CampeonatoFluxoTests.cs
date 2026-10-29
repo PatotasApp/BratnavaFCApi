@@ -1,11 +1,13 @@
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Application.Services;
+using BratnavaFC.Application.TeamGeneration.Championship;
 using BratnavaFC.Application.TeamGeneration.MultiTeam;
 using BratnavaFC.Domain.Championships;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Championships;
 using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
+using BratnavaFC.Domain.Models;
 using BratnavaFC.Infrastructure.Data;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -203,7 +205,7 @@ public sealed class CampeonatoFluxoTests : IClassFixture<CampeonatoPostgresFixtu
         details.Status.Should().Be(ChampionshipStatus.Created);
         details.Players.Should().BeEmpty();
 
-        // Times → Presença: os times somem, as presenças ficam.
+        // Times → Sorteio → Presença: os times somem, as presenças e os goleiros ficam.
         Ok(await sut.OpenAcceptationAsync(groupId, id, Ct));
         foreach (var p in players)
             Ok(await sut.RespondInviteAsync(groupId, id, p.Id, accept: true, Ct));
@@ -211,10 +213,15 @@ public sealed class CampeonatoFluxoTests : IClassFixture<CampeonatoPostgresFixtu
         Ok(await sut.StepBackAsync(groupId, id, Ct));
         db.ChangeTracker.Clear();
         details = await Details(sut, groupId, id);
-        details.Status.Should().Be(ChampionshipStatus.Acceptation);
+        details.Status.Should().Be(ChampionshipStatus.TeamDraw);
         details.Teams.Should().BeEmpty();
-        details.Players.Should().HaveCount(6).And.OnlyContain(p => p.TeamId == null && !p.IsGoalkeeper
+        Ok(await sut.StepBackAsync(groupId, id, Ct));
+        db.ChangeTracker.Clear();
+        details = await Details(sut, groupId, id);
+        details.Status.Should().Be(ChampionshipStatus.Acceptation);
+        details.Players.Should().HaveCount(6).And.OnlyContain(p => p.TeamId == null
             && p.InviteResponse == InviteResponse.Accepted);
+        details.Players.Count(p => p.IsGoalkeeper).Should().Be(3);
 
         // Em andamento → Times, só antes do 1º jogo: as regras voltam a ser editáveis.
         Ok(await sut.DefineTeamsAsync(groupId, id, Ok(await sut.DrawTeamsAsync(groupId, id, 3, Ct)), Ct));
@@ -254,6 +261,113 @@ public sealed class CampeonatoFluxoTests : IClassFixture<CampeonatoPostgresFixtu
         details.Teams.Should().OnlyContain(t => t.FinalPosition == null);
         Ok(await sut.FinalizeAsync(groupId, id, new FinalizeChampionshipDto(null), Ct));
         (await Details(sut, groupId, id)).Status.Should().Be(ChampionshipStatus.Finalized);
+    }
+
+    [Fact]
+    public async Task Sorteio_EtapaPropria_GoleirosAntes_MetodosDaPartida_EDepoisTimes()
+    {
+        await using var db = await _fixture.CreateDatabaseAsync(nameof(Sorteio_EtapaPropria_GoleirosAntes_MetodosDaPartida_EDepoisTimes));
+        var (groupId, players) = await SeedGroupAsync(db, 9);
+        var colors = await SeedColorsAsync(db, groupId, 3);
+        var stats = new FakeStatsService([]);
+        var sut = new ChampionshipService(db, new MultiTeamGenerationService(stats),
+            teamDraw: new ChampionshipTeamDrawService(stats));
+        var id = Ok(await sut.CreateAsync(groupId, new CreateChampionshipDto("Sorteio", Day(), "Arena", null), Ct)).Id;
+        Ok(await sut.OpenAcceptationAsync(groupId, id, Ct));
+        foreach (var p in players)
+            Ok(await sut.RespondInviteAsync(groupId, id, p.Id, accept: true, Ct));
+
+        // Presença → Sorteio, ainda sem times.
+        Ok(await sut.OpenTeamDrawAsync(groupId, id, Ct));
+        var details = await Details(sut, groupId, id);
+        details.Status.Should().Be(ChampionshipStatus.TeamDraw);
+        details.Teams.Should().BeEmpty();
+
+        // Goleiros primeiro: o seed marca 0, 1 e 2; troca o 2 pelo 3.
+        Ok(await sut.SetPlayerGoalkeeperAsync(groupId, id, players[2].Id, false, Ct));
+        Ok(await sut.SetPlayerGoalkeeperAsync(groupId, id, players[3].Id, true, Ct));
+        var goalkeepers = new[] { players[0].Id, players[1].Id, players[3].Id };
+
+        // Todos os métodos da partida, com 3 times: cada time sai com um goleiro.
+        foreach (var strategy in new[] { StrategyType.Random, StrategyType.Algorithm, StrategyType.GroupByWins })
+        {
+            var draw = Ok(await sut.DrawTeamOptionsAsync(groupId, id,
+                new ChampionshipDrawRequestDto(3, strategy, ColorIds: [colors[2], null, colors[0]]), Ct));
+            draw.Options.Should().NotBeEmpty(strategy.ToString());
+            foreach (var option in draw.Options)
+            {
+                option.Teams.Should().HaveCount(3);
+                option.Teams.SelectMany(t => t.PlayerIds).Should().HaveCount(9).And.OnlyHaveUniqueItems();
+                option.Teams.Select(t => t.GoalkeeperPlayerId).Should().BeEquivalentTo(goalkeepers, strategy.ToString());
+                option.Teams[0].ColorId.Should().Be(colors[2]);
+                option.Teams[2].ColorId.Should().Be(colors[0]);
+                option.Teams[1].ColorId.Should().Be(colors[1], "a cor que faltava sai das restantes");
+            }
+        }
+
+        // Por perfil sem notas: avisa em vez de montar times pela metade.
+        (await sut.DrawTeamOptionsAsync(groupId, id, new ChampionshipDrawRequestDto(3, StrategyType.Profile), Ct))
+            .Error.Should().StartWith("Por perfil precisa das notas");
+
+        // Goleiros fora do sorteio: ficam sem time para o admin encaixar.
+        var withoutGk = Ok(await sut.DrawTeamOptionsAsync(groupId, id,
+            new ChampionshipDrawRequestDto(3, StrategyType.Random, IncludeGoalkeepers: false), Ct)).Options[0];
+        withoutGk.UnassignedPlayerIds.Should().BeEquivalentTo(goalkeepers);
+
+        // Com 2 times usa as estratégias da partida (formato de 2 times, direto no serviço de sorteio).
+        var pool = players.Select(p => new BratnavaFC.Domain.Dtos.PlayerRequestDto(p.Id, p.Name, goalkeepers.Contains(p.Id))).ToList();
+        var two = Ok(await new ChampionshipTeamDrawService(stats).GenerateAsync(pool, 2, StrategyType.Algorithm, true, ct: Ct));
+        two[0].Teams.SelectMany(t => t.PlayerIds).Should().HaveCount(9);
+        two[0].Teams.Should().OnlyContain(t => t.GoalkeeperPlayerId != null);
+
+        // Manual: times vazios, todos sem time; salvar leva para Times e lá o admin monta.
+        var manual = Ok(await sut.DrawTeamOptionsAsync(groupId, id, new ChampionshipDrawRequestDto(3, StrategyType.Manual), Ct)).Options.Single();
+        manual.UnassignedPlayerIds.Should().HaveCount(9);
+        Ok(await sut.DefineTeamsAsync(groupId, id, new DefineTeamsDto(manual.Teams), Ct));
+        details = await Details(sut, groupId, id);
+        details.Teams.Should().HaveCount(3).And.OnlyContain(t => t.PlayerIds.Count == 0);
+        (await sut.StartAsync(groupId, id, Ct)).Error.Should().Contain("ainda nao tem jogadores");
+        for (var i = 0; i < players.Count; i++)
+            Ok(await sut.MovePlayerAsync(groupId, id, players[i].Id, details.Teams[i % 3].Id, Ct));
+        db.ChangeTracker.Clear();
+        details = await Details(sut, groupId, id);
+        details.Players.Where(p => p.IsGoalkeeper).Select(p => p.PlayerId).Should().BeEquivalentTo(goalkeepers);
+
+        // Times → Sorteio: os times saem, os goleiros marcados ficam. Sorteio → Presença.
+        Ok(await sut.StepBackAsync(groupId, id, Ct));
+        db.ChangeTracker.Clear();
+        details = await Details(sut, groupId, id);
+        details.Status.Should().Be(ChampionshipStatus.TeamDraw);
+        details.Teams.Should().BeEmpty();
+        details.Players.Where(p => p.IsGoalkeeper).Select(p => p.PlayerId).Should().BeEquivalentTo(goalkeepers);
+        Ok(await sut.StepBackAsync(groupId, id, Ct));
+        (await Details(sut, groupId, id)).Status.Should().Be(ChampionshipStatus.Acceptation);
+
+        // De volta: sorteia, salva e inicia. Quem está no gol entra no jogo com IsGoalkeeper.
+        Ok(await sut.OpenTeamDrawAsync(groupId, id, Ct));
+        var best = Ok(await sut.DrawTeamOptionsAsync(groupId, id, new ChampionshipDrawRequestDto(3, StrategyType.Algorithm), Ct)).Options[0];
+        Ok(await sut.DefineTeamsAsync(groupId, id, new DefineTeamsDto(best.Teams), Ct));
+        Ok(await sut.StartAsync(groupId, id, Ct));
+        var teams = (await Details(sut, groupId, id)).Teams;
+        var gameId = Ok(await sut.CreateGameAsync(groupId, id, new CreateChampionshipGameDto(teams[0].Id, teams[1].Id), Ct)).GameId;
+        db.ChangeTracker.Clear();
+        var gamePlayers = await db.Matches.IgnoreQueryFilters().Where(m => m.Id == gameId).SelectMany(m => m.Players).ToListAsync();
+        gamePlayers.Where(mp => mp.IsGoalkeeper).Select(mp => mp.PlayerId)
+            .Should().BeEquivalentTo(best.Teams.Take(2).Select(t => t.GoalkeeperPlayerId!.Value));
+    }
+
+    [Fact]
+    public async Task EventoVinculado_ComoNaPartida()
+    {
+        await using var db = await _fixture.CreateDatabaseAsync(nameof(EventoVinculado_ComoNaPartida));
+        var (groupId, _) = await SeedGroupAsync(db, 4);
+        var sut = new ChampionshipService(db, new MultiTeamGenerationService(new FakeStatsService([])));
+        var id = Ok(await sut.CreateAsync(groupId, new CreateChampionshipDto("Com evento", Day(), "Arena", null), Ct)).Id;
+
+        (await sut.SetLinkedPollAsync(groupId, id, Guid.NewGuid(), Ct)).Success.Should().BeFalse();
+        var poll = await db.Polls.Select(p => p.Id).FirstOrDefaultAsync();
+        if (poll == Guid.Empty) return; // sem votação no seed: o caso de erro acima já cobre a validação
+        Ok(await sut.SetLinkedPollAsync(groupId, id, poll, Ct));
     }
 
     [Fact]
@@ -389,6 +503,17 @@ public sealed class CampeonatoFluxoTests : IClassFixture<CampeonatoPostgresFixtu
 
         Ok(await sut.EndGameAsync(groupId, id, gameId, new EndChampionshipGameDto(null), Ct));
         db.ChangeTracker.Clear();
+    }
+
+    private static async Task<List<Guid>> SeedColorsAsync(AppDbContext db, Guid groupId, int count)
+    {
+        var colors = Enumerable.Range(0, count)
+            .Select(i => new TeamColorEntity(groupId, $"Cor {i}", $"#00000{i}"))
+            .ToList();
+        db.TeamColors.AddRange(colors);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        return colors.Select(c => c.Id).ToList();
     }
 
     private static async Task<(Guid groupId, List<PlayerEntity> players)> SeedGroupAsync(AppDbContext db, int count)

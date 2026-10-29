@@ -128,6 +128,9 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<Guid>("GroupId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("LinkedPollId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -156,6 +159,8 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("LinkedPollId");
 
                     b.HasIndex("GroupId", "PlayedAt");
 
@@ -2150,7 +2155,14 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("BratnavaFC.Domain.Entities.PollEntity", "LinkedPoll")
+                        .WithMany()
+                        .HasForeignKey("LinkedPollId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Group");
+
+                    b.Navigation("LinkedPoll");
                 });
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.ChampionshipGameEventEntity", b =>

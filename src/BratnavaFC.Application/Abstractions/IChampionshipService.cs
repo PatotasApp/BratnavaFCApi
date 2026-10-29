@@ -20,6 +20,10 @@ public interface IChampionshipService
     Task<Result> AddGuestAsync(Guid groupId, Guid championshipId, AddChampionshipGuestDto dto, CancellationToken ct);
 
     Task<Result<DefineTeamsDto>> DrawTeamsAsync(Guid groupId, Guid championshipId, int teamCount, CancellationToken ct);
+    Task<Result> SetLinkedPollAsync(Guid groupId, Guid championshipId, Guid? pollId, CancellationToken ct);
+    Task<Result> OpenTeamDrawAsync(Guid groupId, Guid championshipId, CancellationToken ct);
+    Task<Result> SetPlayerGoalkeeperAsync(Guid groupId, Guid championshipId, Guid playerId, bool isGoalkeeper, CancellationToken ct);
+    Task<Result<ChampionshipDrawOptionsDto>> DrawTeamOptionsAsync(Guid groupId, Guid championshipId, ChampionshipDrawRequestDto dto, CancellationToken ct);
     Task<Result> DefineTeamsAsync(Guid groupId, Guid championshipId, DefineTeamsDto dto, CancellationToken ct);
     Task<Result> MovePlayerAsync(Guid groupId, Guid championshipId, Guid playerId, Guid? teamId, CancellationToken ct);
     Task<Result> DrawTeamColorsAsync(Guid groupId, Guid championshipId, CancellationToken ct);

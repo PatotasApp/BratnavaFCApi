@@ -50,6 +50,11 @@ public sealed class ChampionshipEntityConfiguration : IEntityTypeConfiguration<C
             .HasForeignKey(x => x.ChampionshipId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        builder.HasOne(x => x.LinkedPoll)
+            .WithMany()
+            .HasForeignKey(x => x.LinkedPollId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         builder.HasIndex(x => new { x.GroupId, x.PlayedAt });
     }
 }

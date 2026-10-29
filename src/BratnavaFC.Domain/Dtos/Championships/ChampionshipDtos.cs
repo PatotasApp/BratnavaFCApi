@@ -1,6 +1,7 @@
 using BratnavaFC.Domain.Championships;
 using System.Text.Json.Serialization;
 using BratnavaFC.Domain.Enums;
+using BratnavaFC.Domain.Models;
 
 namespace BratnavaFC.Domain.Dtos.Championships;
 
@@ -19,6 +20,28 @@ public sealed record ChampionshipPlayerActionDto(Guid PlayerId);
 public sealed record AddChampionshipGuestDto(Guid? PlayerId, string? Name, bool IsGoalkeeper = false, int? GuestStarRating = null);
 
 public sealed record DrawTeamsDto(int TeamCount);
+
+/// <summary>
+/// Sorteio do campeonato (v8) com os parâmetros da partida mais a quantidade de times.
+/// <c>ColorIds</c> são as cores escolhidas na aba Cores, na ordem dos times; vazio sorteia.
+/// </summary>
+public sealed record ChampionshipDrawRequestDto(
+    int TeamCount,
+    StrategyType StrategyType = StrategyType.Algorithm,
+    bool IncludeGoalkeepers = true,
+    List<Guid?>? ColorIds = null,
+    int OptionsCount = 3);
+
+/// <summary>Uma opção do sorteio, já no formato do <c>PUT /teams</c>.</summary>
+public sealed record ChampionshipDrawOptionDto(
+    List<DefineTeamDto> Teams,
+    List<Guid> UnassignedPlayerIds,
+    List<double> TeamStrengths,
+    double StrengthDifference);
+
+public sealed record ChampionshipDrawOptionsDto(List<ChampionshipDrawOptionDto> Options);
+
+public sealed record SetChampionshipPlayerGoalkeeperDto(bool IsGoalkeeper);
 
 public sealed record DefineTeamDto(string Name, Guid? ColorId, List<Guid> PlayerIds, Guid? GoalkeeperPlayerId);
 
@@ -147,7 +170,8 @@ public sealed record ChampionshipDetailsDto(
     IReadOnlyList<Guid> MvpPlayerIds,
     InviteResponse? MyInviteResponse,
     bool CanVote,
-    IReadOnlyList<ChampionshipMyVoteDto> MyVotes);
+    IReadOnlyList<ChampionshipMyVoteDto> MyVotes,
+    Guid? LinkedPollId = null);
 
 public sealed record NextGameSuggestionDto(
     Guid TeamAId,

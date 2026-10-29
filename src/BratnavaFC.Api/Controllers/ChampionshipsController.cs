@@ -1,5 +1,6 @@
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Common;
+using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Dtos.Championships;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
@@ -95,6 +96,26 @@ public class ChampionshipsController : GroupAuthorizedController
     {
         if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
         return ToResponse(await _service.DrawTeamsAsync(groupId, championshipId, dto.TeamCount, ct));
+    }
+
+    [HttpPatch("{championshipId:guid}/linked-poll")]
+    public Task<IActionResult> SetLinkedPoll(Guid groupId, Guid championshipId, [FromBody] SetLinkedPollRequestDto dto, CancellationToken ct) =>
+        AsAdmin(groupId, ct, () => _service.SetLinkedPollAsync(groupId, championshipId, dto.PollId, ct));
+
+    [HttpPost("{championshipId:guid}/team-draw/open")]
+    public Task<IActionResult> OpenTeamDraw(Guid groupId, Guid championshipId, CancellationToken ct) =>
+        AsAdmin(groupId, ct, () => _service.OpenTeamDrawAsync(groupId, championshipId, ct));
+
+    [HttpPatch("{championshipId:guid}/players/{playerId:guid}/goalkeeper")]
+    public Task<IActionResult> SetPlayerGoalkeeper(Guid groupId, Guid championshipId, Guid playerId,
+        [FromBody] SetChampionshipPlayerGoalkeeperDto dto, CancellationToken ct) =>
+        AsAdmin(groupId, ct, () => _service.SetPlayerGoalkeeperAsync(groupId, championshipId, playerId, dto.IsGoalkeeper, ct));
+
+    [HttpPost("{championshipId:guid}/teams/draw-options")]
+    public async Task<IActionResult> DrawTeamOptions(Guid groupId, Guid championshipId, [FromBody] ChampionshipDrawRequestDto dto, CancellationToken ct)
+    {
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
+        return ToResponse(await _service.DrawTeamOptionsAsync(groupId, championshipId, dto, ct));
     }
 
     [HttpPut("{championshipId:guid}/teams")]

@@ -60,6 +60,12 @@ public class ChampionshipEntity : BaseEntity
     /// <summary>Quando o primeiro jogo pôde começar (status InProgress).</summary>
     public DateTime? StartedAt { get; private set; }
 
+    /// <summary>Votação/evento vinculado, como na partida (null = sem vínculo).</summary>
+    public Guid? LinkedPollId { get; private set; }
+    public PollEntity? LinkedPoll { get; private set; }
+
+    public void SetLinkedPoll(Guid? pollId) => LinkedPollId = pollId;
+
     /// <summary>Regras serializadas (coluna). Use <see cref="Rules"/>.</summary>
     public string RulesJson { get; private set; } = "{}";
 
@@ -157,6 +163,30 @@ public class ChampionshipEntity : BaseEntity
 
     // ── Times ────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Fecha a presença e vai para o sorteio, como a partida vai da aceitação para a formação.
+    /// O sorteio é a etapa TeamDraw ainda sem times; depois de salvos, a etapa mostra os times.
+    /// </summary>
+    public void OpenTeamDraw()
+    {
+        EnsureStatus(ChampionshipStatus.Acceptation, "So e possivel ir para o sorteio durante a presenca.");
+        var confirmed = Players.Count(p => p.InviteResponse == InviteResponse.Accepted);
+        if (confirmed < Rules.MinimumTeams)
+            throw new InvalidOperationException($"Confirme ao menos {Rules.MinimumTeams} jogadores para sortear os times.");
+        Status = ChampionshipStatus.TeamDraw;
+    }
+
+    /// <summary>Marca quem joga no gol antes do sorteio (vale para a presença e o sorteio).</summary>
+    public void SetPlayerGoalkeeper(Guid playerId, bool isGoalkeeper)
+    {
+        EnsureStatusIn("So e possivel definir os goleiros durante a presenca ou o sorteio.",
+            ChampionshipStatus.Acceptation, ChampionshipStatus.TeamDraw);
+        var participant = FindParticipant(playerId);
+        if (participant.InviteResponse != InviteResponse.Accepted)
+            throw new InvalidOperationException("So jogadores com presenca confirmada podem ser goleiros.");
+        participant.AssignTeam(participant.TeamId, isGoalkeeper);
+    }
+
     public sealed record TeamSpec(string Name, Guid? ColorId, IReadOnlyList<Guid> PlayerIds, Guid? GoalkeeperPlayerId);
 
     /// <summary>Define (ou redefine) os times. Só antes do primeiro jogo.</summary>
@@ -179,11 +209,10 @@ public class ChampionshipEntity : BaseEntity
 
         foreach (var spec in teams)
         {
-            if (spec.PlayerIds is null || spec.PlayerIds.Count == 0)
-                throw new InvalidOperationException($"O time {spec.Name} precisa de ao menos 1 jogador.");
+            // Time vazio é permitido (sorteio manual): os jogadores entram na etapa Times.
             if (spec.GoalkeeperPlayerId.HasValue && !spec.PlayerIds.Contains(spec.GoalkeeperPlayerId.Value))
                 throw new InvalidOperationException($"O goleiro do time {spec.Name} precisa estar no time.");
-            foreach (var playerId in spec.PlayerIds)
+            foreach (var playerId in spec.PlayerIds ?? [])
             {
                 if (FindParticipant(playerId).InviteResponse != InviteResponse.Accepted)
                     throw new InvalidOperationException("So jogadores com presenca confirmada podem entrar em um time.");
@@ -199,8 +228,12 @@ public class ChampionshipEntity : BaseEntity
             var spec = teams[i];
             var team = new ChampionshipTeamEntity(Id, spec.Name, spec.ColorId, i + 1);
             Teams.Add(team);
-            foreach (var playerId in spec.PlayerIds)
-                FindParticipant(playerId).AssignTeam(team.Id, playerId == spec.GoalkeeperPlayerId);
+            foreach (var playerId in spec.PlayerIds ?? [])
+            {
+                var participant = FindParticipant(playerId);
+                participant.AssignTeam(team.Id, playerId == spec.GoalkeeperPlayerId
+                    || (spec.GoalkeeperPlayerId is null && participant.IsGoalkeeper));
+            }
         }
 
         Status = ChampionshipStatus.TeamDraw;
@@ -275,6 +308,9 @@ public class ChampionshipEntity : BaseEntity
         EnsureStatus(ChampionshipStatus.TeamDraw, "So e possivel iniciar o campeonato depois de definir os times.");
         if (Teams.Count < Rules.MinimumTeams)
             throw new InvalidOperationException($"Esse formato precisa de ao menos {Rules.MinimumTeams} times.");
+        var empty = Teams.FirstOrDefault(t => !Players.Any(p => p.TeamId == t.Id));
+        if (empty is not null)
+            throw new InvalidOperationException($"O time {empty.Name} ainda nao tem jogadores.");
 
         StartedAt = nowUtc;
         Status = ChampionshipStatus.InProgress;
@@ -463,10 +499,14 @@ public class ChampionshipEntity : BaseEntity
                 Status = ChampionshipStatus.Created;
                 break;
 
-            case ChampionshipStatus.TeamDraw:
+            case ChampionshipStatus.TeamDraw when Teams.Count > 0:
+                // Times → Sorteio: os times saem, os goleiros marcados continuam.
                 foreach (var participant in Players)
-                    participant.AssignTeam(null, false);
+                    participant.AssignTeam(null, participant.IsGoalkeeper);
                 Teams.Clear();
+                break;
+
+            case ChampionshipStatus.TeamDraw:
                 Status = ChampionshipStatus.Acceptation;
                 break;
 

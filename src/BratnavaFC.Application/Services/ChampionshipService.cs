@@ -1,4 +1,5 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.TeamGeneration.Championship;
 using BratnavaFC.Application.TeamGeneration.MultiTeam;
 using BratnavaFC.Domain.Championships;
 using BratnavaFC.Domain.Common;
@@ -26,13 +27,16 @@ public sealed class ChampionshipService : IChampionshipService
     private readonly MultiTeamGenerationService _multiTeamGeneration;
     private readonly IConquistaProjectionService? _projection;
     private readonly IMatchEventPublisher? _eventPublisher;
+    private readonly ChampionshipTeamDrawService? _teamDraw;
 
     public ChampionshipService(
         AppDbContext db,
         MultiTeamGenerationService multiTeamGeneration,
         IConquistaProjectionService? projection = null,
-        IMatchEventPublisher? eventPublisher = null)
+        IMatchEventPublisher? eventPublisher = null,
+        ChampionshipTeamDrawService? teamDraw = null)
     {
+        _teamDraw = teamDraw;
         _db = db;
         _multiTeamGeneration = multiTeamGeneration ?? throw new ArgumentNullException(nameof(multiTeamGeneration));
         _projection = projection;
@@ -147,7 +151,8 @@ public sealed class ChampionshipService : IChampionshipService
             mvps,
             me?.InviteResponse,
             CanVote(championship, me, games),
-            myVotes);
+            myVotes,
+            championship.LinkedPollId);
 
         return Result<ChampionshipDetailsDto>.Ok(dto);
     }
@@ -296,6 +301,92 @@ public sealed class ChampionshipService : IChampionshipService
             team.GoalkeeperPlayerId)).ToList();
 
         return Result<DefineTeamsDto>.Ok(new DefineTeamsDto(teams), ColorShortageWarning(teamCount, colors.Count));
+    }
+
+    /// <summary>Vincula (ou desvincula, com null) uma votação/evento da patota, como na partida.</summary>
+    public Task<Result> SetLinkedPollAsync(Guid groupId, Guid championshipId, Guid? pollId, CancellationToken ct) =>
+        Mutate(groupId, championshipId, ct, async c =>
+        {
+            if (pollId.HasValue && !await _db.Polls.AnyAsync(p => p.Id == pollId.Value && p.GroupId == groupId, ct))
+                throw new InvalidOperationException("Votacao nao encontrada nesta patota.");
+            c.SetLinkedPoll(pollId);
+        });
+
+    public Task<Result> OpenTeamDrawAsync(Guid groupId, Guid championshipId, CancellationToken ct) =>
+        Mutate(groupId, championshipId, ct, c =>
+        {
+            c.OpenTeamDraw();
+            return Task.CompletedTask;
+        });
+
+    public Task<Result> SetPlayerGoalkeeperAsync(Guid groupId, Guid championshipId, Guid playerId, bool isGoalkeeper, CancellationToken ct) =>
+        Mutate(groupId, championshipId, ct, c =>
+        {
+            c.SetPlayerGoalkeeper(playerId, isGoalkeeper);
+            return Task.CompletedTask;
+        });
+
+    /// <summary>
+    /// Sorteio da etapa Sorteio (v8): mesmos métodos da partida, sem salvar. As cores vêm da
+    /// aba Cores (na ordem dos times) ou são sorteadas; o nome do time é o da cor.
+    /// </summary>
+    public async Task<Result<ChampionshipDrawOptionsDto>> DrawTeamOptionsAsync(
+        Guid groupId, Guid championshipId, ChampionshipDrawRequestDto dto, CancellationToken ct)
+    {
+        if (_teamDraw is null)
+            return Result<ChampionshipDrawOptionsDto>.Fail("Sorteio indisponivel.");
+        var championship = await LoadAsync(groupId, championshipId, tracking: false, ct);
+        if (championship is null) return NotFound<ChampionshipDrawOptionsDto>();
+        if (championship.Status is not (ChampionshipStatus.Acceptation or ChampionshipStatus.TeamDraw))
+            return Result<ChampionshipDrawOptionsDto>.Fail("So e possivel sortear durante a presenca ou o sorteio.");
+        if (dto.TeamCount < championship.Rules.MinimumTeams)
+            return Result<ChampionshipDrawOptionsDto>.Fail($"Esse formato precisa de ao menos {championship.Rules.MinimumTeams} times.");
+
+        var confirmed = championship.Players
+            .Where(p => p.InviteResponse == InviteResponse.Accepted && !p.DidNotPlay && p.Player is not null)
+            .Select(p => new PlayerRequestDto(p.PlayerId, p.Player!.Name, p.IsGoalkeeper, p.Player.GuestStarRating))
+            .ToList();
+
+        // Cores escolhidas valem na ordem; as que faltarem saem do sorteio entre as restantes.
+        var active = await ActiveColorsShuffledAsync(groupId, ct);
+        var chosen = (dto.ColorIds ?? []).Take(dto.TeamCount).ToList();
+        if (chosen.Where(id => id.HasValue).GroupBy(id => id).Any(g => g.Count() > 1))
+            return Result<ChampionshipDrawOptionsDto>.Fail("Dois times nao podem ter a mesma cor.");
+        if (chosen.Any(id => id.HasValue && active.All(c => c.Id != id)))
+            return Result<ChampionshipDrawOptionsDto>.Fail("Cor de time invalida: use uma cor ativa desta patota.");
+        var remaining = active.Where(c => !chosen.Contains(c.Id)).ToList();
+        var colors = new List<TeamColorEntity?>();
+        for (var i = 0; i < dto.TeamCount; i++)
+        {
+            if (i < chosen.Count && chosen[i].HasValue)
+                colors.Add(active.First(c => c.Id == chosen[i]));
+            else if (remaining.Count > 0)
+            {
+                colors.Add(remaining[0]);
+                remaining.RemoveAt(0);
+            }
+            else
+                colors.Add(null);
+        }
+
+        var draw = await _teamDraw.GenerateAsync(
+            confirmed, dto.TeamCount, dto.StrategyType, dto.IncludeGoalkeepers, dto.OptionsCount, ct);
+        if (!draw.Success)
+            return Result<ChampionshipDrawOptionsDto>.Fail(draw.Error ?? "Nao foi possivel sortear os times.", draw.Status, draw.Errors);
+
+        var options = draw.Data!.Select(option => new ChampionshipDrawOptionDto(
+            option.Teams.Select((team, i) => new DefineTeamDto(
+                colors[i]?.Name ?? $"Time {i + 1}",
+                colors[i]?.Id,
+                team.PlayerIds.ToList(),
+                team.GoalkeeperPlayerId)).ToList(),
+            option.UnassignedPlayerIds.ToList(),
+            option.Teams.Select(t => t.Strength).ToList(),
+            option.StrengthDifference)).ToList();
+
+        return Result<ChampionshipDrawOptionsDto>.Ok(
+            new ChampionshipDrawOptionsDto(options),
+            ColorShortageWarning(dto.TeamCount, colors.Count(c => c is not null)));
     }
 
     public Task<Result> DefineTeamsAsync(Guid groupId, Guid championshipId, DefineTeamsDto dto, CancellationToken ct) =>

@@ -86,6 +86,7 @@ public static class ApplicationDependencyInjection
         services.AddScoped<IGroupService, GroupService>();
         services.AddScoped<TeamGenerationService>();
         services.AddScoped<MultiTeamGenerationService>();
+        services.AddScoped<BratnavaFC.Application.TeamGeneration.Championship.ChampionshipTeamDrawService>();
         services.AddScoped<IGroupSettingsService, GroupSettingsService>();
         services.AddScoped<ICalendarService, CalendarService>();
         services.AddScoped<IFinancialTransactionService, FinancialTransactionService>();
