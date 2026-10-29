@@ -77,5 +77,28 @@ As migrações mais novas (`AddShowChampionshipsInHistory`, `AddChampionshipLink
 - Conferido no banco: 3 times de 5 com os goleiros certos, jogos na ordem, placares iguais à produção.
 - **Validado pelo Luis no ambiente local (29/10/2026).**
 
+## Plano para produção (29/10/2026)
+### O que falta subir
+| Parte | Branch | Situação |
+|---|---|---|
+| API | `feature/campeonato-integracao-local` | 12 commits à frente da `main`, sem conflito (contém a `main` inteira). O deploy aplica 4 migrações, **todas só acrescentam**: `GroupSettings.ShowChampionshipsInHistory` (padrão false), `Championships.LinkedPollId`, `ReplayClips.ChampionshipId` e as tabelas de apostas. |
+| Site | `feature/campeonato-web` | 12 commits à frente da `main`. O `.env.production` já está com `VITE_CHAMPIONSHIPS_ENABLED=true`: o campeonato aparece assim que o site sobe. |
+| App | `feature/campeonato-telas` | 21 commits à frente da `main`. `config/prod.json` está com `CHAMPIONSHIPS_ENABLED: false`: precisa ligar e publicar nova versão nas lojas. |
+
+### Ordem
+1. Backup da produção (`pg_dump`), além do `prod-antes-campeonato-20261027-201620.dump` que já existe.
+2. API na `main` → deploy aplica as migrações. Conferir que a API antiga dos apps continua funcionando.
+3. Site na `main` (já liga o campeonato).
+4. **Ensaio:** cópia nova da patota para o local (`scripts/copiar-patota-para-dev.ps1`), rodar o script de produção no local e validar.
+5. Importação em produção com o mesmo script, numa transação.
+6. Ligar "Mostrar campeonatos no histórico" na patota (a migração cria desligado).
+7. App: ligar a flag em `config/prod.json`, gerar e publicar nas lojas. Até sair, o app atual só não mostra o campeonato; as estatísticas já contam para todos.
+
+### Script de produção: atualizar no lugar, sem apagar nada
+- As 3 partidas: só `UPDATE` (campeonato, times, ordem 1–3, status 6, `LinkedPollId` vai para o campeonato). Placar, cores, `ActualStartTime`, datas e ids ficam iguais.
+- `MatchPlayers`: **nada é apagado**, nem os convites sem time e as 5 recusas da J3. As estatísticas só leem quem tem time.
+- Ficam como estão, ligados aos mesmos ids: 66 pedidos de replay, 9 lembretes agendados (já passados) e 136 notificações dos usuários.
+- Única mudança visível: as 3 partidas saem das listas de partidas comuns (passam a ser jogos do campeonato). Notificações antigas que abrem a partida podem dar "Partida não encontrada".
+
 ## Para produção (não é o mesmo script)
 O script local **apaga e recria** as partidas. Em produção isso apagaria os 66 pedidos de replay ligados a elas. Lá o roteiro tem de **atualizar** as 3 partidas no lugar (ligar ao campeonato, status 6, tirar a enquete do jogo) e apagar só os `MatchPlayers` sem time, depois da `feature/campeonato-integracao-local` ir para a `main` e com backup antes.
