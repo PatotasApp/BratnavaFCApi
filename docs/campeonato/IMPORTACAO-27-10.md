@@ -7,13 +7,28 @@ Leitura feita em 29/10/2026 na base oficial, **somente leitura** (`default_trans
 ## O que existe hoje na base oficial
 As 3 partidas estão com status **4 (Ended)**: encerradas, mas nunca finalizadas. Por isso **hoje não contam em nenhuma estatística**. Todas são de 27/10 às 20:30, no Boca Jrs, com placar mas **sem gols individuais e sem votos de MVP**.
 
-| Jogo | Partida (id) | Placar | Última atualização |
+| Jogo | Partida (id) | Placar | Início real (Brasília) |
 |---|---|---|---|
-| 1 | `a110819e-989d-425d-81ac-479cb7b6353e` | Laranja **4 x 3** Azul | 28/10 00:08 |
-| 2 | `e8280212-2dfd-4055-ab3f-d7093a677928` | Preto **7 x 3** Azul | 28/10 00:30 |
-| 3 | `83100247-218e-4ce7-8d8e-06479bb7b7ea` | Preto **5 x 4** Laranja | 28/10 00:54 |
+| 1 | `a110819e-989d-425d-81ac-479cb7b6353e` | Laranja **4 x 3** Azul | 20:47 |
+| 2 | `e8280212-2dfd-4055-ab3f-d7093a677928` | Preto **7 x 3** Azul | 21:09 |
+| 3 | `83100247-218e-4ce7-8d8e-06479bb7b7ea` | Preto **5 x 4** Laranja | 21:31 |
 
-A ordem segue a última atualização de cada partida (quando o placar foi fechado). A data de criação não serve: o jogo 3 foi criado em 21/10, como a partida normal do dia.
+A ordem está confirmada pelo início real (`ActualStartTime`). O jogo 3 é a partida normal do dia (criada em 21/10): é ele que tem a enquete vinculada e as 5 recusas de presença.
+
+### Tudo o que está ligado às 3 partidas
+| Dado | O que tem | No campeonato |
+|---|---|---|
+| Partidas | 3, status 4 (Ended), placar e cores, `ActualStartTime` | Viram os jogos 1 a 3 (mesmos ids), status 6 |
+| Jogadores com time | 10 por jogo (5 x 5), todos com presença confirmada, 1 goleiro por time | 15 participantes confirmados, nos 3 times |
+| Convites sem time | J1 e J2: 15 cada (sem resposta). J3: 10 sem resposta + 5 recusas | Ficam fora (só quem jogou entra) |
+| Gols | **Nenhum** (só o placar) | Artilharia/assistência vazias |
+| Votos de MVP / MVP | **Nenhum** | Votação aberta no campeonato |
+| Apostas | **Nenhuma** | — |
+| Replays (clipes) | **Nenhum** clipe gerado | — |
+| Pedidos de replay | 66 na fila, todos **Pending**: gols por time (J1 4/3, J2 7/3, J3 5/4, batem com o placar) e 40 "Jogada" | Ficam onde estão (ligados ao id do jogo, que não muda) |
+| Enquete | J3 tem a enquete "Churrasco Luís e Andrei" (evento, aberta) | Passa para o campeonato (`LinkedPollId` do campeonato) |
+| Conquistas/estatística | Nenhuma linha (as partidas nunca foram finalizadas) | Contam ao finalizar o campeonato |
+| Cores | Preto `#000000`, Azul `#00CBF8`, Laranja `#FA810A` (ativas) | Cores dos 3 times |
 
 ## Times (iguais nos 3 jogos)
 | Time | Goleiro | Linha |
@@ -49,6 +64,9 @@ A ideia é **transformar as 3 partidas existentes**, mantendo os mesmos ids, par
 4. Conferir no app e no site: classificação, card no histórico, votação de MVP. Finalizar pelo app.
 
 **Em produção**, só depois do deploy das migrações do campeonato. Mesmo roteiro, com backup antes.
+
+## ⚠️ Produção já tem migrações do campeonato
+A leitura de `__EFMigrationsHistory` mostrou em produção `20261027184007_AddChampionships` e `20261029001454_AddChampionshipGameEvents` (as colunas `Championship*` existem e estão vazias em `Matches`). A segunda só existe na branch `feature/campeonato-integracao-local`. Causa provável: `dotnet ef database update` usa a conexão padrão dos user secrets (`ConnectionStrings:DefaultConnection`), que é a **produção**. As duas só acrescentam tabelas/colunas nulas. Antes de qualquer novo `database update`, apontar explicitamente para o banco local.
 
 ## Pendente
 - **Nome do campeonato:** ainda não definido (sugestão: "Campeonato 27/10").
