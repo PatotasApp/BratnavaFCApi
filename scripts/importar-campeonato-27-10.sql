@@ -6,14 +6,15 @@
 -- originais são apagadas à parte. As originais estão como Ended (4) e nunca foram
 -- finalizadas, então não contam em estatística: nada fica em dobro.
 --
--- Pedidos de replay (decisão do Luis, 29/10): os 66 pedidos pendentes das partidas
--- originais são copiados para os jogos do campeonato, cada um no jogo correspondente,
--- e os originais passam a "Transferred" para o processo das câmeras não enviá-los em
--- dobro. Convites sem time, recusas, lembretes e notificações ficam só nas originais.
+-- Replays (decisão do Luis, 29/10): os 66 pedidos de replay foram processados nas
+-- partidas originais em 29/10 (todos "Published", 66 clipes gerados). Não se cria pedido
+-- novo, para não gerar vídeo em dobro: os pedidos ficam como estão, e os 66 clipes
+-- (ReplayClips) passam para o jogo do campeonato correspondente. Curtidas e favoritos
+-- seguem o clipe. Convites sem time, recusas, lembretes e notificações ficam só nas originais.
 --
 -- Garantias:
 --   * Nada é apagado. As partidas originais não são alteradas; a única alteração
---     fora dos INSERTs é o status dos 66 pedidos de replay originais.
+--     fora dos INSERTs é a partida/campeonato dos 66 clipes.
 --   * Pode rodar de novo: os ids são fixos e cada passo pula o que já foi feito.
 --   * Tudo numa transação: qualquer trava que falhar desfaz tudo.
 --   * Trava de entrada: se placar, cores ou status das partidas mudaram desde a
@@ -60,14 +61,20 @@ BEGIN
     RAISE EXCEPTION 'Trava: esperava 15 jogadores com time, achei %. Nada foi alterado.', ok;
   END IF;
 
-  -- Os 66 pedidos de replay originais: pendentes (1ª vez) ou já transferidos (repetição).
-  -- Se algum já foi enviado às câmeras, a cópia geraria clipe em dobro: aborta.
+  -- Os 66 pedidos de replay originais já processados, e nenhum em andamento.
   SELECT count(*) INTO ok
   FROM "ReplayEventOutbox" o JOIN imp_jogos j ON j.match_id = o."MatchId"
-  WHERE o."Status" IN ('Pending', 'Transferred');
+  WHERE o."Status" = 'Published';
   IF ok <> 66 OR EXISTS (SELECT 1 FROM "ReplayEventOutbox" o JOIN imp_jogos j ON j.match_id = o."MatchId"
-                         WHERE o."Status" NOT IN ('Pending', 'Transferred')) THEN
-    RAISE EXCEPTION 'Trava: esperava 66 pedidos de replay pendentes nas partidas originais (achei %). Nada foi alterado.', ok;
+                         WHERE o."Status" <> 'Published') THEN
+    RAISE EXCEPTION 'Trava: esperava os 66 pedidos de replay publicados nas partidas originais (achei %). Nada foi alterado.', ok;
+  END IF;
+
+  -- Os 66 clipes: nas partidas originais (1ª vez) ou já nos jogos do campeonato (repetição).
+  SELECT count(*) INTO ok
+  FROM "ReplayClips" c JOIN imp_jogos j ON c."MatchId" IN (j.match_id, j.jogo_id);
+  IF ok <> 66 THEN
+    RAISE EXCEPTION 'Trava: esperava 66 clipes de replay, achei %. Nada foi alterado.', ok;
   END IF;
 END $$;
 
@@ -135,23 +142,18 @@ JOIN imp_jogos j ON j.match_id = mp."MatchId"
 WHERE mp."Team" IN (1, 2)
 ON CONFLICT ("Id") DO NOTHING;
 
--- ── Pedidos de replay: 66 copiados para os jogos do campeonato ─────────────
--- Mesmo lance, horário e duração; o id da partida dentro do conteúdo enviado às
--- câmeras passa a ser o do jogo novo. Ficam pendentes para o processo das câmeras.
-INSERT INTO "ReplayEventOutbox" ("Id", "StreamKey", "GroupId", "MatchId", "Type", "EventTime", "SecondsBeforeStart",
-                                 "DurationSeconds", "Payload", "StreamFieldsJson", "Status", "Reason", "ProcessedAt",
-                                 "RedisStreamEntryId", "CreateDate", "UpdateDate")
-SELECT md5('campeonato-27-10/replay/' || o."Id"::text)::uuid, o."StreamKey", o."GroupId", j.jogo_id, o."Type", o."EventTime",
-       o."SecondsBeforeStart", o."DurationSeconds",
-       replace(o."Payload"::text, j.match_id::text, j.jogo_id::text)::jsonb,
-       replace(o."StreamFieldsJson"::text, j.match_id::text, j.jogo_id::text)::jsonb,
-       'Pending', 'Copiado da partida ' || j.match_id::text || ' (Campeonato 27/10).', NULL, NULL, o."CreateDate", now()
-FROM "ReplayEventOutbox" o
-JOIN imp_jogos j ON j.match_id = o."MatchId"
-ON CONFLICT ("Id") DO NOTHING;
+-- ── Clipes de replay: passam para o jogo do campeonato correspondente ──────
+-- O vídeo (ObjectKey no R2) não muda; só a partida e o campeonato do registro.
+UPDATE "ReplayClips" c
+SET "MatchId" = j.jogo_id,
+    "ChampionshipId" = 'bac18efd-395e-537c-8dff-122e7e273c57',
+    "UpdateDate" = now()
+FROM imp_jogos j
+WHERE c."MatchId" = j.match_id;
 
 -- Registro dos lances no campeonato (como os marcados ao vivo): tipo, time do gol e
 -- minuto. O horário real é o CreateDate do pedido (o EventTime segue o relógio das câmeras).
+-- QueueId aponta para o pedido de replay original, que gerou o clipe.
 INSERT INTO "ChampionshipGameEvents" ("Id", "ChampionshipId", "GameId", "Type", "TeamId", "EventTimeUtc",
                                       "ElapsedSeconds", "QueueId", "CreatedByUserId", "CreateDate")
 SELECT md5('campeonato-27-10/lance/' || o."Id"::text)::uuid, 'bac18efd-395e-537c-8dff-122e7e273c57', j.jogo_id,
@@ -159,21 +161,13 @@ SELECT md5('campeonato-27-10/lance/' || o."Id"::text)::uuid, 'bac18efd-395e-537c
        CASE o."Type" WHEN 'GolTimeA' THEN ta.team_id WHEN 'GolTimeB' THEN tb.team_id END,
        o."CreateDate",
        greatest(0, extract(epoch FROM (o."CreateDate" - m."ActualStartTime"))::int),
-       md5('campeonato-27-10/replay/' || o."Id"::text)::uuid::text, NULL, now()
+       o."Id"::text, NULL, now()
 FROM "ReplayEventOutbox" o
 JOIN imp_jogos j ON j.match_id = o."MatchId"
 JOIN "Matches" m ON m."Id" = j.match_id
 JOIN imp_times ta ON ta.cor = j.cor_a
 JOIN imp_times tb ON tb.cor = j.cor_b
 ON CONFLICT ("Id") DO NOTHING;
-
--- Os originais saem da fila: o processo das câmeras só envia os "Pending".
-UPDATE "ReplayEventOutbox" o
-SET "Status" = 'Transferred',
-    "Reason" = 'Transferido para o Campeonato 27/10 (jogo ' || j.ordem || ').',
-    "UpdateDate" = now()
-FROM imp_jogos j
-WHERE o."MatchId" = j.match_id AND o."Status" = 'Pending';
 
 -- ── Trava de saída ──────────────────────────────────────────────────────────
 DO $$
@@ -196,19 +190,21 @@ BEGIN
   IF n <> 30 THEN
     RAISE EXCEPTION 'Trava: esperava 30 jogadores nos 3 jogos novos, achei %.', n;
   END IF;
-  SELECT count(*) INTO n FROM "ReplayEventOutbox" o JOIN "Matches" m ON m."Id" = o."MatchId"
-  WHERE m."ChampionshipId" = 'bac18efd-395e-537c-8dff-122e7e273c57' AND o."Status" = 'Pending'
-    -- o conteúdo enviado às câmeras tem de apontar para o jogo novo
-    AND o."Payload"::text LIKE '%' || o."MatchId"::text || '%'
-    AND o."StreamFieldsJson"::text LIKE '%' || o."MatchId"::text || '%';
+  SELECT count(*) INTO n FROM "ReplayClips" c JOIN imp_jogos j ON j.jogo_id = c."MatchId"
+  WHERE c."ChampionshipId" = 'bac18efd-395e-537c-8dff-122e7e273c57';
   IF n <> 66 THEN
-    RAISE EXCEPTION 'Trava: esperava 66 pedidos de replay nos jogos do campeonato, achei %.', n;
+    RAISE EXCEPTION 'Trava: esperava 66 clipes nos jogos do campeonato, achei %.', n;
+  END IF;
+  IF EXISTS (SELECT 1 FROM "ReplayClips" c JOIN imp_jogos j ON j.match_id = c."MatchId") THEN
+    RAISE EXCEPTION 'Trava: sobrou clipe nas partidas originais.';
   END IF;
   IF (SELECT count(*) FROM "ChampionshipGameEvents" WHERE "ChampionshipId" = 'bac18efd-395e-537c-8dff-122e7e273c57') <> 66 THEN
     RAISE EXCEPTION 'Trava: esperava 66 lances registrados no campeonato.';
   END IF;
-  IF EXISTS (SELECT 1 FROM "ReplayEventOutbox" o JOIN imp_jogos j ON j.match_id = o."MatchId" WHERE o."Status" <> 'Transferred') THEN
-    RAISE EXCEPTION 'Trava: sobrou pedido de replay pendente nas partidas originais.';
+  -- Nenhum pedido de replay novo e os originais intactos (não gera vídeo em dobro).
+  IF (SELECT count(*) FROM "ReplayEventOutbox" o JOIN imp_jogos j ON o."MatchId" IN (j.match_id, j.jogo_id)) <> 66
+     OR EXISTS (SELECT 1 FROM "ReplayEventOutbox" o JOIN imp_jogos j ON o."MatchId" = j.jogo_id) THEN
+    RAISE EXCEPTION 'Trava: os pedidos de replay não podem mudar.';
   END IF;
   -- As originais continuam exatamente como estavam (Ended, fora do campeonato).
   SELECT count(*) INTO n FROM "Matches" m JOIN imp_jogos j ON j.match_id = m."Id"

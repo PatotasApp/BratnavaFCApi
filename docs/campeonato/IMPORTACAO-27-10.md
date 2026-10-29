@@ -104,15 +104,30 @@ Decisão do Luis (29/10): em produção **nenhuma das 3 partidas é alterada ou 
 
 As originais estão como Ended (4) e nunca foram finalizadas, então **não contam em estatística**: nada fica em dobro. Elas continuam visíveis na lista de partidas até serem apagadas.
 
-**Pedidos de replay (decisão do Luis, 29/10):** os 66 pedidos pendentes são **copiados para os jogos do campeonato** (cada um no jogo correspondente, com o id do jogo novo dentro do conteúdo enviado às câmeras) e viram 66 lances registrados no campeonato (tipo, time do gol, minuto). Os 66 originais passam a `Transferred`, para o processo das câmeras (que só envia `Pending`) não gerar clipe em dobro. É a única alteração fora dos INSERTs. Se algum original já tiver sido enviado, o script aborta sem gravar nada.
+**Replays (decisão do Luis, 29/10):** na primeira tentativa de importar (29/10, ~15:20), a trava de entrada abortou sem gravar nada: o processo das câmeras tinha voltado às 15:14 e estava gerando os 66 replays nas partidas originais. Esperamos terminar (16:36: 66 `Published`, 66 clipes — J1 25, J2 24, J3 17) e o script mudou:
+- **nenhum pedido de replay novo** e os originais ficam como estão (`Published`): nada é gerado em dobro;
+- os **66 clipes** (`ReplayClips`) passam para o jogo do campeonato correspondente (`MatchId` do jogo novo e `ChampionshipId`). O vídeo no R2, as curtidas e os favoritos não mudam. É a única alteração fora dos INSERTs;
+- os 66 lances do campeonato (tipo, time do gol, minuto) apontam no `QueueId` para o pedido original;
+- **travas:** entrada exige os 66 pedidos `Published` e 66 clipes; saída exige os 66 clipes nos jogos novos, nenhum nas originais e nenhum pedido de replay novo.
 
-O processo que lê esses pedidos não roda desde 21/10 (746 enviados até lá; os 66 de 27/10 são os únicos pendentes). Quando voltar, os clipes saem já nos jogos do campeonato, **se as câmeras ainda tiverem a gravação de 27/10**.
+`ReplayClips` não tem chave estrangeira para `Matches`: apagar as originais depois não afeta os clipes. **Atenção:** o `ClipCleanupJob` apaga clipes com mais de 7 dias sem curtida nem favorito; os de 27/10 entram nessa regra a partir de 03/11.
 
 **Ignorados (decisão do Luis):** lembretes (9), notificações (136), convites sem time e recusas. Os convites e recusas não são presença real: são os 10 convidados avulsos chamados automaticamente e, em cada jogo, os jogadores do time que estava de fora (as 5 "recusas" da J3 são o time Azul, que não jogou o jogo 3). Tudo isso fica só nas partidas originais.
 
 **Depois de consolidado** (campeonato finalizado e conferido), apagar as 3 originais num passo separado.
 
-### Ensaio (29/10/2026) ✅
+### Ensaio (29/10/2026, versão com clipes) ✅
+Backup da produção das 16:38 (`prod-antes-import-27-10-v2-20261029-163803.dump`) restaurado em `bratnavafc_ensaio_v2`. Contagem e hash das 46 tabelas (em `ReplayClips`, sem as colunas que a importação muda):
+- 1ª execução: só **+1 campeonato, +3 times, +15 participantes, +3 jogos, +30 jogadores e +66 lances**; todo o resto idêntico, inclusive os pedidos de replay e os clipes (fora partida/campeonato).
+- Clipes por jogo 25/24/17, todos com o campeonato; clipes de gol = lances de gol = placar (7, 10, 9). Nenhum clipe sobrou nas originais.
+- 2ª execução: **nada mudou**.
+
+### Produção ✅ (29/10/2026, ~16:45)
+`importar-campeonato-27-10.sql` rodou em produção. Conferido em somente leitura: "Campeonato 27/10" com status 4 (votação do MVP), 15 participantes, 66 lances; jogos 1/2/3 com 25/24/17 clipes (gols 7/10/9); as 3 originais com status 4, fora do campeonato, sem clipes; pedidos de replay todos `Published`.
+
+Falta: ligar "Mostrar campeonatos no histórico" na patota, votar o MVP e finalizar; depois apagar as 3 originais.
+
+### Ensaio anterior (29/10/2026, versão com cópia dos pedidos — substituída)
 Banco separado `bratnavafc_dev_ensaio`, restaurado do backup local e com os dados **atuais da produção** de tudo o que é ligado às 3 partidas (lidos em modo somente leitura). Comparação por contagem e hash de cada tabela:
 - 1ª execução: só **+1 campeonato, +3 jogos, +30 jogadores, +66 pedidos de replay e +66 lances**; os 66 pedidos originais viraram `Transferred` (resto da linha idêntico). Partidas originais (linha inteira), 75 jogadores, 9 lembretes, 136 notificações e a enquete: **idênticos**.
 - Pedidos copiados: conteúdo aponta para o jogo novo, sem o id antigo; gols marcados por time batem com o placar de cada jogo (J1 4/3, J2 7/3, J3 5/4).
