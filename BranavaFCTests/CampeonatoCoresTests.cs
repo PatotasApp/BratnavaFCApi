@@ -58,28 +58,19 @@ public sealed class CampeonatoCoresTests : IClassFixture<CampeonatoPostgresFixtu
     }
 
     [Fact]
-    public async Task TrocarNomeECor_DepoisDeIniciado_ValeParaOsProximosJogos()
+    public async Task TrocarNomeECor_DuranteOSorteio_ComValidacoes()
     {
-        await using var db = await _fixture.CreateDatabaseAsync(nameof(TrocarNomeECor_DepoisDeIniciado_ValeParaOsProximosJogos));
+        await using var db = await _fixture.CreateDatabaseAsync(nameof(TrocarNomeECor_DuranteOSorteio_ComValidacoes));
         var (groupId, id, sut) = await SetupAsync(db, activeColors: 5);
-        Ok(await sut.StartAsync(groupId, id, Ct));
 
         var details = await DetailsAsync(sut, groupId, id);
         var (a, b) = (details.Teams[0], details.Teams[1]);
-        var game1 = Ok(await sut.CreateGameAsync(groupId, id, new CreateChampionshipGameDto(a.Id, b.Id), Ct)).GameId;
-        Ok(await sut.EndGameAsync(groupId, id, game1, new EndChampionshipGameDto(null), Ct));
-
         var used = details.Teams.Select(t => t.ColorId).ToHashSet();
         var free = await db.TeamColors.Where(c => c.GroupId == groupId && c.IsActive && !used.Contains(c.Id)).Select(c => c.Id).FirstAsync();
 
         Ok(await sut.UpdateTeamAsync(groupId, id, a.Id, new UpdateChampionshipTeamDto("Azul Royal", free), Ct));
-
-        var game2 = Ok(await sut.CreateGameAsync(groupId, id, new CreateChampionshipGameDto(a.Id, b.Id), Ct)).GameId;
-        db.ChangeTracker.Clear();
-        var games = await db.Matches.IgnoreQueryFilters().Where(m => m.Id == game1 || m.Id == game2).ToDictionaryAsync(m => m.Id);
-        games[game1].TeamAColorId.Should().Be(a.ColorId, "jogo já jogado guarda a cor com que foi jogado");
-        games[game2].TeamAColorId.Should().Be(free);
-        (await DetailsAsync(sut, groupId, id)).Teams.Single(t => t.Id == a.Id).Name.Should().Be("Azul Royal");
+        var updated = (await DetailsAsync(sut, groupId, id)).Teams.Single(t => t.Id == a.Id);
+        (updated.Name, updated.ColorId).Should().Be(("Azul Royal", free));
 
         // Validações.
         (await sut.UpdateTeamAsync(groupId, id, a.Id, new UpdateChampionshipTeamDto("X", b.ColorId), Ct))
@@ -95,6 +86,30 @@ public sealed class CampeonatoCoresTests : IClassFixture<CampeonatoPostgresFixtu
 
         // Sem cor também é permitido.
         Ok(await sut.UpdateTeamAsync(groupId, id, a.Id, new UpdateChampionshipTeamDto("Azul Royal", null), Ct));
+    }
+
+    [Fact]
+    public async Task DepoisDeIniciado_TimesFicamTravados()
+    {
+        await using var db = await _fixture.CreateDatabaseAsync(nameof(DepoisDeIniciado_TimesFicamTravados));
+        var (groupId, id, sut) = await SetupAsync(db, activeColors: 5);
+        var details = await DetailsAsync(sut, groupId, id);
+        var (a, b) = (details.Teams[0], details.Teams[1]);
+        Ok(await sut.StartAsync(groupId, id, Ct));
+
+        var mover = a.PlayerIds.First(p => p != a.PlayerIds.Last());
+        var attempts = new[]
+        {
+            await sut.UpdateTeamAsync(groupId, id, a.Id, new UpdateChampionshipTeamDto("Outro nome", null), Ct),
+            await sut.DrawTeamColorsAsync(groupId, id, Ct),
+            await sut.MovePlayerAsync(groupId, id, mover, b.Id, Ct),
+            await sut.SetTeamGoalkeeperAsync(groupId, id, new SetGameGoalkeeperDto(a.Id, mover), Ct),
+        };
+        attempts.Should().OnlyContain(r => !r.Success && r.Error!.Contains("ficam travados"));
+
+        var after = await DetailsAsync(sut, groupId, id);
+        after.Teams.Select(t => (t.Name, t.ColorId, string.Join(",", t.PlayerIds.OrderBy(x => x))))
+            .Should().Equal(details.Teams.Select(t => (t.Name, t.ColorId, string.Join(",", t.PlayerIds.OrderBy(x => x)))));
     }
 
     [Fact]

@@ -240,8 +240,7 @@ public class ChampionshipEntity : BaseEntity
     }
 
     /// <summary>
-    /// Renomeia ou troca a cor de um time, inclusive com o campeonato em andamento.
-    /// Vale para os próximos jogos; os jogos já criados guardam as cores com que foram jogados.
+    /// Renomeia ou troca a cor de um time. Só durante o sorteio: depois do início os times ficam travados.
     /// </summary>
     public void UpdateTeam(Guid teamId, string name, Guid? colorId)
     {
@@ -268,15 +267,17 @@ public class ChampionshipEntity : BaseEntity
             team.SetColor(colorByTeam.TryGetValue(team.Id, out var color) ? color : null);
     }
 
+    /// <summary>Decisão do Luis (29/10/2026): depois que o campeonato começa, os times ficam travados.</summary>
     private void EnsureTeamsEditable() =>
-        EnsureStatusIn("So e possivel alterar os times depois de definidos e antes de finalizar o campeonato.",
-            ChampionshipStatus.TeamDraw, ChampionshipStatus.InProgress, ChampionshipStatus.PostGame);
+        EnsureStatusIn(TeamsLockedMessage, ChampionshipStatus.TeamDraw);
 
-    /// <summary>Troca o time de um jogador (ex.: chegou atrasado). Não altera jogos já feitos.</summary>
+    private const string TeamsLockedMessage =
+        "Os times so podem ser alterados durante o sorteio. Depois que o campeonato comeca, eles ficam travados.";
+
+    /// <summary>Troca o time de um jogador. Só durante o sorteio (times travados depois do início).</summary>
     public void MovePlayer(Guid playerId, Guid? teamId)
     {
-        EnsureStatusIn("So e possivel trocar jogadores de time durante o sorteio ou os jogos.",
-            ChampionshipStatus.TeamDraw, ChampionshipStatus.InProgress);
+        EnsureTeamsEditable();
 
         var participant = FindParticipant(playerId);
         if (participant.InviteResponse != InviteResponse.Accepted)
@@ -287,11 +288,10 @@ public class ChampionshipEntity : BaseEntity
         participant.AssignTeam(teamId, teamId.HasValue && participant.IsGoalkeeper);
     }
 
-    /// <summary>Define o goleiro do time para os próximos jogos (o jogo em andamento não muda).</summary>
+    /// <summary>Define o goleiro do time. Só durante o sorteio (times travados depois do início).</summary>
     public void SetTeamGoalkeeper(Guid teamId, Guid playerId)
     {
-        EnsureStatusIn("So e possivel trocar o goleiro durante o sorteio ou os jogos.",
-            ChampionshipStatus.TeamDraw, ChampionshipStatus.InProgress);
+        EnsureTeamsEditable();
 
         var participant = FindParticipant(playerId);
         if (participant.TeamId != teamId)

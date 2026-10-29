@@ -43,7 +43,7 @@ Presets prontos: "Fica quem ganha clássico", "Troca quem ganhou 2".
 - Conquistas tipo hat-trick/clean sheet são **por jogo**, nunca somadas entre jogos.
 - No consolidado, o campeonato conta como **1 data** nas sequências.
 - Para receber o resultado da colocação, o jogador precisa ter jogado pelo menos 1 jogo (mínimo exato ainda a definir).
-- Quem chega atrasado entra num time sem mexer na classificação.
+- ~~Quem chega atrasado entra num time sem mexer na classificação.~~ Substituído em 29/10/2026: depois que o campeonato começa, **os times ficam travados** (nome, cor, jogadores e goleiro). O app mostra os times só para leitura, em abas.
 
 ## Respostas do Luis (27/10/2026, tarde)
 - **Fica quem ganha com limite:** vira parâmetro (`limitRule`): sai só o vencedor **ou** saem os dois. Com 3 times "saem os dois" é impossível e vira "sai só o vencedor" automaticamente.
