@@ -257,6 +257,40 @@ public sealed class CampeonatoFluxoTests : IClassFixture<CampeonatoPostgresFixtu
     }
 
     [Fact]
+    public async Task Convidado_NovoPeloNomeComoNaPartida_OuJaCadastrado()
+    {
+        await using var db = await _fixture.CreateDatabaseAsync(nameof(Convidado_NovoPeloNomeComoNaPartida_OuJaCadastrado));
+        var (groupId, players) = await SeedGroupAsync(db, 4);
+        var sut = new ChampionshipService(db, new MultiTeamGenerationService(new FakeStatsService([])));
+        var id = Ok(await sut.CreateAsync(groupId, new CreateChampionshipDto("Convidados", Day(), "Arena", null), Ct)).Id;
+        Ok(await sut.OpenAcceptationAsync(groupId, id, Ct));
+
+        // Novo, como na partida: criado na patota como convidado e já confirmado.
+        Ok(await sut.AddGuestAsync(groupId, id, new AddChampionshipGuestDto(null, "  Zé da Pelada ", true, 4), Ct));
+        db.ChangeTracker.Clear();
+        var guest = await db.Players.AsNoTracking().SingleAsync(p => p.Name == "Zé da Pelada");
+        (guest.IsGuest, guest.IsGoalkeeper, guest.GroupId).Should().Be((true, true, groupId));
+        var details = await Details(sut, groupId, id);
+        details.Players.Single(p => p.PlayerId == guest.Id)
+            .Should().Match<ChampionshipParticipantDto>(p => p.IsGuest && p.InviteResponse == InviteResponse.Accepted);
+
+        // Já cadastrado (ex.: convidado que volta): pelo id, sem duplicar.
+        var outro = new PlayerEntity("Volta", null, groupId, 0m, false, isGuest: true);
+        db.Players.Add(outro);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        Ok(await sut.AddGuestAsync(groupId, id, new AddChampionshipGuestDto(outro.Id, null), Ct));
+        db.ChangeTracker.Clear();
+        (await Details(sut, groupId, id)).Players.Should().Contain(p => p.PlayerId == outro.Id);
+        (await db.Players.CountAsync(p => p.Name == "Volta")).Should().Be(1);
+
+        (await sut.AddGuestAsync(groupId, id, new AddChampionshipGuestDto(null, " "), Ct)).Error
+            .Should().Be("Nome do convidado e obrigatorio.");
+        (await sut.AddGuestAsync(groupId, id, new AddChampionshipGuestDto(null, "Nota", false, 6), Ct)).Success
+            .Should().BeFalse();
+    }
+
+    [Fact]
     public async Task LanceParaCameras_GravaCampeonatoJogoTimeETempo()
     {
         await using var db = await _fixture.CreateDatabaseAsync(nameof(LanceParaCameras_GravaCampeonatoJogoTimeETempo));

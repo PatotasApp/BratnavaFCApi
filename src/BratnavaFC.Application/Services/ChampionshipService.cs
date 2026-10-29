@@ -223,11 +223,28 @@ public sealed class ChampionshipService : IChampionshipService
             return Task.CompletedTask;
         });
 
-    public Task<Result> AddGuestAsync(Guid groupId, Guid championshipId, Guid playerId, CancellationToken ct) =>
+    public Task<Result> AddGuestAsync(Guid groupId, Guid championshipId, AddChampionshipGuestDto dto, CancellationToken ct) =>
         Mutate(groupId, championshipId, ct, async c =>
         {
-            var player = await _db.Players.FirstOrDefaultAsync(p => p.Id == playerId && p.GroupId == groupId, ct)
-                ?? throw new InvalidOperationException("Jogador nao encontrado na patota.");
+            PlayerEntity player;
+            if (dto.PlayerId is { } playerId)
+            {
+                player = await _db.Players.FirstOrDefaultAsync(p => p.Id == playerId && p.GroupId == groupId, ct)
+                    ?? throw new InvalidOperationException("Jogador nao encontrado na patota.");
+            }
+            else
+            {
+                // Como o convidado da partida: criado na patota, para poder voltar em outros jogos.
+                if (string.IsNullOrWhiteSpace(dto.Name))
+                    throw new InvalidOperationException("Nome do convidado e obrigatorio.");
+                if (dto.GuestStarRating is < 1 or > 5)
+                    throw new InvalidOperationException("A nota do convidado deve ser de 1 a 5.");
+
+                player = new PlayerEntity(dto.Name.Trim(), null, groupId, 0m, dto.IsGoalkeeper, isGuest: true, Status.Active);
+                if (dto.GuestStarRating.HasValue)
+                    player.SetGuestStarRating(dto.GuestStarRating.Value);
+                _db.Players.Add(player);
+            }
             c.AddConfirmedPlayer(player);
         });
 

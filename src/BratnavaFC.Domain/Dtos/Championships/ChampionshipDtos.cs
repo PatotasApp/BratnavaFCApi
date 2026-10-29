@@ -12,6 +12,12 @@ public sealed record UpdateChampionshipDto(string Name, DateTime PlayedAt, strin
 
 public sealed record ChampionshipPlayerActionDto(Guid PlayerId);
 
+/// <summary>
+/// Convidado do campeonato: <c>PlayerId</c> de um jogador já cadastrado na patota, ou um
+/// convidado novo pelo nome (como na partida), criado na patota e já confirmado.
+/// </summary>
+public sealed record AddChampionshipGuestDto(Guid? PlayerId, string? Name, bool IsGoalkeeper = false, int? GuestStarRating = null);
+
 public sealed record DrawTeamsDto(int TeamCount);
 
 public sealed record DefineTeamDto(string Name, Guid? ColorId, List<Guid> PlayerIds, Guid? GoalkeeperPlayerId);

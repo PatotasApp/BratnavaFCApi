@@ -85,8 +85,8 @@ public class ChampionshipsController : GroupAuthorizedController
         AsAdmin(groupId, ct, () => _service.RespondInviteAsync(groupId, championshipId, dto.PlayerId, accept: false, ct));
 
     [HttpPost("{championshipId:guid}/players/guest")]
-    public Task<IActionResult> AddGuest(Guid groupId, Guid championshipId, [FromBody] ChampionshipPlayerActionDto dto, CancellationToken ct) =>
-        AsAdmin(groupId, ct, () => _service.AddGuestAsync(groupId, championshipId, dto.PlayerId, ct));
+    public Task<IActionResult> AddGuest(Guid groupId, Guid championshipId, [FromBody] AddChampionshipGuestDto dto, CancellationToken ct) =>
+        AsAdmin(groupId, ct, () => _service.AddGuestAsync(groupId, championshipId, dto, ct));
 
     // ── Times ────────────────────────────────────────────────────────────────
 

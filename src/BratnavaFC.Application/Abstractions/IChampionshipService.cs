@@ -17,7 +17,7 @@ public interface IChampionshipService
     Task<Result> OpenAcceptationAsync(Guid groupId, Guid championshipId, CancellationToken ct);
     Task<Result> RespondMyInviteAsync(Guid groupId, Guid championshipId, Guid userId, bool accept, CancellationToken ct);
     Task<Result> RespondInviteAsync(Guid groupId, Guid championshipId, Guid playerId, bool accept, CancellationToken ct);
-    Task<Result> AddGuestAsync(Guid groupId, Guid championshipId, Guid playerId, CancellationToken ct);
+    Task<Result> AddGuestAsync(Guid groupId, Guid championshipId, AddChampionshipGuestDto dto, CancellationToken ct);
 
     Task<Result<DefineTeamsDto>> DrawTeamsAsync(Guid groupId, Guid championshipId, int teamCount, CancellationToken ct);
     Task<Result> DefineTeamsAsync(Guid groupId, Guid championshipId, DefineTeamsDto dto, CancellationToken ct);

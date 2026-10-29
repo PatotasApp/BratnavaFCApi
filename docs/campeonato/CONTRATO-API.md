@@ -80,7 +80,7 @@ Mudanças no contrato: só por quem faz o backend, anotadas no histórico no fim
 | PATCH | `/{id}/my-invite/reject` | — |
 | PATCH | `/{id}/invite/accept` [admin] | `{ "playerId": "guid" }` |
 | PATCH | `/{id}/invite/reject` [admin] | `{ "playerId": "guid" }` |
-| POST | `/{id}/players/guest` [admin] | `{ "playerId": "guid" }` (convidado já cadastrado) |
+| POST | `/{id}/players/guest` [admin] | `{ "playerId": "guid" }` (já cadastrado) **ou** `{ "name", "isGoalkeeper", "guestStarRating"? }` (novo, como na partida: criado na patota e já confirmado) |
 
 ### Times [admin]
 | Método | Rota | Corpo |
@@ -129,7 +129,7 @@ Mudanças no contrato: só por quem faz o backend, anotadas no histórico no fim
 ```jsonc
 // ChampionshipSummaryDto
 { "id", "name", "playedAt", "placeName", "status", "teamCount", "gameCount",
-  "championTeamName": null, "championTeamColorHex": null, "ruleBadges": ["Conta como 1 partida", "1º V · 2º E · 3º D", "MVP do campeonato"] }
+  "championTeamName": null, "championTeamColorHex": null, "ruleBadges": ["Conta como 1 partida", "Colocação: 1º vitória, 2º empate, 3º+ derrota", "MVP do campeonato"] }
 
 // ChampionshipDetailsDto
 { "id", "name", "playedAt", "placeName", "status", "rules": ChampionshipRulesDto,
@@ -193,3 +193,5 @@ Com o parâmetro, os itens de campeonato vêm misturados às partidas, por data,
 - v7 (28/10/2026): **novo** `POST /{id}/step-back` (voltar etapa) e `POST /{id}/games/{gameId}/events` (lances para as câmeras, gravados em `ChampionshipGameEvents`; migration `AddChampionshipGameEvents`, só cria tabela).
 - v7.1 (28/10/2026): `GroupSettings.showChampionshipsInHistory` (padrão `false`): sem ela ligada, `includeChampionships=true` não traz campeonatos nas listas de histórico. Migration `AddShowChampionshipsInHistory` (só acrescenta coluna).
 - v7.2 (28/10/2026): itens `kind = "championship"` (histórico e listas do jogador) trazem `podium: [{ position, teamName, colorHex }]` (1º a 3º), para mostrar no lugar do placar.
+- v7.3 (28/10/2026): selos por extenso: "Colocação: 1º vitória, 2º empate, 3º+ derrota" (antes "1º V · 2º E · 3º D") e "Resultado de cada jogo" (antes "V/E/D por jogo").
+- v7.4 (28/10/2026): `POST /{id}/players/guest` aceita convidado novo pelo nome (`name`, `isGoalkeeper`, `guestStarRating` 1–5), como na partida.

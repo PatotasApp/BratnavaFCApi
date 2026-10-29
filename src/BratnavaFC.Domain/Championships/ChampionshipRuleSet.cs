@@ -147,12 +147,13 @@ public sealed record ChampionshipRuleSet(
 
         switch (ResultMode)
         {
-            case ResultMode.PerGame: badges.Add("V/E/D por jogo"); break;
+            case ResultMode.PerGame: badges.Add("Resultado de cada jogo"); break;
             case ResultMode.WinForAll: badges.Add("Vitória para todos"); break;
             case ResultMode.PresenceOnly: badges.Add("Só presença"); break;
             case ResultMode.Placement when PlacementResults is { Count: > 0 }:
-                badges.Add(string.Join(" · ", PlacementResults.Select((r, i) =>
-                    $"{i + 1}º{(i == PlacementResults.Count - 1 && i > 0 ? "+" : "")} {Short(r)}")));
+                // Por extenso: "1º V · 2º D" não deixava claro que é a colocação nem o que é D.
+                badges.Add("Colocação: " + string.Join(", ", PlacementResults.Select((r, i) =>
+                    $"{i + 1}º{(i == PlacementResults.Count - 1 && i > 0 ? "+" : "")} {Word(r)}")));
                 break;
         }
 
@@ -166,11 +167,11 @@ public sealed record ChampionshipRuleSet(
         return badges;
     }
 
-    private static string Short(PlacementResult result) => result switch
+    private static string Word(PlacementResult result) => result switch
     {
-        PlacementResult.Win => "V",
-        PlacementResult.Draw => "E",
-        PlacementResult.Loss => "D",
-        _ => "—"
+        PlacementResult.Win => "vitória",
+        PlacementResult.Draw => "empate",
+        PlacementResult.Loss => "derrota",
+        _ => "sem resultado"
     };
 }
