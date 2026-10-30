@@ -51,6 +51,40 @@ public sealed class MultiTeamGenerationControllerTests
         envelope.Data.Should().BeNull();
         envelope.Message.Should().Be(warning);
     }
+
+    [Fact]
+    public async Task Replays_JogadorQueNaoEAdmin_VeOsVideosDoCampeonato()
+    {
+        Guid userId = Guid.NewGuid();
+        Guid championshipId = Guid.NewGuid();
+        await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase($"championship-replays-{Guid.NewGuid()}")
+            .Options);
+        var group = new GroupEntity("Bratnava FC", null, Guid.NewGuid());
+        db.Groups.Add(group);
+        db.Players.Add(new PlayerEntity("Jogador", userId, group.Id, 3m, isGoalkeeper: false));
+        await db.SaveChangesAsync();
+
+        var service = new Mock<IChampionshipService>();
+        service.Setup(item => item.GetReplaysAsync(group.Id, championshipId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<ChampionshipReplaysDto>.Ok(new ChampionshipReplaysDto(championshipId, "Copa", DateTime.UtcNow, "Arena", [])));
+        var controller = new ChampionshipsController(service.Object, new ChampionshipBetService(db), db)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    // Membro comum: tem jogador na patota, não é admin.
+                    User = new ClaimsPrincipal(new ClaimsIdentity(
+                        [new Claim(ClaimTypes.NameIdentifier, userId.ToString())], "TestAuth")),
+                },
+            },
+        };
+
+        IActionResult action = await controller.GetReplays(group.Id, championshipId, CancellationToken.None);
+
+        action.Should().BeOfType<OkObjectResult>();
+    }
 }
 
 [Trait("Category", "Postgres")]

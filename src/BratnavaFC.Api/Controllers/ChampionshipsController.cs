@@ -104,7 +104,7 @@ public class ChampionshipsController : GroupAuthorizedController
     [HttpGet("{championshipId:guid}/replays")]
     public async Task<IActionResult> GetReplays(Guid groupId, Guid championshipId, CancellationToken ct)
     {
-        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
         return ToResponse(await _service.GetReplaysAsync(groupId, championshipId, ct));
     }
 
