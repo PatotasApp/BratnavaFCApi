@@ -567,11 +567,11 @@ public sealed class ChampionshipService : IChampionshipService
     public async Task<Result> AddGoalAsync(Guid groupId, Guid championshipId, Guid gameId, ChampionshipGoalDto dto, CancellationToken ct)
     {
         var result = await AddGoalCoreAsync(groupId, championshipId, gameId, dto, ct);
-        return result.Success ? await SyncLiveScoreAsync(gameId, ct) : result;
+        return result.Success ? await AfterGoalChangeAsync(groupId, championshipId, gameId, ct) : result;
     }
 
     private Task<Result> AddGoalCoreAsync(Guid groupId, Guid championshipId, Guid gameId, ChampionshipGoalDto dto, CancellationToken ct) =>
-        MutateGame(groupId, championshipId, gameId, ct, (_, game) =>
+        MutateGoals(groupId, championshipId, gameId, ct, (_, game) =>
         {
             var scorer = game.Players.FirstOrDefault(mp => mp.PlayerId == dto.ScorerPlayerId)
                 ?? throw new InvalidOperationException("O autor do gol nao jogou esse jogo.");
@@ -592,14 +592,47 @@ public sealed class ChampionshipService : IChampionshipService
 
     public async Task<Result> RemoveGoalAsync(Guid groupId, Guid championshipId, Guid gameId, Guid goalId, CancellationToken ct)
     {
-        var result = await MutateGame(groupId, championshipId, gameId, ct, (_, game) =>
+        var result = await MutateGoals(groupId, championshipId, gameId, ct, (_, game) =>
         {
             var goal = game.Goals.FirstOrDefault(g => g.Id == goalId)
                 ?? throw new InvalidOperationException("Gol nao encontrado.");
             game.RemoveGoal(goalId);
             _db.Goals.Remove(goal);
         });
-        return result.Success ? await SyncLiveScoreAsync(gameId, ct) : result;
+        return result.Success ? await AfterGoalChangeAsync(groupId, championshipId, gameId, ct) : result;
+    }
+
+    public async Task<Result> UpdateGoalAsync(Guid groupId, Guid championshipId, Guid gameId, Guid goalId, ChampionshipGoalDto dto, CancellationToken ct)
+    {
+        var result = await MutateGoals(groupId, championshipId, gameId, ct, (_, game) =>
+        {
+            var scorer = game.Players.FirstOrDefault(mp => mp.PlayerId == dto.ScorerPlayerId)
+                ?? throw new InvalidOperationException("O autor do gol nao jogou esse jogo.");
+            Guid? assistId = null;
+            if (dto.AssistPlayerId.HasValue)
+            {
+                assistId = (game.Players.FirstOrDefault(mp => mp.PlayerId == dto.AssistPlayerId.Value)
+                    ?? throw new InvalidOperationException("O autor da assistencia nao jogou esse jogo.")).Id;
+            }
+            game.UpdateGoal(goalId, scorer.Id, assistId, dto.TimeSeconds, dto.IsOwnGoal);
+        });
+        return result.Success ? await AfterGoalChangeAsync(groupId, championshipId, gameId, ct) : result;
+    }
+
+    /// <summary>
+    /// Depois de mexer em gols: jogo ao vivo sincroniza o placar com os botões das câmeras;
+    /// campeonato finalizado reconstrói as estatísticas (a classificação já foi regravada).
+    /// </summary>
+    private async Task<Result> AfterGoalChangeAsync(Guid groupId, Guid championshipId, Guid gameId, CancellationToken ct)
+    {
+        var sync = await SyncLiveScoreAsync(gameId, ct);
+        if (!sync.Success) return sync;
+
+        var finalized = await _db.Championships.AsNoTracking()
+            .AnyAsync(c => c.Id == championshipId && c.Status == ChampionshipStatus.Finalized, ct);
+        if (finalized && _projection is not null)
+            await _projection.RebuildGroupAsync(groupId, ct);
+        return Result.Ok();
     }
 
     /// <summary>
@@ -994,6 +1027,31 @@ public sealed class ChampionshipService : IChampionshipService
             return Result.Fail(ex.Message);
         }
     }
+
+    /// <summary>
+    /// Gols podem ser lançados, editados e removidos durante o campeonato e também depois de
+    /// finalizado. Finalizado, o placar do jogo sai dos gols e a classificação final é recalculada
+    /// (empates continuam decididos pela ordem que já estava gravada).
+    /// </summary>
+    private Task<Result> MutateGoals(Guid groupId, Guid championshipId, Guid gameId, CancellationToken ct,
+        Action<ChampionshipEntity, MatchEntity> action) =>
+        Mutate(groupId, championshipId, ct, async c =>
+        {
+            if (c.Status is not (ChampionshipStatus.InProgress or ChampionshipStatus.PostGame or ChampionshipStatus.Finalized))
+                throw new InvalidOperationException("Os gols so podem ser alterados com o campeonato em andamento, em votacao ou finalizado.");
+
+            var games = await LoadGamesAsync(championshipId, tracking: true, ct);
+            var game = games.FirstOrDefault(g => g.Id == gameId)
+                ?? throw new InvalidOperationException("Jogo nao encontrado neste campeonato.");
+            action(c, game);
+
+            if (c.Status == ChampionshipStatus.Finalized)
+            {
+                var previousOrder = c.Teams.Where(t => t.FinalPosition.HasValue)
+                    .OrderBy(t => t.FinalPosition).Select(t => t.Id).ToList();
+                c.UpdateFinalPositions(FinalPositions(c, games, previousOrder));
+            }
+        });
 
     private Task<Result> MutateGame(Guid groupId, Guid championshipId, Guid gameId, CancellationToken ct,
         Action<ChampionshipEntity, MatchEntity> action) =>
