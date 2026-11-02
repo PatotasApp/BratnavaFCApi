@@ -34,6 +34,7 @@ public interface IChampionshipService
     Task<Result<ChampionshipGameCreatedDto>> CreateGameAsync(Guid groupId, Guid championshipId, CreateChampionshipGameDto dto, CancellationToken ct);
     Task<Result> AddGoalAsync(Guid groupId, Guid championshipId, Guid gameId, ChampionshipGoalDto dto, CancellationToken ct);
     Task<Result> RemoveGoalAsync(Guid groupId, Guid championshipId, Guid gameId, Guid goalId, CancellationToken ct);
+    Task<Result> UpdateGoalAsync(Guid groupId, Guid championshipId, Guid gameId, Guid goalId, ChampionshipGoalDto dto, CancellationToken ct);
     Task<Result> SetTeamGoalkeeperAsync(Guid groupId, Guid championshipId, SetGameGoalkeeperDto dto, CancellationToken ct);
     Task<Result> EndGameAsync(Guid groupId, Guid championshipId, Guid gameId, EndChampionshipGameDto dto, CancellationToken ct);
     Task<Result> FinishAsync(Guid groupId, Guid championshipId, CancellationToken ct);
