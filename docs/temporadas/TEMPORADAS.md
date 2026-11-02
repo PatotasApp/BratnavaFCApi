@@ -28,8 +28,22 @@ API `api/seasons/group/{groupId}`:
 
 Site: aba **Temporadas** em Configurações da patota.
 
-## Próximas fases
+## Fase 2: estatísticas e conquistas por temporada
 
-2. Estatísticas e conquistas por temporada (seletor único no site; `year` antigo continua funcionando).
-3. App Flutter.
-4. Retrospectiva no fechamento: sela os títulos da temporada, mostra a classificação real, notificação e card para compartilhar.
+- `StatPeriod` (Application/Statistics): uma temporada, um ano (`includePreSeason`) ou `null` = tudo. Resolvido por `ISeasonService.ResolvePeriodAsync`.
+- `GET api/TeamGeneration/visual-stats/{groupId}?seasonId=&year=&includePreSeason=`: sem parâmetro continua tudo (app antigo).
+- `GET api/Conquistas/group/{groupId}?seasonId=`: o "na temporada" é da temporada escolhida (padrão: a atual); a resposta traz `seasonId` e `seasonName`.
+- Títulos (`SeasonTitles`) ganharam `SeasonId` e `Scope` (1 = temporada, 2 = ano). Migração `AddSeasonTitleScope` liga os títulos antigos à temporada Ano/1.
+  - Temporada regular **encerrada** (fim já passou) é selada; pré-temporada não.
+  - Ano completo (todas fechadas e já existe temporada de um ano seguinte) com **2+ temporadas regulares** ganha os títulos do ano ("Artilheiro de 2026"); com uma só, o título da temporada já é o do ano.
+  - Partida corrigida depois não muda título selado. Mexer na temporada (desfazer, ajustar corte, marcar pré-temporada) refaz os títulos dos anos envolvidos.
+- Sorteio de times e carreira continuam com todos os jogos.
+
+## Fase 4: retrospectiva
+
+- `GET api/seasons/group/{groupId}/{seasonId}/summary` (membro): só depois que a temporada fecha. Totais, `titlesSealed` e a **classificação real** de cada categoria (Gols, Assistências, MVPs, Presença, Aproveitamento com 5+ jogos, Jogos sem sofrer gols para goleiros); empatados dividem a posição (1, 2, 2, 4).
+- Notificação `season_closed` (`groupId`, `seasonId`) para a patota quando os títulos da temporada são selados: no fechamento, na virada automática ou quando um corte agendado passa (na próxima leitura das temporadas).
+
+## Fase 3
+
+App Flutter: seletor de temporada, tela de Temporadas (admin) e retrospectiva.

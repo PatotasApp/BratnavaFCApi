@@ -38,6 +38,14 @@ public class SeasonsController : GroupAuthorizedController
         return ToResponse(await _service.PreviewCloseAsync(groupId, cutAt, ct));
     }
 
+    /// <summary>Retrospectiva da temporada encerrada: títulos e classificação real.</summary>
+    [HttpGet("{seasonId:guid}/summary")]
+    public async Task<IActionResult> Summary(Guid groupId, Guid seasonId, CancellationToken ct)
+    {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
+        return ToResponse(await _service.GetSummaryAsync(groupId, seasonId, ct));
+    }
+
     [HttpPost("close")]
     public Task<IActionResult> Close(Guid groupId, [FromBody] CloseSeasonDto dto, CancellationToken ct) =>
         AsAdmin(groupId, ct, () => _service.CloseAsync(groupId, GetCurrentUserId(), dto, ct));

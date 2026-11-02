@@ -4,7 +4,10 @@ namespace BratnavaFC.Domain.Dtos.Conquistas;
 public sealed class GroupConquistasDto
 {
     public Guid                        GroupId  { get; set; }
-    public int                         Season   { get; set; }   // temporada atual (ano)
+    public int                         Season   { get; set; }   // ano da temporada exibida
+    /// <summary>Temporada do "na temporada" (padrão: a atual); nulo sem temporadas cadastradas.</summary>
+    public Guid?                       SeasonId { get; set; }
+    public string                      SeasonName { get; set; } = "";
     public List<PlayerConquistasDto>   Players  { get; set; } = [];
 }
 

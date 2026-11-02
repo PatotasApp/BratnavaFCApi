@@ -352,6 +352,34 @@ public sealed class PlayerStatsServiceTests
     }
 
     [Fact]
+    public async Task GetVisualReportAsync_ComPeriodo_SoContaOsJogosDaTemporada()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetVisualReportAsync_ComPeriodo_SoContaOsJogosDaTemporada));
+        var group = await SeedGroupAsync(db);
+        var p1 = await SeedPlayerAsync(db, group.Id);
+        var p2 = await SeedPlayerAsync(db, group.Id);
+        var (match, _) = await SeedMatchUpToPostGameAsync(db, group.Id, new[] { p1.Id }, new[] { p2.Id });
+        match.SetScore(2, 0);
+        match.FinalizeByVotes();
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        // O jogo foi ontem: a temporada que começa hoje não tem jogo; a de ontem tem.
+        var desdeHoje = new BratnavaFC.Application.Statistics.StatPeriod(
+            [new(DateTime.UtcNow.Date.AddHours(12), null)], "Nova");
+        var ateHoje = new BratnavaFC.Application.Statistics.StatPeriod(
+            [new(DateTime.UtcNow.AddDays(-30), DateTime.UtcNow)], "Anterior");
+
+        var vazia = await CreateSut(db).GetVisualReportAsync(group.Id, true, desdeHoje);
+        vazia.TotalMatchesConsidered.Should().Be(0);
+        vazia.Players.Should().OnlyContain(p => p.GamesPlayed == 0);
+
+        var anterior = await CreateSut(db).GetVisualReportAsync(group.Id, true, ateHoje);
+        anterior.TotalMatchesConsidered.Should().Be(1);
+        anterior.Players.Single(p => p.PlayerId == p1.Id).Wins.Should().Be(1);
+    }
+
+    [Fact]
     public async Task GetVisualReportAsync_ShouldCountWinsAndLossesCorrectly()
     {
         await using var db = DbContextFactory.Create(nameof(GetVisualReportAsync_ShouldCountWinsAndLossesCorrectly));

@@ -23,11 +23,11 @@ public sealed class ConquistasController : GroupAuthorizedController
 
     /// <summary>Conquistas de todos os jogadores do grupo (qualquer membro pode ver).</summary>
     [HttpGet("group/{groupId:guid}")]
-    public async Task<IActionResult> GetGroup(Guid groupId, CancellationToken ct)
+    public async Task<IActionResult> GetGroup(Guid groupId, [FromQuery] Guid? seasonId, CancellationToken ct)
     {
         if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
 
-        var data = await _conquistas.GetGroupConquistasAsync(groupId, ct);
+        var data = await _conquistas.GetGroupConquistasAsync(groupId, seasonId, ct);
         return Ok(new { data });
     }
 

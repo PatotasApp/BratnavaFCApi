@@ -54,6 +54,8 @@ public sealed class SeasonEntity : BaseEntity
         return utc >= StartsAt && (EndsAt is null || utc < EndsAt);
     }
 
+    public bool Contains(DateTimeOffset instant) => Contains(instant.UtcDateTime);
+
     public void Rename(string? name) => Name = NormalizeName(name);
 
     public void SetPreSeason(bool isPreSeason) => IsPreSeason = isPreSeason;

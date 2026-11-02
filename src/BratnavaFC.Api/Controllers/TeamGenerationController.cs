@@ -18,9 +18,11 @@ public class TeamGenerationController : BaseApiController
     private readonly TeamGenerationService _teamService;
     private readonly IPlayerStatsService _playerStats;
     private readonly AppDbContext _db;
+    private readonly ISeasonService _seasons;
 
-    public TeamGenerationController(TeamGenerationService teamService, IPlayerStatsService playerStats, AppDbContext db)
+    public TeamGenerationController(TeamGenerationService teamService, IPlayerStatsService playerStats, AppDbContext db, ISeasonService seasons)
     {
+        _seasons     = seasons ?? throw new ArgumentNullException(nameof(seasons));
         _teamService = teamService ?? throw new ArgumentNullException(nameof(teamService));
         _playerStats = playerStats ?? throw new ArgumentNullException(nameof(playerStats));
         _db          = db ?? throw new ArgumentNullException(nameof(db));
@@ -59,9 +61,16 @@ public class TeamGenerationController : BaseApiController
     public async Task<IActionResult> GetVisualStats(
         [FromRoute] Guid groupId,
         [FromQuery] bool includeGuests = true,
+        [FromQuery] Guid? seasonId = null,
+        [FromQuery] int? year = null,
+        [FromQuery] bool includePreSeason = false,
         CancellationToken cancellationToken = default)
     {
-        var report = await _playerStats.GetVisualReportAsync(groupId, includeGuests, cancellationToken);
+        // Sem temporada nem ano: tudo (como sempre foi; o app antigo não manda nada).
+        var period = await _seasons.ResolvePeriodAsync(groupId, seasonId, year, includePreSeason, cancellationToken);
+        if (!period.Success) return ToResponse(Result<PlayerVisualStatsReport>.Fail(period.Error ?? "Periodo invalido.", period.Status));
+
+        var report = await _playerStats.GetVisualReportAsync(groupId, includeGuests, period.Data, cancellationToken);
         return ToResponse(Result<PlayerVisualStatsReport>.Ok(report));
     }
 

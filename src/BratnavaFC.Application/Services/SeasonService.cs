@@ -1,4 +1,5 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Statistics;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos.Seasons;
 using BratnavaFC.Domain.Entities;
@@ -21,11 +22,16 @@ public sealed class SeasonService : ISeasonService
 
     private readonly AppDbContext _db;
     private readonly TimeProvider _clock;
+    private readonly IConquistaProjectionService? _titles;
+    private readonly IPushService? _push;
 
-    public SeasonService(AppDbContext db, TimeProvider? clock = null)
+    public SeasonService(AppDbContext db, TimeProvider? clock = null,
+        IConquistaProjectionService? titles = null, IPushService? push = null)
     {
         _db = db;
         _clock = clock ?? TimeProvider.System;
+        _titles = titles;
+        _push = push;
     }
 
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
@@ -58,6 +64,9 @@ public sealed class SeasonService : ISeasonService
             return Result<SeasonsOverviewDto>.Fail("Patota nao encontrada.", ResultStatus.NotFound);
 
         var seasons = await EnsureSeasonsSafeAsync(groupId, ct);
+        // Virada automática ou corte agendado que já passou: sela e avisa.
+        if (_titles is not null)
+            await NotifyClosedAsync(groupId, await _titles.SealTitlesAsync(groupId, Now, ct), ct);
         var (matches, championships) = await LoadPlayedAtAsync(groupId, ct);
 
         var closerIds = seasons.Where(s => s.ClosedByUserId.HasValue).Select(s => s.ClosedByUserId!.Value).Distinct().ToList();
@@ -65,14 +74,8 @@ public sealed class SeasonService : ISeasonService
             .Where(u => closerIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => u.DisplayName, ct);
 
-        var now = Now;
-        var current = seasons.FirstOrDefault(s => s.Contains(now)) ?? seasons.LastOrDefault();
-        var dtos = seasons.Select(s => new SeasonDto(
-                s.Id, s.Year, s.Number, s.Name, DisplayName(s, seasons),
-                s.StartsAt, s.EndsAt, s.IsPreSeason, s.IsOpen, s.Id == current?.Id,
-                matches.Count(s.Contains), championships.Count(s.Contains),
-                s.ClosedAt, s.ClosedByUserId is { } by ? closers.GetValueOrDefault(by) : null))
-            .ToList();
+        var current = Current(seasons);
+        var dtos = seasons.Select(s => ToDto(s, seasons, current, matches, championships, closers)).ToList();
 
         return Result<SeasonsOverviewDto>.Ok(new SeasonsOverviewDto(
             dtos, current?.Id, IsManual(seasons), UndoTarget(seasons) is not null));
@@ -107,10 +110,12 @@ public sealed class SeasonService : ISeasonService
 
     // ── Ações do admin ───────────────────────────────────────────────────────
 
-    public Task<Result> CloseAsync(Guid groupId, Guid? userId, CloseSeasonDto dto, CancellationToken ct) =>
-        Mutate(groupId, ct, async seasons =>
+    public async Task<Result> CloseAsync(Guid groupId, Guid? userId, CloseSeasonDto dto, CancellationToken ct)
+    {
+        SeasonEntity? closed = null;
+        var result = await Mutate(groupId, ct, async seasons =>
         {
-            var open = OpenSeason(seasons);
+            var open = closed = OpenSeason(seasons);
             var cut = ValidateCut(open, dto.CutAt);
             var (nextYear, nextNumber) = NextSlot(seasons, cut);
             var next = new SeasonEntity(groupId, nextYear, nextNumber, cut, dto.NextName, dto.NextIsPreSeason);
@@ -121,17 +126,37 @@ public sealed class SeasonService : ISeasonService
             _db.Seasons.Add(next);
         });
 
-    public Task<Result> UpdateAsync(Guid groupId, Guid seasonId, UpdateSeasonDto dto, CancellationToken ct) =>
-        Mutate(groupId, ct, seasons =>
+        // Encerrada (corte já passou): sela os títulos e avisa a patota.
+        if (result.Success && closed is not null)
+        {
+            // Só sela o que falta: a que fechou não tinha título, e os já selados não mudam.
+            var closedId = closed.Id;
+            var sealedNow = _titles is null ? [] : await _titles.SealTitlesAsync(groupId, Now, ct);
+            await NotifyClosedAsync(groupId, sealedNow.Where(id => id == closedId).ToList(), ct);
+        }
+        return result;
+    }
+
+    public async Task<Result> UpdateAsync(Guid groupId, Guid seasonId, UpdateSeasonDto dto, CancellationToken ct)
+    {
+        var years = new List<int>();
+        var result = await Mutate(groupId, ct, seasons =>
         {
             var season = Find(seasons, seasonId);
             season.Rename(dto.Name);
+            // Pré-temporada não gera título: mudar a marcação refaz os títulos do ano.
+            if (season.IsPreSeason != dto.IsPreSeason) years.Add(season.Year);
             season.SetPreSeason(dto.IsPreSeason);
             return Task.CompletedTask;
         });
+        if (result.Success && years.Count > 0) await ResealAsync(groupId, years, ct);
+        return result;
+    }
 
-    public Task<Result> MoveStartAsync(Guid groupId, Guid seasonId, MoveSeasonStartDto dto, CancellationToken ct) =>
-        Mutate(groupId, ct, seasons =>
+    public async Task<Result> MoveStartAsync(Guid groupId, Guid seasonId, MoveSeasonStartDto dto, CancellationToken ct)
+    {
+        var years = new List<int>();
+        var result = await Mutate(groupId, ct, seasons =>
         {
             var season = Find(seasons, seasonId);
             var previous = seasons.FirstOrDefault(s => s.EndsAt == season.StartsAt)
@@ -150,21 +175,140 @@ public sealed class SeasonService : ISeasonService
 
             previous.MoveEnd(start);
             season.MoveStart(start);
+            years.AddRange([previous.Year, season.Year]);
             return Task.CompletedTask;
         });
+        if (result.Success) await ResealAsync(groupId, years, ct);
+        return result;
+    }
 
-    public Task<Result> UndoCloseAsync(Guid groupId, CancellationToken ct) =>
-        Mutate(groupId, ct, async seasons =>
+    public async Task<Result> UndoCloseAsync(Guid groupId, CancellationToken ct)
+    {
+        var years = new List<int>();
+        var result = await Mutate(groupId, ct, async seasons =>
         {
             var previous = UndoTarget(seasons)
                 ?? throw new InvalidOperationException("Nao ha fechamento feito pelo admin para desfazer.");
             var open = OpenSeason(seasons);
+            years.AddRange([previous.Year, open.Year]);
 
             // Apaga a aberta primeiro: o índice só aceita uma aberta por patota.
             _db.Seasons.Remove(open);
             await _db.SaveChangesAsync(ct);
             previous.Reopen();
         });
+        if (result.Success) await ResealAsync(groupId, years, ct);
+        return result;
+    }
+
+    // ── Período das estatísticas ─────────────────────────────────────────────
+
+    public async Task<Result<StatPeriod?>> ResolvePeriodAsync(Guid groupId, Guid? seasonId, int? year, bool includePreSeason, CancellationToken ct)
+    {
+        if (seasonId is null && year is null) return Result<StatPeriod?>.Ok(null);
+
+        var seasons = await EnsureSeasonsSafeAsync(groupId, ct);
+        if (seasonId is { } id)
+        {
+            var season = seasons.FirstOrDefault(s => s.Id == id);
+            return season is null
+                ? Result<StatPeriod?>.Fail("Temporada nao encontrada.", ResultStatus.NotFound)
+                : Result<StatPeriod?>.Ok(new StatPeriod([new StatPeriodRange(season.StartsAt, season.EndsAt)], DisplayName(season, seasons)));
+        }
+
+        var ofYear = seasons.Where(s => s.Year == year && (includePreSeason || !s.IsPreSeason))
+            .Select(s => new StatPeriodRange(s.StartsAt, s.EndsAt)).ToList();
+        return Result<StatPeriod?>.Ok(new StatPeriod(ofYear, includePreSeason ? $"{year} (com pré-temporada)" : $"{year}"));
+    }
+
+    // ── Retrospectiva (fase 4) ───────────────────────────────────────────────
+
+    public async Task<Result<SeasonSummaryDto>> GetSummaryAsync(Guid groupId, Guid seasonId, CancellationToken ct) =>
+        await Run(async () =>
+        {
+            var seasons = await EnsureSeasonsSafeAsync(groupId, ct);
+            var season = Find(seasons, seasonId);
+            if (season.EndsAt is not { } end || end > Now)
+                throw new InvalidOperationException("A retrospectiva sai quando a temporada fecha.");
+
+            if (_titles is not null)
+            {
+                await _titles.EnsureGroupProjectedAsync(groupId, ct);
+                await _titles.SealTitlesAsync(groupId, Now, ct);
+            }
+
+            var start = new DateTimeOffset(season.StartsAt, TimeSpan.Zero);
+            var finish = new DateTimeOffset(end, TimeSpan.Zero);
+            var rows = await _db.PlayerMatchStatContributions.AsNoTracking()
+                .Where(c => c.GroupId == groupId && c.PlayedAt >= start && c.PlayedAt < finish)
+                .ToListAsync(ct);
+            var players = await _db.Players.AsNoTracking()
+                .Where(p => p.GroupId == groupId)
+                .Select(p => new SummaryPlayer(p.Id, p.Name, p.IsGuest, p.IsGoalkeeper))
+                .ToDictionaryAsync(p => p.Id, ct);
+            var stats = rows.GroupBy(r => r.PlayerId)
+                .Where(g => players.ContainsKey(g.Key))
+                .Select(g => new PlayerStatProjectionEntity(groupId, g.Key, season.Year, g))
+                .ToList();
+
+            var categories = ConquistaProjectionService.TitleCategories
+                .Append(new ConquistaProjectionService.TitleCategory(
+                    "CleanSheets", "Paredão", "Jogos sem sofrer gols", "🧤", x => x.CleanSheets, 0));
+            var rankings = categories.Select(category => Ranking(category, stats, players)).ToList();
+
+            var (matches, championships) = await LoadPlayedAtAsync(groupId, ct);
+            var closers = season.ClosedByUserId is { } by
+                ? await _db.Users.AsNoTracking().Where(u => u.Id == by).ToDictionaryAsync(u => u.Id, u => u.DisplayName, ct)
+                : new Dictionary<Guid, string>();
+            var titlesSealed = await _db.SeasonTitles.AsNoTracking().AnyAsync(t => t.SeasonId == season.Id, ct);
+
+            return Result<SeasonSummaryDto>.Ok(new SeasonSummaryDto(
+                ToDto(season, seasons, Current(seasons), matches, championships, closers),
+                matches.Count(season.Contains), championships.Count(season.Contains),
+                stats.Sum(p => p.Goals), stats.Count, titlesSealed, rankings));
+        });
+
+    /// <summary>Classificação real da categoria: empatados dividem a posição (1, 1, 3...).</summary>
+    private static SeasonRankingDto Ranking(ConquistaProjectionService.TitleCategory category,
+        IReadOnlyList<PlayerStatProjectionEntity> stats, IReadOnlyDictionary<Guid, SummaryPlayer> players)
+    {
+        var eligible = stats
+            .Where(p => p.Games >= category.MinGames && category.Value(p) > 0)
+            .Where(p => category.Category != "CleanSheets" || players[p.PlayerId].IsGoalkeeper)
+            .OrderByDescending(category.Value).ThenByDescending(p => p.Games).ThenBy(p => players[p.PlayerId].Name)
+            .ToList();
+        var rows = eligible.Select(p => new SeasonRankingRowDto(
+                eligible.Count(other => category.Value(other) > category.Value(p)) + 1,
+                p.PlayerId, players[p.PlayerId].Name, category.Value(p), p.Games, players[p.PlayerId].IsGuest))
+            .ToList();
+        return new SeasonRankingDto(category.Category, category.RankingName, category.Icon, category.MinGames, rows);
+    }
+
+    private sealed record SummaryPlayer(Guid Id, string Name, bool IsGuest, bool IsGoalkeeper);
+
+    // ── Títulos e aviso ──────────────────────────────────────────────────────
+
+    private async Task<IReadOnlyList<Guid>> ResealAsync(Guid groupId, IEnumerable<int> years, CancellationToken ct) =>
+        _titles is null ? [] : await _titles.ResealYearsAsync(groupId, years, Now, ct);
+
+    /// <summary>Temporadas que acabaram de ganhar títulos: avisa a patota da retrospectiva.</summary>
+    private async Task NotifyClosedAsync(Guid groupId, IReadOnlyCollection<Guid> seasonIds, CancellationToken ct)
+    {
+        if (_push is null || seasonIds.Count == 0) return;
+        var seasons = await _db.Seasons.AsNoTracking().Where(s => s.GroupId == groupId).ToListAsync(ct);
+        foreach (var season in seasons.Where(s => seasonIds.Contains(s.Id)))
+        {
+            await _push.SendToGroupAsync(
+                groupId,
+                title: $"Temporada {DisplayName(season, seasons)} encerrada",
+                body: "Veja os campeões e a classificação final da temporada.",
+                data: new Dictionary<string, string>
+                {
+                    ["type"] = "season_closed", ["groupId"] = groupId.ToString(), ["seasonId"] = season.Id.ToString(),
+                },
+                ct);
+        }
+    }
 
     // ── Cobertura e virada do ano ────────────────────────────────────────────
 
@@ -254,6 +398,20 @@ public sealed class SeasonService : ISeasonService
 
     private static string DisplayName(SeasonEntity season, IReadOnlyList<SeasonEntity> seasons) =>
         season.DisplayName(seasons.Count(s => s.Year == season.Year));
+
+    private SeasonEntity? Current(IReadOnlyList<SeasonEntity> seasons)
+    {
+        var now = Now;
+        return seasons.FirstOrDefault(s => s.Contains(now)) ?? seasons.LastOrDefault();
+    }
+
+    private static SeasonDto ToDto(SeasonEntity s, IReadOnlyList<SeasonEntity> seasons, SeasonEntity? current,
+        IReadOnlyCollection<DateTime> matches, IReadOnlyCollection<DateTime> championships,
+        IReadOnlyDictionary<Guid, string> closers) =>
+        new(s.Id, s.Year, s.Number, s.Name, DisplayName(s, seasons),
+            s.StartsAt, s.EndsAt, s.IsPreSeason, s.IsOpen, s.Id == current?.Id,
+            matches.Count(s.Contains), championships.Count(s.Contains),
+            s.ClosedAt, s.ClosedByUserId is { } by ? closers.GetValueOrDefault(by) : null);
 
     // ── Datas ────────────────────────────────────────────────────────────────
 

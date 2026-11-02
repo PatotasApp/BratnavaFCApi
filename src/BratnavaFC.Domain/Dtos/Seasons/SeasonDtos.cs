@@ -46,3 +46,32 @@ public sealed record UpdateSeasonDto(string? Name, bool IsPreSeason);
 
 /// <summary>Novo corte entre a temporada e a anterior.</summary>
 public sealed record MoveSeasonStartDto(DateTimeOffset StartsAt);
+
+/// <summary>
+/// Retrospectiva de uma temporada encerrada (fase 4): totais, títulos e a classificação
+/// real de cada categoria (posição de verdade, sem o "top x%" de durante a temporada).
+/// </summary>
+public sealed record SeasonSummaryDto(
+    SeasonDto Season,
+    int Matches,
+    int Championships,
+    int Goals,
+    int Players,
+    bool TitlesSealed,
+    IReadOnlyList<SeasonRankingDto> Rankings);
+
+public sealed record SeasonRankingDto(
+    string Category,
+    string Name,
+    string Icon,
+    /// <summary>Mínimo de jogos para entrar (0 = sem mínimo).</summary>
+    int MinGames,
+    IReadOnlyList<SeasonRankingRowDto> Rows);
+
+public sealed record SeasonRankingRowDto(
+    int Position,
+    Guid PlayerId,
+    string PlayerName,
+    int Value,
+    int Games,
+    bool IsGuest);
