@@ -106,6 +106,57 @@ public sealed class CampeonatoFluxoTests : IClassFixture<CampeonatoPostgresFixtu
     }
 
     [Fact]
+    public async Task Finalizado_EditarGols_RecalculaPlacarEClassificacao()
+    {
+        await using var db = await _fixture.CreateDatabaseAsync(nameof(Finalizado_EditarGols_RecalculaPlacarEClassificacao));
+        var (groupId, players) = await SeedGroupAsync(db, 9);
+        var sut = new ChampionshipService(db, new MultiTeamGenerationService(new FakeStatsService([])));
+
+        var id = Ok(await sut.CreateAsync(groupId, new CreateChampionshipDto("Editar depois", Day(), "Arena", null), Ct)).Id;
+        await SetupTeamsAsync(sut, groupId, id, players, teamCount: 3);
+        var teams = (await Details(sut, groupId, id)).Teams.Select(t => t.Id).ToList();
+        var (a, b, c) = (teams[0], teams[1], teams[2]);
+
+        // A 2x0 B; C 1x0 A; B 0x0 C → C 4 pts, A 3, B 1.
+        await PlayAsync(db, sut, groupId, id, a, b, goalsA: 2, goalsB: 0);
+        var next = Ok(await sut.GetNextGameAsync(groupId, id, Ct))!;
+        await PlayAsync(db, sut, groupId, id, next.TeamAId, next.TeamBId,
+            goalsA: next.TeamAId == c ? 1 : 0, goalsB: next.TeamBId == c ? 1 : 0);
+        next = Ok(await sut.GetNextGameAsync(groupId, id, Ct))!;
+        await PlayAsync(db, sut, groupId, id, next.TeamAId, next.TeamBId, goalsA: 0, goalsB: 0);
+        Ok(await sut.FinishAsync(groupId, id, Ct));
+        Ok(await sut.FinalizeAsync(groupId, id, new FinalizeChampionshipDto(null), Ct));
+
+        var details = await Details(sut, groupId, id);
+        details.Teams.Single(t => t.FinalPosition == 1).Id.Should().Be(c);
+
+        // Depois de finalizado: A faz mais 2 no jogo contra C e vira 2x1 → A campeão.
+        var game2 = details.Games.OrderBy(g => g.Order).ElementAt(1);
+        var aPlayer = details.Teams.Single(t => t.Id == a).PlayerIds.First(pid => details.Players.Any(p => p.PlayerId == pid && !p.IsGoalkeeper));
+        Ok(await sut.AddGoalAsync(groupId, id, game2.Id, new ChampionshipGoalDto(aPlayer, null, false, 21 * 60 + 5), Ct));
+        Ok(await sut.AddGoalAsync(groupId, id, game2.Id, new ChampionshipGoalDto(aPlayer, null, false, 21 * 60 + 9), Ct));
+
+        details = await Details(sut, groupId, id);
+        details.Status.Should().Be(ChampionshipStatus.Finalized);
+        var edited = details.Games.Single(g => g.Id == game2.Id);
+        (edited.TeamAId == a ? edited.TeamAGoals : edited.TeamBGoals).Should().Be(2, "placar sai dos gols");
+        details.Teams.Single(t => t.FinalPosition == 1).Id.Should().Be(a, "classificação final recalculada");
+
+        // Editar o autor e o horário não muda o placar nem o campeão.
+        var goal = edited.Goals.First(g => g.ScorerPlayerId == aPlayer);
+        var otherA = details.Teams.Single(t => t.Id == a).PlayerIds.First(pid => pid != aPlayer);
+        Ok(await sut.UpdateGoalAsync(groupId, id, game2.Id, goal.Id, new ChampionshipGoalDto(otherA, null, false, 21 * 60 + 6), Ct));
+        details = await Details(sut, groupId, id);
+        details.Games.Single(g => g.Id == game2.Id).Goals.Should().Contain(g => g.Id == goal.Id && g.ScorerPlayerId == otherA && g.TimeSeconds == 21 * 60 + 6);
+        details.Teams.Single(t => t.FinalPosition == 1).Id.Should().Be(a);
+
+        // Remover os dois gols novos devolve o título para C.
+        foreach (var g in details.Games.Single(x => x.Id == game2.Id).Goals.Where(g => g.ScorerPlayerId == aPlayer || g.ScorerPlayerId == otherA).ToList())
+            Ok(await sut.RemoveGoalAsync(groupId, id, game2.Id, g.Id, Ct));
+        (await Details(sut, groupId, id)).Teams.Single(t => t.FinalPosition == 1).Id.Should().Be(c);
+    }
+
+    [Fact]
     public async Task TodosContraTodosMaisFinal_EmpateNaFinalExigePenaltis_EColocacao()
     {
         await using var db = await _fixture.CreateDatabaseAsync(nameof(TodosContraTodosMaisFinal_EmpateNaFinalExigePenaltis_EColocacao));
