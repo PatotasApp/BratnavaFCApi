@@ -442,6 +442,7 @@ public sealed class CampeonatoIgnoreQueryFiltersTests
         "src/BratnavaFC.Application/Services/ChampionshipBetService.cs", // jogos do campeonato → vencedores das apostas
         "src/BratnavaFC.Application/Services/TeamBuilderService.cs", // só ids já filtrados pela ChampionshipStatsSource
         "src/BratnavaFC.Infrastructure/Redis/ReplayStreamConsumerService.cs", // só lê o ChampionshipId do jogo para ligar o clipe
+        "src/BratnavaFC.Application/Services/ReplayRankingService.cs", // só lê placar/times dos jogos dos clipes curtidos
         // GetByIdIncludingInactiveAsync (anterior à Fase 0): hoje só chamado para patota,
         // jogador e usuário. Não usar com MatchEntity sem rever este teste.
         "src/BratnavaFC.Infrastructure/Repositories/RepositoryBase.cs",
