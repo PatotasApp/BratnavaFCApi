@@ -1866,6 +1866,62 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.ToTable("ScheduledNotificationJobs");
                 });
 
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.SeasonEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ClosedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("EndsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsPreSeason")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("StartsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GroupId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Seasons_GroupId_Open")
+                        .HasFilter("\"EndsAt\" IS NULL");
+
+                    b.HasIndex("GroupId", "StartsAt")
+                        .IsUnique();
+
+                    b.HasIndex("GroupId", "Year", "Number")
+                        .IsUnique();
+
+                    b.ToTable("Seasons");
+                });
+
             modelBuilder.Entity("BratnavaFC.Domain.Entities.SeasonTitleEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2703,6 +2759,15 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.SeasonEntity", b =>
+                {
+                    b.HasOne("BratnavaFC.Domain.Entities.GroupEntity", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.SeasonTitleEntity", b =>

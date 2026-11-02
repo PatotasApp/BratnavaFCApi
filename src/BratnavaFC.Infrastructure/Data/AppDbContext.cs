@@ -48,6 +48,7 @@ public class AppDbContext : DbContext
     public DbSet<PlayerMatchStatContributionEntity> PlayerMatchStatContributions => Set<PlayerMatchStatContributionEntity>();
     public DbSet<PlayerStatProjectionEntity> PlayerStatProjections => Set<PlayerStatProjectionEntity>();
     public DbSet<SeasonTitleEntity> SeasonTitles => Set<SeasonTitleEntity>();
+    public DbSet<SeasonEntity> Seasons => Set<SeasonEntity>();
     public DbSet<ChampionshipEntity> Championships => Set<ChampionshipEntity>();
     public DbSet<ChampionshipTeamEntity> ChampionshipTeams => Set<ChampionshipTeamEntity>();
     public DbSet<ChampionshipPlayerEntity> ChampionshipPlayers => Set<ChampionshipPlayerEntity>();
@@ -77,6 +78,7 @@ public class AppDbContext : DbContext
         modelBuilder.ApplyConfiguration(new PlayerMatchStatContributionEntityConfiguration());
         modelBuilder.ApplyConfiguration(new PlayerStatProjectionEntityConfiguration());
         modelBuilder.ApplyConfiguration(new SeasonTitleEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new SeasonEntityConfiguration());
         modelBuilder.ApplyConfiguration(new ChampionshipEntityConfiguration());
         modelBuilder.ApplyConfiguration(new ChampionshipTeamEntityConfiguration());
         modelBuilder.ApplyConfiguration(new ChampionshipPlayerEntityConfiguration());
