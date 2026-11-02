@@ -1533,6 +1533,39 @@ public sealed class MatchServiceCoverageTests
     }
 
     [Fact]
+    public async Task PlayerHistory_OwnGoalAssist_ShouldNotCountAsAssist()
+    {
+        await using var db = DbContextFactory.Create(nameof(PlayerHistory_OwnGoalAssist_ShouldNotCountAsAssist));
+        var sut = CreateSut(db);
+
+        var group = await SeedGroupAsync(db);
+        var (match, players) = await SeedMatchAsync(db, group.Id, 4, MatchStatus.PostGame);
+
+        // players[0] e players[1] no time A; players[2] e players[3] no time B.
+        // Gol normal: players[1] com passe de players[0] (assistência de verdade).
+        await sut.AddGoalAsync(group.Id, match.Id, new AddGoalRequestDto(players[1].Id, players[0].Id, "00:10"), CancellationToken.None);
+        // Gol contra de players[2], causado por players[0]: fica registrado, mas não é assistência.
+        await sut.AddGoalAsync(group.Id, match.Id, new AddGoalRequestDto(players[2].Id, players[0].Id, "00:20", IsOwnGoal: true), CancellationToken.None);
+
+        var mpByPid = match.Players.ToDictionary(p => p.PlayerId, p => p);
+        await sut.VoteAsync(group.Id, match.Id, mpByPid[players[0].Id].Id, mpByPid[players[1].Id].Id, CancellationToken.None);
+        await sut.VoteAsync(group.Id, match.Id, mpByPid[players[1].Id].Id, mpByPid[players[0].Id].Id, CancellationToken.None);
+        await sut.VoteAsync(group.Id, match.Id, mpByPid[players[2].Id].Id, mpByPid[players[0].Id].Id, CancellationToken.None);
+        await sut.VoteAsync(group.Id, match.Id, mpByPid[players[3].Id].Id, mpByPid[players[0].Id].Id, CancellationToken.None);
+        await sut.FinalizeMatchAsync(group.Id, match.Id, CancellationToken.None);
+
+        var recent = await sut.GetPlayerRecentMatchesAsync(group.Id, players[0].Id, 5, CancellationToken.None);
+        var history = await sut.GetPlayerHistoryAsync(group.Id, players[0].Id, null, CancellationToken.None);
+
+        recent.Data![0].PlayerAssists.Should().Be(1);
+        history.Data![0].PlayerAssists.Should().Be(1);
+
+        var ownGoalScorer = await sut.GetPlayerHistoryAsync(group.Id, players[2].Id, null, CancellationToken.None);
+        ownGoalScorer.Data![0].PlayerOwnGoals.Should().Be(1);
+        ownGoalScorer.Data![0].PlayerGoals.Should().Be(0);
+    }
+
+    [Fact]
     public async Task GetPlayerHistoryAsync_ShouldFilterByYear()
     {
         await using var db = DbContextFactory.Create(nameof(GetPlayerHistoryAsync_ShouldFilterByYear));

@@ -10,8 +10,16 @@ namespace BratnavaFC.Application.Statistics;
 /// Uma unidade de estatística vinda de um campeonato, com o que o histórico precisa mostrar.
 /// AnchorMatchId: partida real à qual a linha de contribuição se prende (FK para Matches):
 /// o próprio jogo, ou, no consolidado, o último jogo do campeonato.
+/// AllGoals/AllMvps: o que aconteceu de fato, mesmo quando a regra não deixa contar nas
+/// estatísticas gerais. Servem só para o histórico mostrar o que o jogador fez.
 /// </summary>
-public sealed record ChampionshipUnit(StatMatch Stat, ChampionshipEntity Championship, MatchEntity? Game, Guid AnchorMatchId);
+public sealed record ChampionshipUnit(
+    StatMatch Stat,
+    ChampionshipEntity Championship,
+    MatchEntity? Game,
+    Guid AnchorMatchId,
+    IReadOnlyList<StatGoal>? AllGoals = null,
+    IReadOnlySet<Guid>? AllMvps = null);
 
 /// <summary>
 /// Fase 3: transforma cada campeonato FINALIZADO em unidades de estatística conforme as regras dele.
@@ -58,10 +66,12 @@ public sealed class ChampionshipStatsSource
             if (champGames.Count == 0) continue;
 
             if (championship.Rules.HistoryMode == HistoryMode.Consolidated)
-                units.Add(new ChampionshipUnit(Consolidated(championship, champGames), championship, null, champGames[^1].Id));
+                units.Add(new ChampionshipUnit(Consolidated(championship, champGames), championship, null, champGames[^1].Id,
+                    champGames.SelectMany(GoalsOf).ToList(), ActualMvps(championship, champGames, null)));
             else
                 units.AddRange(SeparateGames(championship, champGames)
-                    .Select(x => new ChampionshipUnit(x.Stat, championship, x.Game, x.Game.Id)));
+                    .Select(x => new ChampionshipUnit(x.Stat, championship, x.Game, x.Game.Id,
+                        GoalsOf(x.Game).ToList(), ActualMvps(championship, champGames, x.Game))));
         }
 
         return units;
@@ -249,6 +259,24 @@ public sealed class ChampionshipStatsSource
         rules.ResultMode == ResultMode.Placement && gamesPlayed < rules.MinGamesForPlacementResult
             ? StatResult.None
             : teamResult;
+
+    /// <summary>
+    /// MVPs de fato, sem olhar MvpCountsInGeneralStats. No jogo separado, o MVP do campeonato
+    /// fica no último jogo de cada um (como nas estatísticas).
+    /// </summary>
+    private static IReadOnlySet<Guid> ActualMvps(ChampionshipEntity c, IReadOnlyList<MatchEntity> games, MatchEntity? game)
+    {
+        if (c.Rules.MvpMode == MvpMode.PerGame)
+            return (game is null ? games : [game]).SelectMany(g => g.Players)
+                .Where(mp => mp.IsMvp == true).Select(mp => mp.PlayerId).ToHashSet();
+
+        if (c.Rules.MvpMode != MvpMode.PerChampionship) return new HashSet<Guid>();
+
+        var mvps = c.Players.Where(p => p.IsMvp).Select(p => p.PlayerId);
+        if (game is not null)
+            mvps = mvps.Where(id => games.LastOrDefault(g => PlayedIn(g, id))?.Id == game.Id);
+        return mvps.ToHashSet();
+    }
 
     private static bool IsMvp(ChampionshipRuleSet rules, bool championshipMvp, bool anyGameMvp) =>
         rules.MvpCountsInGeneralStats && rules.MvpMode switch
