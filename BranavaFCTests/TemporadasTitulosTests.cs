@@ -86,7 +86,9 @@ public sealed class TemporadasTitulosTests : IClassFixture<CampeonatoPostgresFix
 
         Ok(await c.Sut.CloseAsync(c.GroupId, c.AdminId, new CloseSeasonDto(Brt(2026, 11, 21, 23, 59), "Pré-temporada", true), Ct));
 
-        var titles = await Db(c).SeasonTitles.AsNoTracking().Where(t => t.Category == "Gols").OrderBy(t => t.Position).ToListAsync();
+        // Empatados em 2º vêm em qualquer ordem do banco: ordena também pelo jogador.
+        var titles = (await Db(c).SeasonTitles.AsNoTracking().Where(t => t.Category == "Gols").ToListAsync())
+            .OrderBy(t => t.Position).ThenBy(t => c.Players.IndexOf(t.PlayerId)).ToList();
         titles.Should().OnlyContain(t => t.SeasonId == current.Id && t.Scope == SeasonTitleEntity.ScopeSeason && t.Season == 2026);
         titles.Select(t => (t.PlayerId, t.Position, t.Value)).Should().Equal(
             (c.Players[0], 1, 5), (c.Players[1], 2, 3), (c.Players[2], 2, 3), (c.Players[3], 3, 1));
