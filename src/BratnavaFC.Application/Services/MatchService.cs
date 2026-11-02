@@ -1939,8 +1939,10 @@ public sealed class MatchService : IMatchService
                     !g.IsOwnGoal &&
                     m.Players.Any(mp => mp.Id == g.ScorerMatchPlayerId && mp.PlayerId == playerId)),
 
-                // Assistências: conta goals cujo AssistMatchPlayer pertence ao jogador
+                // Assistências: conta goals cujo AssistMatchPlayer pertence ao jogador.
+                // Em gol contra a "assistência" é só registro de quem causou o lance: não conta.
                 PlayerAssists = m.Goals.Count(g =>
+                    !g.IsOwnGoal &&
                     g.AssistMatchPlayerId.HasValue &&
                     m.Players.Any(mp => mp.Id == g.AssistMatchPlayerId.Value && mp.PlayerId == playerId)),
 
@@ -2029,6 +2031,7 @@ public sealed class MatchService : IMatchService
                     !g.IsOwnGoal &&
                     m.Players.Any(mp => mp.Id == g.ScorerMatchPlayerId && mp.PlayerId == playerId)),
                 PlayerAssists = m.Goals.Count(g =>
+                    !g.IsOwnGoal &&
                     g.AssistMatchPlayerId.HasValue &&
                     m.Players.Any(mp => mp.Id == g.AssistMatchPlayerId.Value && mp.PlayerId == playerId)),
                 PlayerOwnGoals = m.Goals.Count(g =>

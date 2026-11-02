@@ -44,8 +44,13 @@ public static class ChampionshipHistoryItems
 
         var side = unit.Stat.Sides[sideIndex];
         var player = side.Players.First(p => p.PlayerId == playerId);
-        var goals = unit.Stat.Goals;
+        // O histórico mostra o que o jogador fez de fato; se conta nas estatísticas, a regra diz
+        // (GoalsCountInStats/MvpCountsInStats) e quem soma totais respeita.
+        var goals = unit.AllGoals ?? unit.Stat.Goals;
+        var isMvp = unit.AllMvps?.Contains(playerId) ?? player.IsMvp;
         var c = unit.Championship;
+        var goalsCount = c.Rules.GoalsCountInGeneralStats;
+        var mvpCounts = c.Rules.MvpCountsInGeneralStats;
 
         var playerGoals = goals.Count(g => !g.IsOwnGoal && g.ScorerPlayerId == playerId);
         var playerAssists = goals.Count(g => !g.IsOwnGoal && g.AssistPlayerId == playerId);
@@ -65,8 +70,9 @@ public static class ChampionshipHistoryItems
             return new PlayerRecentMatchDto(
                 game.Id, game.PlayedAt, game.TeamAGoals ?? 0, game.TeamBGoals ?? 0,
                 MatchStatus.Finalized.ToString(), c.PlaceName, hexA, nameA, hexB, nameB,
-                sideIndex + 1, playerGoals, playerAssists, playerOwnGoals, player.IsMvp,
-                Kind: "championshipGame", ChampionshipId: c.Id, ChampionshipName: c.Name, PlayerResult: result);
+                sideIndex + 1, playerGoals, playerAssists, playerOwnGoals, isMvp,
+                Kind: "championshipGame", ChampionshipId: c.Id, ChampionshipName: c.Name, PlayerResult: result,
+                GoalsCountInStats: goalsCount, MvpCountsInStats: mvpCounts);
         }
 
         // Consolidado: o "time" do jogador é o time dele no campeonato; não há placar único.
@@ -74,9 +80,9 @@ public static class ChampionshipHistoryItems
         return new PlayerRecentMatchDto(
             c.Id, c.PlayedAt, 0, 0,
             MatchStatus.Finalized.ToString(), c.PlaceName, team?.Color?.HexValue, team?.Name, null, null,
-            1, playerGoals, playerAssists, playerOwnGoals, player.IsMvp,
+            1, playerGoals, playerAssists, playerOwnGoals, isMvp,
             Kind: "championship", ChampionshipId: c.Id, ChampionshipName: c.Name, PlayerResult: result,
-            Podium: Podium(c));
+            Podium: Podium(c), GoalsCountInStats: goalsCount, MvpCountsInStats: mvpCounts);
     }
 
     /// <summary>Pódio do consolidado (1º a 3º), mostrado no lugar do placar.</summary>

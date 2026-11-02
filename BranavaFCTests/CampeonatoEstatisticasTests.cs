@@ -124,6 +124,15 @@ public sealed class CampeonatoEstatisticasTests : IClassFixture<CampeonatoPostgr
         }
 
         var (a1, b1) = (teams[0][0], teams[1][0]);
+        if (caso.UnidadesNoHistorico > 0)
+        {
+            // O histórico do jogador mostra o que ele fez de fato (3 gols, MVP), mesmo quando a
+            // regra não deixa contar; a flag diz a quem soma totais se pode somar.
+            var a1Items = Ok(await matches.GetPlayerHistoryAsync(groupId, a1, null, Ct, includeChampionships: true));
+            a1Items.Sum(i => i.PlayerGoals).Should().Be(3, "histórico mostra os gols de fato");
+            a1Items.Should().OnlyContain(i => i.GoalsCountInStats == caso.GoalsCount && i.MvpCountsInStats == caso.MvpCount);
+            a1Items.Count(i => i.IsPlayerMvp).Should().Be(1, "o MVP aparece uma vez, conte ou não");
+        }
         visual[a1].Goals.Should().Be(caso.GolsA1);
         visual[a1].Mvps.Should().Be(caso.MvpsA1);
         if (caso.UnidadesNoHistorico > 0)
