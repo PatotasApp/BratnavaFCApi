@@ -35,6 +35,8 @@ public class GroupSettingsEntityConfiguration : IEntityTypeConfiguration<GroupSe
         builder.Property(x => x.MatchScheduleTime);
         builder.Property(x => x.ManualMatchSchedulesJson)
             .HasColumnType("text");
+        builder.Property(x => x.SpotlightConfigJson)
+            .HasColumnType("text");
 
         builder.Property(x => x.PaymentMode)
             .HasConversion<short>()

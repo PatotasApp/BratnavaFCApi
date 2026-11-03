@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Text.Json;
 using BratnavaFC.Domain.Enums;
+using BratnavaFC.Domain.Models;
 
 namespace BratnavaFC.Domain.Entities;
 
@@ -118,6 +119,31 @@ public sealed class GroupSettingsEntity : BaseEntity
         ShowStatsGeneralTab = general;
         ShowStatsPerMatchTab = perMatch;
         ShowStatsClassificationTab = classification;
+    }
+
+    // ── Spotlight (slideshow do telão) ────────────────────────────────────────
+    public string? SpotlightConfigJson { get; private set; }
+
+    /// <summary>Configuração do Spotlight; padrão quando nunca foi salva ou o JSON não é lido.</summary>
+    public SpotlightSettings GetSpotlightSettings()
+    {
+        if (string.IsNullOrWhiteSpace(SpotlightConfigJson))
+            return new SpotlightSettings();
+
+        try
+        {
+            return JsonSerializer.Deserialize<SpotlightSettings>(SpotlightConfigJson) ?? new SpotlightSettings();
+        }
+        catch (JsonException)
+        {
+            return new SpotlightSettings();
+        }
+    }
+
+    public void SetSpotlightSettings(SpotlightSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        SpotlightConfigJson = JsonSerializer.Serialize(settings.Normalized());
     }
 
     // ── Notificações configuráveis ────────────────────────────────────────────
