@@ -75,6 +75,7 @@ public static class ApplicationDependencyInjection
     private static void AddDomainServices(this IServiceCollection services)
     {
         services.AddScoped<IMatchService, MatchService>();
+        services.AddScoped<IReplayRankingService, ReplayRankingService>();
         services.AddScoped<IPlayerStatsService, PlayerStatsService>();
         services.AddScoped<IConquistaService, ConquistaService>();
         services.AddScoped<IConquistaProjectionService, ConquistaProjectionService>();
