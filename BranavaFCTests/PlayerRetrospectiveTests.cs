@@ -35,8 +35,9 @@ public sealed class PlayerRetrospectiveCalculatorTests
 
     private static DateTime Day(int month, int day) => new(2026, month, day, 23, 0, 0, DateTimeKind.Utc);
 
-    private static StatGoal Goal(Guid scorer, short team, Guid? assist = null) => new(scorer, assist, false, team);
-    private static StatGoal Own(Guid scorer, short forTeam, Guid? assist = null) => new(scorer, assist, true, forTeam);
+    // team = time que ganhou o gol (1 ou 2) → lado 0 ou 1 da unidade.
+    private static StatGoal Goal(Guid scorer, short team, Guid? assist = null) => new(scorer, assist, false, team - 1);
+    private static StatGoal Own(Guid scorer, short forTeam, Guid? assist = null) => new(scorer, assist, true, forTeam - 1);
 
     private static StatMatch Game(
         DateTime at, Guid[] team1, Guid[] team2, int? score1, int? score2,

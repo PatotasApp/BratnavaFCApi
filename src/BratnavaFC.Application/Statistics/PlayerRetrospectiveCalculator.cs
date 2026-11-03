@@ -302,8 +302,8 @@ public static class PlayerRetrospectiveCalculator
         var score1 = unit.Sides[1].GoalsAgainst;
         var score2 = unit.Sides[0].GoalsAgainst;
         if (score1 is null || score2 is null || score1 + score2 == 0) return default;
-        if (unit.Goals.Any(g => g.ForTeam is not (1 or 2))) return default;
-        if (unit.Goals.Count(g => g.ForTeam == 1) != score1 || unit.Goals.Count(g => g.ForTeam == 2) != score2) return default;
+        if (unit.Goals.Any(g => g.Side is not (0 or 1))) return default;
+        if (unit.Goals.Count(g => g.Side == 0) != score1 || unit.Goals.Count(g => g.Side == 1) != score2) return default;
 
         var first = unit.Goals[0];
         Guid? opener = first.IsOwnGoal ? null : first.ScorerPlayerId;
@@ -311,8 +311,8 @@ public static class PlayerRetrospectiveCalculator
         Guid? winner = null;
         if (score1 != score2)
         {
-            short winTeam = score1 > score2 ? (short)1 : (short)2;
-            var decisive = unit.Goals.Where(g => g.ForTeam == winTeam).ElementAt(Math.Min(score1.Value, score2.Value));
+            var winSide = score1 > score2 ? 0 : 1;
+            var decisive = unit.Goals.Where(g => g.Side == winSide).ElementAt(Math.Min(score1.Value, score2.Value));
             winner = decisive.IsOwnGoal ? null : decisive.ScorerPlayerId;
         }
 

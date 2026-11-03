@@ -29,7 +29,24 @@ public sealed class TeamBuilderController : GroupAuthorizedController
         // Somente admin do grupo (ou admin de plataforma / GodMode) pode visualizar.
         if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
 
-        var result = await _teamBuilder.GetStatsAsync(groupId, dto.PlayerIds, ct);
+        var result = await _teamBuilder.GetStatsAsync(groupId, dto, ct);
+
+        if (!result.Success)
+            return BadRequest(new { error = result.Error });
+
+        return Ok(new { data = result.Data });
+    }
+
+    /// <summary>Jogadores para escolher, com quantos jogos cada um fez no recorte, e as temporadas com partidas.</summary>
+    [HttpGet("group/{groupId:guid}/players")]
+    public async Task<IActionResult> GetPlayers(
+        Guid groupId,
+        [FromQuery] TeamBuilderFilterDto filter,
+        CancellationToken ct)
+    {
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
+
+        var result = await _teamBuilder.GetPlayersAsync(groupId, filter, ct);
 
         if (!result.Success)
             return BadRequest(new { error = result.Error });
