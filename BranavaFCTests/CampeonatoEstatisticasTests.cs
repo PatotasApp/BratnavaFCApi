@@ -176,7 +176,7 @@ public sealed class CampeonatoEstatisticasTests : IClassFixture<CampeonatoPostgr
 
     // ── Cenário ──────────────────────────────────────────────────────────────
 
-    private static async Task<(Guid groupId, List<List<Guid>> teams)> PlayChampionshipAsync(
+    internal static async Task<(Guid groupId, List<List<Guid>> teams)> PlayChampionshipAsync(
         AppDbContext db, Caso caso, bool finalize = true, bool showInHistory = true)
     {
         var group = new GroupEntity("Bratnava FC", null, Guid.NewGuid());

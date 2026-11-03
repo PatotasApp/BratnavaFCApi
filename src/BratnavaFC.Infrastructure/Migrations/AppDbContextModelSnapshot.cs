@@ -791,6 +791,9 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<string>("SpotlightConfigJson")
+                        .HasColumnType("text");
+
                     b.Property<DateTime?>("UpdateDate")
                         .HasColumnType("timestamp with time zone");
 
