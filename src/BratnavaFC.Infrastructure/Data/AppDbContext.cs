@@ -44,6 +44,8 @@ public class AppDbContext : DbContext
     public DbSet<UserBetBalanceEntity> UserBetBalances => Set<UserBetBalanceEntity>();
     public DbSet<ScheduledNotificationJobEntity> ScheduledNotificationJobs => Set<ScheduledNotificationJobEntity>();
     public DbSet<UserNotificationEntity> UserNotifications => Set<UserNotificationEntity>();
+    public DbSet<ContentReportEntity> ContentReports => Set<ContentReportEntity>();
+    public DbSet<UserBlockEntity> UserBlocks => Set<UserBlockEntity>();
     public DbSet<GroupTransactionEntity> GroupTransactions => Set<GroupTransactionEntity>();
     public DbSet<PlayerMatchStatContributionEntity> PlayerMatchStatContributions => Set<PlayerMatchStatContributionEntity>();
     public DbSet<PlayerStatProjectionEntity> PlayerStatProjections => Set<PlayerStatProjectionEntity>();
@@ -60,6 +62,8 @@ public class AppDbContext : DbContext
     {
         // ── Notifications ────────────────────────────────────────────────────
         modelBuilder.ApplyConfiguration(new UserNotificationEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new ContentReportEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new UserBlockEntityConfiguration());
         modelBuilder.ApplyConfiguration(new ScheduledNotificationJobEntityConfiguration());
 
         // ── Replay ───────────────────────────────────────────────────────────
