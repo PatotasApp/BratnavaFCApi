@@ -1279,6 +1279,13 @@ public sealed class MatchService : IMatchService
 
         var wasMatchMaking = match.Status == MatchStatus.MatchMaking;
 
+        // Voltar da montagem de times recria os jogadores da partida, e os gols apontam para
+        // eles. Com gol registrado o banco recusaria a exclusão; aqui a recusa vira mensagem.
+        if (wasMatchMaking && await _context.Goals.AnyAsync(g => g.MatchId == matchId, ct))
+            return Result.Fail(
+                "Esta partida já tem gols registrados. Remova os gols antes de voltar de etapa.",
+                ResultStatus.Conflict);
+
         match.RewindOneStep();
 
         if (wasMatchMaking)
