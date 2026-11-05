@@ -1130,6 +1130,34 @@ public sealed class MatchServiceTests
         after.Status.Should().Be(MatchStatus.Acceptation);
     }
 
+    [Fact]
+    public async Task RewindOneStepAsync_WhenMatchHasGoals_ShouldRefuseWithClearMessage()
+    {
+        await using var db = DbContextFactory.Create(nameof(RewindOneStepAsync_WhenMatchHasGoals_ShouldRefuseWithClearMessage));
+        var repo = BuildRepoMock(db);
+        var sut = CreateSut(db, repo);
+        var group = await SeedGroupAsync(db);
+        var (match, _) = await SeedMatchAsync(
+            db,
+            group.Id,
+            playersCount: 2,
+            targetStatus: MatchStatus.MatchMaking,
+            acceptAllInvites: true,
+            defineTeamsIfPossible: true);
+        var scorer = await db.MatchPlayers.FirstAsync(mp => mp.MatchId == match.Id);
+        db.Goals.Add(new GoalEntity(match.Id, group.Id, scorer.Id, null, 60));
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var result = await sut.RewindOneStepAsync(group.Id, match.Id, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(ResultStatus.Conflict);
+        result.Error.Should().Contain("já tem gols registrados");
+        (await db.Matches.AsNoTracking().FirstAsync(m => m.Id == match.Id)).Status.Should().Be(MatchStatus.MatchMaking);
+        (await db.Goals.CountAsync(g => g.MatchId == match.Id)).Should().Be(1);
+    }
+
     // =========================
     // ADD GUEST TO MATCH
     // =========================

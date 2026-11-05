@@ -816,7 +816,8 @@ public class MatchesController : GroupAuthorizedController
         if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
         try
         {
-            await _service.RewindOneStepAsync(groupId, matchId, ct);
+            var result = await _service.RewindOneStepAsync(groupId, matchId, ct);
+            if (!result.Success) return ToResponse(result);
             await _realtime.MatchChangedAsync(groupId, matchId, "match.step.changed", ct);
             return NoContent();
         }
