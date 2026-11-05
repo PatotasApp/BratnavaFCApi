@@ -5,6 +5,8 @@ using BratnavaFC.Domain.Common;
 using BratnavaFC.Infrastructure;
 using Hangfire;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Serilog;
 using Serilog.Events;
 
@@ -133,6 +135,27 @@ public static class PipelineExtensions
 
                     await context.Response.WriteAsJsonAsync(
                         new ApiResponse<object>(false, null, null, disabled.Message, []));
+
+                    return;
+                }
+
+                // Registro ainda referenciado por outro (chave estrangeira, 23503): é um conflito
+                // de estado que o usuário entende, não um erro técnico. O detalhe fica no log.
+                if (ex is DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.ForeignKeyViolation } })
+                {
+                    logger.LogWarning(
+                        ex,
+                        "Conflito de chave estrangeira — {Method} {Path}",
+                        context.Request.Method,
+                        context.Request.Path);
+
+                    context.Response.StatusCode = StatusCodes.Status409Conflict;
+                    context.Response.ContentType = "application/json";
+
+                    await context.Response.WriteAsJsonAsync(new ApiResponse<object>(
+                        false, null, null,
+                        "Não foi possível concluir porque há outros registros ligados a este item (por exemplo, gols da partida). Remova-os e tente de novo.",
+                        []));
 
                     return;
                 }
