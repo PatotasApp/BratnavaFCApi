@@ -43,6 +43,9 @@ public sealed class UpsertGroupSettingsDto
     /// <summary>null = não alterar</summary>
     public bool? ShowChampionshipsInHistory { get; set; }
 
+    /// <summary>Página pública da patota (link compartilhado). Null = não mexe.</summary>
+    public bool? PublicPageEnabled { get; set; }
+
     // ── Notificações configuráveis ────────────────────────────────────────────
     /// <summary>Dia do mês (1–28) para vencimento da mensalidade. Null = sem lembrete.</summary>
     public int? PaymentDueDay        { get; set; }

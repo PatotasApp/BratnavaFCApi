@@ -47,6 +47,9 @@ public sealed class GroupSettingsDto
     // ── Campeonatos no histórico ──────────────────────────────────────────────
     public bool ShowChampionshipsInHistory { get; init; }
 
+    // ── Página pública da patota ──────────────────────────────────────────────
+    public bool PublicPageEnabled { get; init; } = true;
+
     // ── Notificações configuráveis ────────────────────────────────────────────
     public int? PaymentDueDay        { get; init; }
     public int? AutoFinalizeMvpHours { get; init; }

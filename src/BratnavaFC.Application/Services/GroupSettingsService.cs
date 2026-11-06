@@ -58,6 +58,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 ShowStatsPerMatchTab = true,
                 ShowStatsClassificationTab = true,
                 ShowChampionshipsInHistory = false,
+                PublicPageEnabled = true,
                 PaymentDueDay        = null,
                 AutoFinalizeMvpHours = null,
                 MatchSchedulingEnabled = false,
@@ -102,6 +103,8 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 entity.SetShowPlayerStats(dto.ShowPlayerStats.Value);
             if (dto.ShowChampionshipsInHistory.HasValue)
                 entity.SetShowChampionshipsInHistory(dto.ShowChampionshipsInHistory.Value);
+            if (dto.PublicPageEnabled.HasValue)
+                entity.SetPublicPageEnabled(dto.PublicPageEnabled.Value);
             ApplyStatsTabs(entity, dto);
             entity.SetPaymentDueDay(dto.PaymentDueDay);
             entity.SetAutoFinalizeMvpHours(dto.AutoFinalizeMvpHours);
@@ -127,6 +130,8 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 entity.SetShowPlayerStats(dto.ShowPlayerStats.Value);
             if (dto.ShowChampionshipsInHistory.HasValue)
                 entity.SetShowChampionshipsInHistory(dto.ShowChampionshipsInHistory.Value);
+            if (dto.PublicPageEnabled.HasValue)
+                entity.SetPublicPageEnabled(dto.PublicPageEnabled.Value);
             ApplyStatsTabs(entity, dto);
             entity.SetPaymentDueDay(dto.PaymentDueDay);
             entity.SetAutoFinalizeMvpHours(dto.AutoFinalizeMvpHours);
@@ -161,6 +166,8 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 existing.SetShowPlayerStats(dto.ShowPlayerStats.Value);
             if (dto.ShowChampionshipsInHistory.HasValue)
                 existing.SetShowChampionshipsInHistory(dto.ShowChampionshipsInHistory.Value);
+            if (dto.PublicPageEnabled.HasValue)
+                existing.SetPublicPageEnabled(dto.PublicPageEnabled.Value);
             ApplyStatsTabs(existing, dto);
             existing.SetPaymentDueDay(dto.PaymentDueDay);
             existing.SetAutoFinalizeMvpHours(dto.AutoFinalizeMvpHours);
@@ -202,6 +209,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
         ShowStatsPerMatchTab = e.ShowStatsPerMatchTab,
         ShowStatsClassificationTab = e.ShowStatsClassificationTab,
         ShowChampionshipsInHistory = e.ShowChampionshipsInHistory,
+        PublicPageEnabled = e.PublicPageEnabled,
         PaymentDueDay        = e.PaymentDueDay,
         AutoFinalizeMvpHours = e.AutoFinalizeMvpHours,
         MatchSchedulingEnabled = e.MatchSchedulingEnabled,

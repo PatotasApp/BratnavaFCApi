@@ -61,6 +61,12 @@ public class GroupSettingsEntityConfiguration : IEntityTypeConfiguration<GroupSe
         builder.Property(x => x.ShowChampionshipsInHistory)
             .HasDefaultValue(false);
 
+        // Sentinel = true: sem ele o EF trataria false (o default do bool) como "não informado"
+        // e o banco gravaria true num INSERT com a página desligada.
+        builder.Property(x => x.PublicPageEnabled)
+            .HasDefaultValue(true)
+            .HasSentinel(true);
+
         builder.HasIndex(x => x.GroupId).IsUnique();
     }
 }
