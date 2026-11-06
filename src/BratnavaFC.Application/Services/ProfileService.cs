@@ -29,6 +29,11 @@ public sealed class ProfileService : IProfileService
         var isOwner = requesterId == userId;
         if (!isOwner && !canOverridePrivacy)
         {
+            // Bloqueio vale nos dois sentidos e responde como perfil inexistente.
+            if (await _db.UserBlocks.AnyAsync(b =>
+                    (b.BlockerUserId == requesterId && b.BlockedUserId == userId) ||
+                    (b.BlockerUserId == userId && b.BlockedUserId == requesterId), ct))
+                throw new KeyNotFoundException("Perfil não encontrado.");
             if (user.ProfileVisibility == ProfileVisibility.Private)
                 throw new UnauthorizedAccessException("Este perfil é privado.");
             if (user.ProfileVisibility == ProfileVisibility.SharedPatotas &&
