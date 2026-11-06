@@ -299,7 +299,9 @@ public sealed class PaymentService : IPaymentService
             record.Id,
             monthlyCaixaAmount,
             $"Mensalidade {_monthNames[record.Month - 1]}/{record.Year} – {monthlyPlayerName}",
-            new DateOnly(record.Year, record.Month, 1),
+            record.PaidAt.HasValue
+                ? DateOnly.FromDateTime(record.PaidAt.Value)
+                : DateOnly.FromDateTime(DateTime.UtcNow),
             record.Status == PaymentStatus.Paid,
             monthlyPlayerName,
             ct);
@@ -1391,7 +1393,9 @@ public sealed class PaymentService : IPaymentService
                         capturedRecord.Id,
                         capturedRecord.Amount - capturedRecord.Discount,
                         $"Mensalidade {_monthNames[mo - 1]}/{yr} – {paySelectedPlayerName}",
-                        new DateOnly(yr, mo, 1),
+                        capturedRecord.PaidAt.HasValue
+                            ? DateOnly.FromDateTime(capturedRecord.PaidAt.Value)
+                            : DateOnly.FromDateTime(DateTime.UtcNow),
                         item.IsPaid,
                         paySelectedPlayerName,
                         ct));
