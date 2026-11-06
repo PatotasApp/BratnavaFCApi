@@ -123,8 +123,9 @@ public sealed class BillingProductEntity : BaseEntity
 /// Situação de cobrança de uma patota. Criada no primeiro acesso à cobrança da patota
 /// (o teste conta da criação da patota, ou do lançamento para as que já existiam).
 ///
-/// O acesso vale até o maior entre: fim do teste, fim do período pago (calculado das
-/// transações confirmadas) e cortesia dada pelo GodMode.
+/// Cobrança por pacote avulso: cada pacote pago soma N meses a partir do vencimento da
+/// época (ou de quando foi pago, se já estava vencida). O acesso vale até o fim dessa
+/// fila de períodos, calculada por <see cref="BillingTimeline"/>.
 /// </summary>
 public sealed class GroupBillingEntity
 {
@@ -139,11 +140,15 @@ public sealed class GroupBillingEntity
     /// </summary>
     public bool TrialGranted { get; private set; }
 
-    /// <summary>Fim do período pago, recalculado das transações confirmadas (sem reembolsadas).</summary>
+    /// <summary>
+    /// Fim do acesso somando pacotes pagos e dias dados pelo GodMode depois do teste.
+    /// Nulo quando não há nenhum dos dois. Recalculado do zero a cada mudança, então um
+    /// reembolso tira exatamente os meses daquele pacote.
+    /// </summary>
     public DateTime? PaidUntil { get; private set; }
 
-    /// <summary>Dias extras dados pelo GodMode, contados a partir do vencimento da época.</summary>
-    public DateTime? CourtesyUntil { get; private set; }
+    /// <summary>Verdadeiro se há ao menos um pacote pago confirmado.</summary>
+    public bool HasPaidPeriod { get; private set; }
 
     public bool IsLifetime { get; private set; }
     public string? LifetimeReason { get; private set; }
@@ -165,29 +170,12 @@ public sealed class GroupBillingEntity
         CreatedAt = DateTime.UtcNow;
     }
 
-    public DateTime AccessEndsAt
-    {
-        get
-        {
-            var end = TrialEndsAt;
-            if (PaidUntil is { } paid && paid > end) end = paid;
-            if (CourtesyUntil is { } courtesy && courtesy > end) end = courtesy;
-            return end;
-        }
-    }
+    public DateTime AccessEndsAt => PaidUntil is { } paid && paid > TrialEndsAt ? paid : TrialEndsAt;
 
-    /// <summary>Soma dias ao vencimento: a partir do vencimento atual ou de agora, o que for maior.</summary>
-    public void Extend(int days, DateTime now)
-    {
-        if (days is < 1 or > 3650) throw new ArgumentException("Informe de 1 a 3650 dias.");
-        var from = AccessEndsAt > now ? AccessEndsAt : now;
-        CourtesyUntil = from.AddDays(days);
-        Touch();
-    }
-
-    public void SetPaidUntil(DateTime? paidUntil)
+    public void SetTimeline(DateTime? paidUntil, bool hasPaidPeriod)
     {
         PaidUntil = paidUntil;
+        HasPaidPeriod = hasPaidPeriod;
         Touch();
     }
 
@@ -205,6 +193,35 @@ public sealed class GroupBillingEntity
     }
 
     private void Touch() => UpdatedAt = DateTime.UtcNow;
+}
+
+/// <summary>Um item da fila de períodos: pacote pago (meses) ou dias dados pelo GodMode.</summary>
+public sealed record BillingTimelineItem(Guid Id, DateTime At, int Months, int Days, bool IsPurchase);
+
+/// <summary>Período calculado de um item da fila.</summary>
+public sealed record BillingTimelinePeriod(Guid Id, DateTime Start, DateTime End, bool IsPurchase);
+
+/// <summary>
+/// A fila de períodos da patota. Cada item começa no fim do anterior (ou quando foi
+/// pago/dado, se a patota já estava vencida) e dura os seus meses ou dias. O primeiro
+/// começa depois do teste grátis: pagar durante o teste não desperdiça dia nenhum.
+/// </summary>
+public static class BillingTimeline
+{
+    public static (DateTime? End, IReadOnlyList<BillingTimelinePeriod> Periods) Compute(
+        DateTime trialEndsAt, IEnumerable<BillingTimelineItem> items)
+    {
+        var cursor = trialEndsAt;
+        var periods = new List<BillingTimelinePeriod>();
+        foreach (var item in items.OrderBy(i => i.At).ThenBy(i => i.Id))
+        {
+            var start = item.At > cursor ? item.At : cursor;
+            var end = start.AddMonths(item.Months).AddDays(item.Days);
+            periods.Add(new BillingTimelinePeriod(item.Id, start, end, item.IsPurchase));
+            cursor = end;
+        }
+        return (periods.Count == 0 ? null : cursor, periods);
+    }
 }
 
 /// <summary>
@@ -228,86 +245,27 @@ public sealed class BillingTrialGrantEntity
 }
 
 /// <summary>
-/// Assinatura com renovação automática numa loja, ligada a uma patota. Uma por
-/// <c>originalTransactionId</c> (Apple) ou <c>purchaseToken</c> (Google). Cada cobrança dela
-/// (a primeira e as renovações) vira uma <see cref="BillingPurchaseEntity"/>.
-/// </summary>
-public sealed class StoreSubscriptionEntity : BaseEntity
-{
-    public Guid GroupId { get; private set; }
-    public Guid? PayerUserId { get; private set; }
-    public BillingStore Store { get; private set; }
-
-    /// <summary>Apple: originalTransactionId. Google: purchaseToken. Simulada: gerado.</summary>
-    public string StoreSubscriptionId { get; private set; } = null!;
-
-    public string ProductId { get; private set; } = null!;
-    public StoreSubscriptionState State { get; private set; }
-    public bool AutoRenewEnabled { get; private set; }
-    public DateTime? ExpiresAt { get; private set; }
-
-    /// <summary>"Production", "Sandbox" ou "Simulated".</summary>
-    public string Environment { get; private set; } = "Production";
-
-    /// <summary>Google: confirmação (acknowledge) feita. A loja reembolsa se não houver em 3 dias.</summary>
-    public DateTime? AcknowledgedAt { get; private set; }
-
-    public DateTime LastSyncedAt { get; private set; }
-
-    private StoreSubscriptionEntity() { }
-
-    public StoreSubscriptionEntity(Guid groupId, Guid? payerUserId, BillingStore store, string storeSubscriptionId,
-        string productId, string environment)
-    {
-        GroupId = groupId;
-        PayerUserId = payerUserId;
-        Store = store;
-        StoreSubscriptionId = storeSubscriptionId;
-        ProductId = productId;
-        Environment = environment;
-        State = StoreSubscriptionState.Active;
-        LastSyncedAt = DateTime.UtcNow;
-    }
-
-    public void Sync(string productId, StoreSubscriptionState state, bool autoRenew, DateTime? expiresAt)
-    {
-        ProductId = productId;
-        State = state;
-        AutoRenewEnabled = autoRenew;
-        ExpiresAt = expiresAt;
-        LastSyncedAt = DateTime.UtcNow;
-        UpdateDate = DateTime.UtcNow;
-    }
-
-    public void SetPayerIfMissing(Guid? userId)
-    {
-        if (PayerUserId == null && userId != null) PayerUserId = userId;
-    }
-
-    public void MarkAcknowledged() => AcknowledgedAt = DateTime.UtcNow;
-}
-
-/// <summary>
-/// Uma cobrança confirmada pela loja (compra inicial ou renovação). O ID da transação é
-/// único por loja: a mesma transação reenviada (pelo app, pelo restaurar ou pela notificação
-/// da loja) nunca concede o período duas vezes.
+/// Um pacote comprado (1, 3, 6 ou 12 meses). O ID da transação é único por loja: a mesma
+/// compra reenviada (pelo app, pelo restaurar ou pelo aviso da loja) nunca soma duas vezes.
+/// O período (início e fim) é recalculado pela <see cref="BillingTimeline"/>.
 /// </summary>
 public sealed class BillingPurchaseEntity : BaseEntity
 {
-    public const int RawMaxLength = 8000;
-
     public Guid GroupId { get; private set; }
-    public Guid? SubscriptionId { get; private set; }
     public Guid? UserId { get; private set; }
     public BillingStore Store { get; private set; }
     public string ProductId { get; private set; } = null!;
 
-    /// <summary>Apple: transactionId. Google: orderId (cada renovação tem o seu). Único por loja.</summary>
+    /// <summary>Apple: transactionId. Google: orderId. Único por loja.</summary>
     public string TransactionId { get; private set; } = null!;
+
+    /// <summary>Google: purchaseToken (para consumir e reprocessar).</summary>
+    public string? PurchaseToken { get; private set; }
 
     public int Months { get; private set; }
     public DateTime PurchasedAt { get; private set; }
-    public DateTime ExpiresAt { get; private set; }
+    public DateTime? PeriodStart { get; private set; }
+    public DateTime? PeriodEnd { get; private set; }
     public BillingPurchaseState State { get; private set; }
 
     /// <summary>Preço pago, em micros (1 real = 1.000.000), quando a loja informa.</summary>
@@ -315,35 +273,55 @@ public sealed class BillingPurchaseEntity : BaseEntity
     public string? Currency { get; private set; }
 
     public string Environment { get; private set; } = "Production";
+
+    /// <summary>
+    /// Google: consumida na loja (o que também a confirma). Sem isso em 3 dias o Google
+    /// reembolsa sozinho. Apple e simulada já nascem com a data preenchida.
+    /// </summary>
+    public DateTime? ConsumedAt { get; private set; }
+
     public DateTime? RefundedAt { get; private set; }
     public string? RefundReason { get; private set; }
 
     private BillingPurchaseEntity() { }
 
-    public BillingPurchaseEntity(Guid groupId, Guid? subscriptionId, Guid? userId, BillingStore store,
-        string productId, string transactionId, int months, DateTime purchasedAt, DateTime expiresAt,
-        BillingPurchaseState state, long? priceMicros, string? currency, string environment)
+    public BillingPurchaseEntity(Guid groupId, Guid? userId, BillingStore store, string productId, string transactionId,
+        string? purchaseToken, int months, DateTime purchasedAt, BillingPurchaseState state, long? priceMicros,
+        string? currency, string environment, bool needsConsume)
     {
         GroupId = groupId;
-        SubscriptionId = subscriptionId;
         UserId = userId;
         Store = store;
         ProductId = productId;
         TransactionId = transactionId;
+        PurchaseToken = purchaseToken;
         Months = months;
         PurchasedAt = purchasedAt;
-        ExpiresAt = expiresAt;
         State = state;
         PriceMicros = priceMicros;
         Currency = currency;
         Environment = environment;
+        if (!needsConsume) ConsumedAt = purchasedAt;
     }
 
-    public void Confirm(DateTime expiresAt)
+    public bool NeedsConsume => ConsumedAt == null && State == BillingPurchaseState.Confirmed;
+
+    public void Confirm()
     {
-        if (State == BillingPurchaseState.Refunded) return;
+        if (State != BillingPurchaseState.Pending) return;
         State = BillingPurchaseState.Confirmed;
-        ExpiresAt = expiresAt;
+        UpdateDate = DateTime.UtcNow;
+    }
+
+    public void SetPeriod(DateTime? start, DateTime? end)
+    {
+        PeriodStart = start;
+        PeriodEnd = end;
+    }
+
+    public void MarkConsumed()
+    {
+        ConsumedAt = DateTime.UtcNow;
         UpdateDate = DateTime.UtcNow;
     }
 
@@ -412,7 +390,8 @@ public sealed class StoreEventEntity : BaseEntity
     public StoreEventStatus Status { get; private set; }
     public string? Error { get; private set; }
     public Guid? GroupId { get; private set; }
-    public string? StoreSubscriptionId { get; private set; }
+    /// <summary>Apple: transactionId. Google: purchaseToken.</summary>
+    public string? StoreReference { get; private set; }
     public DateTime? ProcessedAt { get; private set; }
     public int Attempts { get; private set; }
 
@@ -434,21 +413,21 @@ public sealed class StoreEventEntity : BaseEntity
         Subtype = subtype;
     }
 
-    public void MarkProcessed(Guid? groupId, string? storeSubscriptionId, bool ignored = false)
+    public void MarkProcessed(Guid? groupId, string? storeReference, bool ignored = false)
     {
         Status = ignored ? StoreEventStatus.Ignored : StoreEventStatus.Processed;
         GroupId = groupId;
-        StoreSubscriptionId = storeSubscriptionId;
+        StoreReference = storeReference;
         Error = null;
         ProcessedAt = DateTime.UtcNow;
         Attempts++;
     }
 
-    public void MarkFailed(string error, string? storeSubscriptionId)
+    public void MarkFailed(string error, string? storeReference)
     {
         Status = StoreEventStatus.Failed;
         Error = error.Length > 1000 ? error[..1000] : error;
-        StoreSubscriptionId ??= storeSubscriptionId;
+        StoreReference ??= storeReference;
         ProcessedAt = DateTime.UtcNow;
         Attempts++;
     }

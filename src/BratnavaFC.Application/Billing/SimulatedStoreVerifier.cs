@@ -19,9 +19,8 @@ public static class BillingEnvironment
 
 /// <summary>
 /// "Loja" falsa para testar o fluxo inteiro sem App Store nem Google Play: aceita qualquer
-/// compra de um produto cadastrado na loja Simulated e devolve uma assinatura de N meses a
-/// partir de agora, com renovação automática ligada. As renovações, cancelamentos e
-/// reembolsos simulados ficam no painel GodMode do site.
+/// compra de um pacote cadastrado na loja Simulated. O reembolso simulado fica no painel
+/// GodMode do site.
 /// </summary>
 public sealed class SimulatedStoreVerifier : IStoreVerifier
 {
@@ -42,7 +41,7 @@ public sealed class SimulatedStoreVerifier : IStoreVerifier
     public BillingStore Store => BillingStore.Simulated;
     public bool IsAvailable => _enabled;
 
-    public async Task<VerifiedStoreTransaction> VerifyAsync(StorePurchaseProof proof, CancellationToken ct)
+    public async Task<VerifiedStorePurchase> VerifyAsync(StorePurchaseProof proof, CancellationToken ct)
     {
         if (!_enabled)
             throw new StoreVerificationException("Compra simulada não está disponível neste ambiente.");
@@ -51,19 +50,13 @@ public sealed class SimulatedStoreVerifier : IStoreVerifier
             .FirstOrDefaultAsync(p => p.Store == BillingStore.Simulated && p.ProductId == proof.ProductId, ct)
             ?? throw new StoreVerificationException("Produto simulado desconhecido.");
 
-        var now = _clock();
-        var transactionId = string.IsNullOrWhiteSpace(proof.TransactionId) ? $"sim-tx-{Guid.NewGuid():N}" : proof.TransactionId.Trim();
-        var subscriptionId = string.IsNullOrWhiteSpace(proof.PurchaseToken) ? $"sim-sub-{Guid.NewGuid():N}" : proof.PurchaseToken.Trim();
+        var transactionId = string.IsNullOrWhiteSpace(proof.TransactionId) ? $"sim-{Guid.NewGuid():N}" : proof.TransactionId.Trim();
 
-        return new VerifiedStoreTransaction(
+        return new VerifiedStorePurchase(
             BillingStore.Simulated,
-            subscriptionId,
             transactionId,
             product.ProductId,
-            now,
-            now.AddMonths(product.Months),
-            StoreSubscriptionState.Active,
-            AutoRenewEnabled: true,
+            _clock(),
             IsPending: false,
             RevokedAt: null,
             RevocationReason: null,
@@ -71,8 +64,9 @@ public sealed class SimulatedStoreVerifier : IStoreVerifier
             PriceMicros: product.ReferencePriceCents * 10_000L,
             Currency: "BRL",
             Environment: "Simulated",
-            NeedsAcknowledge: false);
+            PurchaseToken: null,
+            NeedsConsume: false);
     }
 
-    public Task AcknowledgeAsync(VerifiedStoreTransaction transaction, CancellationToken ct) => Task.CompletedTask;
+    public Task ConsumeAsync(string productId, string purchaseToken, CancellationToken ct) => Task.CompletedTask;
 }

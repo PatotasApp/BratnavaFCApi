@@ -58,42 +58,25 @@ public class BillingTrialGrantEntityConfiguration : IEntityTypeConfiguration<Bil
     }
 }
 
-public class StoreSubscriptionEntityConfiguration : IEntityTypeConfiguration<StoreSubscriptionEntity>
-{
-    public void Configure(EntityTypeBuilder<StoreSubscriptionEntity> builder)
-    {
-        builder.ToTable("StoreSubscriptions");
-        builder.HasKey(x => x.Id);
-        builder.Property(x => x.StoreSubscriptionId).IsRequired().HasMaxLength(300);
-        builder.Property(x => x.ProductId).IsRequired().HasMaxLength(150);
-        builder.Property(x => x.Environment).IsRequired().HasMaxLength(20);
-        builder.HasIndex(x => new { x.Store, x.StoreSubscriptionId }).IsUnique();
-        builder.HasIndex(x => x.GroupId);
-        builder.HasIndex(x => x.PayerUserId);
-        // Sem FK para Groups: a assinatura e o histórico de cobrança ficam mesmo se a
-        // patota for apagada (receita, reembolsos e a loja continuam mandando avisos).
-    }
-}
-
 public class BillingPurchaseEntityConfiguration : IEntityTypeConfiguration<BillingPurchaseEntity>
 {
     public void Configure(EntityTypeBuilder<BillingPurchaseEntity> builder)
     {
+        // Sem FK para Groups: o histórico de cobrança fica mesmo se a patota for apagada
+        // (receita, reembolsos, e a loja continua mandando avisos).
         builder.ToTable("BillingPurchases");
         builder.HasKey(x => x.Id);
+        builder.Ignore(x => x.NeedsConsume);
         builder.Property(x => x.ProductId).IsRequired().HasMaxLength(150);
         builder.Property(x => x.TransactionId).IsRequired().HasMaxLength(200);
+        builder.Property(x => x.PurchaseToken).HasMaxLength(500);
         builder.Property(x => x.Currency).HasMaxLength(3);
         builder.Property(x => x.Environment).IsRequired().HasMaxLength(20);
         builder.Property(x => x.RefundReason).HasMaxLength(200);
-        // A garantia de "não conceder o mesmo mês duas vezes".
+        // A garantia de "não somar o mesmo pacote duas vezes".
         builder.HasIndex(x => new { x.Store, x.TransactionId }).IsUnique();
         builder.HasIndex(x => new { x.GroupId, x.PurchasedAt });
-        builder.HasIndex(x => x.SubscriptionId);
-        builder.HasOne<StoreSubscriptionEntity>()
-            .WithMany()
-            .HasForeignKey(x => x.SubscriptionId)
-            .OnDelete(DeleteBehavior.SetNull);
+        builder.HasIndex(x => x.PurchaseToken);
     }
 }
 
@@ -121,7 +104,7 @@ public class StoreEventEntityConfiguration : IEntityTypeConfiguration<StoreEvent
         builder.Property(x => x.Subtype).HasMaxLength(80);
         builder.Property(x => x.RawPayload).IsRequired();
         builder.Property(x => x.Error).HasMaxLength(1000);
-        builder.Property(x => x.StoreSubscriptionId).HasMaxLength(300);
+        builder.Property(x => x.StoreReference).HasMaxLength(500);
         builder.HasIndex(x => new { x.Store, x.ExternalId }).IsUnique();
         builder.HasIndex(x => new { x.Status, x.CreateDate });
         builder.HasIndex(x => x.GroupId);

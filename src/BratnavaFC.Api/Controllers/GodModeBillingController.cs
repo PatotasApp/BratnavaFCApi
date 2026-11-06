@@ -51,14 +51,14 @@ public sealed class GodModeBillingController : BaseApiController
     public async Task<IActionResult> Reprocess([FromBody] ReprocessPurchaseDto dto, CancellationToken ct) =>
         ToResponse(await _admin.ReprocessAsync(ActorId(), dto, ct));
 
-    [HttpPost("subscriptions/{subscriptionId:guid}/resync")]
-    public async Task<IActionResult> Resync(Guid subscriptionId, CancellationToken ct) =>
-        ToResponse(await _admin.ResyncSubscriptionAsync(subscriptionId, ActorId(), ct));
+    [HttpPost("purchases/{purchaseId:guid}/resync")]
+    public async Task<IActionResult> Resync(Guid purchaseId, CancellationToken ct) =>
+        ToResponse(await _admin.ResyncPurchaseAsync(purchaseId, ActorId(), ct));
 
-    /// <summary>Só Development com a compra simulada ligada.</summary>
-    [HttpPost("subscriptions/{subscriptionId:guid}/simulate")]
-    public async Task<IActionResult> Simulate(Guid subscriptionId, [FromBody] SimulateSubscriptionEventDto dto, CancellationToken ct) =>
-        ToResponse(await _admin.SimulateAsync(subscriptionId, ActorId(), dto, ct));
+    /// <summary>Só Development com a compra simulada ligada: "refund" | "unrefund".</summary>
+    [HttpPost("purchases/{purchaseId:guid}/simulate")]
+    public async Task<IActionResult> Simulate(Guid purchaseId, [FromBody] SimulatePurchaseEventDto dto, CancellationToken ct) =>
+        ToResponse(await _admin.SimulateAsync(purchaseId, ActorId(), dto, ct));
 
     [HttpGet("settings")]
     public async Task<IActionResult> Settings(CancellationToken ct) =>

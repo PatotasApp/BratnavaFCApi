@@ -44,7 +44,8 @@ public static class BillingStatusCalculator
         GroupBillingStatus status;
         if (now < accessEnds)
         {
-            var paidCovers = billing.PaidUntil is { } paid && paid > now;
+            // Pagou durante o teste: continua "em teste" até o teste acabar, aí vira paga.
+            var paidCovers = billing.HasPaidPeriod && now >= billing.TrialEndsAt;
             status = paidCovers ? GroupBillingStatus.Active : GroupBillingStatus.Trial;
         }
         else if (now < graceEnds)

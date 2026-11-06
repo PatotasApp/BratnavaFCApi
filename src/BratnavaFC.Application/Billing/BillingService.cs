@@ -30,15 +30,17 @@ public interface IBillingService
 
     Task<RestoreResultDto> RestoreAsync(Guid userId, RestorePurchasesDto dto, CancellationToken ct);
 
-    Task<IReadOnlyList<MySubscriptionDto>> GetMySubscriptionsAsync(Guid userId, CancellationToken ct);
+    /// <summary>Aplica uma compra já conferida com a loja (compra, restaurar, aviso da loja, reprocesso).</summary>
+    Task<BillingApplyResult> ApplyVerifiedAsync(VerifiedStorePurchase purchase, Guid? requestedGroupId, Guid? userId, CancellationToken ct);
 
-    /// <summary>Aplica uma transação já conferida com a loja (compra, restaurar, aviso da loja, reprocesso).</summary>
-    Task<BillingApplyResult> ApplyVerifiedAsync(VerifiedStoreTransaction tx, Guid? requestedGroupId, Guid? userId, CancellationToken ct);
-
-    /// <summary>Marca como reembolsada a cobrança com este ID de transação (aviso de reembolso da loja).</summary>
+    /// <summary>Marca como reembolsada a compra com este ID de transação (aviso de reembolso da loja).</summary>
     Task<BillingApplyResult> RefundTransactionAsync(BillingStore store, string transactionId, string? reason, DateTime when, CancellationToken ct);
 
-    Task RecomputePaidUntilAsync(Guid groupId, CancellationToken ct);
+    /// <summary>Refaz a fila de períodos da patota (pacotes confirmados + dias dados pelo GodMode).</summary>
+    Task RecomputeAsync(Guid groupId, CancellationToken ct);
+
+    /// <summary>Google: consome as compras confirmadas que ainda não foram consumidas.</summary>
+    Task<int> ConsumePendingAsync(CancellationToken ct);
 
     IStoreVerifier? GetVerifier(BillingStore store);
 }
@@ -56,12 +58,18 @@ public static class BillingCodes
     public const string StoreUnavailable = "STORE_UNAVAILABLE";
     public const string InvalidPurchase = "INVALID_PURCHASE";
     public const string UnknownProduct = "UNKNOWN_PRODUCT";
-    public const string OtherGroup = "SUBSCRIPTION_OTHER_GROUP";
+    public const string OtherGroup = "PURCHASE_OTHER_GROUP";
     public const string GroupMismatch = "PURCHASE_GROUP_MISMATCH";
     public const string NoGroup = "PURCHASE_WITHOUT_GROUP";
     public const string GroupNotFound = "GROUP_NOT_FOUND";
 }
 
+/// <summary>
+/// Cobrança por pacote avulso (1, 3, 6 ou 12 meses) que soma ao vencimento: Apple
+/// non-renewing subscription e Google produto consumível. Qualquer admin ou financeiro da
+/// patota paga, inclusive antes de vencer; cada compra conta uma vez só (ID de transação
+/// único) e o reembolso tira exatamente aqueles meses.
+/// </summary>
 public sealed class BillingService : IBillingService
 {
     /// <summary>Bratnava FC: plano vitalício (isenção permanente), decidido pelo Luis.</summary>
@@ -194,25 +202,18 @@ public sealed class BillingService : IBillingService
         var now = _clock();
         var snap = BillingStatusCalculator.Calculate(billing, settings.GraceDays, settings.EnforcementEnabled, now);
 
-        var subs = await _db.StoreSubscriptions.AsNoTracking()
-            .Where(s => s.GroupId == groupId)
-            .OrderByDescending(s => s.ExpiresAt)
-            .ToListAsync(ct);
-
-        var current = subs.FirstOrDefault(s => IsLive(s, now)) ?? subs.FirstOrDefault();
-
-        var products = await _db.BillingProducts.AsNoTracking().Where(p => p.IsActive).ToListAsync(ct);
-        var allProducts = await _db.BillingProducts.AsNoTracking().ToListAsync(ct);
-        int MonthsOf(BillingStore store, string productId) =>
-            allProducts.FirstOrDefault(p => p.Store == store && p.ProductId == productId)?.Months ?? 1;
+        // Comprar agora soma a partir do vencimento atual (ou de agora, se já venceu).
+        var from = billing.AccessEndsAt > now ? billing.AccessEndsAt : now;
 
         var storeForPlatform = PlatformStore(platform);
+        var products = await _db.BillingProducts.AsNoTracking().Where(p => p.IsActive).ToListAsync(ct);
         var visibleProducts = products
             .Where(p => storeForPlatform == null ? p.Store != BillingStore.Simulated : p.Store == storeForPlatform)
             .Concat(SimulatedEnabled ? products.Where(p => p.Store == BillingStore.Simulated) : [])
             .DistinctBy(p => p.Id)
             .OrderBy(p => p.Store).ThenBy(p => p.Months)
-            .Select(p => new BillingProductDto(StoreName(p.Store), p.ProductId, p.Months, p.ReferencePriceCents / 100m))
+            .Select(p => new BillingProductDto(StoreName(p.Store), p.ProductId, p.Months, p.ReferencePriceCents / 100m,
+                BillingStatusCalculator.BrasiliaDate(from.AddMonths(p.Months).AddTicks(-1)).ToString("yyyy-MM-dd")))
             .ToList();
 
         var purchases = await _db.BillingPurchases.AsNoTracking()
@@ -220,47 +221,14 @@ public sealed class BillingService : IBillingService
             .OrderByDescending(p => p.PurchasedAt)
             .Take(50)
             .ToListAsync(ct);
-
-        var userIds = purchases.Select(p => p.UserId).Concat(subs.Select(s => s.PayerUserId))
-            .Where(id => id != null).Select(id => id!.Value).Distinct().ToList();
-        var names = await UserNamesAsync(userIds, ct);
-
-        BillingSubscriptionDto? subDto = current == null ? null : new BillingSubscriptionDto(
-            current.Id, StoreName(current.Store), current.ProductId, MonthsOf(current.Store, current.ProductId),
-            current.AutoRenewEnabled, current.ExpiresAt, current.State.ToString(),
-            current.PayerUserId is { } pid && names.TryGetValue(pid, out var pn) ? pn : null,
-            userId != null && current.PayerUserId == userId);
-
-        // Pode comprar? Não, se a patota já tem uma assinatura que vai renovar sozinha
-        // (seria cobrar duas vezes) ou se a conta deste usuário já paga outra patota na
-        // mesma loja (a loja só deixa uma assinatura deste app por conta).
-        string? blocked = null;
-        if (snap.Status == GroupBillingStatus.Lifetime)
-            blocked = "Esta patota tem plano vitalício.";
-        else if (subs.FirstOrDefault(s => IsLive(s, now) && s.AutoRenewEnabled) is { } renewing)
-            blocked = renewing.PayerUserId == userId
-                ? "Você já assina o plano desta patota. A renovação é automática."
-                : $"Esta patota já tem assinatura ativa{(renewing.PayerUserId is { } rp && names.TryGetValue(rp, out var rn) ? $", paga por {rn}" : "")}. A renovação é automática.";
-        else if (userId != null && storeForPlatform is { } store)
-        {
-            var other = await _db.StoreSubscriptions.AsNoTracking()
-                .Where(s => s.PayerUserId == userId && s.Store == store && s.GroupId != groupId)
-                .ToListAsync(ct);
-            var live = other.FirstOrDefault(s => IsLive(s, now) && s.AutoRenewEnabled);
-            if (live != null)
-            {
-                var groupName = await _db.Groups.AsNoTracking().Where(g => g.Id == live.GroupId).Select(g => g.Name).FirstOrDefaultAsync(ct);
-                blocked = $"Sua conta da {StoreLabel(store)} já paga o plano da patota {groupName ?? "outra patota"}. "
-                          + "A loja só permite uma assinatura por conta: outro admin ou financeiro pode pagar esta.";
-            }
-        }
+        var names = await UserNamesAsync(purchases.Select(p => p.UserId), ct);
 
         var history = purchases.Select(p => new BillingHistoryItemDto(
-            p.Id, p.PurchasedAt, p.ExpiresAt, p.Months, StoreName(p.Store), p.State.ToString().ToLowerInvariant(),
+            p.Id, p.PurchasedAt, p.PeriodStart, p.PeriodEnd, p.Months, StoreName(p.Store), p.State.ToString().ToLowerInvariant(),
             p.UserId is { } u && names.TryGetValue(u, out var n) ? n : null,
             p.PriceMicros is { } micros ? micros / 1_000_000m : null, p.Currency)).ToList();
 
-        var renewsAlone = current != null && IsLive(current, now) && current.AutoRenewEnabled;
+        var blocked = billing.IsLifetime ? "Esta patota tem plano vitalício." : null;
 
         return new GroupBillingStatusDto(
             groupId,
@@ -276,8 +244,7 @@ public sealed class BillingService : IBillingService
             snap.IsReadOnly,
             settings.EnforcementEnabled,
             settings.GraceDays,
-            ShowBanner: !billing.IsLifetime && !renewsAlone && snap.DaysRemaining <= 7,
-            subDto,
+            ShowBanner: !billing.IsLifetime && snap.DaysRemaining <= 7,
             CanPurchase: blocked == null && visibleProducts.Count > 0,
             blocked,
             visibleProducts,
@@ -287,17 +254,6 @@ public sealed class BillingService : IBillingService
             _options.PrivacyUrl);
     }
 
-    public async Task<IReadOnlyList<MySubscriptionDto>> GetMySubscriptionsAsync(Guid userId, CancellationToken ct)
-    {
-        var now = _clock();
-        var subs = await _db.StoreSubscriptions.AsNoTracking().Where(s => s.PayerUserId == userId).ToListAsync(ct);
-        var live = subs.Where(s => IsLive(s, now)).ToList();
-        var groupIds = live.Select(s => s.GroupId).Distinct().ToList();
-        var groups = await _db.Groups.AsNoTracking().Where(g => groupIds.Contains(g.Id)).ToDictionaryAsync(g => g.Id, g => g.Name, ct);
-        return live.Select(s => new MySubscriptionDto(
-            s.GroupId, groups.GetValueOrDefault(s.GroupId, "(patota apagada)"), StoreName(s.Store), s.ProductId, s.ExpiresAt, s.AutoRenewEnabled)).ToList();
-    }
-
     // ── Compra ──────────────────────────────────────────────────────────────────
 
     public async Task<Result<GroupBillingStatusDto>> SubmitPurchaseAsync(Guid groupId, Guid userId, SubmitPurchaseDto dto, string? platform, CancellationToken ct)
@@ -305,7 +261,7 @@ public sealed class BillingService : IBillingService
         if (!TryParseStore(dto.Store, out var store))
             return Result<GroupBillingStatusDto>.Fail("Loja inválida.");
         if (string.IsNullOrWhiteSpace(dto.ProductId))
-            return Result<GroupBillingStatusDto>.Fail("Informe o produto.");
+            return Result<GroupBillingStatusDto>.Fail("Informe o pacote.");
 
         var verifier = GetVerifier(store);
         if (verifier == null || !verifier.IsAvailable)
@@ -316,10 +272,10 @@ public sealed class BillingService : IBillingService
         if (await EnsureGroupAsync(groupId, ct) == null)
             return Result<GroupBillingStatusDto>.Fail("Patota não encontrada.", ResultStatus.NotFound, [BillingCodes.GroupNotFound]);
 
-        VerifiedStoreTransaction tx;
+        VerifiedStorePurchase purchase;
         try
         {
-            tx = await verifier.VerifyAsync(new StorePurchaseProof(dto.ProductId.Trim(), dto.TransactionId, dto.PurchaseToken, groupId), ct);
+            purchase = await verifier.VerifyAsync(new StorePurchaseProof(dto.ProductId.Trim(), dto.TransactionId, dto.PurchaseToken, groupId), ct);
         }
         catch (StoreVerificationException ex)
         {
@@ -329,14 +285,14 @@ public sealed class BillingService : IBillingService
                 ResultStatus.BadRequest, [BillingCodes.InvalidPurchase]);
         }
 
-        var applied = await ApplyVerifiedAsync(tx, groupId, userId, ct);
+        var applied = await ApplyVerifiedAsync(purchase, groupId, userId, ct);
         if (!applied.Success)
             return Result<GroupBillingStatusDto>.Fail(applied.Error!,
                 applied.Code == BillingCodes.OtherGroup ? ResultStatus.Conflict : ResultStatus.BadRequest,
                 [applied.Code!]);
 
         var status = await GetStatusAsync(groupId, userId, platform, ct);
-        return Result<GroupBillingStatusDto>.Ok(status!, "Pagamento confirmado.");
+        return Result<GroupBillingStatusDto>.Ok(status!, purchase.IsPending ? "Pagamento pendente na loja." : "Pagamento confirmado.");
     }
 
     public async Task<RestoreResultDto> RestoreAsync(Guid userId, RestorePurchasesDto dto, CancellationToken ct)
@@ -351,8 +307,8 @@ public sealed class BillingService : IBillingService
         {
             try
             {
-                var tx = await verifier.VerifyAsync(new StorePurchaseProof(item.ProductId, item.TransactionId, item.PurchaseToken, null), ct);
-                var applied = await ApplyVerifiedAsync(tx, null, userId, ct);
+                var purchase = await verifier.VerifyAsync(new StorePurchaseProof(item.ProductId, item.TransactionId, item.PurchaseToken, null), ct);
+                var applied = await ApplyVerifiedAsync(purchase, null, userId, ct);
                 if (applied.Success && applied.GroupId is { } g) groups.Add(g);
                 else if (applied.Error != null) errors.Add(applied.Error);
             }
@@ -366,191 +322,171 @@ public sealed class BillingService : IBillingService
         return new RestoreResultDto(groups.Count, names, errors.Distinct().ToList());
     }
 
-    public async Task<BillingApplyResult> ApplyVerifiedAsync(VerifiedStoreTransaction tx, Guid? requestedGroupId, Guid? userId, CancellationToken ct)
+    public async Task<BillingApplyResult> ApplyVerifiedAsync(VerifiedStorePurchase purchase, Guid? requestedGroupId, Guid? userId, CancellationToken ct)
     {
         for (var attempt = 0; ; attempt++)
         {
             try
             {
-                return await ApplyOnceAsync(tx, requestedGroupId, userId, ct);
+                return await ApplyOnceAsync(purchase, requestedGroupId, userId, ct);
             }
             catch (DbUpdateException ex) when (attempt == 0 && IsUniqueViolation(ex))
             {
-                // O app e o aviso da loja chegaram juntos com a mesma transação: a segunda
+                // O app e o aviso da loja chegaram juntos com a mesma compra: a segunda
                 // tentativa já encontra o registro e só atualiza.
                 _db.ChangeTracker.Clear();
             }
         }
     }
 
-    private async Task<BillingApplyResult> ApplyOnceAsync(VerifiedStoreTransaction tx, Guid? requestedGroupId, Guid? userId, CancellationToken ct)
+    private async Task<BillingApplyResult> ApplyOnceAsync(VerifiedStorePurchase tx, Guid? requestedGroupId, Guid? userId, CancellationToken ct)
     {
         var product = await _db.BillingProducts.AsNoTracking()
             .FirstOrDefaultAsync(p => p.Store == tx.Store && p.ProductId == tx.ProductId, ct);
         if (product == null)
-            return BillingApplyResult.Fail($"Produto {tx.ProductId} não está cadastrado para a {StoreLabel(tx.Store)}.", BillingCodes.UnknownProduct);
+            return BillingApplyResult.Fail($"Pacote {tx.ProductId} não está cadastrado para a {StoreLabel(tx.Store)}.", BillingCodes.UnknownProduct);
 
-        var sub = await _db.StoreSubscriptions
-            .FirstOrDefaultAsync(s => s.Store == tx.Store && s.StoreSubscriptionId == tx.StoreSubscriptionId, ct);
+        var purchase = await _db.BillingPurchases
+            .FirstOrDefaultAsync(p => p.Store == tx.Store && p.TransactionId == tx.TransactionId, ct);
 
-        // De qual patota é esta assinatura? Já ligada: a mesma de sempre. Nova: a que o app
-        // pediu, conferida com a que a loja gravou na compra.
         Guid groupId;
-        if (sub != null)
+        if (purchase != null)
         {
-            if (requestedGroupId != null && requestedGroupId != sub.GroupId)
+            // Já registrada (reenvio do app, restaurar ou aviso da loja): só atualiza o estado.
+            if (requestedGroupId != null && requestedGroupId != purchase.GroupId)
             {
-                var other = await _db.Groups.AsNoTracking().Where(g => g.Id == sub.GroupId).Select(g => g.Name).FirstOrDefaultAsync(ct);
-                return BillingApplyResult.Fail(
-                    $"Esta assinatura da {StoreLabel(tx.Store)} já paga a patota {other ?? "outra patota"}. Cada conta da loja paga uma patota por vez.",
-                    BillingCodes.OtherGroup, sub.GroupId);
+                var other = await _db.Groups.AsNoTracking().Where(g => g.Id == purchase.GroupId).Select(g => g.Name).FirstOrDefaultAsync(ct);
+                return BillingApplyResult.Fail($"Esta compra já foi usada na patota {other ?? "(apagada)"}.", BillingCodes.OtherGroup, purchase.GroupId);
             }
-            groupId = sub.GroupId;
+            groupId = purchase.GroupId;
+            if (!tx.IsPending) purchase.Confirm();
         }
         else
         {
+            // A patota gravada na loja na hora da compra manda: protege contra usar o
+            // comprovante de uma patota em outra.
             if (requestedGroupId != null && tx.GroupHint != null && tx.GroupHint != requestedGroupId)
                 return BillingApplyResult.Fail("Esta compra foi feita para outra patota.", BillingCodes.GroupMismatch, tx.GroupHint);
 
-            Guid? linkedGroup = null;
-            if (tx.LinkedStoreSubscriptionId is { } linked)
-                linkedGroup = await _db.StoreSubscriptions.AsNoTracking()
-                    .Where(s => s.Store == tx.Store && s.StoreSubscriptionId == linked)
-                    .Select(s => (Guid?)s.GroupId).FirstOrDefaultAsync(ct);
-
-            var resolved = requestedGroupId ?? tx.GroupHint ?? linkedGroup;
+            var resolved = tx.GroupHint ?? requestedGroupId;
             if (resolved == null)
                 return BillingApplyResult.Fail("Não sei de qual patota é esta compra.", BillingCodes.NoGroup);
             groupId = resolved.Value;
 
-            if (!await _db.Groups.AnyAsync(g => g.Id == groupId, ct))
+            if (await EnsureGroupAsync(groupId, ct) == null)
                 return BillingApplyResult.Fail("Patota da compra não existe mais.", BillingCodes.GroupNotFound, groupId);
 
-            sub = new StoreSubscriptionEntity(groupId, userId, tx.Store, tx.StoreSubscriptionId, tx.ProductId, tx.Environment);
-            _db.StoreSubscriptions.Add(sub);
-        }
-
-        if (await EnsureGroupAsync(groupId, ct) == null)
-            return BillingApplyResult.Fail("Patota da compra não existe mais.", BillingCodes.GroupNotFound, groupId);
-
-        sub.SetPayerIfMissing(userId);
-        sub.Sync(tx.ProductId, tx.SubscriptionState, tx.AutoRenewEnabled, tx.ExpiresAt);
-
-        // Cada cobrança uma vez só (índice único Store + TransactionId).
-        var purchase = await _db.BillingPurchases
-            .FirstOrDefaultAsync(p => p.Store == tx.Store && p.TransactionId == tx.TransactionId, ct);
-
-        var purchasedAt = tx.PurchasedAt;
-        if (tx.Store == BillingStore.Google)
-        {
-            // O Google não diz quando cada renovação foi cobrada; o período é o mês que
-            // termina no vencimento.
-            var periodStart = tx.ExpiresAt.AddMonths(-product.Months);
-            if (periodStart > purchasedAt) purchasedAt = periodStart;
-        }
-
-        if (purchase == null)
-        {
             purchase = new BillingPurchaseEntity(
-                groupId, sub.Id, userId ?? sub.PayerUserId, tx.Store, tx.ProductId, tx.TransactionId, product.Months,
-                purchasedAt, tx.ExpiresAt,
+                groupId, userId, tx.Store, tx.ProductId, tx.TransactionId, tx.PurchaseToken, product.Months, tx.PurchasedAt,
                 tx.IsPending ? BillingPurchaseState.Pending : BillingPurchaseState.Confirmed,
-                tx.PriceMicros, tx.Currency, tx.Environment);
+                tx.PriceMicros, tx.Currency, tx.Environment, needsConsume: tx.NeedsConsume);
             _db.BillingPurchases.Add(purchase);
-        }
-        else if (purchase.GroupId != groupId)
-        {
-            return BillingApplyResult.Fail("Esta cobrança já foi usada em outra patota.", BillingCodes.OtherGroup, purchase.GroupId);
-        }
-        else if (!tx.IsPending)
-        {
-            purchase.Confirm(tx.ExpiresAt);
         }
 
         if (tx.RevokedAt is { } revokedAt && purchase.State != BillingPurchaseState.Refunded)
             purchase.Refund(revokedAt, tx.RevocationReason);
+        else if (tx.Store == BillingStore.Google && !tx.NeedsConsume && purchase.ConsumedAt == null && !tx.IsPending)
+            purchase.MarkConsumed(); // já consumida na loja (ex.: por outra tentativa)
 
         await _db.SaveChangesAsync(ct);
-        await RecomputePaidUntilAsync(groupId, ct);
+        await RecomputeAsync(groupId, ct);
 
-        if (tx.NeedsAcknowledge && sub.AcknowledgedAt == null && GetVerifier(tx.Store) is { } verifier)
-        {
-            try
-            {
-                await verifier.AcknowledgeAsync(tx, ct);
-                sub.MarkAcknowledged();
-                await _db.SaveChangesAsync(ct);
-            }
-            catch (Exception ex)
-            {
-                // Fica no painel de problemas; o job diário tenta de novo (o Google dá 3 dias).
-                _logger.LogWarning(ex, "[Billing] Falha ao confirmar (acknowledge) a compra {Token} no Google.", tx.StoreSubscriptionId);
-            }
-        }
-        else if (!tx.NeedsAcknowledge && sub.AcknowledgedAt == null && tx.Store == BillingStore.Google && !tx.IsPending)
-        {
-            sub.MarkAcknowledged();
-            await _db.SaveChangesAsync(ct);
-        }
+        if (purchase.NeedsConsume && tx.PurchaseToken != null)
+            await TryConsumeAsync(purchase, ct);
 
         _logger.LogInformation(
-            "[Billing] Transação aplicada. Group={GroupId} Store={Store} Product={Product} Tx={Tx} Expira={Expires} Estado={State}",
-            groupId, tx.Store, tx.ProductId, tx.TransactionId, tx.ExpiresAt, purchase.State);
+            "[Billing] Pacote aplicado. Group={GroupId} Store={Store} Product={Product} Tx={Tx} Estado={State}",
+            groupId, tx.Store, tx.ProductId, tx.TransactionId, purchase.State);
 
         return BillingApplyResult.Ok(groupId);
+    }
+
+    private async Task<bool> TryConsumeAsync(BillingPurchaseEntity purchase, CancellationToken ct)
+    {
+        if (GetVerifier(purchase.Store) is not { IsAvailable: true } verifier || purchase.PurchaseToken == null) return false;
+        try
+        {
+            await verifier.ConsumeAsync(purchase.ProductId, purchase.PurchaseToken, ct);
+            purchase.MarkConsumed();
+            await _db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // Fica no painel de problemas; o job diário tenta de novo (o Google dá 3 dias).
+            _logger.LogWarning(ex, "[Billing] Falha ao consumir a compra {Tx} no Google.", purchase.TransactionId);
+            return false;
+        }
+    }
+
+    public async Task<int> ConsumePendingAsync(CancellationToken ct)
+    {
+        var pending = await _db.BillingPurchases
+            .Where(p => p.Store == BillingStore.Google && p.ConsumedAt == null && p.State == BillingPurchaseState.Confirmed)
+            .ToListAsync(ct);
+        var done = 0;
+        foreach (var p in pending)
+            if (await TryConsumeAsync(p, ct)) done++;
+        return done;
     }
 
     public async Task<BillingApplyResult> RefundTransactionAsync(BillingStore store, string transactionId, string? reason, DateTime when, CancellationToken ct)
     {
         var purchase = await _db.BillingPurchases.FirstOrDefaultAsync(p => p.Store == store && p.TransactionId == transactionId, ct);
         if (purchase == null)
-            return BillingApplyResult.Fail("Cobrança reembolsada não encontrada.", BillingCodes.InvalidPurchase);
+            return BillingApplyResult.Fail("Compra reembolsada não encontrada.", BillingCodes.InvalidPurchase);
 
         if (purchase.State != BillingPurchaseState.Refunded)
         {
             purchase.Refund(when, reason ?? "Reembolso");
             await _db.SaveChangesAsync(ct);
-            await RecomputePaidUntilAsync(purchase.GroupId, ct);
+            await RecomputeAsync(purchase.GroupId, ct);
         }
         return BillingApplyResult.Ok(purchase.GroupId);
     }
 
     /// <summary>
-    /// Período pago = maior vencimento entre as cobranças confirmadas. Reembolso tira a
-    /// cobrança da conta, e o período volta para o vencimento da anterior.
+    /// Fila de períodos: pacotes confirmados e dias dados pelo GodMode, na ordem em que
+    /// aconteceram, cada um somando a partir do fim do anterior (ou do momento, se a patota
+    /// estava vencida). Refeita do zero, então reembolso tira exatamente aquele pacote.
     /// </summary>
-    public async Task RecomputePaidUntilAsync(Guid groupId, CancellationToken ct)
+    public async Task RecomputeAsync(Guid groupId, CancellationToken ct)
     {
         var billing = await _db.GroupBillings.FirstOrDefaultAsync(b => b.GroupId == groupId, ct);
         if (billing == null) return;
 
-        var paidUntil = await _db.BillingPurchases.AsNoTracking()
-            .Where(p => p.GroupId == groupId && p.State == BillingPurchaseState.Confirmed)
-            .Select(p => (DateTime?)p.ExpiresAt)
-            .MaxAsync(ct);
+        var purchases = await _db.BillingPurchases.Where(p => p.GroupId == groupId).ToListAsync(ct);
+        var extensions = await _db.BillingAdjustments.AsNoTracking()
+            .Where(a => a.GroupId == groupId && a.Type == BillingAdjustmentType.ExtendDays && a.Days != null)
+            .Select(a => new { a.Id, a.CreateDate, a.Days })
+            .ToListAsync(ct);
 
-        if (billing.PaidUntil != paidUntil)
+        var confirmed = purchases.Where(p => p.State == BillingPurchaseState.Confirmed).ToList();
+        var items = confirmed.Select(p => new BillingTimelineItem(p.Id, p.PurchasedAt, p.Months, 0, true))
+            .Concat(extensions.Select(e => new BillingTimelineItem(e.Id, e.CreateDate, 0, e.Days!.Value, false)));
+
+        var (end, periods) = BillingTimeline.Compute(billing.TrialEndsAt, items);
+        var byId = periods.ToDictionary(p => p.Id);
+        foreach (var p in purchases)
         {
-            billing.SetPaidUntil(paidUntil);
-            await _db.SaveChangesAsync(ct);
+            if (byId.TryGetValue(p.Id, out var period)) p.SetPeriod(period.Start, period.End);
+            else p.SetPeriod(null, null);
         }
+
+        billing.SetTimeline(end, confirmed.Count > 0);
+        await _db.SaveChangesAsync(ct);
     }
 
     // ── Auxiliares ──────────────────────────────────────────────────────────────
 
-    /// <summary>A assinatura ainda dá acesso ou vai voltar a dar (a loja está tentando cobrar).</summary>
-    public static bool IsLive(StoreSubscriptionEntity s, DateTime now) => s.State switch
+    private async Task<Dictionary<Guid, string>> UserNamesAsync(IEnumerable<Guid?> ids, CancellationToken ct)
     {
-        StoreSubscriptionState.Active => s.ExpiresAt == null || s.ExpiresAt > now,
-        StoreSubscriptionState.GracePeriod or StoreSubscriptionState.BillingRetry => true,
-        _ => false,
-    };
-
-    private async Task<Dictionary<Guid, string>> UserNamesAsync(List<Guid> ids, CancellationToken ct) =>
-        ids.Count == 0
+        var list = ids.Where(i => i != null).Select(i => i!.Value).Distinct().ToList();
+        return list.Count == 0
             ? []
-            : await _db.Users.AsNoTracking().Where(u => ids.Contains(u.Id))
+            : await _db.Users.AsNoTracking().Where(u => list.Contains(u.Id))
                 .ToDictionaryAsync(u => u.Id, u => (u.FirstName + " " + u.LastName).Trim(), ct);
+    }
 
     public static bool TryParseStore(string? raw, out BillingStore store)
     {

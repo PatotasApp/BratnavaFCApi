@@ -13,20 +13,17 @@ public sealed record StorePurchaseProof(
     Guid? GroupId);
 
 /// <summary>
-/// Uma transação já conferida com a loja (nunca montada a partir do que o app diz).
+/// Uma compra de pacote já conferida com a loja (nunca montada a partir do que o app diz).
+/// Apple: non-renewing subscription. Google: produto avulso consumível.
 /// </summary>
-public sealed record VerifiedStoreTransaction(
+public sealed record VerifiedStorePurchase(
     BillingStore Store,
-    /// <summary>Apple: originalTransactionId. Google: purchaseToken.</summary>
-    string StoreSubscriptionId,
-    /// <summary>Apple: transactionId. Google: orderId da cobrança mais recente.</summary>
+    /// <summary>Apple: transactionId. Google: orderId. Único por loja.</summary>
     string TransactionId,
     string ProductId,
     DateTime PurchasedAt,
-    DateTime ExpiresAt,
-    StoreSubscriptionState SubscriptionState,
-    bool AutoRenewEnabled,
     bool IsPending,
+    /// <summary>Reembolsada ou cancelada na loja.</summary>
     DateTime? RevokedAt,
     string? RevocationReason,
     /// <summary>Patota gravada na compra pela loja (appAccountToken / obfuscatedExternalAccountId).</summary>
@@ -34,10 +31,10 @@ public sealed record VerifiedStoreTransaction(
     long? PriceMicros,
     string? Currency,
     string Environment,
-    /// <summary>Google: ainda não confirmada (acknowledge). Apple: sempre falso.</summary>
-    bool NeedsAcknowledge,
-    /// <summary>Google: token da assinatura anterior que esta substituiu (troca de plano).</summary>
-    string? LinkedStoreSubscriptionId = null);
+    /// <summary>Google: purchaseToken.</summary>
+    string? PurchaseToken,
+    /// <summary>Google: ainda não consumida na loja.</summary>
+    bool NeedsConsume);
 
 /// <summary>Verificador de uma loja. Um por loja; o serviço escolhe pela <see cref="Store"/>.</summary>
 public interface IStoreVerifier
@@ -47,10 +44,10 @@ public interface IStoreVerifier
     /// <summary>Falso quando faltam credenciais: a compra é recusada com mensagem clara.</summary>
     bool IsAvailable { get; }
 
-    Task<VerifiedStoreTransaction> VerifyAsync(StorePurchaseProof proof, CancellationToken ct);
+    Task<VerifiedStorePurchase> VerifyAsync(StorePurchaseProof proof, CancellationToken ct);
 
-    /// <summary>Google: confirma a compra (obrigatório em até 3 dias). Apple: nada a fazer.</summary>
-    Task AcknowledgeAsync(VerifiedStoreTransaction transaction, CancellationToken ct);
+    /// <summary>Google: consome a compra (obrigatório em até 3 dias, e libera comprar o mesmo pacote de novo). Apple: nada.</summary>
+    Task ConsumeAsync(string productId, string purchaseToken, CancellationToken ct);
 }
 
 /// <summary>Falha ao conferir a compra com a loja (compra inválida, de outro app, credencial errada).</summary>

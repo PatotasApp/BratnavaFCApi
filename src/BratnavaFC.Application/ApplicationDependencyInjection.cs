@@ -63,7 +63,7 @@ public static class ApplicationDependencyInjection
             utc);
 
         // 12:00 UTC = 9h em Brasília: lembretes de vencimento da patota e nova tentativa de
-        // confirmar compras do Google.
+        // consumir compras do Google.
         recurringJobs.AddOrUpdate<IBillingReminderJob>(
             "billing-reminders",
             job => job.ExecuteAsync(CancellationToken.None),

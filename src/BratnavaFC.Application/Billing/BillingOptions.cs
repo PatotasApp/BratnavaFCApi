@@ -13,7 +13,7 @@ public sealed class BillingOptions
     public GoogleBillingOptions Google { get; set; } = new();
     public SimulatedBillingOptions Simulated { get; set; } = new();
 
-    /// <summary>Links mostrados no card do plano (exigência das lojas para assinatura).</summary>
+    /// <summary>Links mostrados no card do plano (exigência das lojas junto da compra).</summary>
     public string TermsUrl { get; set; } = "https://patotasapp.com.br/termos";
     public string PrivacyUrl { get; set; } = "https://patotasapp.com.br/privacidade";
 }

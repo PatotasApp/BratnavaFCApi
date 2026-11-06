@@ -62,7 +62,6 @@ public class AppDbContext : DbContext
     public DbSet<BillingProductEntity> BillingProducts => Set<BillingProductEntity>();
     public DbSet<GroupBillingEntity> GroupBillings => Set<GroupBillingEntity>();
     public DbSet<BillingTrialGrantEntity> BillingTrialGrants => Set<BillingTrialGrantEntity>();
-    public DbSet<StoreSubscriptionEntity> StoreSubscriptions => Set<StoreSubscriptionEntity>();
     public DbSet<BillingPurchaseEntity> BillingPurchases => Set<BillingPurchaseEntity>();
     public DbSet<BillingAdjustmentEntity> BillingAdjustments => Set<BillingAdjustmentEntity>();
     public DbSet<StoreEventEntity> StoreEvents => Set<StoreEventEntity>();
@@ -138,7 +137,6 @@ public class AppDbContext : DbContext
         modelBuilder.ApplyConfiguration(new BillingProductEntityConfiguration());
         modelBuilder.ApplyConfiguration(new GroupBillingEntityConfiguration());
         modelBuilder.ApplyConfiguration(new BillingTrialGrantEntityConfiguration());
-        modelBuilder.ApplyConfiguration(new StoreSubscriptionEntityConfiguration());
         modelBuilder.ApplyConfiguration(new BillingPurchaseEntityConfiguration());
         modelBuilder.ApplyConfiguration(new BillingAdjustmentEntityConfiguration());
         modelBuilder.ApplyConfiguration(new StoreEventEntityConfiguration());

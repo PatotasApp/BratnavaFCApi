@@ -56,27 +56,35 @@ public sealed class BillingStatusCalculatorTests
     }
 
     [Fact]
-    public void PeriodoPagoAlemDoTeste_FicaAtiva()
+    public void PacotePagoDepoisDoTeste_FicaPaga()
     {
         var b = new GroupBillingEntity(Guid.NewGuid(), Start, 30, true);
-        b.SetPaidUntil(Start.AddDays(90));
+        b.SetTimeline(Start.AddDays(90), true);
 
+        BillingStatusCalculator.Calculate(b, 3, true, Start.AddDays(10)).Status.Should().Be(GroupBillingStatus.Trial);
         var snap = BillingStatusCalculator.Calculate(b, 3, true, Start.AddDays(40));
         snap.Status.Should().Be(GroupBillingStatus.Active);
         snap.AccessEndsAt.Should().Be(Start.AddDays(90));
     }
 
     [Fact]
-    public void Estender_SomaAPartirDoVencimentoOuDeAgora()
+    public void Fila_SomaAPartirDoFimDoAnteriorOuDoMomento()
     {
-        var b = new GroupBillingEntity(Guid.NewGuid(), Start, 30, true);
-        b.Extend(10, Start);
-        b.AccessEndsAt.Should().Be(Start.AddDays(40));
+        var trialEnd = Start.AddDays(30);
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+        var c = Guid.NewGuid();
 
-        // Já vencida: soma a partir de agora.
-        var later = Start.AddDays(100);
-        b.Extend(5, later);
-        b.AccessEndsAt.Should().Be(later.AddDays(5));
+        var (end, periods) = BillingTimeline.Compute(trialEnd, [
+            new BillingTimelineItem(a, Start.AddDays(5), 1, 0, true),      // pago no teste: começa no fim do teste
+            new BillingTimelineItem(b, Start.AddDays(6), 3, 0, true),      // pago antes de vencer: soma ao fim do anterior
+            new BillingTimelineItem(c, Start.AddYears(1), 0, 10, false),   // dado com a patota já vencida: começa no momento
+        ]);
+
+        periods[0].Start.Should().Be(trialEnd);
+        periods[1].Start.Should().Be(trialEnd.AddMonths(1));
+        periods[2].Start.Should().Be(Start.AddYears(1));
+        end.Should().Be(Start.AddYears(1).AddDays(10));
     }
 }
 
@@ -158,26 +166,46 @@ public sealed class BillingServiceTests
         status.DaysRemaining.Should().BeNull();
     }
 
-    [Fact]
-    public async Task CompraSimulada_LiberaOsMesesEAparecNoHistorico()
-    {
-        var kit = new BillingTestKit(nameof(CompraSimulada_LiberaOsMesesEAparecNoHistorico));
-        var user = kit.AddUser();
-        var group = kit.AddGroup(user.Id, kit.Now.AddDays(-40));
-        var svc = kit.Billing();
+    private static SubmitPurchaseDto Sim(string product) => new("simulated", product, null, null);
 
-        var result = await svc.SubmitPurchaseAsync(group.Id, user.Id, new SubmitPurchaseDto("simulated", "patota_3m", null, null), "android", default);
+    [Fact]
+    public async Task PagarDuranteOTeste_SomaDepoisDoTeste()
+    {
+        var kit = new BillingTestKit(nameof(PagarDuranteOTeste_SomaDepoisDoTeste));
+        var user = kit.AddUser();
+        var group = kit.AddGroup(user.Id, kit.Now.AddDays(-10));
+        var trialEnd = kit.Now.AddDays(20);
+
+        var result = await kit.Billing().SubmitPurchaseAsync(group.Id, user.Id, Sim("patota_3m"), "android", default);
 
         result.Success.Should().BeTrue(result.Error);
         var status = result.Data!;
-        status.Status.Should().Be("active");
-        status.PaidUntil.Should().Be(kit.Now.AddMonths(3));
-        status.History.Should().ContainSingle(h => h.Months == 3 && h.State == "confirmed" && h.PayerName == "Ana Teste");
-        status.Subscription!.AutoRenewEnabled.Should().BeTrue();
-        status.Subscription.IsMine.Should().BeTrue();
-        // Já renova sozinha: não deixa comprar de novo (cobrança dupla).
-        status.CanPurchase.Should().BeFalse();
-        status.ShowBanner.Should().BeFalse();
+        status.Status.Should().Be("trial");
+        status.PaidUntil.Should().Be(trialEnd.AddMonths(3));
+        status.AccessEndsAt.Should().Be(trialEnd.AddMonths(3));
+        status.History.Should().ContainSingle(h => h.Months == 3 && h.State == "confirmed" && h.PayerName == "Ana Teste" && h.PeriodStart == trialEnd);
+        // Pacote avulso: pode pagar de novo, antes de vencer, quantas vezes quiser.
+        status.CanPurchase.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task PagarAntesDeVencer_SomaAoVencimentoAtual_OutroAdminTambemPaga()
+    {
+        var kit = new BillingTestKit(nameof(PagarAntesDeVencer_SomaAoVencimentoAtual_OutroAdminTambemPaga));
+        var ana = kit.AddUser("Ana");
+        var bia = kit.AddUser("Bia");
+        var group = kit.AddGroup(ana.Id, kit.Now.AddDays(-40));
+        var svc = kit.Billing();
+
+        await svc.SubmitPurchaseAsync(group.Id, ana.Id, Sim("patota_1m"), null, default);
+        kit.Now = kit.Now.AddDays(10);
+        var second = await svc.SubmitPurchaseAsync(group.Id, bia.Id, Sim("patota_12m"), null, default);
+
+        // Venceu o teste 10 dias antes da 1ª compra: começa na compra.
+        var firstStart = kit.Now.AddDays(-10);
+        second.Data!.Status.Should().Be("active");
+        second.Data.PaidUntil.Should().Be(firstStart.AddMonths(1).AddMonths(12));
+        second.Data.History.Select(h => h.PayerName).Should().BeEquivalentTo(["Ana Teste", "Bia Teste"]);
     }
 
     [Fact]
@@ -187,7 +215,7 @@ public sealed class BillingServiceTests
         var user = kit.AddUser();
         var group = kit.AddGroup(user.Id, kit.Now);
 
-        var result = await kit.Billing().SubmitPurchaseAsync(group.Id, user.Id, new SubmitPurchaseDto("simulated", "patota_1m", null, null), null, default);
+        var result = await kit.Billing().SubmitPurchaseAsync(group.Id, user.Id, Sim("patota_1m"), null, default);
 
         result.Success.Should().BeFalse();
         result.Errors.Should().Contain(BillingCodes.StoreUnavailable);
@@ -203,60 +231,59 @@ public sealed class BillingServiceTests
         BillingEnvironment.SimulatedEnabled(BillingTestKit.Config(true), BillingTestKit.Env("Development")).Should().BeTrue();
     }
 
-    private static VerifiedStoreTransaction Tx(string txId, string subId, DateTime purchased, int months, Guid? hint,
-        DateTime? revoked = null, string product = "patota_1m") =>
-        new(BillingStore.Simulated, subId, txId, product, purchased, purchased.AddMonths(months),
-            revoked == null ? StoreSubscriptionState.Active : StoreSubscriptionState.Revoked, revoked == null, false,
-            revoked, revoked == null ? null : "Reembolso", hint, 29_900_000, "BRL", "Production", false);
+    internal static VerifiedStorePurchase Tx(string txId, DateTime purchased, Guid? hint, DateTime? revoked = null,
+        string product = "patota_1m", BillingStore store = BillingStore.Simulated, string? token = null, bool needsConsume = false) =>
+        new(store, txId, product, purchased, false, revoked, revoked == null ? null : "Reembolso", hint,
+            29_900_000, "BRL", "Production", token, needsConsume);
 
     [Fact]
-    public async Task MesmaTransacaoDuasVezes_NaoConcedeDuasVezes()
+    public async Task MesmaCompraDuasVezes_NaoSomaDuasVezes()
     {
-        var kit = new BillingTestKit(nameof(MesmaTransacaoDuasVezes_NaoConcedeDuasVezes));
+        var kit = new BillingTestKit(nameof(MesmaCompraDuasVezes_NaoSomaDuasVezes));
         var user = kit.AddUser();
-        var group = kit.AddGroup(user.Id, kit.Now);
+        var group = kit.AddGroup(user.Id, kit.Now.AddDays(-40));
         var svc = kit.Billing();
-        var tx = Tx("tx-1", "sub-1", kit.Now, 1, group.Id);
+        var tx = Tx("tx-1", kit.Now, group.Id);
 
         (await svc.ApplyVerifiedAsync(tx, group.Id, user.Id, default)).Success.Should().BeTrue();
         (await svc.ApplyVerifiedAsync(tx, null, null, default)).Success.Should().BeTrue();
 
         kit.Db.BillingPurchases.Should().ContainSingle();
-        kit.Db.StoreSubscriptions.Should().ContainSingle();
         (await kit.Db.GroupBillings.SingleAsync()).PaidUntil.Should().Be(kit.Now.AddMonths(1));
     }
 
     [Fact]
-    public async Task Renovacao_EstendeEReembolso_TiraOPeriodo()
+    public async Task Reembolso_TiraOsMesesDaquelePacote()
     {
-        var kit = new BillingTestKit(nameof(Renovacao_EstendeEReembolso_TiraOPeriodo));
+        var kit = new BillingTestKit(nameof(Reembolso_TiraOsMesesDaquelePacote));
         var user = kit.AddUser();
-        var group = kit.AddGroup(user.Id, kit.Now);
+        var group = kit.AddGroup(user.Id, kit.Now.AddDays(-40));
         var svc = kit.Billing();
 
-        await svc.ApplyVerifiedAsync(Tx("tx-1", "sub-1", kit.Now, 1, group.Id), group.Id, user.Id, default);
-        // A renovação chega pelo aviso da loja, sem patota no pedido: vem da assinatura.
-        await svc.ApplyVerifiedAsync(Tx("tx-2", "sub-1", kit.Now.AddMonths(1), 1, null), null, null, default);
-        (await kit.Db.GroupBillings.SingleAsync()).PaidUntil.Should().Be(kit.Now.AddMonths(2));
+        await svc.ApplyVerifiedAsync(Tx("tx-1", kit.Now, group.Id), group.Id, user.Id, default);
+        await svc.ApplyVerifiedAsync(Tx("tx-2", kit.Now.AddMinutes(5), group.Id, product: "patota_3m"), group.Id, user.Id, default);
+        (await kit.Db.GroupBillings.SingleAsync()).PaidUntil.Should().Be(kit.Now.AddMonths(4));
 
-        await svc.ApplyVerifiedAsync(Tx("tx-2", "sub-1", kit.Now.AddMonths(1), 1, null, revoked: kit.Now.AddDays(35)), null, null, default);
+        // A Apple/Google avisam o reembolso do 1º pacote: o de 3 meses passa a começar na compra dele.
+        await svc.ApplyVerifiedAsync(Tx("tx-1", kit.Now, group.Id, revoked: kit.Now.AddDays(3)), null, null, default);
 
         var billing = await kit.Db.GroupBillings.AsNoTracking().SingleAsync();
-        billing.PaidUntil.Should().Be(kit.Now.AddMonths(1));
-        kit.Db.BillingPurchases.Single(p => p.TransactionId == "tx-2").State.Should().Be(BillingPurchaseState.Refunded);
+        billing.PaidUntil.Should().Be(kit.Now.AddMinutes(5).AddMonths(3));
+        kit.Db.BillingPurchases.Single(p => p.TransactionId == "tx-1").State.Should().Be(BillingPurchaseState.Refunded);
+        kit.Db.BillingPurchases.Single(p => p.TransactionId == "tx-1").PeriodEnd.Should().BeNull();
     }
 
     [Fact]
-    public async Task AssinaturaDeOutraPatota_Recusa()
+    public async Task MesmaCompraEmOutraPatota_Recusa()
     {
-        var kit = new BillingTestKit(nameof(AssinaturaDeOutraPatota_Recusa));
+        var kit = new BillingTestKit(nameof(MesmaCompraEmOutraPatota_Recusa));
         var user = kit.AddUser();
         var a = kit.AddGroup(user.Id, kit.Now, "A");
         var b = kit.AddGroup(user.Id, kit.Now, "B");
         var svc = kit.Billing();
 
-        await svc.ApplyVerifiedAsync(Tx("tx-1", "sub-1", kit.Now, 1, a.Id), a.Id, user.Id, default);
-        var again = await svc.ApplyVerifiedAsync(Tx("tx-2", "sub-1", kit.Now, 1, a.Id), b.Id, user.Id, default);
+        await svc.ApplyVerifiedAsync(Tx("tx-1", kit.Now, null), a.Id, user.Id, default);
+        var again = await svc.ApplyVerifiedAsync(Tx("tx-1", kit.Now, null), b.Id, user.Id, default);
 
         again.Success.Should().BeFalse();
         again.Code.Should().Be(BillingCodes.OtherGroup);
@@ -271,7 +298,7 @@ public sealed class BillingServiceTests
         var a = kit.AddGroup(user.Id, kit.Now, "A");
         var b = kit.AddGroup(user.Id, kit.Now, "B");
 
-        var result = await kit.Billing().ApplyVerifiedAsync(Tx("tx-1", "sub-1", kit.Now, 1, hint: a.Id), b.Id, user.Id, default);
+        var result = await kit.Billing().ApplyVerifiedAsync(Tx("tx-1", kit.Now, hint: a.Id), b.Id, user.Id, default);
 
         result.Code.Should().Be(BillingCodes.GroupMismatch);
         kit.Db.BillingPurchases.Should().BeEmpty();
@@ -281,7 +308,7 @@ public sealed class BillingServiceTests
     public async Task AvisoSemPatotaConhecida_Falha()
     {
         var kit = new BillingTestKit(nameof(AvisoSemPatotaConhecida_Falha));
-        var result = await kit.Billing().ApplyVerifiedAsync(Tx("tx-1", "sub-x", kit.Now, 1, null), null, null, default);
+        var result = await kit.Billing().ApplyVerifiedAsync(Tx("tx-1", kit.Now, null), null, null, default);
         result.Code.Should().Be(BillingCodes.NoGroup);
     }
 
@@ -292,42 +319,24 @@ public sealed class BillingServiceTests
         var user = kit.AddUser();
         var g = kit.AddGroup(user.Id, kit.Now);
 
-        var result = await kit.Billing().ApplyVerifiedAsync(Tx("tx-1", "sub-1", kit.Now, 1, g.Id, product: "outro"), g.Id, user.Id, default);
+        var result = await kit.Billing().ApplyVerifiedAsync(Tx("tx-1", kit.Now, g.Id, product: "outro"), g.Id, user.Id, default);
         result.Code.Should().Be(BillingCodes.UnknownProduct);
     }
 
     [Fact]
-    public async Task ContaQueJaPagaOutraPatota_NaoPodeComprarNaMesmaLoja()
+    public async Task Status_MostraOsPacotesDaPlataformaEAteQuandoVaiCadaUm()
     {
-        var kit = new BillingTestKit(nameof(ContaQueJaPagaOutraPatota_NaoPodeComprarNaMesmaLoja));
+        var kit = new BillingTestKit(nameof(Status_MostraOsPacotesDaPlataformaEAteQuandoVaiCadaUm));
         var user = kit.AddUser();
-        var a = kit.AddGroup(user.Id, kit.Now, "Patota A");
-        var b = kit.AddGroup(user.Id, kit.Now, "Patota B");
-        var svc = kit.Billing();
-
-        var google = new VerifiedStoreTransaction(BillingStore.Google, "token-a", "GPA.1", "patota_1m", kit.Now, kit.Now.AddMonths(1),
-            StoreSubscriptionState.Active, true, false, null, null, a.Id, null, null, "Production", false);
-        await svc.ApplyVerifiedAsync(google, a.Id, user.Id, default);
-
-        var onAndroid = await svc.GetStatusAsync(b.Id, user.Id, "android", default);
-        onAndroid!.CanPurchase.Should().BeFalse();
-        onAndroid.PurchaseBlockedReason.Should().Contain("Patota A");
-
-        // No iPhone a conta é outra (Apple), então pode.
-        (await svc.GetStatusAsync(b.Id, user.Id, "ios", default))!.CanPurchase.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task Status_MostraSoOsProdutosDaPlataformaEOSimulado()
-    {
-        var kit = new BillingTestKit(nameof(Status_MostraSoOsProdutosDaPlataformaEOSimulado));
-        var user = kit.AddUser();
-        var g = kit.AddGroup(user.Id, kit.Now);
+        var g = kit.AddGroup(user.Id, kit.Now); // teste até 10/12/2026
 
         var status = await kit.Billing().GetStatusAsync(g.Id, user.Id, "ios", default);
 
         status!.Products.Select(p => p.Store).Distinct().Should().BeEquivalentTo(["apple", "simulated"]);
-        status.Products.Where(p => p.Store == "apple").Select(p => p.ReferencePrice).Should().Equal(29.90m, 84.90m, 322.90m);
+        var apple = status.Products.Where(p => p.Store == "apple").ToList();
+        apple.Select(p => p.ReferencePrice).Should().Equal(29.90m, 84.90m, 322.90m);
+        apple[0].ExtendsUntilOn.Should().Be("2027-01-10");
+        apple[2].ExtendsUntilOn.Should().Be("2027-12-10");
         status.SimulatedPurchasesEnabled.Should().BeTrue();
     }
 
@@ -352,12 +361,8 @@ public sealed class BillingServiceTests
     {
         var kit = new BillingTestKit(nameof(Restaurar_LigaACompraAPatotaGravadaNaLoja));
         var user = kit.AddUser();
-        var g = kit.AddGroup(user.Id, kit.Now, "Resenha");
-
-        var fake = new FakeVerifier(BillingStore.Apple, new VerifiedStoreTransaction(
-            BillingStore.Apple, "orig-1", "tx-1", "patota_1m", kit.Now, kit.Now.AddMonths(1), StoreSubscriptionState.Active,
-            true, false, null, null, g.Id, 29_900_000, "BRL", "Sandbox", false));
-        kit.Verifiers.Add(fake);
+        var g = kit.AddGroup(user.Id, kit.Now.AddDays(-40), "Resenha");
+        kit.Verifiers.Add(new FakeVerifier(BillingStore.Apple, Tx("tx-1", kit.Now, g.Id, store: BillingStore.Apple)));
 
         var result = await kit.Billing().RestoreAsync(user.Id, new RestorePurchasesDto("apple", [new RestoreItemDto("patota_1m", "tx-1", null)]), default);
 
@@ -367,51 +372,53 @@ public sealed class BillingServiceTests
     }
 
     [Fact]
-    public async Task Google_ConfirmaACompra()
+    public async Task Google_ConsomeACompra()
     {
-        var kit = new BillingTestKit(nameof(Google_ConfirmaACompra));
+        var kit = new BillingTestKit(nameof(Google_ConsomeACompra));
         var user = kit.AddUser();
         var g = kit.AddGroup(user.Id, kit.Now);
-        var tx = new VerifiedStoreTransaction(BillingStore.Google, "token-1", "GPA.1", "patota_1m", kit.Now, kit.Now.AddMonths(1),
-            StoreSubscriptionState.Active, true, false, null, null, g.Id, null, null, "Production", NeedsAcknowledge: true);
-        var fake = new FakeVerifier(BillingStore.Google, tx);
+        var fake = new FakeVerifier(BillingStore.Google,
+            Tx("GPA.1", kit.Now, g.Id, store: BillingStore.Google, token: "token-1", needsConsume: true));
         kit.Verifiers.Add(fake);
 
         var result = await kit.Billing().SubmitPurchaseAsync(g.Id, user.Id, new SubmitPurchaseDto("google", "patota_1m", null, "token-1"), "android", default);
 
         result.Success.Should().BeTrue(result.Error);
-        fake.Acknowledged.Should().Be(1);
-        kit.Db.StoreSubscriptions.Single().AcknowledgedAt.Should().NotBeNull();
+        fake.Consumed.Should().Be(1);
+        kit.Db.BillingPurchases.Single().ConsumedAt.Should().NotBeNull();
     }
 
     [Fact]
-    public async Task Google_RenovacaoComecaNoMesQueTerminaNoVencimento()
+    public async Task Google_FalhaAoConsumir_FicaNosProblemasEJobTentaDeNovo()
     {
-        var kit = new BillingTestKit(nameof(Google_RenovacaoComecaNoMesQueTerminaNoVencimento));
+        var kit = new BillingTestKit(nameof(Google_FalhaAoConsumir_FicaNosProblemasEJobTentaDeNovo));
         var user = kit.AddUser();
         var g = kit.AddGroup(user.Id, kit.Now);
+        var fake = new FakeVerifier(BillingStore.Google,
+            Tx("GPA.1", kit.Now, g.Id, store: BillingStore.Google, token: "token-1", needsConsume: true)) { FailConsume = true };
+        kit.Verifiers.Add(fake);
         var svc = kit.Billing();
-        var start = kit.Now;
 
-        Task Apply(string order, DateTime expires) => svc.ApplyVerifiedAsync(new VerifiedStoreTransaction(
-            BillingStore.Google, "token-1", order, "patota_1m", start, expires, StoreSubscriptionState.Active, true, false,
-            null, null, g.Id, null, null, "Production", false), g.Id, user.Id, default);
+        (await svc.SubmitPurchaseAsync(g.Id, user.Id, new SubmitPurchaseDto("google", "patota_1m", null, "token-1"), "android", default))
+            .Success.Should().BeTrue();
+        (await kit.Admin().GetProblemsAsync(default)).UnconsumedPurchases.Should().ContainSingle();
 
-        await Apply("GPA.1", start.AddMonths(1));
-        await Apply("GPA.1..0", start.AddMonths(2));
-
-        kit.Db.BillingPurchases.Single(p => p.TransactionId == "GPA.1..0").PurchasedAt.Should().Be(start.AddMonths(1));
+        fake.FailConsume = false;
+        (await svc.ConsumePendingAsync(default)).Should().Be(1);
+        (await kit.Admin().GetProblemsAsync(default)).UnconsumedPurchases.Should().BeEmpty();
     }
 
-    internal sealed class FakeVerifier(BillingStore store, VerifiedStoreTransaction tx) : IStoreVerifier
+    internal sealed class FakeVerifier(BillingStore store, VerifiedStorePurchase tx) : IStoreVerifier
     {
-        public int Acknowledged { get; private set; }
+        public int Consumed { get; private set; }
+        public bool FailConsume { get; set; }
         public BillingStore Store => store;
         public bool IsAvailable => true;
-        public Task<VerifiedStoreTransaction> VerifyAsync(StorePurchaseProof proof, CancellationToken ct) => Task.FromResult(tx);
-        public Task AcknowledgeAsync(VerifiedStoreTransaction transaction, CancellationToken ct)
+        public Task<VerifiedStorePurchase> VerifyAsync(StorePurchaseProof proof, CancellationToken ct) => Task.FromResult(tx);
+        public Task ConsumeAsync(string productId, string purchaseToken, CancellationToken ct)
         {
-            Acknowledged++;
+            if (FailConsume) throw new StoreVerificationException("fora do ar", true);
+            Consumed++;
             return Task.CompletedTask;
         }
     }

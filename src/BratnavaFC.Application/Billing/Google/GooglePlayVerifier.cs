@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
@@ -10,9 +9,10 @@ using Microsoft.Extensions.Options;
 namespace BratnavaFC.Application.Billing.Google;
 
 /// <summary>
-/// Confere assinaturas do Google Play pela Google Play Developer API
-/// (<c>purchases.subscriptionsv2.get</c>) e confirma a compra (<c>acknowledge</c>), que o
-/// Google exige em até 3 dias — sem isso a compra é reembolsada sozinha.
+/// Confere compras do Google Play pela Google Play Developer API
+/// (<c>purchases.products.get</c>) e consome a compra (<c>purchases.products.consume</c>).
+/// Os pacotes são produtos avulsos consumíveis: consumir confirma a compra (o Google exige
+/// em até 3 dias, senão reembolsa) e libera a mesma pessoa a comprar o pacote de novo.
 /// </summary>
 public sealed class GooglePlayVerifier : IStoreVerifier
 {
@@ -34,14 +34,17 @@ public sealed class GooglePlayVerifier : IStoreVerifier
     public BillingStore Store => BillingStore.Google;
     public bool IsAvailable => _options.IsConfigured;
 
-    public async Task<VerifiedStoreTransaction> VerifyAsync(StorePurchaseProof proof, CancellationToken ct)
+    public async Task<VerifiedStorePurchase> VerifyAsync(StorePurchaseProof proof, CancellationToken ct)
     {
         if (!IsAvailable)
             throw new StoreVerificationException("Compra pelo Google Play ainda não está configurada no servidor.");
         if (string.IsNullOrWhiteSpace(proof.PurchaseToken))
             throw new StoreVerificationException("Faltou o purchaseToken da compra do Google Play.");
+        if (string.IsNullOrWhiteSpace(proof.ProductId))
+            throw new StoreVerificationException("Faltou o produto da compra do Google Play.");
 
-        var url = $"{BaseUrl}/{Uri.EscapeDataString(_options.PackageName!)}/purchases/subscriptionsv2/tokens/{Uri.EscapeDataString(proof.PurchaseToken.Trim())}";
+        var token = proof.PurchaseToken.Trim();
+        var url = $"{ProductUrl(proof.ProductId.Trim(), token)}";
         using var res = await SendAsync(HttpMethod.Get, url, null, ct);
         var body = await res.Content.ReadAsStringAsync(ct);
         if (res.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone or HttpStatusCode.BadRequest)
@@ -49,101 +52,60 @@ public sealed class GooglePlayVerifier : IStoreVerifier
         EnsureSuccess(res, body);
 
         using var doc = JsonDocument.Parse(body);
-        return FromSubscriptionV2(doc.RootElement, proof.PurchaseToken.Trim(), proof.ProductId);
+        return FromProductPurchase(doc.RootElement, proof.ProductId.Trim(), token);
     }
 
-    public async Task AcknowledgeAsync(VerifiedStoreTransaction transaction, CancellationToken ct)
+    public async Task ConsumeAsync(string productId, string purchaseToken, CancellationToken ct)
     {
-        if (!transaction.NeedsAcknowledge || !IsAvailable) return;
-
-        var url = $"{BaseUrl}/{Uri.EscapeDataString(_options.PackageName!)}/purchases/subscriptions/{Uri.EscapeDataString(transaction.ProductId)}/tokens/{Uri.EscapeDataString(transaction.StoreSubscriptionId)}:acknowledge";
-        using var res = await SendAsync(HttpMethod.Post, url, "{}", ct);
+        if (!IsAvailable) throw new StoreVerificationException("Google Play não configurado no servidor.", isTransient: true);
+        using var res = await SendAsync(HttpMethod.Post, $"{ProductUrl(productId, purchaseToken)}:consume", "{}", ct);
         var body = await res.Content.ReadAsStringAsync(ct);
         EnsureSuccess(res, body);
     }
 
-    /// <summary>Converte a resposta do subscriptionsv2 no formato interno. Público para teste.</summary>
-    public static VerifiedStoreTransaction FromSubscriptionV2(JsonElement root, string purchaseToken, string? expectedProductId)
+    /// <summary>Converte a resposta do purchases.products.get no formato interno. Público para teste.</summary>
+    public static VerifiedStorePurchase FromProductPurchase(JsonElement root, string productId, string purchaseToken)
     {
-        var lineItems = root.TryGetProperty("lineItems", out var li) && li.ValueKind == JsonValueKind.Array
-            ? li.EnumerateArray().ToList()
-            : [];
-        if (lineItems.Count == 0)
-            throw new StoreVerificationException("Assinatura do Google Play sem itens.");
-
-        // Normalmente um item só. Se o app disse qual produto comprou, preferimos esse.
-        var item = lineItems.FirstOrDefault(i => Str(i, "productId") == expectedProductId);
-        if (item.ValueKind == JsonValueKind.Undefined) item = lineItems[0];
-
-        var productId = Str(item, "productId") ?? throw new StoreVerificationException("Assinatura do Google Play sem produto.");
-        var expiresAt = Time(item, "expiryTime") ?? throw new StoreVerificationException("Assinatura do Google Play sem vencimento.");
-        var startedAt = Time(root, "startTime");
-
-        var state = Str(root, "subscriptionState") ?? "";
-        var mapped = state switch
-        {
-            "SUBSCRIPTION_STATE_ACTIVE" => StoreSubscriptionState.Active,
-            "SUBSCRIPTION_STATE_CANCELED" => StoreSubscriptionState.Active, // cancelou a renovação, mas vale até vencer
-            "SUBSCRIPTION_STATE_IN_GRACE_PERIOD" => StoreSubscriptionState.GracePeriod,
-            "SUBSCRIPTION_STATE_ON_HOLD" => StoreSubscriptionState.BillingRetry,
-            "SUBSCRIPTION_STATE_PAUSED" => StoreSubscriptionState.Paused,
-            "SUBSCRIPTION_STATE_EXPIRED" => StoreSubscriptionState.Expired,
-            "SUBSCRIPTION_STATE_PENDING" => StoreSubscriptionState.Pending,
-            "SUBSCRIPTION_STATE_PENDING_PURCHASE_CANCELED" => StoreSubscriptionState.Expired,
-            _ => StoreSubscriptionState.Active,
-        };
-
-        var autoRenew = item.TryGetProperty("autoRenewingPlan", out var plan)
-                        && plan.TryGetProperty("autoRenewEnabled", out var are)
-                        && are.ValueKind == JsonValueKind.True;
-
-        var orderId = Str(item, "latestSuccessfulOrderId") ?? Str(root, "latestOrderId");
-        var pending = mapped == StoreSubscriptionState.Pending;
+        // purchaseState: 0 comprado, 1 cancelado, 2 pendente.
+        var state = Int(root, "purchaseState") ?? 0;
+        var orderId = Str(root, "orderId");
+        var pending = state == 2;
         if (string.IsNullOrWhiteSpace(orderId))
         {
-            if (!pending) throw new StoreVerificationException("Assinatura do Google Play sem número do pedido.");
+            if (!pending) throw new StoreVerificationException("Compra do Google Play sem número do pedido.");
             orderId = $"pending:{purchaseToken[..Math.Min(40, purchaseToken.Length)]}";
         }
 
-        Guid? hint = null;
-        if (root.TryGetProperty("externalAccountIdentifiers", out var ext))
-        {
-            if (Guid.TryParse(Str(ext, "obfuscatedExternalProfileId"), out var p)) hint = p;
-            else if (Guid.TryParse(Str(ext, "obfuscatedExternalAccountId"), out var a)) hint = a;
-        }
+        var purchasedAt = long.TryParse(Str(root, "purchaseTimeMillis"), out var ms)
+            ? DateTimeOffset.FromUnixTimeMilliseconds(ms).UtcDateTime
+            : DateTime.UtcNow;
 
-        long? priceMicros = null;
-        string? currency = null;
-        if (plan.ValueKind == JsonValueKind.Object && plan.TryGetProperty("recurringPrice", out var price))
-        {
-            currency = Str(price, "currencyCode");
-            var units = long.TryParse(Str(price, "units"), out var u) ? u : 0;
-            var nanos = price.TryGetProperty("nanos", out var n) && n.ValueKind == JsonValueKind.Number ? n.GetInt64() : 0;
-            priceMicros = units * 1_000_000 + nanos / 1000;
-        }
+        Guid? hint = Guid.TryParse(Str(root, "obfuscatedExternalProfileId"), out var p) ? p
+            : Guid.TryParse(Str(root, "obfuscatedExternalAccountId"), out var a) ? a : null;
 
-        var acknowledged = Str(root, "acknowledgementState") == "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED";
-        var isTest = root.TryGetProperty("testPurchase", out _);
+        // consumptionState: 0 ainda não consumida, 1 consumida.
+        var consumed = (Int(root, "consumptionState") ?? 0) == 1;
+        // purchaseType: 0 = compra de teste (licença de teste).
+        var isTest = Int(root, "purchaseType") == 0;
 
-        return new VerifiedStoreTransaction(
+        return new VerifiedStorePurchase(
             BillingStore.Google,
-            purchaseToken,
             orderId!,
-            productId,
-            PurchasedAt: startedAt is { } s && s > expiresAt.AddYears(-2) ? (s > DateTime.UtcNow ? DateTime.UtcNow : s) : DateTime.UtcNow,
-            expiresAt,
-            mapped,
-            autoRenew,
+            Str(root, "productId") ?? productId,
+            purchasedAt,
             pending,
-            RevokedAt: null,
-            RevocationReason: null,
+            RevokedAt: state == 1 ? DateTime.UtcNow : null,
+            RevocationReason: state == 1 ? "Compra cancelada no Google Play" : null,
             hint,
-            priceMicros,
-            currency,
+            PriceMicros: null, // o products.get não informa preço; vem do relatório da loja
+            Currency: null,
             isTest ? "Sandbox" : "Production",
-            NeedsAcknowledge: !acknowledged && !pending,
-            LinkedStoreSubscriptionId: Str(root, "linkedPurchaseToken"));
+            purchaseToken,
+            NeedsConsume: !consumed && !pending && state == 0);
     }
+
+    private string ProductUrl(string productId, string token) =>
+        $"{BaseUrl}/{Uri.EscapeDataString(_options.PackageName!)}/purchases/products/{Uri.EscapeDataString(productId)}/tokens/{Uri.EscapeDataString(token)}";
 
     private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, string? json, CancellationToken ct)
     {
@@ -192,8 +154,6 @@ public sealed class GooglePlayVerifier : IStoreVerifier
     private static string? Str(JsonElement e, string name) =>
         e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 
-    private static DateTime? Time(JsonElement e, string name) =>
-        DateTimeOffset.TryParse(Str(e, name), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var d)
-            ? d.UtcDateTime
-            : null;
+    private static int? Int(JsonElement e, string name) =>
+        e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : null;
 }

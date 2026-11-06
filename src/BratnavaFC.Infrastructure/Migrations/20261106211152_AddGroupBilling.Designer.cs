@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BratnavaFC.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261106155253_AddGroupBilling")]
+    [Migration("20261106211152_AddGroupBilling")]
     partial class AddGroupBilling
     {
         /// <inheritdoc />
@@ -112,6 +112,9 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("ConsumedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("CreateDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -124,14 +127,17 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid>("GroupId")
                         .HasColumnType("uuid");
 
                     b.Property<int>("Months")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("PeriodEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PeriodStart")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<long?>("PriceMicros")
                         .HasColumnType("bigint");
@@ -140,6 +146,10 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
+
+                    b.Property<string>("PurchaseToken")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<DateTime>("PurchasedAt")
                         .HasColumnType("timestamp with time zone");
@@ -157,9 +167,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<int>("Store")
                         .HasColumnType("integer");
 
-                    b.Property<Guid?>("SubscriptionId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("TransactionId")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -173,7 +180,7 @@ namespace BratnavaFC.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SubscriptionId");
+                    b.HasIndex("PurchaseToken");
 
                     b.HasIndex("GroupId", "PurchasedAt");
 
@@ -243,11 +250,11 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<Guid>("GroupId")
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime?>("CourtesyUntil")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("HasPaidPeriod")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("IsLifetime")
                         .HasColumnType("boolean");
@@ -322,9 +329,9 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<int>("Store")
                         .HasColumnType("integer");
 
-                    b.Property<string>("StoreSubscriptionId")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
+                    b.Property<string>("StoreReference")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("Subtype")
                         .HasMaxLength(80)
@@ -343,69 +350,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("StoreEvents", (string)null);
-                });
-
-            modelBuilder.Entity("BratnavaFC.Domain.Entities.Billing.StoreSubscriptionEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("AcknowledgedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("AutoRenewEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("CreateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Environment")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("GroupId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("LastSyncedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("PayerUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ProductId")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<int>("State")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Store")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("StoreSubscriptionId")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<DateTime?>("UpdateDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GroupId");
-
-                    b.HasIndex("PayerUserId");
-
-                    b.HasIndex("Store", "StoreSubscriptionId")
-                        .IsUnique();
-
-                    b.ToTable("StoreSubscriptions", (string)null);
                 });
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.CalendarCategoryEntity", b =>
@@ -2675,14 +2619,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Votes");
-                });
-
-            modelBuilder.Entity("BratnavaFC.Domain.Entities.Billing.BillingPurchaseEntity", b =>
-                {
-                    b.HasOne("BratnavaFC.Domain.Entities.Billing.StoreSubscriptionEntity", null)
-                        .WithMany()
-                        .HasForeignKey("SubscriptionId")
-                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.Billing.GroupBillingEntity", b =>

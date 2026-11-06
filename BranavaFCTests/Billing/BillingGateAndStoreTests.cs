@@ -220,58 +220,64 @@ public sealed class AppleJwsVerifierTests
         var group = Guid.NewGuid();
         var json = JsonSerializer.SerializeToElement(new
         {
-            transactionId = "2000", originalTransactionId = "1000", productId = "patota_1m", bundleId = "br.com.patotasapp",
-            purchaseDate = 1_762_000_000_000L, expiresDate = 1_764_600_000_000L, appAccountToken = group.ToString(),
-            type = "Auto-Renewable Subscription", price = 29900, currency = "BRL", environment = "Sandbox",
+            transactionId = "2000", originalTransactionId = "2000", productId = "patota_1m", bundleId = "br.com.patotasapp",
+            purchaseDate = 1_762_000_000_000L, appAccountToken = group.ToString(),
+            type = "Non-Renewing Subscription", price = 29900, currency = "BRL", environment = "Sandbox",
         });
-        var renewal = JsonSerializer.SerializeToElement(new { autoRenewStatus = 1 });
 
-        var tx = AppleStoreVerifier.FromPayloads(json, renewal, null, "br.com.patotasapp");
+        var tx = AppleStoreVerifier.FromPayload(json, "br.com.patotasapp");
 
-        tx.StoreSubscriptionId.Should().Be("1000");
         tx.TransactionId.Should().Be("2000");
         tx.GroupHint.Should().Be(group);
         tx.PriceMicros.Should().Be(29_900_000);
-        tx.AutoRenewEnabled.Should().BeTrue();
         tx.Environment.Should().Be("Sandbox");
+        tx.NeedsConsume.Should().BeFalse();
 
-        var other = () => AppleStoreVerifier.FromPayloads(json, renewal, null, "outro.app");
+        var other = () => AppleStoreVerifier.FromPayload(json, "outro.app");
         other.Should().Throw<StoreVerificationException>();
+
+        var renewing = JsonSerializer.SerializeToElement(new { transactionId = "1", productId = "x", type = "Auto-Renewable Subscription" });
+        var wrongType = () => AppleStoreVerifier.FromPayload(renewing, null);
+        wrongType.Should().Throw<StoreVerificationException>().WithMessage("*Non-Renewing*");
     }
 }
 
 public sealed class GooglePlayVerifierTests
 {
     [Fact]
-    public void SubscriptionV2_ConverteCampos()
+    public void ProdutoAvulso_ConverteCampos()
     {
         var group = Guid.NewGuid();
         var json = JsonSerializer.SerializeToElement(new
         {
-            startTime = "2026-11-01T10:00:00Z",
-            subscriptionState = "SUBSCRIPTION_STATE_CANCELED",
-            latestOrderId = "GPA.1234",
-            acknowledgementState = "ACKNOWLEDGEMENT_STATE_PENDING",
-            externalAccountIdentifiers = new { obfuscatedExternalAccountId = group.ToString() },
-            lineItems = new[]
-            {
-                new
-                {
-                    productId = "patota_1m", expiryTime = "2026-12-01T10:00:00Z", latestSuccessfulOrderId = "GPA.1234..0",
-                    autoRenewingPlan = new { autoRenewEnabled = false, recurringPrice = new { currencyCode = "BRL", units = "29", nanos = 900_000_000 } },
-                },
-            },
+            purchaseTimeMillis = "1762000000000",
+            purchaseState = 0,
+            consumptionState = 0,
+            orderId = "GPA.1234",
+            productId = "patota_3m",
+            obfuscatedExternalAccountId = group.ToString(),
         });
 
-        var tx = GooglePlayVerifier.FromSubscriptionV2(json, "token-1", "patota_1m");
+        var tx = GooglePlayVerifier.FromProductPurchase(json, "patota_3m", "token-1");
 
-        tx.TransactionId.Should().Be("GPA.1234..0");
-        tx.SubscriptionState.Should().Be(StoreSubscriptionState.Active); // cancelou só a renovação
-        tx.AutoRenewEnabled.Should().BeFalse();
-        tx.NeedsAcknowledge.Should().BeTrue();
+        tx.TransactionId.Should().Be("GPA.1234");
+        tx.NeedsConsume.Should().BeTrue();
+        tx.IsPending.Should().BeFalse();
         tx.GroupHint.Should().Be(group);
-        tx.PriceMicros.Should().Be(29_900_000);
-        tx.ExpiresAt.Should().Be(new DateTime(2026, 12, 1, 10, 0, 0, DateTimeKind.Utc));
+        tx.PurchaseToken.Should().Be("token-1");
+        tx.PurchasedAt.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(1762000000000).UtcDateTime);
+    }
+
+    [Fact]
+    public void Pendente_ECancelada()
+    {
+        var pending = GooglePlayVerifier.FromProductPurchase(JsonSerializer.SerializeToElement(new { purchaseState = 2 }), "patota_1m", "tok");
+        pending.IsPending.Should().BeTrue();
+        pending.NeedsConsume.Should().BeFalse();
+
+        var canceled = GooglePlayVerifier.FromProductPurchase(
+            JsonSerializer.SerializeToElement(new { purchaseState = 1, orderId = "GPA.9" }), "patota_1m", "tok");
+        canceled.RevokedAt.Should().NotBeNull();
     }
 }
 
@@ -285,13 +291,12 @@ public sealed class BillingNotificationServiceTests
         NullLogger<BillingNotificationService>.Instance,
         new AppleJwsVerifier([chain.RootSha256]));
 
-    private static object Transaction(string txId, Guid group, DateTime purchased, DateTime expires, DateTime? revoked = null) => new
+    private static object Transaction(string txId, Guid group, DateTime purchased, DateTime? revoked = null) => new
     {
-        transactionId = txId, originalTransactionId = "orig-1", productId = "patota_1m", bundleId = Bundle,
+        transactionId = txId, originalTransactionId = txId, productId = "patota_1m", bundleId = Bundle,
         purchaseDate = new DateTimeOffset(purchased).ToUnixTimeMilliseconds(),
-        expiresDate = new DateTimeOffset(expires).ToUnixTimeMilliseconds(),
         revocationDate = revoked is { } r ? new DateTimeOffset(r).ToUnixTimeMilliseconds() : (long?)null,
-        appAccountToken = group.ToString(), type = "Auto-Renewable Subscription", price = 29900, currency = "BRL",
+        appAccountToken = group.ToString(), type = "Non-Renewing Subscription", price = 29900, currency = "BRL",
         environment = "Production",
     };
 
@@ -299,31 +304,30 @@ public sealed class BillingNotificationServiceTests
     {
         notificationType = type,
         notificationUUID = uuid,
-        data = new { bundleId = Bundle, signedTransactionInfo = chain.Sign(transaction), signedRenewalInfo = chain.Sign(new { autoRenewStatus = 1 }) },
+        data = new { bundleId = Bundle, signedTransactionInfo = chain.Sign(transaction) },
     });
 
     [Fact]
-    public async Task Apple_RenovacaoEReembolso()
+    public async Task Apple_CompraEReembolso()
     {
         using var chain = new FakeAppleChain();
-        var kit = new BillingTestKit(nameof(Apple_RenovacaoEReembolso));
+        var kit = new BillingTestKit(nameof(Apple_CompraEReembolso));
         var user = kit.AddUser();
-        var g = kit.AddGroup(user.Id, kit.Now);
+        var g = kit.AddGroup(user.Id, kit.Now.AddDays(-40));
         var svc = Create(kit, chain);
         var t0 = DateTime.SpecifyKind(kit.Now, DateTimeKind.Utc);
 
-        (await svc.HandleAppleAsync(Notification(chain, "n1", "SUBSCRIBED", Transaction("t1", g.Id, t0, t0.AddMonths(1))), default))
-            .Should().Be(StoreNotificationOutcome.Ok);
-        (await svc.HandleAppleAsync(Notification(chain, "n2", "DID_RENEW", Transaction("t2", g.Id, t0.AddMonths(1), t0.AddMonths(2))), default))
+        (await svc.HandleAppleAsync(Notification(chain, "n1", "ONE_TIME_CHARGE", Transaction("t1", g.Id, t0)), default))
             .Should().Be(StoreNotificationOutcome.Ok);
         // Reenvio do mesmo aviso: ignorado.
-        await svc.HandleAppleAsync(Notification(chain, "n2", "DID_RENEW", Transaction("t2", g.Id, t0.AddMonths(1), t0.AddMonths(2))), default);
+        await svc.HandleAppleAsync(Notification(chain, "n1", "ONE_TIME_CHARGE", Transaction("t1", g.Id, t0)), default);
+        kit.Db.BillingPurchases.Count().Should().Be(1);
+        (await kit.Db.GroupBillings.AsNoTracking().SingleAsync()).PaidUntil.Should().Be(t0.AddMonths(1));
 
-        kit.Db.BillingPurchases.Count().Should().Be(2);
-        (await kit.Db.GroupBillings.AsNoTracking().SingleAsync()).PaidUntil.Should().Be(t0.AddMonths(2));
+        await svc.HandleAppleAsync(Notification(chain, "n2", "REFUND", Transaction("t1", g.Id, t0, revoked: t0.AddDays(3))), default);
+        (await kit.Db.GroupBillings.AsNoTracking().SingleAsync()).PaidUntil.Should().BeNull();
 
-        await svc.HandleAppleAsync(Notification(chain, "n3", "REFUND", Transaction("t2", g.Id, t0.AddMonths(1), t0.AddMonths(2), revoked: t0.AddDays(40))), default);
-
+        await svc.HandleAppleAsync(Notification(chain, "n3", "REFUND_REVERSED", Transaction("t1", g.Id, t0)), default);
         (await kit.Db.GroupBillings.AsNoTracking().SingleAsync()).PaidUntil.Should().Be(t0.AddMonths(1));
         kit.Db.StoreEvents.Count(e => e.Status == StoreEventStatus.Processed).Should().Be(3);
     }
@@ -349,7 +353,7 @@ public sealed class BillingNotificationServiceTests
         var kit = new BillingTestKit(nameof(Apple_SemPatota_FicaNoPainelDeProblemas));
         var svc = Create(kit, chain);
 
-        var outcome = await svc.HandleAppleAsync(Notification(chain, "n1", "SUBSCRIBED", Transaction("t1", Guid.NewGuid(), kit.Now, kit.Now.AddMonths(1))), default);
+        var outcome = await svc.HandleAppleAsync(Notification(chain, "n1", "ONE_TIME_CHARGE", Transaction("t1", Guid.NewGuid(), kit.Now)), default);
 
         outcome.Should().Be(StoreNotificationOutcome.Ok);
         var problems = await kit.Admin().GetProblemsAsync(default);
@@ -362,10 +366,9 @@ public sealed class BillingNotificationServiceTests
         using var chain = new FakeAppleChain();
         var kit = new BillingTestKit(nameof(Google_ReembolsoPeloAviso));
         var user = kit.AddUser();
-        var g = kit.AddGroup(user.Id, kit.Now);
-        await kit.Billing().ApplyVerifiedAsync(new VerifiedStoreTransaction(BillingStore.Google, "token-1", "GPA.9", "patota_1m",
-            kit.Now, kit.Now.AddMonths(1), StoreSubscriptionState.Active, true, false, null, null, g.Id, null, null, "Production", false),
-            g.Id, user.Id, default);
+        var g = kit.AddGroup(user.Id, kit.Now.AddDays(-40));
+        await kit.Billing().ApplyVerifiedAsync(
+            BillingServiceTests.Tx("GPA.9", kit.Now, g.Id, store: BillingStore.Google, token: "token-1"), g.Id, user.Id, default);
 
         var data = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(new
         {
@@ -378,5 +381,33 @@ public sealed class BillingNotificationServiceTests
 
         (await kit.Db.GroupBillings.AsNoTracking().SingleAsync()).PaidUntil.Should().BeNull();
         kit.Db.BillingPurchases.Single().State.Should().Be(BillingPurchaseState.Refunded);
+    }
+}
+
+public sealed class BillingGoogleNotificationTests
+{
+    [Fact]
+    public async Task Google_CompraPeloAviso()
+    {
+        using var chain = new FakeAppleChain();
+        var kit = new BillingTestKit(nameof(Google_CompraPeloAviso));
+        var user = kit.AddUser();
+        var g = kit.AddGroup(user.Id, kit.Now.AddDays(-40));
+        var fake = new BillingServiceTests.FakeVerifier(BillingStore.Google,
+            BillingServiceTests.Tx("GPA.5", kit.Now, g.Id, store: BillingStore.Google, token: "tok-5", needsConsume: true));
+        kit.Verifiers.Add(fake);
+        var svc = new BillingNotificationService(kit.Db, kit.Billing(), Options.Create(new BillingOptions()),
+            NullLogger<BillingNotificationService>.Instance, new AppleJwsVerifier([chain.RootSha256]));
+
+        var data = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            oneTimeProductNotification = new { notificationType = 1, purchaseToken = "tok-5", sku = "patota_1m" },
+        }));
+        var body = JsonSerializer.Serialize(new { message = new { data, messageId = "m-5" } });
+
+        (await svc.HandleGoogleAsync(body, default)).Should().Be(StoreNotificationOutcome.Ok);
+        (await kit.Db.GroupBillings.AsNoTracking().SingleAsync()).PaidUntil.Should().Be(kit.Now.AddMonths(1));
+        fake.Consumed.Should().Be(1);
+        kit.Db.StoreEvents.Single().Subtype.Should().Be("PURCHASED");
     }
 }

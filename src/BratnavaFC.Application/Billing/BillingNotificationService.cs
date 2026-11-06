@@ -13,11 +13,11 @@ namespace BratnavaFC.Application.Billing;
 /// <summary>Resultado de um aviso de loja, para o controller escolher o status HTTP.</summary>
 public enum StoreNotificationOutcome
 {
-    /// <summary>Processado (ou já processado antes): 200.</summary>
+    /// <summary>Processado (ou já processado antes, ou falha permanente já registrada): 200.</summary>
     Ok,
-    /// <summary>Aviso inválido (assinatura, formato): 400 — a loja não deve insistir.</summary>
+    /// <summary>Aviso inválido (assinatura, formato): 400.</summary>
     Rejected,
-    /// <summary>Falha passageira ao processar: 500 — a loja manda de novo.</summary>
+    /// <summary>Falha passageira ao processar: 500, a loja manda de novo.</summary>
     RetryLater,
 }
 
@@ -31,9 +31,11 @@ public interface IBillingNotificationService
 }
 
 /// <summary>
-/// Avisos das lojas: App Store Server Notifications V2 (JWS assinado pela Apple) e Google
-/// Real-Time Developer Notifications (via push do Pub/Sub). Todo aviso é guardado cru antes
-/// de processar; o mesmo aviso repetido (a loja reenvia) não é aplicado duas vezes.
+/// Avisos das lojas: App Store Server Notifications V2 (JWS assinado pela Apple; para os
+/// pacotes chegam ONE_TIME_CHARGE, REFUND e REFUND_REVERSED) e Google Real-Time Developer
+/// Notifications via push do Pub/Sub (oneTimeProductNotification e
+/// voidedPurchaseNotification). Todo aviso é guardado cru antes de processar; o mesmo aviso
+/// repetido não é aplicado duas vezes.
 /// </summary>
 public sealed class BillingNotificationService : IBillingNotificationService
 {
@@ -77,87 +79,67 @@ public sealed class BillingNotificationService : IBillingNotificationService
             return StoreNotificationOutcome.Rejected;
         }
 
-        var notificationUuid = AppleStoreVerifier.Str(payload, "notificationUUID") ?? Guid.NewGuid().ToString();
-        var type = AppleStoreVerifier.Str(payload, "notificationType") ?? "UNKNOWN";
-        var subtype = AppleStoreVerifier.Str(payload, "subtype");
-
-        var existing = await _db.StoreEvents.FirstOrDefaultAsync(e => e.Store == BillingStore.Apple && e.ExternalId == notificationUuid, ct);
+        var uuidOk = AppleStoreVerifier.Str(payload, "notificationUUID") ?? Guid.NewGuid().ToString();
+        var existing = await _db.StoreEvents.FirstOrDefaultAsync(e => e.Store == BillingStore.Apple && e.ExternalId == uuidOk, ct);
         if (existing is { Status: StoreEventStatus.Processed or StoreEventStatus.Ignored })
             return StoreNotificationOutcome.Ok;
 
-        var stored = existing ?? await RecordAsync(BillingStore.Apple, notificationUuid, type, subtype, signedPayload, ct);
+        var stored = existing ?? await RecordAsync(BillingStore.Apple, uuidOk,
+            AppleStoreVerifier.Str(payload, "notificationType") ?? "UNKNOWN", AppleStoreVerifier.Str(payload, "subtype"), signedPayload, ct);
         return await ProcessAppleAsync(stored, payload, ct);
     }
 
     private async Task<StoreNotificationOutcome> ProcessAppleAsync(StoreEventEntity ev, JsonElement payload, CancellationToken ct)
     {
         var type = AppleStoreVerifier.Str(payload, "notificationType") ?? "UNKNOWN";
-        var subtype = AppleStoreVerifier.Str(payload, "subtype");
-        ev.Describe(type, subtype);
+        ev.Describe(type, AppleStoreVerifier.Str(payload, "subtype"));
 
-        if (type == "TEST" || !payload.TryGetProperty("data", out var data))
-        {
-            ev.MarkProcessed(null, null, ignored: true);
-            await _db.SaveChangesAsync(ct);
-            return StoreNotificationOutcome.Ok;
-        }
-
-        string? originalTransactionId = null;
+        string? transactionId = null;
         try
         {
-            if (AppleStoreVerifier.Str(data, "bundleId") is { } bundle && !string.IsNullOrWhiteSpace(_options.Apple.BundleId)
-                && bundle != _options.Apple.BundleId)
-                throw new StoreVerificationException("Aviso da Apple de outro app.");
-
-            if (AppleStoreVerifier.Str(data, "signedTransactionInfo") is not { } signedTx)
+            if (type == "TEST" || !payload.TryGetProperty("data", out var data)
+                || AppleStoreVerifier.Str(data, "signedTransactionInfo") is not { } signedTx)
             {
                 ev.MarkProcessed(null, null, ignored: true);
                 await _db.SaveChangesAsync(ct);
                 return StoreNotificationOutcome.Ok;
             }
 
+            if (AppleStoreVerifier.Str(data, "bundleId") is { } bundle && !string.IsNullOrWhiteSpace(_options.Apple.BundleId)
+                && bundle != _options.Apple.BundleId)
+                throw new StoreVerificationException("Aviso da Apple de outro app.");
+
             var transaction = _appleJws.Verify(signedTx);
-            originalTransactionId = AppleStoreVerifier.Str(transaction, "originalTransactionId");
-            JsonElement? renewal = AppleStoreVerifier.Str(data, "signedRenewalInfo") is { } signedRenewal
-                ? _appleJws.Verify(signedRenewal)
-                : null;
+            transactionId = AppleStoreVerifier.Str(transaction, "transactionId");
 
             if (type == "REFUND_REVERSED")
             {
-                var txId = AppleStoreVerifier.Str(transaction, "transactionId");
-                var purchase = await _db.BillingPurchases.FirstOrDefaultAsync(p => p.Store == BillingStore.Apple && p.TransactionId == txId, ct);
+                var purchase = await _db.BillingPurchases.FirstOrDefaultAsync(p => p.Store == BillingStore.Apple && p.TransactionId == transactionId, ct);
                 if (purchase != null)
                 {
                     purchase.ReverseRefund();
                     await _db.SaveChangesAsync(ct);
-                    await _billing.RecomputePaidUntilAsync(purchase.GroupId, ct);
+                    await _billing.RecomputeAsync(purchase.GroupId, ct);
                 }
-                ev.MarkProcessed(purchase?.GroupId, originalTransactionId, ignored: purchase == null);
+                ev.MarkProcessed(purchase?.GroupId, transactionId, ignored: purchase == null);
                 await _db.SaveChangesAsync(ct);
                 return StoreNotificationOutcome.Ok;
             }
 
-            StoreSubscriptionState? state = type switch
-            {
-                "EXPIRED" or "GRACE_PERIOD_EXPIRED" => StoreSubscriptionState.Expired,
-                "DID_FAIL_TO_RENEW" => subtype == "GRACE_PERIOD" ? StoreSubscriptionState.GracePeriod : StoreSubscriptionState.BillingRetry,
-                "REFUND" or "REVOKE" => StoreSubscriptionState.Revoked,
-                "SUBSCRIBED" or "DID_RENEW" => StoreSubscriptionState.Active,
-                _ => null,
-            };
-
-            var tx = AppleStoreVerifier.FromPayloads(transaction, renewal, state, _options.Apple.BundleId);
-            var result = await _billing.ApplyVerifiedAsync(tx, null, null, ct);
+            // ONE_TIME_CHARGE, REFUND, REVOKE ou qualquer outro com transação: a própria
+            // transação diz se foi reembolsada (revocationDate).
+            var verified = AppleStoreVerifier.FromPayload(transaction, _options.Apple.BundleId);
+            var result = await _billing.ApplyVerifiedAsync(verified, null, null, ct);
             if (!result.Success)
                 throw new StoreVerificationException(result.Error ?? "Falha ao aplicar o aviso.", result.Transient);
 
-            ev.MarkProcessed(result.GroupId, originalTransactionId);
+            ev.MarkProcessed(result.GroupId, transactionId);
             await _db.SaveChangesAsync(ct);
             return StoreNotificationOutcome.Ok;
         }
         catch (Exception ex)
         {
-            return await FailAsync(ev, ex, originalTransactionId, ct);
+            return await FailAsync(ev, ex, transactionId, ct);
         }
     }
 
@@ -169,11 +151,7 @@ public sealed class BillingNotificationService : IBillingNotificationService
         JsonElement notification;
         try
         {
-            using var doc = JsonDocument.Parse(pubSubBody);
-            var message = doc.RootElement.GetProperty("message");
-            messageId = message.TryGetProperty("messageId", out var mid) ? mid.GetString() ?? Guid.NewGuid().ToString() : Guid.NewGuid().ToString();
-            var data = message.GetProperty("data").GetString() ?? "";
-            notification = JsonDocument.Parse(Encoding.UTF8.GetString(Convert.FromBase64String(data))).RootElement.Clone();
+            (messageId, notification) = ParsePubSub(pubSubBody);
         }
         catch (Exception ex)
         {
@@ -190,6 +168,15 @@ public sealed class BillingNotificationService : IBillingNotificationService
         return await ProcessGoogleAsync(stored, notification, ct);
     }
 
+    private static (string MessageId, JsonElement Notification) ParsePubSub(string body)
+    {
+        using var doc = JsonDocument.Parse(body);
+        var message = doc.RootElement.GetProperty("message");
+        var messageId = message.TryGetProperty("messageId", out var mid) ? mid.GetString() ?? Guid.NewGuid().ToString() : Guid.NewGuid().ToString();
+        var data = message.GetProperty("data").GetString() ?? "";
+        return (messageId, JsonDocument.Parse(Encoding.UTF8.GetString(Convert.FromBase64String(data))).RootElement.Clone());
+    }
+
     private async Task<StoreNotificationOutcome> ProcessGoogleAsync(StoreEventEntity ev, JsonElement n, CancellationToken ct)
     {
         string? token = null;
@@ -199,19 +186,18 @@ public sealed class BillingNotificationService : IBillingNotificationService
                 && pkg.GetString() != _options.Google.PackageName)
                 throw new StoreVerificationException("Aviso do Google de outro app.");
 
-            if (n.TryGetProperty("subscriptionNotification", out var sn))
+            if (n.TryGetProperty("oneTimeProductNotification", out var on))
             {
-                token = sn.GetProperty("purchaseToken").GetString();
-                var subscriptionId = sn.TryGetProperty("subscriptionId", out var sid) ? sid.GetString() : null;
+                token = on.GetProperty("purchaseToken").GetString();
+                var sku = on.TryGetProperty("sku", out var s) ? s.GetString() ?? "" : "";
                 var verifier = _billing.GetVerifier(BillingStore.Google);
                 if (verifier is not { IsAvailable: true })
                     throw new StoreVerificationException("Google Play não configurado no servidor.", isTransient: true);
 
-                var tx = await verifier.VerifyAsync(new StorePurchaseProof(subscriptionId ?? "", null, token, null), ct);
-                var result = await _billing.ApplyVerifiedAsync(tx, null, null, ct);
+                var purchase = await verifier.VerifyAsync(new StorePurchaseProof(sku, null, token, null), ct);
+                var result = await _billing.ApplyVerifiedAsync(purchase, null, null, ct);
                 if (!result.Success)
                     throw new StoreVerificationException(result.Error ?? "Falha ao aplicar o aviso.", result.Transient);
-
                 ev.MarkProcessed(result.GroupId, token);
             }
             else if (n.TryGetProperty("voidedPurchaseNotification", out var vn))
@@ -220,12 +206,12 @@ public sealed class BillingNotificationService : IBillingNotificationService
                 var orderId = vn.GetProperty("orderId").GetString() ?? "";
                 var result = await _billing.RefundTransactionAsync(BillingStore.Google, orderId, "Reembolso no Google Play", DateTime.UtcNow, ct);
                 if (!result.Success)
-                    throw new StoreVerificationException($"Reembolso do pedido {orderId} sem cobrança correspondente.");
+                    throw new StoreVerificationException($"Reembolso do pedido {orderId} sem compra correspondente.");
                 ev.MarkProcessed(result.GroupId, token);
             }
             else
             {
-                // testNotification, oneTimeProductNotification (não usamos) etc.
+                // testNotification, subscriptionNotification (não vendemos assinatura) etc.
                 ev.MarkProcessed(null, null, ignored: true);
             }
 
@@ -240,36 +226,16 @@ public sealed class BillingNotificationService : IBillingNotificationService
 
     private static (string Type, string? Subtype) DescribeGoogle(JsonElement n)
     {
-        if (n.TryGetProperty("subscriptionNotification", out var sn))
+        if (n.TryGetProperty("oneTimeProductNotification", out var on))
         {
-            var code = sn.TryGetProperty("notificationType", out var nt) && nt.ValueKind == JsonValueKind.Number ? nt.GetInt32() : 0;
-            return ("SUBSCRIPTION", GoogleTypeName(code));
+            var code = on.TryGetProperty("notificationType", out var nt) && nt.ValueKind == JsonValueKind.Number ? nt.GetInt32() : 0;
+            return ("ONE_TIME_PRODUCT", code switch { 1 => "PURCHASED", 2 => "CANCELED", _ => $"TYPE_{code}" });
         }
         if (n.TryGetProperty("voidedPurchaseNotification", out _)) return ("VOIDED_PURCHASE", null);
         if (n.TryGetProperty("testNotification", out _)) return ("TEST", null);
+        if (n.TryGetProperty("subscriptionNotification", out _)) return ("SUBSCRIPTION", null);
         return ("OTHER", null);
     }
-
-    /// <summary>Códigos do RTDN de assinatura.</summary>
-    public static string GoogleTypeName(int code) => code switch
-    {
-        1 => "RECOVERED",
-        2 => "RENEWED",
-        3 => "CANCELED",
-        4 => "PURCHASED",
-        5 => "ON_HOLD",
-        6 => "IN_GRACE_PERIOD",
-        7 => "RESTARTED",
-        8 => "PRICE_CHANGE_CONFIRMED",
-        9 => "DEFERRED",
-        10 => "PAUSED",
-        11 => "PAUSE_SCHEDULE_CHANGED",
-        12 => "REVOKED",
-        13 => "EXPIRED",
-        19 => "PRICE_CHANGE_UPDATED",
-        20 => "PENDING_PURCHASE_CANCELED",
-        _ => $"TYPE_{code}",
-    };
 
     // ── Reprocessar ─────────────────────────────────────────────────────────────
 
@@ -296,9 +262,7 @@ public sealed class BillingNotificationService : IBillingNotificationService
 
         try
         {
-            using var doc = JsonDocument.Parse(ev.RawPayload);
-            var data = doc.RootElement.GetProperty("message").GetProperty("data").GetString() ?? "";
-            var n = JsonDocument.Parse(Encoding.UTF8.GetString(Convert.FromBase64String(data))).RootElement.Clone();
+            var (_, n) = ParsePubSub(ev.RawPayload);
             return await ProcessGoogleAsync(ev, n, ct);
         }
         catch (Exception ex) when (ex is JsonException or FormatException or KeyNotFoundException)
@@ -319,7 +283,7 @@ public sealed class BillingNotificationService : IBillingNotificationService
         return ev;
     }
 
-    private async Task<StoreNotificationOutcome> FailAsync(StoreEventEntity ev, Exception ex, string? storeSubscriptionId, CancellationToken ct)
+    private async Task<StoreNotificationOutcome> FailAsync(StoreEventEntity ev, Exception ex, string? storeReference, CancellationToken ct)
     {
         var transient = ex is StoreVerificationException { IsTransient: true } || ex is HttpRequestException or TaskCanceledException;
         _logger.LogWarning(ex, "[Billing] Falha ao processar aviso {Store} {Type} {ExternalId}.", ev.Store, ev.NotificationType, ev.ExternalId);
@@ -327,7 +291,7 @@ public sealed class BillingNotificationService : IBillingNotificationService
         // O que estava pela metade no rastreador não pode ir junto com a marcação de falha.
         _db.ChangeTracker.Clear();
         var fresh = await _db.StoreEvents.FirstAsync(e => e.Id == ev.Id, ct);
-        fresh.MarkFailed(ex.Message, storeSubscriptionId);
+        fresh.MarkFailed(ex.Message, storeReference);
         await _db.SaveChangesAsync(ct);
 
         return transient ? StoreNotificationOutcome.RetryLater : StoreNotificationOutcome.Ok;

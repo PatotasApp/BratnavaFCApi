@@ -88,7 +88,7 @@ public sealed class BillingAdminServiceTests
         var u3 = kit.AddUser("C");
         kit.AddGroup(u1.Id, kit.Now, "Em teste");
         kit.AddGroup(u2.Id, kit.Now.AddDays(-60), "Vencida");
-        var paid = kit.AddGroup(u3.Id, kit.Now.AddDays(-10), "Paga");
+        var paid = kit.AddGroup(u3.Id, kit.Now.AddDays(-31), "Paga");
         await kit.Billing().SubmitPurchaseAsync(paid.Id, u3.Id, new SubmitPurchaseDto("simulated", "patota_1m", null, null), null, default);
 
         var d = await kit.Admin().GetDashboardAsync(default);
@@ -100,27 +100,40 @@ public sealed class BillingAdminServiceTests
         d.SimulatedPurchasesEnabled.Should().BeTrue();
 
         var expired = await kit.Admin().ListGroupsAsync("expired", null, default);
+        expired.Should().NotContain(x => x.GroupName == "Paga");
         expired.Should().ContainSingle(x => x.GroupName == "Vencida");
     }
 
     [Fact]
-    public async Task Simulacao_RenovarReembolsarExpirar()
+    public async Task Estender_DuranteOTeste_EPacoteDepoisSomaNoFim()
     {
-        var kit = new BillingTestKit(nameof(Simulacao_RenovarReembolsarExpirar));
+        var kit = new BillingTestKit(nameof(Estender_DuranteOTeste_EPacoteDepoisSomaNoFim));
+        var user = kit.AddUser();
+        var g = kit.AddGroup(user.Id, kit.Now);
+        await kit.Admin().ExtendAsync(g.Id, user.Id, new ExtendBillingDto(10, "Cortesia"), default);
+
+        kit.Now = kit.Now.AddDays(1);
+        var paid = await kit.Billing().SubmitPurchaseAsync(g.Id, user.Id, new SubmitPurchaseDto("simulated", "patota_1m", null, null), null, default);
+
+        paid.Data!.AccessEndsAt.Should().Be(kit.Now.AddDays(-1).AddDays(40).AddMonths(1));
+    }
+
+    [Fact]
+    public async Task Simulacao_ReembolsoEDesfazer()
+    {
+        var kit = new BillingTestKit(nameof(Simulacao_ReembolsoEDesfazer));
         var user = kit.AddUser();
         var g = kit.AddGroup(user.Id, kit.Now.AddDays(-40));
         await kit.Billing().SubmitPurchaseAsync(g.Id, user.Id, new SubmitPurchaseDto("simulated", "patota_1m", null, null), null, default);
-        var subId = kit.Db.StoreSubscriptions.Single().Id;
+        var purchaseId = kit.Db.BillingPurchases.Single().Id;
         var admin = kit.Admin();
 
-        var renewed = await admin.SimulateAsync(subId, user.Id, new SimulateSubscriptionEventDto("renew"), default);
-        renewed.Data!.PaidUntil.Should().Be(kit.Now.AddMonths(2));
+        var refunded = await admin.SimulateAsync(purchaseId, user.Id, new SimulatePurchaseEventDto("refund"), default);
+        refunded.Data!.PaidUntil.Should().BeNull();
+        refunded.Data.Summary.Status.Should().Be("expired");
 
-        var refunded = await admin.SimulateAsync(subId, user.Id, new SimulateSubscriptionEventDto("refund"), default);
-        refunded.Data!.PaidUntil.Should().Be(kit.Now.AddMonths(1));
-
-        var expired = await admin.SimulateAsync(subId, user.Id, new SimulateSubscriptionEventDto("expire"), default);
-        expired.Data!.Summary.Status.Should().Be("grace");
+        var back = await admin.SimulateAsync(purchaseId, user.Id, new SimulatePurchaseEventDto("unrefund"), default);
+        back.Data!.PaidUntil.Should().Be(kit.Now.AddMonths(1));
     }
 }
 
@@ -166,18 +179,20 @@ public sealed class BillingReminderJobTests
     }
 
     [Fact]
-    public async Task ComRenovacaoAutomatica_NaoAvisa()
+    public async Task DepoisDePagar_LembreteFalaDoPlano()
     {
-        var kit = new BillingTestKit(nameof(ComRenovacaoAutomatica_NaoAvisa));
+        var kit = new BillingTestKit(nameof(DepoisDePagar_LembreteFalaDoPlano));
         kit.SetSettings(reminders: true);
         var user = kit.AddUser();
         var g = kit.AddGroup(user.Id, kit.Now.AddDays(-60));
-        await kit.Billing().ApplyVerifiedAsync(new VerifiedStoreTransaction(
-            BillingStore.Simulated, "sub-1", "tx-1", "patota_1m", kit.Now.AddDays(-23).AddMonths(-1).AddDays(0), kit.Now.AddDays(7),
-            StoreSubscriptionState.Active, true, false, null, null, g.Id, null, null, "Simulated", false), g.Id, user.Id, default);
+        kit.Now = kit.Now.AddMonths(-1).AddDays(3);
+        await kit.Billing().SubmitPurchaseAsync(g.Id, user.Id, new SubmitPurchaseDto("simulated", "patota_1m", null, null), null, default);
+        kit.Now = kit.Now.AddMonths(1).AddDays(-3); // faltam 3 dias para o fim do pacote
         var (job, push) = Create(kit);
 
-        (await job.SendRemindersAsync(default)).Should().Be(0);
+        (await job.SendRemindersAsync(default)).Should().Be(1);
+        push.Verify(p => p.SendToUsersAsync(It.IsAny<List<Guid>>(), "Plano vence em 3 dias", It.Is<string>(b => b.StartsWith("O plano")),
+            It.IsAny<Dictionary<string, string>?>(), It.IsAny<CancellationToken>(), g.Id), Times.Once);
     }
 
     [Fact]

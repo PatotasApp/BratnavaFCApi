@@ -8,7 +8,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace BratnavaFC.Api.Controllers;
 
 /// <summary>
-/// Plano da patota no app. Só admin e financeiro da patota enxergam e pagam; para o
+/// Plano da patota no app (pacotes avulsos de 1, 3, 6 ou 12 meses que somam ao
+/// vencimento). Só admin e financeiro da patota enxergam e pagam; para o
 /// jogador comum estes endpoints respondem 403 e o app não mostra nada de cobrança.
 ///
 /// Liberado com a patota vencida, claro: é por aqui que ela volta a funcionar.
@@ -62,15 +63,6 @@ public sealed class BillingController : GroupAuthorizedController
         if (userId == null) return Unauthorized();
 
         return base.ToResponse(Result<RestoreResultDto>.Ok(await _billing.RestoreAsync(userId.Value, dto, ct)));
-    }
-
-    // GET /api/billing/me/subscriptions
-    [HttpGet("me/subscriptions")]
-    public async Task<IActionResult> MySubscriptions(CancellationToken ct)
-    {
-        var userId = GetCurrentUserId();
-        if (userId == null) return Unauthorized();
-        return base.ToResponse(Result<IReadOnlyList<MySubscriptionDto>>.Ok(await _billing.GetMySubscriptionsAsync(userId.Value, ct)));
     }
 
     private async Task<bool> CanManageBillingAsync(Guid groupId, CancellationToken ct) =>

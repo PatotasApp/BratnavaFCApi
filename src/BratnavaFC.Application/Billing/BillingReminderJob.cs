@@ -16,9 +16,9 @@ public interface IBillingReminderJob
 /// Job diário da cobrança:
 /// <list type="bullet">
 /// <item>lembrete por push para admins e financeiros N dias antes de vencer (padrão 7, 3, 1 e
-/// no dia), só quando nada vai renovar sozinho e os lembretes estão ligados no painel;</item>
-/// <item>nova tentativa de confirmar (acknowledge) compras do Google que ficaram sem
-/// confirmação — o Google reembolsa sozinho depois de 3 dias.</item>
+/// no dia), quando os lembretes estão ligados no painel;</item>
+/// <item>nova tentativa de consumir compras do Google que ficaram sem consumo (o Google
+/// reembolsa sozinho depois de 3 dias).</item>
 /// </list>
 /// </summary>
 public sealed class BillingReminderJob : IBillingReminderJob
@@ -43,7 +43,9 @@ public sealed class BillingReminderJob : IBillingReminderJob
 
     public async Task ExecuteAsync(CancellationToken ct = default)
     {
-        await RetryAcknowledgementsAsync(ct);
+        var consumed = await _billing.ConsumePendingAsync(ct);
+        if (consumed > 0)
+            _logger.LogInformation("[Billing] {Count} compra(s) do Google consumidas na nova tentativa.", consumed);
         await SendRemindersAsync(ct);
     }
 
@@ -70,16 +72,10 @@ public sealed class BillingReminderJob : IBillingReminderJob
             .Where(b => !b.IsLifetime)
             .ToListAsync(ct);
 
-        var liveRenewing = (await _db.StoreSubscriptions.AsNoTracking()
-                .Where(s => s.AutoRenewEnabled).ToListAsync(ct))
-            .Where(s => BillingService.IsLive(s, now))
-            .Select(s => s.GroupId).ToHashSet();
-
         var sent = 0;
         foreach (var billing in candidates)
         {
             if (billing.AccessEndsAt > horizon) continue;
-            if (liveRenewing.Contains(billing.GroupId)) continue;
 
             var snap = BillingStatusCalculator.Calculate(billing, settings.GraceDays, settings.EnforcementEnabled, now);
             if (!days.Contains(snap.DaysRemaining)) continue;
@@ -95,7 +91,7 @@ public sealed class BillingReminderJob : IBillingReminderJob
                 .Distinct().ToListAsync(ct);
             if (userIds.Count == 0) continue;
 
-            var (title, body) = Message(groupName, snap.DaysRemaining, snap.AccessEndsOn, billing.PaidUntil == null);
+            var (title, body) = Message(groupName, snap.DaysRemaining, snap.AccessEndsOn, !billing.HasPaidPeriod);
 
             await _push.SendToUsersAsync(userIds, title, body,
                 data: new Dictionary<string, string>
@@ -123,33 +119,9 @@ public sealed class BillingReminderJob : IBillingReminderJob
         var date = endsOn.ToString("dd/MM");
         return daysRemaining switch
         {
-            0 => ("Plano vence hoje", $"{what} da patota vence hoje ({date}). Abra Minha patota → Plano da patota para continuar usando tudo."),
+            0 => ("Plano vence hoje", $"{what} da patota vence hoje ({date}). Pague em Minha patota → Plano da patota para continuar usando tudo."),
             1 => ("Plano vence amanhã", $"{what} da patota vence amanhã ({date}). Pague em Minha patota → Plano da patota."),
             _ => ($"Plano vence em {daysRemaining} dias", $"{what} da patota vence em {date}. Pague em Minha patota → Plano da patota."),
         };
-    }
-
-    private async Task RetryAcknowledgementsAsync(CancellationToken ct)
-    {
-        var verifier = _billing.GetVerifier(BillingStore.Google);
-        if (verifier is not { IsAvailable: true }) return;
-
-        var pending = await _db.StoreSubscriptions.AsNoTracking()
-            .Where(s => s.Store == BillingStore.Google && s.AcknowledgedAt == null
-                        && s.State != StoreSubscriptionState.Pending && s.State != StoreSubscriptionState.Expired)
-            .ToListAsync(ct);
-
-        foreach (var s in pending)
-        {
-            try
-            {
-                var tx = await verifier.VerifyAsync(new StorePurchaseProof(s.ProductId, null, s.StoreSubscriptionId, s.GroupId), ct);
-                await _billing.ApplyVerifiedAsync(tx, s.GroupId, null, ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "[Billing] Nova tentativa de confirmar a compra {Token} falhou.", s.StoreSubscriptionId);
-            }
-        }
     }
 }

@@ -49,6 +49,36 @@ namespace BratnavaFC.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "BillingPurchases",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    GroupId = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: true),
+                    Store = table.Column<int>(type: "integer", nullable: false),
+                    ProductId = table.Column<string>(type: "character varying(150)", maxLength: 150, nullable: false),
+                    TransactionId = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    PurchaseToken = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    Months = table.Column<int>(type: "integer", nullable: false),
+                    PurchasedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    PeriodStart = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    PeriodEnd = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    State = table.Column<int>(type: "integer", nullable: false),
+                    PriceMicros = table.Column<long>(type: "bigint", nullable: true),
+                    Currency = table.Column<string>(type: "character varying(3)", maxLength: 3, nullable: true),
+                    Environment = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    ConsumedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    RefundedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    RefundReason = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    CreateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_BillingPurchases", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "BillingSettings",
                 columns: table => new
                 {
@@ -89,7 +119,7 @@ namespace BratnavaFC.Infrastructure.Migrations
                     TrialEndsAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     TrialGranted = table.Column<bool>(type: "boolean", nullable: false),
                     PaidUntil = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    CourtesyUntil = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    HasPaidPeriod = table.Column<bool>(type: "boolean", nullable: false),
                     IsLifetime = table.Column<bool>(type: "boolean", nullable: false),
                     LifetimeReason = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: true),
                     LastReminderKey = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: true),
@@ -120,7 +150,7 @@ namespace BratnavaFC.Infrastructure.Migrations
                     Status = table.Column<int>(type: "integer", nullable: false),
                     Error = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
                     GroupId = table.Column<Guid>(type: "uuid", nullable: true),
-                    StoreSubscriptionId = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: true),
+                    StoreReference = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     ProcessedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     Attempts = table.Column<int>(type: "integer", nullable: false),
                     CreateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -129,64 +159,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_StoreEvents", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "StoreSubscriptions",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    GroupId = table.Column<Guid>(type: "uuid", nullable: false),
-                    PayerUserId = table.Column<Guid>(type: "uuid", nullable: true),
-                    Store = table.Column<int>(type: "integer", nullable: false),
-                    StoreSubscriptionId = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: false),
-                    ProductId = table.Column<string>(type: "character varying(150)", maxLength: 150, nullable: false),
-                    State = table.Column<int>(type: "integer", nullable: false),
-                    AutoRenewEnabled = table.Column<bool>(type: "boolean", nullable: false),
-                    ExpiresAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    Environment = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
-                    AcknowledgedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    LastSyncedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    CreateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_StoreSubscriptions", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "BillingPurchases",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    GroupId = table.Column<Guid>(type: "uuid", nullable: false),
-                    SubscriptionId = table.Column<Guid>(type: "uuid", nullable: true),
-                    UserId = table.Column<Guid>(type: "uuid", nullable: true),
-                    Store = table.Column<int>(type: "integer", nullable: false),
-                    ProductId = table.Column<string>(type: "character varying(150)", maxLength: 150, nullable: false),
-                    TransactionId = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
-                    Months = table.Column<int>(type: "integer", nullable: false),
-                    PurchasedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    ExpiresAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    State = table.Column<int>(type: "integer", nullable: false),
-                    PriceMicros = table.Column<long>(type: "bigint", nullable: true),
-                    Currency = table.Column<string>(type: "character varying(3)", maxLength: 3, nullable: true),
-                    Environment = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
-                    RefundedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    RefundReason = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
-                    CreateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdateDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_BillingPurchases", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_BillingPurchases_StoreSubscriptions_SubscriptionId",
-                        column: x => x.SubscriptionId,
-                        principalTable: "StoreSubscriptions",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
                 });
 
             migrationBuilder.CreateIndex(
@@ -213,15 +185,15 @@ namespace BratnavaFC.Infrastructure.Migrations
                 columns: new[] { "GroupId", "PurchasedAt" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_BillingPurchases_PurchaseToken",
+                table: "BillingPurchases",
+                column: "PurchaseToken");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_BillingPurchases_Store_TransactionId",
                 table: "BillingPurchases",
                 columns: new[] { "Store", "TransactionId" },
                 unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_BillingPurchases_SubscriptionId",
-                table: "BillingPurchases",
-                column: "SubscriptionId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_BillingTrialGrants_GroupId",
@@ -244,22 +216,6 @@ namespace BratnavaFC.Infrastructure.Migrations
                 columns: new[] { "Store", "ExternalId" },
                 unique: true);
 
-            migrationBuilder.CreateIndex(
-                name: "IX_StoreSubscriptions_GroupId",
-                table: "StoreSubscriptions",
-                column: "GroupId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_StoreSubscriptions_PayerUserId",
-                table: "StoreSubscriptions",
-                column: "PayerUserId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_StoreSubscriptions_Store_StoreSubscriptionId",
-                table: "StoreSubscriptions",
-                columns: new[] { "Store", "StoreSubscriptionId" },
-                unique: true);
-
             // Parâmetros iniciais: 30 dias de teste, 3 de tolerância, bloqueio e lembretes
             // DESLIGADOS. LaunchedAt = agora: patotas que já existem ganham o teste a partir
             // do primeiro acesso, não da criação.
@@ -269,8 +225,8 @@ namespace BratnavaFC.Infrastructure.Migrations
                 ON CONFLICT ("Id") DO NOTHING;
                 """);
 
-            // Produtos (Store: 1 = Apple, 2 = Google, 3 = Simulada). Preço de referência em
-            // centavos: R$ 29,90/mês; 3, 6 e 12 meses com 5%, 7% e 10% de desconto.
+            // Pacotes avulsos (Store: 1 = Apple, 2 = Google, 3 = Simulada). Preço de referência
+            // em centavos: R$ 29,90/mês; 3, 6 e 12 meses com 5%, 7% e 10% de desconto.
             // O preço real é o cadastrado em cada loja.
             migrationBuilder.Sql("""
                 INSERT INTO "BillingProducts" ("Id", "Store", "ProductId", "Months", "ReferencePriceCents", "IsActive", "CreateDate")
@@ -287,8 +243,8 @@ namespace BratnavaFC.Infrastructure.Migrations
 
             // Bratnava FC: plano vitalício (isenção permanente). Só se a patota existir no banco.
             migrationBuilder.Sql("""
-                INSERT INTO "GroupBillings" ("GroupId", "TrialStartedAt", "TrialEndsAt", "TrialGranted", "IsLifetime", "LifetimeReason", "CreatedAt")
-                SELECT g."Id", now(), now(), FALSE, TRUE, 'Bratnava FC: plano vitalício', now()
+                INSERT INTO "GroupBillings" ("GroupId", "TrialStartedAt", "TrialEndsAt", "TrialGranted", "HasPaidPeriod", "IsLifetime", "LifetimeReason", "CreatedAt")
+                SELECT g."Id", now(), now(), FALSE, FALSE, TRUE, 'Bratnava FC: plano vitalício', now()
                 FROM "Groups" g
                 WHERE g."Id" = '3f401edf-d309-4bae-97d8-28eae0da7a8a'
                 ON CONFLICT ("GroupId") DO UPDATE SET "IsLifetime" = TRUE, "LifetimeReason" = EXCLUDED."LifetimeReason";
@@ -318,9 +274,6 @@ namespace BratnavaFC.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "StoreEvents");
-
-            migrationBuilder.DropTable(
-                name: "StoreSubscriptions");
         }
     }
 }

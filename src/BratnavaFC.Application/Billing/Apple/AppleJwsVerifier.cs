@@ -6,7 +6,7 @@ using System.Text.Json;
 namespace BratnavaFC.Application.Billing.Apple;
 
 /// <summary>
-/// Confere um JWS assinado pela Apple (transação, renovação ou notificação V2), do jeito da
+/// Confere um JWS assinado pela Apple (transação ou notificação V2), do jeito da
 /// biblioteca oficial da Apple:
 /// <list type="number">
 /// <item>o cabeçalho traz <c>alg = ES256</c> e a cadeia <c>x5c</c> (folha, intermediário, raiz);</item>

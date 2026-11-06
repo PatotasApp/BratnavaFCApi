@@ -15,7 +15,7 @@ namespace BratnavaFC.Api.Controllers;
 /// <list type="bullet">
 /// <item>Apple: o corpo é um JWS assinado pela Apple, conferido até a raiz da Apple;</item>
 /// <item>Google: a URL do push do Pub/Sub leva <c>?token=</c> com o segredo
-/// <c>Billing:Google:PubSubToken</c>, e o estado da assinatura é sempre relido na API do Google.</item>
+/// <c>Billing:Google:PubSubToken</c>, e a compra é sempre relida na API do Google.</item>
 /// </list>
 /// URLs para cadastrar nos consoles:
 /// <c>https://&lt;api&gt;/api/billing/webhooks/apple</c> e

@@ -20,9 +20,8 @@ public sealed record GroupBillingStatusDto(
     bool IsReadOnly,
     bool EnforcementEnabled,
     int GraceDays,
-    /// <summary>Mostrar a faixa do Dashboard (faltam 7 dias ou menos e nada vai renovar sozinho).</summary>
+    /// <summary>Mostrar a faixa do Dashboard (faltam 7 dias ou menos).</summary>
     bool ShowBanner,
-    BillingSubscriptionDto? Subscription,
     bool CanPurchase,
     string? PurchaseBlockedReason,
     IReadOnlyList<BillingProductDto> Products,
@@ -31,27 +30,19 @@ public sealed record GroupBillingStatusDto(
     string TermsUrl,
     string PrivacyUrl);
 
-public sealed record BillingSubscriptionDto(
-    Guid Id,
-    string Store,
-    string ProductId,
-    int Months,
-    bool AutoRenewEnabled,
-    DateTime? ExpiresAt,
-    string State,
-    string? PayerName,
-    bool IsMine);
-
+/// <summary>Pacote à venda. <see cref="ExtendsUntilOn"/>: até quando a patota fica paga se comprar agora.</summary>
 public sealed record BillingProductDto(
     string Store,
     string ProductId,
     int Months,
-    decimal ReferencePrice);
+    decimal ReferencePrice,
+    string ExtendsUntilOn);
 
 public sealed record BillingHistoryItemDto(
     Guid Id,
     DateTime PurchasedAt,
-    DateTime ExpiresAt,
+    DateTime? PeriodStart,
+    DateTime? PeriodEnd,
     int Months,
     string Store,
     string State,
@@ -72,9 +63,6 @@ public sealed record RestorePurchasesDto(string Store, IReadOnlyList<RestoreItem
 public sealed record RestoreItemDto(string ProductId, string? TransactionId, string? PurchaseToken);
 
 public sealed record RestoreResultDto(int Restored, IReadOnlyList<string> Groups, IReadOnlyList<string> Errors);
-
-/// <summary>Assinatura ativa do usuário (para o app avisar antes de comprar para outra patota).</summary>
-public sealed record MySubscriptionDto(Guid GroupId, string GroupName, string Store, string ProductId, DateTime? ExpiresAt, bool AutoRenewEnabled);
 
 // ── GodMode (site) ─────────────────────────────────────────────────────────────
 
@@ -110,9 +98,8 @@ public sealed record BillingGroupListItemDto(
     string? AccessEndsOn,
     int? DaysRemaining,
     bool IsLifetime,
-    string? Store,
-    bool AutoRenewEnabled,
     int PurchaseCount,
+    DateTime? LastPurchaseAt,
     DateTime GroupCreatedAt);
 
 public sealed record BillingGroupDetailDto(
@@ -121,28 +108,22 @@ public sealed record BillingGroupDetailDto(
     DateTime TrialEndsAt,
     bool TrialGranted,
     DateTime? PaidUntil,
-    DateTime? CourtesyUntil,
     string? LifetimeReason,
-    IReadOnlyList<AdminSubscriptionDto> Subscriptions,
     IReadOnlyList<AdminPurchaseDto> Purchases,
     IReadOnlyList<BillingAdjustmentDto> Adjustments,
     IReadOnlyList<StoreEventDto> Events);
 
-public sealed record AdminSubscriptionDto(
-    Guid Id, string Store, string StoreSubscriptionId, string ProductId, string State, bool AutoRenewEnabled,
-    DateTime? ExpiresAt, string Environment, string? PayerName, DateTime? AcknowledgedAt, DateTime LastSyncedAt);
-
 public sealed record AdminPurchaseDto(
-    Guid Id, Guid GroupId, string? GroupName, string Store, string ProductId, string TransactionId, int Months,
-    DateTime PurchasedAt, DateTime ExpiresAt, string State, decimal? Price, string? Currency, string Environment,
-    string? PayerName, DateTime? RefundedAt, string? RefundReason);
+    Guid Id, Guid GroupId, string? GroupName, string Store, string ProductId, string TransactionId, string? PurchaseToken,
+    int Months, DateTime PurchasedAt, DateTime? PeriodStart, DateTime? PeriodEnd, string State, decimal? Price,
+    string? Currency, string Environment, string? PayerName, DateTime? ConsumedAt, DateTime? RefundedAt, string? RefundReason);
 
 public sealed record BillingAdjustmentDto(
     Guid Id, Guid? GroupId, string Type, int? Days, string Reason, string? Details, string? ActorName, DateTime CreatedAt);
 
 public sealed record StoreEventDto(
     Guid Id, string Store, string ExternalId, string NotificationType, string? Subtype, string Status, string? Error,
-    Guid? GroupId, string? StoreSubscriptionId, int Attempts, DateTime ReceivedAt, DateTime? ProcessedAt);
+    Guid? GroupId, string? StoreReference, int Attempts, DateTime ReceivedAt, DateTime? ProcessedAt);
 
 public sealed record BillingSettingsDto(
     int TrialDays,
@@ -169,12 +150,11 @@ public sealed record SetLifetimeDto(bool Enabled, string Reason);
 public sealed record ReprocessPurchaseDto(string Store, string ProductId, string? TransactionId, string? PurchaseToken, Guid? GroupId, string Reason);
 
 public sealed record BillingProblemsDto(
-    IReadOnlyList<AdminSubscriptionWithGroupDto> UnacknowledgedSubscriptions,
+    /// <summary>Google: compras confirmadas mas ainda não consumidas na loja (o Google reembolsa em 3 dias).</summary>
+    IReadOnlyList<AdminPurchaseDto> UnconsumedPurchases,
     IReadOnlyList<AdminPurchaseDto> PendingPurchases,
     IReadOnlyList<StoreEventDto> FailedEvents,
     IReadOnlyList<AdminPurchaseDto> RecentRefunds);
 
-public sealed record AdminSubscriptionWithGroupDto(AdminSubscriptionDto Subscription, Guid GroupId, string? GroupName);
-
-/// <summary>Ação simulada no painel (só Development): "renew" | "refund" | "cancel" | "resume" | "expire".</summary>
-public sealed record SimulateSubscriptionEventDto(string Action);
+/// <summary>Ação simulada numa compra simulada (só Development): "refund" | "unrefund".</summary>
+public sealed record SimulatePurchaseEventDto(string Action);

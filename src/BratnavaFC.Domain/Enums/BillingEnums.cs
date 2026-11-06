@@ -1,6 +1,6 @@
 namespace BratnavaFC.Domain.Enums;
 
-/// <summary>Loja onde a assinatura da patota foi comprada.</summary>
+/// <summary>Loja onde o pacote da patota foi comprado.</summary>
 public enum BillingStore
 {
     Apple = 1,
@@ -18,7 +18,7 @@ public enum GroupBillingStatus
 {
     /// <summary>Isenção permanente (ex.: Bratnava FC).</summary>
     Lifetime = 1,
-    /// <summary>Dentro do teste grátis (ou de uma cortesia dada pelo GodMode).</summary>
+    /// <summary>Dentro do teste grátis (ou de dias dados pelo GodMode, sem pacote pago).</summary>
     Trial = 2,
     /// <summary>Período pago em vigor.</summary>
     Active = 3,
@@ -28,29 +28,15 @@ public enum GroupBillingStatus
     Expired = 5,
 }
 
-/// <summary>Estado de uma transação (compra ou renovação) vinda da loja.</summary>
+/// <summary>Estado de uma compra de pacote vinda da loja.</summary>
 public enum BillingPurchaseState
 {
-    /// <summary>Confirmada na loja; conta para o período pago.</summary>
+    /// <summary>Confirmada na loja; soma os meses ao vencimento.</summary>
     Confirmed = 1,
-    /// <summary>Pagamento ainda pendente na loja (ex.: boleto no Google); não libera nada.</summary>
+    /// <summary>Pagamento ainda pendente na loja (ex.: boleto no Google); não soma nada.</summary>
     Pending = 2,
-    /// <summary>Reembolsada ou revogada; o período sai da conta.</summary>
+    /// <summary>Reembolsada ou cancelada; os meses saem da conta.</summary>
     Refunded = 3,
-}
-
-/// <summary>Estado da assinatura (o "contrato" com renovação automática) na loja.</summary>
-public enum StoreSubscriptionState
-{
-    Active = 1,
-    /// <summary>A loja não conseguiu cobrar e está tentando de novo; a loja ainda dá acesso.</summary>
-    GracePeriod = 2,
-    /// <summary>A loja não conseguiu cobrar e não dá mais acesso enquanto tenta.</summary>
-    BillingRetry = 3,
-    Expired = 4,
-    Revoked = 5,
-    Paused = 6,
-    Pending = 7,
 }
 
 public enum StoreEventStatus
