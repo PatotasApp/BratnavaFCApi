@@ -6,6 +6,7 @@ using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Cloudflare;
 using BratnavaFC.Infrastructure.Data;
+using BratnavaFC.Infrastructure.Spreadsheets;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -18,14 +19,17 @@ public class GroupService : IGroupService
     private readonly IRepositoryBase<GroupEntity> _repository;
     private readonly IPushService _push;
     private readonly IImageStorageService _images;
+    private readonly ISpreadsheetStorage? _spreadsheets;
 
     public GroupService(
         AppDbContext context,
         ILogger<GroupService> logger,
         IRepositoryBase<GroupEntity> repository,
         IPushService push,
-        IImageStorageService images)
+        IImageStorageService images,
+        ISpreadsheetStorage? spreadsheets = null)
     {
+        _spreadsheets = spreadsheets;
         _context = context;
         _logger = logger;
         _repository = repository;
@@ -98,9 +102,11 @@ public class GroupService : IGroupService
             if (!await _context.Groups.AnyAsync(g => g.Id == groupId, cancellationToken))
                 return Result.Fail("Grupo não encontrado.", ResultStatus.NotFound);
 
-            await DeleteManyAsync([groupId], cancellationToken);
+            var spreadsheetKeys = await DeleteManyAsync([groupId], cancellationToken);
 
             await tx.CommitAsync(cancellationToken);
+
+            await DeleteSpreadsheetFilesAsync(spreadsheetKeys, cancellationToken);
 
             return Result.Ok("Grupo removido com sucesso.");
         }
@@ -189,10 +195,17 @@ public class GroupService : IGroupService
     /// de principal — e emite os comandos já na ordem certa. Verificado contra Postgres real
     /// com partidas, escalações, cores e configurações no mesmo grupo.
     /// </summary>
-    public async Task DeleteManyAsync(IReadOnlyCollection<Guid> groupIds, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<string>> DeleteManyAsync(IReadOnlyCollection<Guid> groupIds, CancellationToken cancellationToken)
     {
         if (groupIds.Count == 0)
-            return;
+            return [];
+
+        // Planilhas enviadas: a linha sai aqui (o CASCADE faria o mesmo), e a key volta para
+        // quem chama apagar o arquivo depois do commit — apagar antes deixaria a linha sem
+        // arquivo se a transação de fora voltasse atrás.
+        var spreadsheets = await _context.GroupSpreadsheets
+            .Where(x => groupIds.Contains(x.GroupId)).ToListAsync(cancellationToken);
+        _context.GroupSpreadsheets.RemoveRange(spreadsheets);
 
         // Partidas levam MatchPlayers, Votes e Goals pelo CASCADE de MatchId; a patota leva
         // GroupAdmins, GroupInvites, Polls e os financeiros. Carregadas aqui só as quatro que
@@ -220,7 +233,12 @@ public class GroupService : IGroupService
             await _context.Groups.Where(x => groupIds.Contains(x.Id)).ToListAsync(cancellationToken));
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        return spreadsheets.Select(x => x.StorageKey).ToList();
     }
+
+    public Task DeleteSpreadsheetFilesAsync(IReadOnlyCollection<string>? storageKeys, CancellationToken cancellationToken)
+        => GroupSpreadsheetService.DeleteFilesQuietlyAsync(_spreadsheets, _logger, storageKeys, cancellationToken);
 
     public async Task<Result> InactivateAsync(Guid groupId, CancellationToken cancellationToken)
     {

@@ -523,9 +523,17 @@ public class UserService : IUserService
 
         // Patotas que ficam sem ninguém somem junto. Precisa ser o primeiro passo: é o vínculo
         // dos jogadores que identifica quem ainda está lá, e ele é desfeito logo abaixo.
-        await _groups.DeleteManyAsync(
+        var spreadsheetKeys = new List<string>(await _groups.DeleteManyAsync(
             await _groups.FindAbandonedByAsync(userId, cancellationToken),
-            cancellationToken);
+            cancellationToken) ?? []);
+
+        // Planilhas que ele mandou para patotas que continuam: saem com a conta (linha aqui,
+        // arquivo depois do commit). O arquivo é dele — quem quiser a importação manda de novo.
+        spreadsheetKeys.AddRange(await _db.GroupSpreadsheets
+            .Where(x => x.UploadedByUserId == userId)
+            .Select(x => x.StorageKey)
+            .ToListAsync(cancellationToken));
+        await _db.GroupSpreadsheets.Where(x => x.UploadedByUserId == userId).ExecuteDeleteAsync(cancellationToken);
 
         // Jogadores viram convidados: o histórico da patota continua de pé, sem identidade.
         // Mesmo movimento do LeaveGroupAsync, aplicado a todas as patotas de uma vez.
@@ -607,6 +615,8 @@ public class UserService : IUserService
                 _logger.LogWarning(ex, "[Users] Avatar do usuário excluído {UserId} não pôde ser removido do R2.", userId);
             }
         }
+
+        await _groups.DeleteSpreadsheetFilesAsync(spreadsheetKeys, cancellationToken);
 
         _logger.LogInformation("[Users] Conta {UserId} excluída a pedido do próprio usuário.", userId);
 
