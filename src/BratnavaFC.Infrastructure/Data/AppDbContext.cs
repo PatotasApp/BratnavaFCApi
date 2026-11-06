@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using BratnavaFC.Domain.Entities;
+using BratnavaFC.Domain.Entities.Billing;
 using BratnavaFC.Infrastructure.Data.Configurations;
 using Microsoft.EntityFrameworkCore;
 
@@ -57,6 +58,13 @@ public class AppDbContext : DbContext
     public DbSet<ChampionshipBetEntity> ChampionshipBets => Set<ChampionshipBetEntity>();
     public DbSet<ChampionshipBetSelectionEntity> ChampionshipBetSelections => Set<ChampionshipBetSelectionEntity>();
     public DbSet<ChampionshipGameEventEntity> ChampionshipGameEvents => Set<ChampionshipGameEventEntity>();
+    public DbSet<BillingSettingsEntity> BillingSettings => Set<BillingSettingsEntity>();
+    public DbSet<BillingProductEntity> BillingProducts => Set<BillingProductEntity>();
+    public DbSet<GroupBillingEntity> GroupBillings => Set<GroupBillingEntity>();
+    public DbSet<BillingTrialGrantEntity> BillingTrialGrants => Set<BillingTrialGrantEntity>();
+    public DbSet<BillingPurchaseEntity> BillingPurchases => Set<BillingPurchaseEntity>();
+    public DbSet<BillingAdjustmentEntity> BillingAdjustments => Set<BillingAdjustmentEntity>();
+    public DbSet<StoreEventEntity> StoreEvents => Set<StoreEventEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -123,6 +131,15 @@ public class AppDbContext : DbContext
 
         // ── Financial Transactions ───────────────────────────────────────────
         modelBuilder.ApplyConfiguration(new GroupTransactionEntityConfiguration());
+
+        // ── Cobrança da patota (lojas) ───────────────────────────────────────
+        modelBuilder.ApplyConfiguration(new BillingSettingsEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new BillingProductEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new GroupBillingEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new BillingTrialGrantEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new BillingPurchaseEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new BillingAdjustmentEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new StoreEventEntityConfiguration());
     }
 
     public override int SaveChanges()

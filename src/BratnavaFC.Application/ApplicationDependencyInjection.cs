@@ -1,4 +1,7 @@
 using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Billing;
+using BratnavaFC.Application.Billing.Apple;
+using BratnavaFC.Application.Billing.Google;
 using BratnavaFC.Application.Services;
 using BratnavaFC.Application.TeamGeneration;
 using BratnavaFC.Application.TeamGeneration.MultiTeam;
@@ -33,6 +36,7 @@ public static class ApplicationDependencyInjection
         services.AddNotificationScheduling(backgroundJobsEnabled);
         services.AddRecurringJobHandlers(backgroundJobsEnabled);
         services.AddHolidayService();
+        services.AddBilling(configuration, backgroundJobsEnabled);
 
         return services;
     }
@@ -58,6 +62,14 @@ public static class ApplicationDependencyInjection
             "0 13 10,20 * *",
             utc);
 
+        // 12:00 UTC = 9h em Brasília: lembretes de vencimento da patota e nova tentativa de
+        // consumir compras do Google.
+        recurringJobs.AddOrUpdate<IBillingReminderJob>(
+            "billing-reminders",
+            job => job.ExecuteAsync(CancellationToken.None),
+            "0 12 * * *",
+            utc);
+
         recurringJobs.AddOrUpdate<IFailedJobCleanupJob>(
             "failed-job-cleanup",
             job => job.ExecuteAsync(CancellationToken.None),
@@ -69,7 +81,7 @@ public static class ApplicationDependencyInjection
         recurringJobs.RemoveIfExists("match-scheduler");
         recurringJobs.RemoveIfExists("birthday-daily");
 
-        logger.LogInformation("[Startup] 3 jobs recorrentes registrados, 2 removidos do storage.");
+        logger.LogInformation("[Startup] 4 jobs recorrentes registrados, 2 removidos do storage.");
     }
 
     private static void AddDomainServices(this IServiceCollection services)
@@ -132,6 +144,31 @@ public static class ApplicationDependencyInjection
         services.AddScoped<IMonthlyPaymentReminderJob, MonthlyPaymentReminderJob>();
         services.AddScoped<IMatchSchedulerJob, MatchSchedulerJob>();
         services.AddScoped<IFailedJobCleanupJob, FailedJobCleanupJob>();
+    }
+
+    /// <summary>
+    /// Cobrança da patota pelas lojas. Os três verificadores entram sempre; cada um diz se
+    /// está disponível (credenciais da loja; a simulada só em Development com o flag).
+    /// </summary>
+    private static void AddBilling(this IServiceCollection services, IConfiguration configuration, bool backgroundJobsEnabled)
+    {
+        services.Configure<BillingOptions>(configuration.GetSection(BillingOptions.Section));
+        services.AddHttpClient(AppleStoreVerifier.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(20));
+        services.AddHttpClient(GooglePlayVerifier.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(20));
+
+        services.AddSingleton<AppleStoreVerifier>();
+        services.AddSingleton<GooglePlayVerifier>();
+        services.AddScoped<SimulatedStoreVerifier>();
+        services.AddScoped<IStoreVerifier>(sp => sp.GetRequiredService<AppleStoreVerifier>());
+        services.AddScoped<IStoreVerifier>(sp => sp.GetRequiredService<GooglePlayVerifier>());
+        services.AddScoped<IStoreVerifier>(sp => sp.GetRequiredService<SimulatedStoreVerifier>());
+
+        services.AddScoped<IBillingService, BillingService>();
+        services.AddScoped<IBillingAdminService, BillingAdminService>();
+        services.AddScoped<IBillingNotificationService, BillingNotificationService>();
+
+        if (backgroundJobsEnabled)
+            services.AddScoped<IBillingReminderJob, BillingReminderJob>();
     }
 
     private static void AddHolidayService(this IServiceCollection services)
