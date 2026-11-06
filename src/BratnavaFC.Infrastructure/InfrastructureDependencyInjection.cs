@@ -3,6 +3,7 @@ using BratnavaFC.Infrastructure.Data;
 using BratnavaFC.Infrastructure.Firebase;
 using BratnavaFC.Infrastructure.Redis;
 using BratnavaFC.Infrastructure.Repositories;
+using BratnavaFC.Infrastructure.Spreadsheets;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 using Hangfire;
@@ -31,6 +32,7 @@ public static class InfrastructureDependencyInjection
         services.AddReplayEventing(configuration, environment, isDevelopment);
         services.AddReplayStorage(configuration, environment, isDevelopment);
         services.AddImageStorage(configuration, environment, isDevelopment);
+        services.AddSpreadsheetStorage(configuration, environment, isDevelopment, logger);
         services.AddFirebase(logger);
         services.AddExternalHttpClients();
 
@@ -281,6 +283,45 @@ public static class InfrastructureDependencyInjection
         services.AddSingleton<IImageProcessor, ImageProcessor>();
         services.AddSingleton<IImageStorageService, R2ImageStorageService>();
     }
+
+    /// <summary>
+    /// Planilhas enviadas pelas patotas: R2 privado (fora de Development, sempre) ou disco
+    /// (Development sem credencial do R2, ou Provider = "disk" de propósito).
+    /// </summary>
+    private static void AddSpreadsheetStorage(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment environment,
+        bool isDevelopment,
+        ILogger logger)
+    {
+        var section = configuration.GetSection(SpreadsheetStorageOptions.SectionName);
+        services.AddOptions<SpreadsheetStorageOptions>().Bind(section);
+
+        var provider = (section["Provider"] ?? "").Trim().ToLowerInvariant();
+        var useDisk = provider == "disk" || (provider != "r2" && isDevelopment && !IsR2Configured(configuration));
+
+        if (useDisk)
+        {
+            var localPath = section["LocalPath"];
+            if (string.IsNullOrWhiteSpace(localPath))
+                localPath = Path.Combine(environment.ContentRootPath, "App_Data", "spreadsheets");
+
+            if (!isDevelopment)
+                logger.LogWarning("[Startup] Planilhas em disco fora de Development: o disco da máquina pode ser efêmero.");
+
+            services.AddSingleton<ISpreadsheetStorage>(new LocalDiskSpreadsheetStorage(localPath));
+            return;
+        }
+
+        services.AddOptions<R2Options>().Bind(configuration.GetSection(R2Options.SectionName));
+        services.AddSingleton<ISpreadsheetStorage, R2SpreadsheetStorage>();
+    }
+
+    private static bool IsR2Configured(IConfiguration configuration)
+        => !string.IsNullOrWhiteSpace(configuration[$"{R2Options.SectionName}:AccessKey"])
+           && !string.IsNullOrWhiteSpace(configuration[$"{R2Options.SectionName}:SecretKey"])
+           && !string.IsNullOrWhiteSpace(configuration[$"{R2Options.SectionName}:EndpointUrl"]);
 
     private static bool IsImageStorageConfigured(IConfiguration configuration)
         => !string.IsNullOrWhiteSpace(configuration[$"{ImageStorageOptions.SectionName}:BucketName"])
