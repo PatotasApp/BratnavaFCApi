@@ -578,6 +578,11 @@ public class UserService : IUserService
         await _db.ReplayLikes.Where(x => x.UserId == userId).ExecuteDeleteAsync(cancellationToken);
         await _db.ReplayFavorites.Where(x => x.UserId == userId).ExecuteDeleteAsync(cancellationToken);
         await _db.UserNotifications.Where(x => x.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+        // Bloqueios não têm chave estrangeira: saem nos dois sentidos. As denúncias ficam
+        // como registro da moderação, mesmo apontando para um usuário que não existe mais.
+        await _db.UserBlocks
+            .Where(x => x.BlockerUserId == userId || x.BlockedUserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
 
         // GroupAdmins, GroupFinanceiros, GroupInvites, PushTokens e UserAbsences saem pelo
         // CASCADE do banco — inclusive as funções de quem administra sem jogar. E a ausência

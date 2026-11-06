@@ -82,6 +82,7 @@ public static class ApplicationDependencyInjection
         services.AddScoped<IConquistaService, ConquistaService>();
         services.AddScoped<IConquistaProjectionService, ConquistaProjectionService>();
         services.AddScoped<IProfileService, ProfileService>();
+        services.AddScoped<IModerationService, ModerationService>();
         services.AddScoped<ITeamColorService, TeamColorService>();
         services.AddScoped<IUserProvisioningService, UserProvisioningService>();
         services.AddScoped<IUserService, UserService>();

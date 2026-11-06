@@ -402,6 +402,61 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.ToTable("ChampionshipVotes");
                 });
 
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.ContentReportEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Details")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid?>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsResolved")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<Guid>("ReporterUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResolutionNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ResolvedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TargetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("TargetType")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsResolved", "CreateDate");
+
+                    b.HasIndex("ReporterUserId", "TargetType", "TargetId");
+
+                    b.ToTable("ContentReports");
+                });
+
             modelBuilder.Entity("BratnavaFC.Domain.Entities.ExtraChargeEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2035,6 +2090,34 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("UserBetBalances");
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.UserBlockEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BlockedUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BlockerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BlockedUserId");
+
+                    b.HasIndex("BlockerUserId", "BlockedUserId")
+                        .IsUnique();
+
+                    b.ToTable("UserBlocks");
                 });
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.UserEntity", b =>
