@@ -36,6 +36,7 @@ public sealed class PollsController : GroupAuthorizedController
         [FromQuery] string? status = null,
         CancellationToken ct = default)
     {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
         var playerId = await GetPlayerIdForGroup(groupId, ct);
         var result = await _polls.GetPollsAsync(groupId, playerId, page, pageSize, type, status, ct);
         return ToResponse(result);
@@ -45,6 +46,7 @@ public sealed class PollsController : GroupAuthorizedController
     [HttpGet("group/{groupId:guid}/{pollId:guid}")]
     public async Task<IActionResult> GetPoll(Guid groupId, Guid pollId, CancellationToken ct)
     {
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
         var playerId = await GetPlayerIdForGroup(groupId, ct);
         var isAdmin = await IsAuthorizedForGroupAsync(groupId, _db, ct);
         var result = await _polls.GetPollAsync(groupId, pollId, playerId, isAdmin, ct);

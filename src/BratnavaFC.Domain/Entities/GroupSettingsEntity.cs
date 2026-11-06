@@ -111,6 +111,16 @@ public sealed class GroupSettingsEntity : BaseEntity
 
     public void SetShowChampionshipsInHistory(bool value) => ShowChampionshipsInHistory = value;
 
+    // ── Página pública da patota (link compartilhado) ─────────────────────────
+    /// <summary>
+    /// Se a vitrine da patota (nome, logo, desde quando, números gerais, dia, horário e local
+    /// do jogo) aparece para quem abre o link compartilhado, inclusive sem login. Desligada, o
+    /// link mostra só "patota privada". Nunca expõe partidas, financeiro, enquetes ou presenças.
+    /// </summary>
+    public bool PublicPageEnabled { get; private set; } = true;
+
+    public void SetPublicPageEnabled(bool value) => PublicPageEnabled = value;
+
     public void SetStatsTabs(bool general, bool perMatch, bool classification)
     {
         if (!general && !perMatch && !classification)

@@ -814,6 +814,11 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<string>("PlayerIcon")
                         .HasColumnType("text");
 
+                    b.Property<bool>("PublicPageEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("Rank1Icon")
                         .HasColumnType("text");
 

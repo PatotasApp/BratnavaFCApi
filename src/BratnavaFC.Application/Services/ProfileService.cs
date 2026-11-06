@@ -41,6 +41,68 @@ public sealed class ProfileService : IProfileService
                 throw new UnauthorizedAccessException("Este perfil é visível apenas para integrantes das mesmas patotas.");
         }
 
+        return await BuildProfileAsync(user, isOwner, showcase: false, ct);
+    }
+
+    public async Task<ProfileShowcaseResult> GetShowcaseAsync(Guid userId, Guid? requesterId,
+        bool canOverridePrivacy, CancellationToken ct = default)
+    {
+        var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, ct);
+        if (user is null) return ProfileShowcaseResult.Denied(ProfileShowcaseAccess.NotFound);
+
+        var isOwner = requesterId == userId;
+        if (!isOwner && !canOverridePrivacy)
+        {
+            if (requesterId is { } viewer && await _db.UserBlocks.AnyAsync(b =>
+                    (b.BlockerUserId == viewer && b.BlockedUserId == userId) ||
+                    (b.BlockerUserId == userId && b.BlockedUserId == viewer), ct))
+                return ProfileShowcaseResult.Denied(ProfileShowcaseAccess.NotFound);
+
+            var access = user.ProfileVisibility switch
+            {
+                ProfileVisibility.Public => ProfileShowcaseAccess.Visible,
+                ProfileVisibility.AuthenticatedUsers => requesterId is null
+                    ? ProfileShowcaseAccess.LoginRequired : ProfileShowcaseAccess.Visible,
+                ProfileVisibility.SharedPatotas => requesterId is null
+                    ? ProfileShowcaseAccess.LoginRequired
+                    : await ShareAGroupAsync(userId, requesterId.Value, ct)
+                        ? ProfileShowcaseAccess.Visible : ProfileShowcaseAccess.SharedPatotasOnly,
+                _ => ProfileShowcaseAccess.Private,
+            };
+            if (access != ProfileShowcaseAccess.Visible) return ProfileShowcaseResult.Denied(access);
+        }
+
+        // A vitrine é sempre o que um terceiro vê, mesmo quando quem abre é o dono (serve de
+        // prévia do link). Por isso isOwner=false aqui.
+        var full = await BuildProfileAsync(user, isOwner: false, showcase: true, ct);
+        return new ProfileShowcaseResult(ProfileShowcaseAccess.Visible, new PublicProfileDto
+        {
+            UserId = full.UserId,
+            Name = full.Name,
+            UserName = full.UserName,
+            PhotoUrl = full.PhotoUrl,
+            Age = full.Age,
+            Position = full.Position,
+            Games = full.Games,
+            Goals = full.Goals,
+            Assists = full.Assists,
+            Mvps = full.Mvps,
+            Marcos = full.Marcos,
+            Feitos = full.Feitos,
+            Titulos = full.Titulos,
+            Destaques = full.Destaques,
+            PatotasCount = full.Patotas.Count,
+            // Nomes só quando a pessoa liberou "mostrar nomes das patotas"; sem números por patota.
+            Patotas = user.ShowPatotaNamesOnProfile
+                ? full.Patotas.Select(x => new PublicProfilePatotaDto { GroupId = x.GroupId, GroupName = x.GroupName }).ToList()
+                : [],
+        });
+    }
+
+    private async Task<UserProfileDto> BuildProfileAsync(BratnavaFC.Domain.Entities.UserEntity user, bool isOwner,
+        bool showcase, CancellationToken ct)
+    {
+        var userId = user.Id;
         var players = await _db.Players.AsNoTracking()
             .Where(p => p.UserId == userId && !p.IsGuest)
             .Select(p => new { p.Id, p.GroupId, p.IsGoalkeeper })
@@ -70,7 +132,8 @@ public sealed class ProfileService : IProfileService
         {
             var pc = groupData[player.GroupId].Players.FirstOrDefault(x => x.PlayerId == player.Id);
             if (pc is null) continue;
-            if (!user.ShowZoeiraAchievementsOnProfile && !isOwner)
+            // Na vitrine (link público) a zoeira nunca entra, mesmo que a pessoa a mostre no perfil.
+            if (showcase || (!user.ShowZoeiraAchievementsOnProfile && !isOwner))
                 pc.Eventos = pc.Eventos.Where(x => x.Categoria != "Zoeira").ToList();
 
             var games = MarcoVal(pc, "marco-presenca");

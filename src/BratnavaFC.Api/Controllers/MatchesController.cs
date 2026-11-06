@@ -322,6 +322,7 @@ public class MatchesController : GroupAuthorizedController
     [HttpGet("group/{groupId:guid}/{matchId:guid}/mvp")]
     public async Task<IActionResult> GetMvpAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
+        if (!await IsGroupMemberAsync(groupId, _db, cancellationToken)) return Forbid();
         var mvp = await _service.GetMvpAsync(groupId, matchId, cancellationToken);
         if (mvp == null) return NotFound();
 
@@ -383,6 +384,7 @@ public class MatchesController : GroupAuthorizedController
         [FromRoute] Guid matchId,
         CancellationToken cancellationToken)
     {
+        if (!await IsGroupMemberAsync(groupId, _db, cancellationToken)) return Forbid();
         var details = await _service.GetDetailsAsync(matchId, cancellationToken);
         if (details is null) return NotFound();
         if (details.Data?.GroupId != groupId) return NotFound();
@@ -640,6 +642,7 @@ public class MatchesController : GroupAuthorizedController
     [HttpGet("group/{groupId:guid}/{matchId:guid}/goals")]
     public async Task<IActionResult> GetGoals(Guid groupId, Guid matchId, CancellationToken cancellationToken)
     {
+        if (!await IsGroupMemberAsync(groupId, _db, cancellationToken)) return Forbid();
         var goals = await _service.GetGoalsAsync(groupId, matchId, cancellationToken);
         return Ok(goals);
     }
@@ -855,6 +858,7 @@ public class MatchesController : GroupAuthorizedController
         CancellationToken ct = default)
     {
         if (playerId == Guid.Empty) return BadRequest(new { error = "playerId é obrigatório." });
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
 
         var items = await _service.GetPlayerRecentMatchesAsync(groupId, playerId, take, ct, includeChampionships);
         return Ok(items);
