@@ -265,9 +265,9 @@ public sealed class FinancialTransactionService : IFinancialTransactionService
                 _db.GroupTransactions.Remove(existing);
                 await _db.SaveChangesAsync(ct);
             }
-            else if (existing.Amount != amount)
+            else if (existing.Amount != amount || existing.Date != date)
             {
-                // Valor mudou (ex: desconto parcial aplicado) — substitui pelo valor correto
+                // Valor ou data do pagamento mudou — substitui pelo registro correto
                 _db.GroupTransactions.Remove(existing);
                 var updated = new GroupTransactionEntity(
                     groupId, amount, description, date, sourceType, sourceId, playerName);
@@ -292,7 +292,7 @@ public sealed class FinancialTransactionService : IFinancialTransactionService
         // Snapshot de todos os lançamentos automáticos existentes para o grupo
         var existingTx = await _db.GroupTransactions
             .Where(t => t.GroupId == groupId && t.IsAutomatic && t.SourceId != null)
-            .Select(t => new { t.Id, SourceId = t.SourceId!.Value, t.Amount, t.SourceType })
+            .Select(t => new { t.Id, SourceId = t.SourceId!.Value, t.Amount, t.Date, t.SourceType })
             .ToListAsync(ct);
 
         var txByMonthly = existingTx
@@ -310,7 +310,7 @@ public sealed class FinancialTransactionService : IFinancialTransactionService
         var paidMonthly = await _db.MonthlyPayments
             .AsNoTracking()
             .Where(m => m.GroupId == groupId && m.Status == PaymentStatus.Paid)
-            .Select(m => new { m.Id, m.PlayerId, m.Amount, m.Discount, m.Year, m.Month })
+            .Select(m => new { m.Id, m.PlayerId, m.Amount, m.Discount, m.Year, m.Month, m.PaidAt })
             .ToListAsync(ct);
 
         if (paidMonthly.Count > 0)
@@ -323,6 +323,9 @@ public sealed class FinancialTransactionService : IFinancialTransactionService
             foreach (var m in paidMonthly)
             {
                 var effective = m.Amount - m.Discount;
+                var paidDate = m.PaidAt.HasValue
+                    ? DateOnly.FromDateTime(m.PaidAt.Value)
+                    : new DateOnly(m.Year, m.Month, 1);
                 txByMonthly.TryGetValue(m.Id, out var existing);
 
                 if (existing is null)
@@ -332,7 +335,7 @@ public sealed class FinancialTransactionService : IFinancialTransactionService
                     _db.GroupTransactions.Add(new GroupTransactionEntity(
                         groupId, effective,
                         $"Mensalidade {_monthNames[m.Month - 1]}/{m.Year} – {name}",
-                        new DateOnly(m.Year, m.Month, 1),
+                        paidDate,
                         TransactionSourceType.MonthlyPayment, m.Id, name));
                     created++;
                 }
@@ -342,15 +345,15 @@ public sealed class FinancialTransactionService : IFinancialTransactionService
                     idsToDelete.Add(existing.Id);
                     updated++;
                 }
-                else if (existing.Amount != effective)
+                else if (existing.Amount != effective || existing.Date != paidDate)
                 {
-                    // Valor diverge (desconto parcial) — remove e recria com valor correto
+                    // Valor ou data diverge — remove e recria com os dados do pagamento
                     idsToDelete.Add(existing.Id);
                     var name = playerMap.GetValueOrDefault(m.PlayerId, "Jogador");
                     _db.GroupTransactions.Add(new GroupTransactionEntity(
                         groupId, effective,
                         $"Mensalidade {_monthNames[m.Month - 1]}/{m.Year} – {name}",
-                        new DateOnly(m.Year, m.Month, 1),
+                        paidDate,
                         TransactionSourceType.MonthlyPayment, m.Id, name));
                     updated++;
                 }
