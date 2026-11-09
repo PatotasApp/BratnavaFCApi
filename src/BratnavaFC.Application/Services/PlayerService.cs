@@ -312,7 +312,8 @@ public class PlayerService : IPlayerService
 
         if (abandonadas.Contains(groupId))
         {
-            await _groups.DeleteManyAsync([groupId], cancellationToken);
+            var spreadsheetKeys = await _groups.DeleteManyAsync([groupId], cancellationToken);
+            await _groups.DeleteSpreadsheetFilesAsync(spreadsheetKeys, cancellationToken);
 
             // O jogador saiu junto com a patota; não há o que atualizar nem quem notificar.
             return Result.Ok("Patota removida: você era o último participante.");

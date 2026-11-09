@@ -18,9 +18,14 @@ public interface IGroupService
 
     /// <summary>
     /// Apaga patotas na ordem que as chaves estrangeiras RESTRICT exigem, sem abrir transação:
-    /// quem chama decide o escopo.
+    /// quem chama decide o escopo. Devolve as keys das planilhas enviadas por essas patotas,
+    /// para quem chama apagar os arquivos (<see cref="DeleteSpreadsheetFilesAsync"/>) só
+    /// depois do commit.
     /// </summary>
-    Task DeleteManyAsync(IReadOnlyCollection<Guid> groupIds, CancellationToken cancellationToken);
+    Task<IReadOnlyList<string>> DeleteManyAsync(IReadOnlyCollection<Guid> groupIds, CancellationToken cancellationToken);
+
+    /// <summary>Apaga do storage, best-effort, os arquivos de planilhas cujas linhas já saíram.</summary>
+    Task DeleteSpreadsheetFilesAsync(IReadOnlyCollection<string>? storageKeys, CancellationToken cancellationToken);
     Task<Result<GroupDto>> GetByIdAsync(Guid groupId, CancellationToken cancellationToken);
     Task<Result<List<GroupDto>>> GetByAdminIdAsync(Guid adminId, CancellationToken cancellationToken);
     Task<Result<PagedResultDto<GroupDto>>> GetAllGroupsAsync(int page, int pageSize, CancellationToken cancellationToken);

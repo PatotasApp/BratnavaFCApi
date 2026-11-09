@@ -179,40 +179,89 @@ public sealed class ConquistaProjectionService : IConquistaProjectionService
             await _db.PlayerStatProjections.AddRangeAsync(projections, ct);
 
         await _db.SaveChangesAsync(ct);
-        await SealPastSeasonsAsync(groupId, projections, ct);
+        await SealTitlesAsync(groupId, contributions, DateTime.UtcNow, ct);
         await _db.SaveChangesAsync(ct);
     }
 
-    private async Task SealPastSeasonsAsync(Guid groupId,
-        IReadOnlyCollection<PlayerStatProjectionEntity> projections, CancellationToken ct)
+    // ── Títulos (docs/temporadas/TEMPORADAS.md) ──────────────────────────────
+
+    public async Task<IReadOnlyList<Guid>> SealTitlesAsync(Guid groupId, DateTime? now = null, CancellationToken ct = default)
     {
-        var currentSeason = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, BrazilTz).Year;
-        var alreadySealed = await _db.SeasonTitles.AsNoTracking()
+        var sealedNow = await SealTitlesAsync(groupId, null, now ?? DateTime.UtcNow, ct);
+        await _db.SaveChangesAsync(ct);
+        return sealedNow;
+    }
+
+    public async Task<IReadOnlyList<Guid>> ResealYearsAsync(Guid groupId, IEnumerable<int> years, DateTime? now = null, CancellationToken ct = default)
+    {
+        var list = years.Distinct().ToList();
+        if (list.Count > 0)
+            await _db.SeasonTitles.Where(x => x.GroupId == groupId && list.Contains(x.Season)).ExecuteDeleteAsync(ct);
+        return await SealTitlesAsync(groupId, now, ct);
+    }
+
+    /// <summary>
+    /// Temporada regular encerrada (fim já passou) ganha os títulos dela. O ano completo
+    /// (todas fechadas e já existe temporada de um ano seguinte) com 2+ temporadas regulares
+    /// ganha os títulos do ano; com uma só, o da temporada já é o do ano.
+    /// </summary>
+    private async Task<List<Guid>> SealTitlesAsync(Guid groupId,
+        IReadOnlyCollection<PlayerMatchStatContributionEntity>? contributions, DateTime now, CancellationToken ct)
+    {
+        var seasons = await _db.Seasons.AsNoTracking()
+            .Where(s => s.GroupId == groupId).OrderBy(s => s.StartsAt).ToListAsync(ct);
+        var existing = await _db.SeasonTitles.AsNoTracking()
             .Where(x => x.GroupId == groupId)
-            .Select(x => x.Season)
+            .Select(x => new { x.Scope, x.SeasonId, x.Season })
             .Distinct()
             .ToListAsync(ct);
+        var sealedSeasons = existing.Where(x => x.Scope == SeasonTitleEntity.ScopeSeason).Select(x => x.SeasonId).ToHashSet();
+        var sealedYears = existing.Where(x => x.Scope == SeasonTitleEntity.ScopeYear).Select(x => x.Season).ToHashSet();
+        var sealedNow = new List<Guid>();
 
-        foreach (var seasonGroup in projections
-                     .Where(x => x.Season > 0 && x.Season < currentSeason && !alreadySealed.Contains(x.Season))
-                     .GroupBy(x => x.Season))
+        bool Ended(SeasonEntity s) => s.EndsAt is { } end && end <= now;
+
+        var pendingSeasons = seasons.Where(s => Ended(s) && !s.IsPreSeason && !sealedSeasons.Contains(s.Id)).ToList();
+        var pendingYears = seasons.Select(s => s.Year).Distinct().Where(y => !sealedYears.Contains(y))
+            .Select(year => seasons.Where(s => s.Year == year).ToList())
+            .Where(ofYear => ofYear.Count(s => !s.IsPreSeason) >= 2 && ofYear.All(Ended)
+                             && seasons.Any(s => s.Year > ofYear[0].Year))
+            .ToList();
+        if (pendingSeasons.Count == 0 && pendingYears.Count == 0) return sealedNow;
+
+        contributions ??= await _db.PlayerMatchStatContributions.AsNoTracking()
+            .Where(x => x.GroupId == groupId).ToListAsync(ct);
+
+        foreach (var season in pendingSeasons)
         {
-            var players = seasonGroup.ToList();
-            if (players.Count < 4) continue;
-
-            Award(players, "Gols", "Artilheiro", "⚽", x => x.Goals, x => x.Games >= 3);
-            Award(players, "Assistencias", "Rei das Assistências", "🅰️", x => x.Assists, x => x.Games >= 3);
-            Award(players, "MVPs", "Rei dos MVPs", "🏅", x => x.Mvps, x => x.Games >= 3);
-            Award(players, "Presenca", "Mais Presente", "🎽", x => x.Games, x => x.Games >= 3);
-            Award(players, "Aproveitamento", "Melhor Aproveitamento", "📈", x => x.WinRatePct, x => x.Games >= 5);
+            var rows = contributions.Where(c => season.Contains(c.PlayedAt));
+            if (Award(groupId, season.Year, season.Id, SeasonTitleEntity.ScopeSeason, rows))
+                sealedNow.Add(season.Id);
         }
 
-        void Award(List<PlayerStatProjectionEntity> players, string category,
-            string name, string icon, Func<PlayerStatProjectionEntity, int> value,
-            Func<PlayerStatProjectionEntity, bool> eligible)
+        foreach (var ofYear in pendingYears)
         {
-            var valueGroups = players.Where(x => eligible(x) && value(x) > 0)
-                .GroupBy(value)
+            var regular = ofYear.Where(s => !s.IsPreSeason).ToList();
+            var rows = contributions.Where(c => regular.Any(s => s.Contains(c.PlayedAt)));
+            Award(groupId, ofYear[0].Year, null, SeasonTitleEntity.ScopeYear, rows);
+        }
+
+        return sealedNow;
+    }
+
+    /// <summary>Pódio (até 3 valores) de cada categoria. Com menos de 4 jogadores, não há título.</summary>
+    private bool Award(Guid groupId, int year, Guid? seasonId, short scope,
+        IEnumerable<PlayerMatchStatContributionEntity> rows)
+    {
+        var players = rows.GroupBy(x => x.PlayerId)
+            .Select(g => new PlayerStatProjectionEntity(groupId, g.Key, year, g))
+            .ToList();
+        if (players.Count < 4) return false;
+
+        foreach (var category in TitleCategories)
+        {
+            var valueGroups = players.Where(x => x.Games >= category.MinGames && category.Value(x) > 0)
+                .GroupBy(category.Value)
                 .OrderByDescending(x => x.Key)
                 .Take(3)
                 .ToList();
@@ -220,10 +269,26 @@ public sealed class ConquistaProjectionService : IConquistaProjectionService
             for (var i = 0; i < valueGroups.Count; i++)
                 foreach (var player in valueGroups[i])
                     _db.SeasonTitles.Add(new SeasonTitleEntity(
-                        groupId, player.PlayerId, player.Season, category,
-                        name, icon, i + 1, value(player)));
+                        groupId, player.PlayerId, year, category.Category,
+                        category.Name, category.Icon, i + 1, category.Value(player), seasonId, scope));
         }
+        return true;
     }
+
+    /// <summary>Categorias dos títulos (as mesmas da retrospectiva da temporada).</summary>
+    public static readonly IReadOnlyList<TitleCategory> TitleCategories =
+    [
+        new("Gols", "Artilheiro", "Gols", "⚽", x => x.Goals, 3),
+        new("Assistencias", "Rei das Assistências", "Assistências", "🅰️", x => x.Assists, 3),
+        new("MVPs", "Rei dos MVPs", "MVPs", "🏅", x => x.Mvps, 3),
+        new("Presenca", "Mais Presente", "Presença", "🎽", x => x.Games, 3),
+        new("Aproveitamento", "Melhor Aproveitamento", "Aproveitamento (%)", "📈", x => x.WinRatePct, 5),
+    ];
+
+    /// <summary>Categoria de título: <paramref name="Name"/> no título, <paramref name="RankingName"/> na classificação.</summary>
+    public sealed record TitleCategory(
+        string Category, string Name, string RankingName, string Icon,
+        Func<PlayerStatProjectionEntity, int> Value, int MinGames);
 
     private static TimeZoneInfo ResolveBrazilTz()
     {

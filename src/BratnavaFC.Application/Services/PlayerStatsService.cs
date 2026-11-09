@@ -124,9 +124,16 @@ public sealed class PlayerStatsService : IPlayerStatsService
         return Result<List<PlayerStats>>.Ok(result);
     }
 
-    public async Task<PlayerVisualStatsReport> GetVisualReportAsync(
+    public Task<PlayerVisualStatsReport> GetVisualReportAsync(
         Guid groupId,
         bool includeGuests = true,
+        CancellationToken cancellationToken = default) =>
+        GetVisualReportAsync(groupId, includeGuests, null, cancellationToken);
+
+    public async Task<PlayerVisualStatsReport> GetVisualReportAsync(
+        Guid groupId,
+        bool includeGuests,
+        StatPeriod? period,
         CancellationToken cancellationToken = default)
     {
         // A regra de incluir/excluir convidados é do backend: o front (app e site)
@@ -163,6 +170,8 @@ public sealed class PlayerStatsService : IPlayerStatsService
         var units = matches.Select(StatMatch.FromMatch)
             .Concat((await new ChampionshipStatsSource(_context).GetUnitsAsync(groupId, cancellationToken)).Select(u => u.Stat))
             .Where(u => u.AllPlayers.Any(p => playerIds.Contains(p.PlayerId)))
+            // Temporada/ano: o jogo entra pela data (docs/temporadas/TEMPORADAS.md).
+            .Where(u => period is null || period.Contains(u.PlayedAt))
             .ToList();
 
         var totalMatches = units.Count;

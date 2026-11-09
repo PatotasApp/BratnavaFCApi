@@ -84,6 +84,7 @@ public static class ApplicationDependencyInjection
         services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<IPublicShareService, PublicShareService>();
         services.AddScoped<IModerationService, ModerationService>();
+        services.AddScoped<IGroupSpreadsheetService, GroupSpreadsheetService>();
         services.AddScoped<ITeamColorService, TeamColorService>();
         services.AddScoped<IUserProvisioningService, UserProvisioningService>();
         services.AddScoped<IUserService, UserService>();
@@ -104,6 +105,7 @@ public static class ApplicationDependencyInjection
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<ITeamBuilderService, TeamBuilderService>();
         services.AddScoped<IChampionshipService, ChampionshipService>();
+        services.AddScoped<ISeasonService, SeasonService>();
         services.AddScoped<ChampionshipBetService>();
     }
 

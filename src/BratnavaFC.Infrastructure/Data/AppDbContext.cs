@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
 using BratnavaFC.Domain.Entities;
@@ -46,10 +46,12 @@ public class AppDbContext : DbContext
     public DbSet<UserNotificationEntity> UserNotifications => Set<UserNotificationEntity>();
     public DbSet<ContentReportEntity> ContentReports => Set<ContentReportEntity>();
     public DbSet<UserBlockEntity> UserBlocks => Set<UserBlockEntity>();
+    public DbSet<GroupSpreadsheetEntity> GroupSpreadsheets => Set<GroupSpreadsheetEntity>();
     public DbSet<GroupTransactionEntity> GroupTransactions => Set<GroupTransactionEntity>();
     public DbSet<PlayerMatchStatContributionEntity> PlayerMatchStatContributions => Set<PlayerMatchStatContributionEntity>();
     public DbSet<PlayerStatProjectionEntity> PlayerStatProjections => Set<PlayerStatProjectionEntity>();
     public DbSet<SeasonTitleEntity> SeasonTitles => Set<SeasonTitleEntity>();
+    public DbSet<SeasonEntity> Seasons => Set<SeasonEntity>();
     public DbSet<ChampionshipEntity> Championships => Set<ChampionshipEntity>();
     public DbSet<ChampionshipTeamEntity> ChampionshipTeams => Set<ChampionshipTeamEntity>();
     public DbSet<ChampionshipPlayerEntity> ChampionshipPlayers => Set<ChampionshipPlayerEntity>();
@@ -64,6 +66,7 @@ public class AppDbContext : DbContext
         modelBuilder.ApplyConfiguration(new UserNotificationEntityConfiguration());
         modelBuilder.ApplyConfiguration(new ContentReportEntityConfiguration());
         modelBuilder.ApplyConfiguration(new UserBlockEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new GroupSpreadsheetEntityConfiguration());
         modelBuilder.ApplyConfiguration(new ScheduledNotificationJobEntityConfiguration());
 
         // ── Replay ───────────────────────────────────────────────────────────
@@ -81,6 +84,7 @@ public class AppDbContext : DbContext
         modelBuilder.ApplyConfiguration(new PlayerMatchStatContributionEntityConfiguration());
         modelBuilder.ApplyConfiguration(new PlayerStatProjectionEntityConfiguration());
         modelBuilder.ApplyConfiguration(new SeasonTitleEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new SeasonEntityConfiguration());
         modelBuilder.ApplyConfiguration(new ChampionshipEntityConfiguration());
         modelBuilder.ApplyConfiguration(new ChampionshipTeamEntityConfiguration());
         modelBuilder.ApplyConfiguration(new ChampionshipPlayerEntityConfiguration());
