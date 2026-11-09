@@ -27,8 +27,12 @@ public sealed record StatPlayer(Guid PlayerId, bool IsGoalkeeper, bool IsMvp, St
 /// <summary>TeamId: time do campeonato desse lado (nulo em partida comum).</summary>
 public sealed record StatSide(IReadOnlyList<StatPlayer> Players, StatResult Result, int? GoalsAgainst, Guid? TeamId = null);
 
-/// <summary>Autor nulo = jogador que não apareceu (DidNotPlay): o gol não conta para ele, mas a assistência conta.</summary>
-public sealed record StatGoal(Guid? ScorerPlayerId, Guid? AssistPlayerId, bool IsOwnGoal);
+/// <summary>
+/// Autor nulo = jogador que não apareceu (DidNotPlay): o gol não conta para ele, mas a assistência conta.
+/// Side: índice do lado (em <see cref="StatMatch.Sides"/>) que ganhou o gol (gol contra vai para o adversário);
+/// TimeSeconds: horário anotado. Os gols de uma unidade vêm na ordem em que aconteceram.
+/// </summary>
+public sealed record StatGoal(Guid? ScorerPlayerId, Guid? AssistPlayerId, bool IsOwnGoal, int? Side = null, int? TimeSeconds = null);
 
 /// <summary>
 /// Fonte única das estatísticas: uma partida comum, um jogo de campeonato que conta como
@@ -76,14 +80,20 @@ public sealed record StatMatch(
 
         var played = match.Players.Where(mp => !mp.DidNotPlay).ToDictionary(mp => mp.Id, mp => mp.PlayerId);
 
+        var teamOf = match.Players.GroupBy(mp => mp.Id).ToDictionary(g => g.Key, g => g.First().Team);
+
+        // Ordem dos gols: horário anotado e, no mesmo horário (ou sem horário), ordem de cadastro.
         var goals = new List<StatGoal>();
-        foreach (var goal in match.Goals ?? [])
+        foreach (var goal in (match.Goals ?? []).OrderBy(g => g.TimeSeconds ?? int.MaxValue).ThenBy(g => g.CreateDate))
         {
             Guid? scorer = played.TryGetValue(goal.ScorerMatchPlayerId, out var s1) ? s1 : null;
             Guid? assist = goal.AssistMatchPlayerId.HasValue && played.TryGetValue(goal.AssistMatchPlayerId.Value, out var a2)
                 ? a2
                 : null;
-            goals.Add(new StatGoal(scorer, assist, goal.IsOwnGoal));
+            int? side = teamOf.TryGetValue(goal.ScorerMatchPlayerId, out var team) && team is 1 or 2
+                ? (team == 1) != goal.IsOwnGoal ? 0 : 1
+                : null;
+            goals.Add(new StatGoal(scorer, assist, goal.IsOwnGoal, side, goal.TimeSeconds));
         }
 
         var votes = (match.Votes ?? [])

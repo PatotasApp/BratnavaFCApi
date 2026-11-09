@@ -36,9 +36,8 @@ public sealed class AbsenceService : IAbsenceService
 
         var absence = new UserAbsenceEntity(userId, dto.StartDate, dto.EndDate, dto.AbsenceType, dto.Description);
         _context.UserAbsences.Add(absence);
-        await _context.SaveChangesAsync(ct);
-
         var affected = await ApplyAbsenceToUpcomingMatchesAsync(absence, ct);
+        await _context.SaveChangesAsync(ct);
 
         var msg = affected > 0
             ? $"Ausência cadastrada. Presença recusada em {affected} partida{(affected != 1 ? "s" : "")} do período."
@@ -66,6 +65,7 @@ public sealed class AbsenceService : IAbsenceService
         // Reaplica nas partidas: reverte rejeições fora do novo período e aplica nas que passaram a fazer parte
         await RevertAbsenceFromUpcomingMatchesAsync(absence.Id, exceptRange: (absence.StartDate, absence.EndDate), ct);
         await ApplyAbsenceToUpcomingMatchesAsync(absence, ct);
+        await _context.SaveChangesAsync(ct);
 
         return Result<AbsenceDto>.Ok(MapToDto(absence), "Ausência atualizada com sucesso.");
     }
@@ -163,8 +163,8 @@ public sealed class AbsenceService : IAbsenceService
     /// </summary>
     private async Task<int> ApplyAbsenceToUpcomingMatchesAsync(UserAbsenceEntity absence, CancellationToken ct)
     {
-        var rangeStart = absence.StartDate.ToDateTime(TimeOnly.MinValue);
-        var rangeEnd   = absence.EndDate.AddDays(1).ToDateTime(TimeOnly.MinValue);
+        var rangeStart = absence.StartDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var rangeEnd   = absence.EndDate.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
 
         var matchPlayers = await _context.MatchPlayers
             .Include(mp => mp.Match)
@@ -180,7 +180,6 @@ public sealed class AbsenceService : IAbsenceService
         foreach (var mp in matchPlayers)
             mp.AutoRejectByAbsence(absence.Id);
 
-        await _context.SaveChangesAsync(ct);
         return matchPlayers.Count;
     }
 
@@ -199,8 +198,8 @@ public sealed class AbsenceService : IAbsenceService
 
         if (exceptRange is { } range)
         {
-            var keepStart = range.Start.ToDateTime(TimeOnly.MinValue);
-            var keepEnd   = range.End.AddDays(1).ToDateTime(TimeOnly.MinValue);
+            var keepStart = range.Start.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            var keepEnd   = range.End.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
             query = query.Where(mp => mp.Match!.PlayedAt < keepStart || mp.Match!.PlayedAt >= keepEnd);
         }
 

@@ -429,6 +429,17 @@ public class ChampionshipEntity : BaseEntity
     }
 
     /// <summary>
+    /// Regrava a classificação final de um campeonato já finalizado (gols editados depois do fim).
+    /// O MVP não muda.
+    /// </summary>
+    public void UpdateFinalPositions(IReadOnlyDictionary<Guid, int> finalPositions)
+    {
+        EnsureStatus(ChampionshipStatus.Finalized, "So e possivel recalcular a classificacao de um campeonato finalizado.");
+        foreach (var team in Teams)
+            team.SetFinalPosition(finalPositions.TryGetValue(team.Id, out var position) ? position : null);
+    }
+
+    /// <summary>
     /// Finaliza: grava a posição de cada time (empatados dividem a posição) e aplica o MVP
     /// com a regra de empate da patota.
     /// <paramref name="games"/> são os jogos do campeonato (necessários no MVP por jogo).

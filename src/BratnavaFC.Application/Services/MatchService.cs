@@ -1279,6 +1279,13 @@ public sealed class MatchService : IMatchService
 
         var wasMatchMaking = match.Status == MatchStatus.MatchMaking;
 
+        // Voltar da montagem de times recria os jogadores da partida, e os gols apontam para
+        // eles. Com gol registrado o banco recusaria a exclusão; aqui a recusa vira mensagem.
+        if (wasMatchMaking && await _context.Goals.AnyAsync(g => g.MatchId == matchId, ct))
+            return Result.Fail(
+                "Esta partida já tem gols registrados. Remova os gols antes de voltar de etapa.",
+                ResultStatus.Conflict);
+
         match.RewindOneStep();
 
         if (wasMatchMaking)
@@ -1939,8 +1946,10 @@ public sealed class MatchService : IMatchService
                     !g.IsOwnGoal &&
                     m.Players.Any(mp => mp.Id == g.ScorerMatchPlayerId && mp.PlayerId == playerId)),
 
-                // Assistências: conta goals cujo AssistMatchPlayer pertence ao jogador
+                // Assistências: conta goals cujo AssistMatchPlayer pertence ao jogador.
+                // Em gol contra a "assistência" é só registro de quem causou o lance: não conta.
                 PlayerAssists = m.Goals.Count(g =>
+                    !g.IsOwnGoal &&
                     g.AssistMatchPlayerId.HasValue &&
                     m.Players.Any(mp => mp.Id == g.AssistMatchPlayerId.Value && mp.PlayerId == playerId)),
 
@@ -2029,6 +2038,7 @@ public sealed class MatchService : IMatchService
                     !g.IsOwnGoal &&
                     m.Players.Any(mp => mp.Id == g.ScorerMatchPlayerId && mp.PlayerId == playerId)),
                 PlayerAssists = m.Goals.Count(g =>
+                    !g.IsOwnGoal &&
                     g.AssistMatchPlayerId.HasValue &&
                     m.Players.Any(mp => mp.Id == g.AssistMatchPlayerId.Value && mp.PlayerId == playerId)),
                 PlayerOwnGoals = m.Goals.Count(g =>

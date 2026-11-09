@@ -173,6 +173,10 @@ public class ChampionshipsController : GroupAuthorizedController
     public Task<IActionResult> AddGoal(Guid groupId, Guid championshipId, Guid gameId, [FromBody] ChampionshipGoalDto dto, CancellationToken ct) =>
         AsAdmin(groupId, ct, () => _service.AddGoalAsync(groupId, championshipId, gameId, dto, ct));
 
+    [HttpPut("{championshipId:guid}/games/{gameId:guid}/goals/{goalId:guid}")]
+    public Task<IActionResult> UpdateGoal(Guid groupId, Guid championshipId, Guid gameId, Guid goalId, [FromBody] ChampionshipGoalDto dto, CancellationToken ct) =>
+        AsAdmin(groupId, ct, () => _service.UpdateGoalAsync(groupId, championshipId, gameId, goalId, dto, ct));
+
     [HttpDelete("{championshipId:guid}/games/{gameId:guid}/goals/{goalId:guid}")]
     public Task<IActionResult> RemoveGoal(Guid groupId, Guid championshipId, Guid gameId, Guid goalId, CancellationToken ct) =>
         AsAdmin(groupId, ct, () => _service.RemoveGoalAsync(groupId, championshipId, gameId, goalId, ct));

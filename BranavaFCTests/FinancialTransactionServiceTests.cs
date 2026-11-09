@@ -376,7 +376,32 @@ public class FinancialTransactionServiceTests
         var sut     = MakeSut(db);
         var groupId = Guid.NewGuid();
 
-        // Mensalidade paga COM lançamento no caixa já existente
+        // Mensalidade paga COM lançamento no caixa já existente, na data do pagamento
+        var payment = new MonthlyPaymentEntity(groupId, Guid.NewGuid(), 2026, 5, 100m);
+        payment.MarkAsPaid(null, null, null, null);
+        db.MonthlyPayments.Add(payment);
+        db.GroupTransactions.Add(new GroupTransactionEntity(
+            groupId, 100m, "Mensalidade Maio/2026 – Jogador",
+            DateOnly.FromDateTime(payment.PaidAt!.Value),
+            TransactionSourceType.MonthlyPayment, payment.Id, null));
+        await db.SaveChangesAsync();
+
+        var result = await sut.SyncPaidPaymentsAsync(groupId);
+
+        result.Success.Should().BeTrue();
+        result.Data!.Created.Should().Be(0);
+        result.Data.Updated.Should().Be(0);
+        (await db.GroupTransactions.CountAsync()).Should().Be(1, "não deve duplicar");
+    }
+
+    [Fact]
+    public async Task Sync_LancamentoNoDia1DoMes_PassaParaADataDoPagamento()
+    {
+        await using var db = DbContextFactory.Create(nameof(Sync_LancamentoNoDia1DoMes_PassaParaADataDoPagamento));
+        var sut     = MakeSut(db);
+        var groupId = Guid.NewGuid();
+
+        // Lançamento antigo: datado no dia 1º do mês de referência, não no dia em que foi pago.
         var payment = new MonthlyPaymentEntity(groupId, Guid.NewGuid(), 2026, 5, 100m);
         payment.MarkAsPaid(null, null, null, null);
         db.MonthlyPayments.Add(payment);
@@ -389,9 +414,10 @@ public class FinancialTransactionServiceTests
         var result = await sut.SyncPaidPaymentsAsync(groupId);
 
         result.Success.Should().BeTrue();
-        result.Data!.Created.Should().Be(0);
-        result.Data.Updated.Should().Be(0);
-        (await db.GroupTransactions.CountAsync()).Should().Be(1, "não deve duplicar");
+        result.Data!.Updated.Should().Be(1);
+        var tx = await db.GroupTransactions.SingleAsync();
+        tx.Date.Should().Be(DateOnly.FromDateTime(payment.PaidAt!.Value));
+        tx.Amount.Should().Be(100m);
     }
 
     [Fact]

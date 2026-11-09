@@ -37,5 +37,9 @@ public sealed record PlayerRecentMatchDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ChampionshipName = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PlayerResult = null,
     // Pódio do campeonato consolidado (até 3º), no lugar do placar.
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChampionshipPodiumItemDto>? Podium = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChampionshipPodiumItemDto>? Podium = null,
+    // Campeonato: gols/assistências/MVP do item são sempre os de fato; estes dizem se entram nas
+    // somas de estatística (regras GoalsCountInGeneralStats / MvpCountsInGeneralStats).
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? GoalsCountInStats = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? MvpCountsInStats = null
 );

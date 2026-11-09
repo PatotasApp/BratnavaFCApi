@@ -457,6 +457,26 @@ public class MatchesController : GroupAuthorizedController
         return ToResponse(result);
     }
 
+    /// <summary>
+    /// Ranking dos replays mais curtidos (admin): colocação com empate, placar, time e quem curtiu.
+    /// from/to filtram pela data da partida (to exclusivo); top = 0 traz todos.
+    /// </summary>
+    [HttpGet("group/{groupId:guid}/replays/liked/ranking")]
+    public async Task<IActionResult> GetLikedReplaysRanking(
+        [FromRoute] Guid groupId,
+        [FromServices] IReplayRankingService ranking,
+        [FromQuery] bool goalsOnly = true,
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
+        [FromQuery] int minLikes = 1,
+        [FromQuery] int top = 0,
+        CancellationToken ct = default)
+    {
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
+        var result = await ranking.GetRankingAsync(groupId, goalsOnly, from, to, minLikes, top, ct);
+        return ToResponse(result);
+    }
+
     [HttpGet("group/{groupId:guid}/replays/my-likes")]
     public async Task<IActionResult> GetMyLikes(
         [FromRoute] Guid groupId,
@@ -796,7 +816,8 @@ public class MatchesController : GroupAuthorizedController
         if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
         try
         {
-            await _service.RewindOneStepAsync(groupId, matchId, ct);
+            var result = await _service.RewindOneStepAsync(groupId, matchId, ct);
+            if (!result.Success) return ToResponse(result);
             await _realtime.MatchChangedAsync(groupId, matchId, "match.step.changed", ct);
             return NoContent();
         }
