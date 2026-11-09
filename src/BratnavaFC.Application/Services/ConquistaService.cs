@@ -38,10 +38,20 @@ public sealed class ConquistaService : IConquistaService
         _projection = projection;
     }
 
-    public async Task<GroupConquistasDto> GetGroupConquistasAsync(Guid groupId, CancellationToken ct = default)
+    public Task<GroupConquistasDto> GetGroupConquistasAsync(Guid groupId, CancellationToken ct = default) =>
+        GetGroupConquistasAsync(groupId, null, ct);
+
+    public async Task<GroupConquistasDto> GetGroupConquistasAsync(Guid groupId, Guid? seasonId, CancellationToken ct = default)
     {
         await _projection.EnsureGroupProjectedAsync(groupId, ct);
-        var season = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, BrazilTz).Year;
+
+        // "Na temporada" = a temporada escolhida (padrão: a atual). Sem temporadas, o ano civil.
+        var seasons = await _db.Seasons.AsNoTracking()
+            .Where(s => s.GroupId == groupId).OrderBy(s => s.StartsAt).ToListAsync(ct);
+        var now = DateTime.UtcNow;
+        var selected = (seasonId is { } id ? seasons.FirstOrDefault(s => s.Id == id) : null)
+            ?? seasons.FirstOrDefault(s => s.Contains(now)) ?? seasons.LastOrDefault();
+        var season = selected?.Year ?? TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, BrazilTz).Year;
         var players = await _db.Players.AsNoTracking()
             .Where(p => p.GroupId == groupId && !p.IsGuest)
             .Select(p => new PlayerRef(p.Id, p.UserId, p.Name, p.IsGoalkeeper))
@@ -55,11 +65,17 @@ public sealed class ConquistaService : IConquistaService
             .ToListAsync(ct);
 
         var lifetime = projections.Where(x => x.Season == 0).ToDictionary(x => x.PlayerId);
-        var current = projections.Where(x => x.Season == season).ToDictionary(x => x.PlayerId);
+        var current = selected is null
+            ? projections.Where(x => x.Season == season).ToDictionary(x => x.PlayerId)
+            : await SeasonProjectionsAsync(groupId, selected, ct);
         var participatingPlayers = players.Where(p => lifetime.ContainsKey(p.Id)).ToList();
         var sampleSize = participatingPlayers.Count;
 
-        var result = new GroupConquistasDto { GroupId = groupId, Season = season };
+        var result = new GroupConquistasDto
+        {
+            GroupId = groupId, Season = season, SeasonId = selected?.Id,
+            SeasonName = selected is null ? $"{season}" : SeasonName(selected, seasons),
+        };
         foreach (var player in players)
         {
             lifetime.TryGetValue(player.Id, out var stats);
@@ -83,7 +99,7 @@ public sealed class ConquistaService : IConquistaService
 
             AddEvents(dto, stats, lifetime.Values.ToList(), sampleSize, player.IsGoalkeeper);
             dto.Temporada = BuildSeasonStandings(player.Id, players, current);
-            dto.Titulos = titles.Where(x => x.PlayerId == player.Id).Select(MapTitle).ToList();
+            dto.Titulos = titles.Where(x => x.PlayerId == player.Id).Select(t => MapTitle(t, seasons)).ToList();
             result.Players.Add(dto);
         }
         return result;
@@ -213,15 +229,40 @@ public sealed class ConquistaService : IConquistaService
         };
     }
 
-    private static ConquistaDto MapTitle(SeasonTitleEntity title) => new()
+    /// <summary>Título da temporada ("Artilheiro da Temporada 2026/1") ou do ano ("Artilheiro de 2026").</summary>
+    private static ConquistaDto MapTitle(SeasonTitleEntity title, IReadOnlyList<SeasonEntity> seasons)
     {
-        Id = $"titulo-{title.Category.ToLowerInvariant()}-{title.Season}",
-        Nome = $"{title.Name} da Temporada {title.Season}",
-        Descricao = title.Position == 1 ? $"Campeão em {title.Season}" : $"{title.Position}º lugar em {title.Season}",
-        Categoria = title.Category, Icone = title.Icon, Desbloqueada = true,
-        Ano = title.Season, Posicao = title.Position, Valor = title.Value,
-        Raridade = title.Position == 1 ? "Lendaria" : "Epica",
-    };
+        var isYear = title.Scope == SeasonTitleEntity.ScopeYear;
+        var season = title.SeasonId is { } id ? seasons.FirstOrDefault(s => s.Id == id) : null;
+        var label = isYear ? $"{title.Season}" : season is null ? $"{title.Season}" : SeasonName(season, seasons);
+        return new ConquistaDto
+        {
+            Id = isYear
+                ? $"titulo-{title.Category.ToLowerInvariant()}-ano-{title.Season}"
+                : $"titulo-{title.Category.ToLowerInvariant()}-{title.SeasonId?.ToString() ?? title.Season.ToString()}",
+            Nome = isYear ? $"{title.Name} de {title.Season}" : $"{title.Name} da Temporada {label}",
+            Descricao = title.Position == 1 ? $"Campeão em {label}" : $"{title.Position}º lugar em {label}",
+            Categoria = title.Category, Icone = title.Icon, Desbloqueada = true,
+            Ano = title.Season, Posicao = title.Position, Valor = title.Value,
+            Raridade = title.Position == 1 ? "Lendaria" : "Epica",
+        };
+    }
+
+    private static string SeasonName(SeasonEntity season, IReadOnlyList<SeasonEntity> seasons) =>
+        season.DisplayName(seasons.Count(s => s.Year == season.Year));
+
+    /// <summary>Números de cada jogador só com os jogos da temporada (pela data do jogo).</summary>
+    private async Task<Dictionary<Guid, PlayerStatProjectionEntity>> SeasonProjectionsAsync(
+        Guid groupId, SeasonEntity season, CancellationToken ct)
+    {
+        var start = new DateTimeOffset(season.StartsAt, TimeSpan.Zero);
+        DateTimeOffset? end = season.EndsAt is { } e ? new DateTimeOffset(e, TimeSpan.Zero) : null;
+        var rows = await _db.PlayerMatchStatContributions.AsNoTracking()
+            .Where(c => c.GroupId == groupId && c.PlayedAt >= start && (end == null || c.PlayedAt < end))
+            .ToListAsync(ct);
+        return rows.GroupBy(r => r.PlayerId)
+            .ToDictionary(g => g.Key, g => new PlayerStatProjectionEntity(groupId, g.Key, season.Year, g));
+    }
 
     public static List<ConquistaDto> BuildCareerMarcos(int games, int goals, int assists, int mvps) => new()
     {
