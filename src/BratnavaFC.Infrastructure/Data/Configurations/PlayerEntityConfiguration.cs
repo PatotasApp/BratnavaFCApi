@@ -31,6 +31,7 @@ public class PlayerEntityConfiguration : IEntityTypeConfiguration<PlayerEntity>
         builder.Property(x => x.Name).IsRequired();
         builder.Property(x => x.IsGoalkeeper).IsRequired();
         builder.Property(x => x.IsGuest).IsRequired().HasDefaultValue(false);
+        builder.Property(x => x.GuestOrigin).HasConversion<short?>();
 
         builder.HasOne(x => x.User)
             .WithMany(x => x.Players)

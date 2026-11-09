@@ -634,6 +634,11 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
                     b.Property<DateTime>("CreateDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -642,6 +647,16 @@ namespace BratnavaFC.Infrastructure.Migrations
 
                     b.Property<DateTime?>("InactivatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsAcceptingPlayers")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsPublic")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<string>("LogoKey")
                         .HasMaxLength(200)
@@ -654,8 +669,21 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("ProfileCity")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ProfileDescription")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<DateTimeOffset?>("ScheduleMatchDate")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("ShowMembersOnProfile")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<short>("Status")
                         .ValueGeneratedOnAdd()
@@ -666,6 +694,9 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
 
                     b.ToTable("Groups");
                 });
@@ -994,6 +1025,62 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.ToTable("GroupTransactions");
                 });
 
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.MatchApplicationEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("GuestPlayerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("InvitedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("OpeningId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("RespondedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<short>("Source")
+                        .HasColumnType("smallint");
+
+                    b.Property<short>("Status")
+                        .HasColumnType("smallint");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuestPlayerId");
+
+                    b.HasIndex("OpeningId");
+
+                    b.HasIndex("GroupId", "Status");
+
+                    b.HasIndex("MatchId", "UserId")
+                        .IsUnique()
+                        .HasFilter("\"Status\" IN (1, 2, 3)");
+
+                    b.HasIndex("UserId", "Status");
+
+                    b.ToTable("MatchApplications");
+                });
+
             modelBuilder.Entity("BratnavaFC.Domain.Entities.MatchBetEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1151,6 +1238,42 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.ToTable("Matches");
                 });
 
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.MatchOpeningEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<short>("Position")
+                        .HasColumnType("smallint");
+
+                    b.Property<int>("Slots")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GroupId");
+
+                    b.HasIndex("MatchId", "IsActive");
+
+                    b.ToTable("MatchOpenings");
+                });
+
             modelBuilder.Entity("BratnavaFC.Domain.Entities.MatchPlayerEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1297,6 +1420,9 @@ namespace BratnavaFC.Infrastructure.Migrations
 
                     b.Property<Guid>("GroupId")
                         .HasColumnType("uuid");
+
+                    b.Property<short?>("GuestOrigin")
+                        .HasColumnType("smallint");
 
                     b.Property<int?>("GuestStarRating")
                         .HasColumnType("integer");
@@ -2728,6 +2854,47 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.MatchApplicationEntity", b =>
+                {
+                    b.HasOne("BratnavaFC.Domain.Entities.GroupEntity", "Group")
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("BratnavaFC.Domain.Entities.PlayerEntity", "GuestPlayer")
+                        .WithMany()
+                        .HasForeignKey("GuestPlayerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("BratnavaFC.Domain.Entities.MatchEntity", "Match")
+                        .WithMany()
+                        .HasForeignKey("MatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("BratnavaFC.Domain.Entities.MatchOpeningEntity", "Opening")
+                        .WithMany()
+                        .HasForeignKey("OpeningId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("BratnavaFC.Domain.Entities.UserEntity", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Group");
+
+                    b.Navigation("GuestPlayer");
+
+                    b.Navigation("Match");
+
+                    b.Navigation("Opening");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("BratnavaFC.Domain.Entities.MatchBetSelectionEntity", b =>
                 {
                     b.HasOne("BratnavaFC.Domain.Entities.MatchBetEntity", "Bet")
@@ -2776,6 +2943,25 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Navigation("TeamAColor");
 
                     b.Navigation("TeamBColor");
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.MatchOpeningEntity", b =>
+                {
+                    b.HasOne("BratnavaFC.Domain.Entities.GroupEntity", "Group")
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("BratnavaFC.Domain.Entities.MatchEntity", "Match")
+                        .WithMany()
+                        .HasForeignKey("MatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Group");
+
+                    b.Navigation("Match");
                 });
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.MatchPlayerEntity", b =>

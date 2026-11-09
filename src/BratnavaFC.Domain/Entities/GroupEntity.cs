@@ -3,6 +3,12 @@
 public class GroupEntity : InactivatableEntity
 {
     public string Name { get; private set; } = null!;
+    public string Code { get; private set; } = null!;
+    public bool IsPublic { get; private set; } = true;
+    public bool IsAcceptingPlayers { get; private set; }
+    public bool ShowMembersOnProfile { get; private set; }
+    public string? ProfileDescription { get; private set; }
+    public string? ProfileCity { get; private set; }
     public DateTimeOffset? ScheduleMatchDate { get; private set; }
     /// <summary>
     /// Dono da patota. NULO significa que o criador excluiu a conta — a patota continua
@@ -35,11 +41,51 @@ public class GroupEntity : InactivatableEntity
     // EF
     private GroupEntity() { }
 
-    public GroupEntity(string name, DateTimeOffset? scheduleMatchDate, Guid createdByUserId)
+    public GroupEntity(string name, DateTimeOffset? scheduleMatchDate, Guid createdByUserId, string? code = null)
     {
         Rename(name);
         Reschedule(scheduleMatchDate);
         CreatedByUserId = createdByUserId;
+        Code = string.IsNullOrWhiteSpace(code) ? GenerateCode() : NormalizeCode(code);
+    }
+
+    public void UpdateProfile(bool isPublic, bool isAcceptingPlayers, bool showMembers,
+        string? description, string? city)
+    {
+        IsPublic = isPublic;
+        IsAcceptingPlayers = isAcceptingPlayers;
+        ShowMembersOnProfile = showMembers;
+        ProfileDescription = NormalizeOptional(description, 500);
+        ProfileCity = NormalizeOptional(city, 100);
+    }
+
+    public void RegenerateCode(string code) => Code = NormalizeCode(code);
+
+    public static string GenerateCode()
+    {
+        const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        Span<byte> bytes = stackalloc byte[8];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(bytes);
+        Span<char> chars = stackalloc char[8];
+        for (var i = 0; i < chars.Length; i++) chars[i] = alphabet[bytes[i] % alphabet.Length];
+        return new string(chars);
+    }
+
+    private static string NormalizeCode(string value)
+    {
+        var code = value.Trim().ToUpperInvariant();
+        if (code.Length != 8 || code.Any(c => !char.IsAsciiLetterUpper(c) && !char.IsAsciiDigit(c)))
+            throw new InvalidOperationException("Group code must have 8 uppercase alphanumeric characters.");
+        return code;
+    }
+
+    private static string? NormalizeOptional(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var normalized = value.Trim();
+        if (normalized.Length > maxLength)
+            throw new InvalidOperationException($"Value must have at most {maxLength} characters.");
+        return normalized;
     }
 
     public void AddPlayer(PlayerEntity player)

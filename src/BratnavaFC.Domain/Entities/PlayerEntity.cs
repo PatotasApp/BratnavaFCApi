@@ -10,6 +10,7 @@ public class PlayerEntity : InactivatableEntity
     public decimal SkillPoints { get; private set; }
     public bool IsGoalkeeper { get; private set; }
     public bool IsGuest { get; private set; }
+    public GuestOrigin? GuestOrigin { get; private set; }
 
     /// <summary>
     /// Data em que o jogador foi vinculado como mensalista (aceitou o convite).
@@ -23,7 +24,7 @@ public class PlayerEntity : InactivatableEntity
     // EF
     private PlayerEntity() { }
 
-    public PlayerEntity(string name, Guid? userId, Guid groupId, decimal skillPoints, bool isGoalkeeper, bool isGuest = false, BratnavaFC.Domain.Enums.Status status = Enums.Status.Active)
+    public PlayerEntity(string name, Guid? userId, Guid groupId, decimal skillPoints, bool isGoalkeeper, bool isGuest = false, BratnavaFC.Domain.Enums.Status status = Enums.Status.Active, GuestOrigin? guestOrigin = null)
     {
         Rename(name);
         if (userId.HasValue) SetUser(userId.Value);
@@ -31,6 +32,7 @@ public class PlayerEntity : InactivatableEntity
         SetSkillPoints(skillPoints);
         SetGoalkeeper(isGoalkeeper);
         SetIsGuest(isGuest);
+        GuestOrigin = isGuest ? guestOrigin ?? Entities.GuestOrigin.Manual : null;
 
         // Honra o status pedido (antes o parâmetro era aceito mas ignorado)
         if (status == Enums.Status.Inactive)
@@ -81,6 +83,13 @@ public class PlayerEntity : InactivatableEntity
     public void SetIsGuest(bool isGuest)
     {
         IsGuest = isGuest;
+        if (!isGuest) GuestOrigin = null;
+    }
+
+    public void SetGuestOrigin(GuestOrigin origin)
+    {
+        if (!IsGuest) throw new InvalidOperationException("Guest origin is only available for guests.");
+        GuestOrigin = origin;
     }
 
     /// <summary>Desvincula a conta de usuário — converte para convidado sem conta associada.</summary>

@@ -324,7 +324,20 @@ public sealed class MatchService : IMatchService
 
         match.GoToMatchMaking();
 
+        var externalPending = await _context.MatchApplications
+            .Where(x => x.MatchId == matchId &&
+                (x.Status == MatchApplicationStatus.PendingAdmin || x.Status == MatchApplicationStatus.PendingPlayer))
+            .ToListAsync(ct);
+        foreach (var application in externalPending) application.Cancel();
+
+        var openings = await _context.MatchOpenings
+            .Where(x => x.MatchId == matchId && x.IsActive).ToListAsync(ct);
+        foreach (var opening in openings) opening.Close();
+
         await _context.SaveChangesAsync(ct);
+        foreach (var application in externalPending)
+            await _push.SendToUserAsync(application.UserId, "Candidatura encerrada",
+                "A partida avançou e a candidatura foi cancelada.", groupId: groupId, cancellationToken: ct);
         return Result.Ok("Partida atualizada com sucesso.");
     }
 

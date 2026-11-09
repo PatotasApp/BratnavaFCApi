@@ -201,8 +201,11 @@ public sealed class TemporadasTests : IClassFixture<CampeonatoPostgresFixture>
         var migrator = db.GetService<IMigrator>();
         await migrator.MigrateAsync("20261029070350_AddChampionshipBets");
 
-        var comJogos = await SeedGroupAsync(db);
-        var semJogos = await SeedGroupAsync(db);
+        // The context already knows the newest Group columns, while this test
+        // deliberately stops on an older migration. Seed through SQL so EF does
+        // not try to write columns that do not exist yet.
+        var comJogos = await SeedLegacyGroupAsync(db);
+        var semJogos = await SeedLegacyGroupAsync(db);
         // 31/12/2024 23:30 em Brasília já é 2025 em UTC: o ano conta pelo horário de Brasília.
         await SeedMatchAsync(db, comJogos, Brt(2024, 12, 31, 23, 30), finalized: true);
 
@@ -231,6 +234,17 @@ public sealed class TemporadasTests : IClassFixture<CampeonatoPostgresFixture>
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
         return group.Id;
+    }
+
+    private static async Task<Guid> SeedLegacyGroupAsync(AppDbContext db)
+    {
+        var id = Guid.NewGuid();
+        var createdAt = DateTime.UtcNow;
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "Groups" ("Id", "Name", "Status", "CreateDate")
+            VALUES ({id}, {"Bratnava FC"}, {1}, {createdAt})
+            """);
+        return id;
     }
 
     private static async Task<Guid> SeedUserAsync(AppDbContext db, string firstName)

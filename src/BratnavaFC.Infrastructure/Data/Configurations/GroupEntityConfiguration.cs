@@ -12,6 +12,13 @@ public class GroupEntityConfiguration : IEntityTypeConfiguration<GroupEntity>
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.Name).IsRequired();
+        builder.Property(x => x.Code).HasMaxLength(8).IsRequired();
+        builder.HasIndex(x => x.Code).IsUnique();
+        builder.Property(x => x.IsPublic).HasDefaultValue(true).IsRequired();
+        builder.Property(x => x.IsAcceptingPlayers).HasDefaultValue(false).IsRequired();
+        builder.Property(x => x.ShowMembersOnProfile).HasDefaultValue(false).IsRequired();
+        builder.Property(x => x.ProfileDescription).HasMaxLength(500);
+        builder.Property(x => x.ProfileCity).HasMaxLength(100);
 
         builder.Property(x => x.CreatedByUserId);
         builder.Property(x => x.LogoKey).HasMaxLength(200);
