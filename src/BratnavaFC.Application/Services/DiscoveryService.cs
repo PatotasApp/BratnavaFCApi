@@ -27,9 +27,10 @@ public sealed class DiscoveryService : IDiscoveryService
     {
         (page, pageSize) = Page(page, pageSize);
         var term = (query ?? "").Trim().ToLower();
+        if (term.Length == 0)
+            return Result<PagedResultDto<GroupSearchItemDto>>.Ok(EmptyPage<GroupSearchItemDto>(page, pageSize));
         var groups = _db.Groups.AsNoTracking().Where(g => g.Status == Status.Active && g.IsPublic);
-        if (term.Length > 0)
-            groups = groups.Where(g => g.Name.ToLower().Contains(term) || g.Code.ToLower() == term);
+        groups = groups.Where(g => g.Name.ToLower().Contains(term) || g.Code.ToLower().Contains(term));
         var total = await groups.CountAsync(ct);
         var rows = await groups.OrderBy(g => g.Name).Skip((page - 1) * pageSize).Take(pageSize)
             .Select(g => new { g.Id, g.Name, g.Code, g.LogoKey, g.ProfileCity, g.IsAcceptingPlayers,
@@ -46,14 +47,15 @@ public sealed class DiscoveryService : IDiscoveryService
     {
         (page, pageSize) = Page(page, pageSize);
         var term = (query ?? "").Trim().ToLower();
+        if (term.Length == 0)
+            return Result<PagedResultDto<PlayerSearchItemDto>>.Ok(EmptyPage<PlayerSearchItemDto>(page, pageSize));
         var myGroups = _db.Players.AsNoTracking().Where(p => p.UserId == requesterId).Select(p => p.GroupId);
         var visible = _db.Users.AsNoTracking().Where(u => u.Status == Status.Active && u.Id != requesterId &&
             (u.ProfileVisibility == ProfileVisibility.AuthenticatedUsers ||
              (u.ProfileVisibility == ProfileVisibility.SharedPatotas &&
               u.Players.Any(p => myGroups.Contains(p.GroupId)))));
-        if (term.Length > 0)
-            visible = visible.Where(u => u.UserName.ToLower().Contains(term) ||
-                (u.FirstName + " " + u.LastName).ToLower().Contains(term));
+        visible = visible.Where(u => u.UserName.ToLower().Contains(term) ||
+            (u.FirstName + " " + u.LastName).ToLower().Contains(term));
         var total = await visible.CountAsync(ct);
         var rows = await visible.OrderBy(u => u.FirstName).ThenBy(u => u.LastName)
             .Skip((page - 1) * pageSize).Take(pageSize)
@@ -342,5 +344,12 @@ public sealed class DiscoveryService : IDiscoveryService
             x.Source, x.Status, x.GuestPlayerId, x.OpeningId, x.Opening == null ? null : x.Opening.Position, x.CreateDate));
 
     private string? Image(string? key) => key is null ? null : _images.BuildPublicUrl(key);
+    private static PagedResultDto<T> EmptyPage<T>(int page, int pageSize) => new()
+    {
+        Page = page,
+        PageSize = pageSize,
+        Total = 0,
+        Items = []
+    };
     private static (int, int) Page(int page, int pageSize) => (Math.Max(1, page), Math.Clamp(pageSize, 1, 50));
 }
