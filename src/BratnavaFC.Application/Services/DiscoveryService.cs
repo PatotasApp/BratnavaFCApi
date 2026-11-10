@@ -84,7 +84,10 @@ public sealed class DiscoveryService : IDiscoveryService
             .Where(x => x.GroupId == groupId && x.UserId == requesterId &&
                 (x.Status == MatchApplicationStatus.PendingAdmin || x.Status == MatchApplicationStatus.PendingPlayer || x.Status == MatchApplicationStatus.Accepted))
             .ToDictionaryAsync(x => x.MatchId, x => x.Status, ct);
-        var matches = group.IsAcceptingPlayers
+        // Candidaturas públicas dependem de a patota estar aberta. O administrador,
+        // porém, pode convidar diretamente um jogador para conhecer a patota mesmo
+        // quando ela não recebe candidaturas espontâneas.
+        var matches = group.IsAcceptingPlayers || isAdmin
             ? await _db.Matches.AsNoTracking().Where(m => m.GroupId == groupId && m.Status == MatchStatus.Acceptation && m.PlayedAt >= DateTime.UtcNow)
                 .OrderBy(m => m.PlayedAt).Take(10).Select(m => new { m.Id, m.PlayedAt, m.PlaceName }).ToListAsync(ct)
             : [];
