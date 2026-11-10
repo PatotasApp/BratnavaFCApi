@@ -26,7 +26,7 @@ Fazer as **mesmas telas no front web** (`C:\Users\lhnme\source\repos\BratnavaFCF
 ## O que fazer
 Estude como o front organiza uma feature (`src/pages`, `src/domains`, `src/api`, `src/routes`, stores e componentes), o tema e os componentes já existentes, e siga o mesmo padrão.
 1. **Tipos TypeScript** iguais ao contrato (enums como número) num arquivo próprio da feature. Não edite `src/api/generated` (é gerado). Escreva o cliente HTTP da feature à mão, com o mesmo `http`/axios que o resto do front usa.
-2. **Datasource mock e real** atrás de uma flag de ambiente (`VITE_CHAMPIONSHIPS_ENABLED`, `VITE_CHAMPIONSHIPS_USE_MOCK`), desligada em produção, como você fez no Flutter.
+2. **Datasource real em runtime**, com o mock restrito aos testes automatizados; a disponibilidade da funcionalidade pode continuar controlada por `VITE_CHAMPIONSHIPS_ENABLED`.
 3. Mesmas telas: **lista** com `ruleBadges`, **wizard de criação** (presets, "Vitória para todos" com a legenda, resumo em linguagem simples, validações do contrato), **detalhe/ao vivo** (presença, times, jogo atual, gols, fila, classificação, artilharia/assistências, ações do admin, `next-game`, pênaltis em empate, polling de 5 s só durante o jogo) e **votação de MVP**.
 4. Testes com vitest no padrão do projeto: resumo das regras, validações do wizard e mapeamento JSON.
 
