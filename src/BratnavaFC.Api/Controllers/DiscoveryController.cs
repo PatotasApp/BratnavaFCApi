@@ -19,7 +19,7 @@ public sealed class DiscoveryController : BaseApiController
 
     [HttpGet("groups")]
     public Task<IActionResult> SearchGroups([FromQuery] string? q, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default) =>
-        Respond(_service.SearchGroupsAsync(q, page, pageSize, ct));
+        Respond(_service.SearchGroupsAsync(UserId(), q, page, pageSize, ct));
 
     [HttpGet("players")]
     public Task<IActionResult> SearchPlayers([FromQuery] string? q, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default) =>
@@ -93,10 +93,11 @@ public sealed class DiscoveryController : BaseApiController
     }
 
     [HttpPatch("groups/{groupId:guid}/applications/{applicationId:guid}/reject")]
-    public async Task<IActionResult> RejectByAdmin(Guid groupId, Guid applicationId, CancellationToken ct)
+    public async Task<IActionResult> RejectByAdmin(Guid groupId, Guid applicationId,
+        [FromBody] RejectMatchApplicationDto? dto, CancellationToken ct)
     {
         if (!await IsAdmin(groupId, ct)) return Forbid();
-        return ToResponse(await _service.RejectByAdminAsync(groupId, applicationId, ct));
+        return ToResponse(await _service.RejectByAdminAsync(groupId, applicationId, dto ?? new(), ct));
     }
 
     [HttpPost("groups/{groupId:guid}/invitations")]

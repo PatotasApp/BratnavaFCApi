@@ -35,14 +35,17 @@ public sealed class GroupProfileDto
 public sealed record UpdateGroupProfileDto(bool IsPublic, bool IsAcceptingPlayers,
     bool ShowMembers, string? Description, string? City);
 
-public sealed record CreateMatchApplicationDto(Guid OpeningId);
-public sealed record CreateAdminMatchInviteDto(Guid MatchId, Guid UserId, Guid? GuestPlayerId);
-public sealed record ApproveMatchApplicationDto(Guid? GuestPlayerId);
+public sealed record CreateMatchApplicationDto(Guid MatchId, string? Message = null);
+public sealed record CreateAdminMatchInviteDto(Guid MatchId, Guid UserId, Guid? GuestPlayerId,
+    Guid? OpeningId = null, string? Message = null);
+public sealed record ApproveMatchApplicationDto(Guid? GuestPlayerId, string? Reason = null);
+public sealed record RejectMatchApplicationDto(string? Reason = null);
 public sealed record UpsertMatchOpeningDto(int Slots, MatchOpeningPosition Position);
 
 public sealed record MatchApplicationDto(Guid Id, Guid GroupId, string GroupName, Guid MatchId,
     DateTime PlayedAt, string? PlaceName, Guid UserId, string PlayerName, string UserName,
     string? PhotoUrl, MatchApplicationSource Source, MatchApplicationStatus Status,
-    Guid? GuestPlayerId, Guid? OpeningId, MatchOpeningPosition? OpeningPosition, DateTime CreatedAt);
+    Guid? GuestPlayerId, Guid? OpeningId, MatchOpeningPosition? OpeningPosition,
+    string? Message, string? DecisionReason, DateTime CreatedAt);
 
 public sealed record GuestCandidateDto(Guid PlayerId, string Name, GuestOrigin Origin, bool LinkedToThisUser);

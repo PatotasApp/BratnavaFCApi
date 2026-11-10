@@ -11,6 +11,8 @@ public sealed class MatchApplicationEntityConfiguration : IEntityTypeConfigurati
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Status).HasConversion<short>().IsRequired();
         builder.Property(x => x.Source).HasConversion<short>().IsRequired();
+        builder.Property(x => x.Message).HasMaxLength(500);
+        builder.Property(x => x.DecisionReason).HasMaxLength(500);
         builder.HasOne(x => x.Group).WithMany().HasForeignKey(x => x.GroupId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne(x => x.Match).WithMany().HasForeignKey(x => x.MatchId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);

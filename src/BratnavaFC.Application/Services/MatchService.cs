@@ -535,6 +535,14 @@ public sealed class MatchService : IMatchService
             return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
         match.Start();
+        var pendingApplications = await _context.MatchApplications
+            .Where(x => x.MatchId == matchId &&
+                (x.Status == MatchApplicationStatus.PendingAdmin || x.Status == MatchApplicationStatus.PendingPlayer))
+            .ToListAsync(ct);
+        foreach (var application in pendingApplications) application.Cancel();
+        var activeOpenings = await _context.MatchOpenings
+            .Where(x => x.MatchId == matchId && x.IsActive).ToListAsync(ct);
+        foreach (var opening in activeOpenings) opening.Close();
         await _context.SaveChangesAsync(ct);
 
         await NotifyMatchStartedAsync(groupId, matchId, ct);

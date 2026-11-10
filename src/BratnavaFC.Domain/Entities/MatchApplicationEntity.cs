@@ -10,7 +10,7 @@ public sealed class MatchApplicationEntity : BaseEntity
     private MatchApplicationEntity() { }
 
     public MatchApplicationEntity(Guid groupId, Guid matchId, Guid userId, MatchApplicationSource source,
-        Guid? invitedByUserId = null, Guid? openingId = null)
+        Guid? invitedByUserId = null, Guid? openingId = null, string? message = null)
     {
         if (groupId == Guid.Empty || matchId == Guid.Empty || userId == Guid.Empty)
             throw new ArgumentException("Group, match and user are required.");
@@ -20,6 +20,7 @@ public sealed class MatchApplicationEntity : BaseEntity
         Source = source;
         InvitedByUserId = invitedByUserId;
         OpeningId = openingId;
+        Message = NormalizeText(message);
         Status = source == MatchApplicationSource.PlayerRequest
             ? MatchApplicationStatus.PendingAdmin
             : MatchApplicationStatus.PendingPlayer;
@@ -39,11 +40,14 @@ public sealed class MatchApplicationEntity : BaseEntity
     public MatchApplicationSource Source { get; private set; }
     public MatchApplicationStatus Status { get; private set; }
     public DateTimeOffset? RespondedAt { get; private set; }
+    public string? Message { get; private set; }
+    public string? DecisionReason { get; private set; }
 
-    public void ApproveByAdmin(Guid? guestPlayerId)
+    public void ApproveByAdmin(Guid? guestPlayerId, string? reason = null)
     {
         if (Status != MatchApplicationStatus.PendingAdmin) throw new InvalidOperationException("Application is not pending admin approval.");
         GuestPlayerId = guestPlayerId;
+        DecisionReason = NormalizeText(reason);
         Status = MatchApplicationStatus.PendingPlayer;
         RespondedAt = DateTimeOffset.UtcNow;
     }
@@ -58,8 +62,16 @@ public sealed class MatchApplicationEntity : BaseEntity
         RespondedAt = DateTimeOffset.UtcNow;
     }
 
-    public void Reject() { Status = MatchApplicationStatus.Rejected; RespondedAt = DateTimeOffset.UtcNow; }
+    public void Reject(string? reason = null) { DecisionReason = NormalizeText(reason); Status = MatchApplicationStatus.Rejected; RespondedAt = DateTimeOffset.UtcNow; }
     public void Cancel() { Status = MatchApplicationStatus.Cancelled; RespondedAt = DateTimeOffset.UtcNow; }
+
+    private static string? NormalizeText(string? value)
+    {
+        var text = value?.Trim();
+        if (string.IsNullOrEmpty(text)) return null;
+        if (text.Length > 500) throw new InvalidOperationException("A mensagem deve ter no máximo 500 caracteres.");
+        return text;
+    }
 }
 
 

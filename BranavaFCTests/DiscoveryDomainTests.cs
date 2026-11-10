@@ -36,6 +36,20 @@ public sealed class DiscoveryDomainTests
         application.GuestPlayerId.Should().Be(guestId);
     }
 
+    [Fact]
+    public void PlayerRequest_DoesNotRequireOpening_AndKeepsOptionalMessages()
+    {
+        var application = new MatchApplicationEntity(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            MatchApplicationSource.PlayerRequest, message: " Quero conhecer a patota ");
+
+        application.OpeningId.Should().BeNull();
+        application.Message.Should().Be("Quero conhecer a patota");
+
+        application.ApproveByAdmin(null, " Chegue 15 minutos antes ");
+        application.DecisionReason.Should().Be("Chegue 15 minutos antes");
+    }
+
     [Theory]
     [InlineData(1, MatchOpeningPosition.Any)]
     [InlineData(3, MatchOpeningPosition.Line)]

@@ -23,13 +23,15 @@ public sealed class DiscoveryService : IDiscoveryService
         _push = push;
     }
 
-    public async Task<Result<PagedResultDto<GroupSearchItemDto>>> SearchGroupsAsync(string? query, int page, int pageSize, CancellationToken ct)
+    public async Task<Result<PagedResultDto<GroupSearchItemDto>>> SearchGroupsAsync(Guid requesterId, string? query, int page, int pageSize, CancellationToken ct)
     {
         (page, pageSize) = Page(page, pageSize);
         var term = (query ?? "").Trim().ToLower();
         if (term.Length == 0)
             return Result<PagedResultDto<GroupSearchItemDto>>.Ok(EmptyPage<GroupSearchItemDto>(page, pageSize));
-        var groups = _db.Groups.AsNoTracking().Where(g => g.Status == Status.Active && g.IsPublic);
+        var groups = _db.Groups.AsNoTracking().Where(g => g.Status == Status.Active && g.IsPublic &&
+            !g.Players.Any(p => p.UserId == requesterId && !p.IsGuest && p.Status == Status.Active) &&
+            !_db.GroupAdmins.Any(a => a.GroupId == g.Id && a.UserId == requesterId));
         groups = groups.Where(g => g.Name.ToLower().Contains(term) || g.Code.ToLower().Contains(term));
         var total = await groups.CountAsync(ct);
         var rows = await groups.OrderBy(g => g.Name).Skip((page - 1) * pageSize).Take(pageSize)
@@ -185,16 +187,14 @@ public sealed class DiscoveryService : IDiscoveryService
 
     public async Task<Result<MatchApplicationDto>> ApplyAsync(Guid groupId, Guid userId, CreateMatchApplicationDto dto, CancellationToken ct)
     {
-        var opening = await _db.MatchOpenings.AsNoTracking().FirstOrDefaultAsync(x => x.Id == dto.OpeningId && x.GroupId == groupId && x.IsActive, ct);
-        if (opening is null) return Result<MatchApplicationDto>.Fail("Vaga não encontrada.", ResultStatus.NotFound);
-        if (await ReservedSlots(opening.Id, ct) >= opening.Slots) return Result<MatchApplicationDto>.Fail("Esta vaga já foi preenchida.", ResultStatus.Conflict);
-        var validation = await ValidateApplicationAsync(groupId, opening.MatchId, userId, requireOpenGroup: true, ct);
+        var validation = await ValidateApplicationAsync(groupId, dto.MatchId, userId, requireOpenGroup: true, ct);
         if (validation is not null) return Result<MatchApplicationDto>.Fail(validation.Value.Error, validation.Value.Status);
-        var application = new MatchApplicationEntity(groupId, opening.MatchId, userId, MatchApplicationSource.PlayerRequest, openingId: opening.Id);
+        var application = new MatchApplicationEntity(groupId, dto.MatchId, userId,
+            MatchApplicationSource.PlayerRequest, message: dto.Message);
         _db.MatchApplications.Add(application);
         await _db.SaveChangesAsync(ct);
         await _push.SendToGroupAdminsAsync(groupId, "Novo jogador interessado", "Um jogador se candidatou para a próxima partida.",
-            new() { ["type"] = "match_application", ["groupId"] = groupId.ToString(), ["matchId"] = opening.MatchId.ToString() }, ct);
+            new() { ["type"] = "match_application", ["groupId"] = groupId.ToString(), ["matchId"] = dto.MatchId.ToString() }, ct);
         return Result<MatchApplicationDto>.Ok(await MapAsync(application.Id, ct), "Candidatura enviada.", ResultStatus.Created);
     }
 
@@ -227,7 +227,7 @@ public sealed class DiscoveryService : IDiscoveryService
         }
         var guestError = await ValidateGuestAsync(groupId, app.UserId, dto.GuestPlayerId, ct);
         if (guestError is not null) return Result.Fail(guestError);
-        app.ApproveByAdmin(dto.GuestPlayerId);
+        app.ApproveByAdmin(dto.GuestPlayerId, dto.Reason);
         await _db.SaveChangesAsync(ct);
         await NotifyPlayerInvite(app, ct);
         return Result.Ok("Candidatura aprovada; aguardando confirmação do jogador.");
@@ -239,7 +239,16 @@ public sealed class DiscoveryService : IDiscoveryService
         if (validation is not null) return Result<MatchApplicationDto>.Fail(validation.Value.Error, validation.Value.Status);
         var guestError = await ValidateGuestAsync(groupId, dto.UserId, dto.GuestPlayerId, ct);
         if (guestError is not null) return Result<MatchApplicationDto>.Fail(guestError);
-        var app = new MatchApplicationEntity(groupId, dto.MatchId, dto.UserId, MatchApplicationSource.AdminInvite, adminUserId);
+        if (dto.OpeningId.HasValue)
+        {
+            var opening = await _db.MatchOpenings.AsNoTracking().FirstOrDefaultAsync(x =>
+                x.Id == dto.OpeningId && x.GroupId == groupId && x.MatchId == dto.MatchId && x.IsActive, ct);
+            if (opening is null) return Result<MatchApplicationDto>.Fail("Vaga não encontrada.", ResultStatus.NotFound);
+            if (await ReservedSlots(opening.Id, ct) >= opening.Slots)
+                return Result<MatchApplicationDto>.Fail("Esta vaga já foi preenchida.", ResultStatus.Conflict);
+        }
+        var app = new MatchApplicationEntity(groupId, dto.MatchId, dto.UserId,
+            MatchApplicationSource.AdminInvite, adminUserId, dto.OpeningId, dto.Message);
         app.SelectGuest(dto.GuestPlayerId);
         _db.MatchApplications.Add(app);
         await _db.SaveChangesAsync(ct);
@@ -247,12 +256,13 @@ public sealed class DiscoveryService : IDiscoveryService
         return Result<MatchApplicationDto>.Ok(await MapAsync(app.Id, ct), "Convite enviado.", ResultStatus.Created);
     }
 
-    public async Task<Result> RejectByAdminAsync(Guid groupId, Guid applicationId, CancellationToken ct)
+    public async Task<Result> RejectByAdminAsync(Guid groupId, Guid applicationId, RejectMatchApplicationDto dto, CancellationToken ct)
     {
         var app = await LoadPendingAsync(groupId, applicationId, MatchApplicationStatus.PendingAdmin, ct);
         if (app is null) return Result.Fail("Candidatura não encontrada.", ResultStatus.NotFound);
-        app.Reject(); await _db.SaveChangesAsync(ct);
-        await _push.SendToUserAsync(app.UserId, "Candidatura atualizada", "A patota não conseguiu aceitar sua participação nesta partida.", groupId: groupId, cancellationToken: ct);
+        app.Reject(dto.Reason); await _db.SaveChangesAsync(ct);
+        var detail = string.IsNullOrWhiteSpace(dto.Reason) ? "" : $" Motivo: {dto.Reason.Trim()}";
+        await _push.SendToUserAsync(app.UserId, "Candidatura atualizada", $"A patota não conseguiu aceitar sua participação nesta partida.{detail}", groupId: groupId, cancellationToken: ct);
         return Result.Ok("Candidatura recusada.");
     }
 
@@ -331,7 +341,9 @@ public sealed class DiscoveryService : IDiscoveryService
     private async Task NotifyPlayerInvite(MatchApplicationEntity app, CancellationToken ct)
     {
         var match = await _db.Matches.AsNoTracking().FirstAsync(x => x.Id == app.MatchId, ct);
-        await _push.SendToUserAsync(app.UserId, "Convite para jogar", $"Você foi aceito para jogar em {match.PlayedAt:dd/MM 'às' HH:mm}, em {match.PlaceName}. Confirme sua presença.",
+        var note = app.DecisionReason ?? app.Message;
+        var detail = string.IsNullOrWhiteSpace(note) ? "" : $" Mensagem: {note}";
+        await _push.SendToUserAsync(app.UserId, "Convite para jogar", $"Você foi aceito para jogar em {match.PlayedAt:dd/MM 'às' HH:mm}, em {match.PlaceName}. Confirme sua presença.{detail}",
             new() { ["type"] = "match_application_invite", ["applicationId"] = app.Id.ToString(), ["matchId"] = app.MatchId.ToString() }, ct, app.GroupId);
     }
 
@@ -344,7 +356,8 @@ public sealed class DiscoveryService : IDiscoveryService
             x.Status == MatchApplicationStatus.PendingPlayer || x.Status == MatchApplicationStatus.Accepted ? x.Match.PlaceName : null,
             x.UserId, (x.User.FirstName + " " + x.User.LastName).Trim(), x.User.UserName,
             x.User.ProfilePhotoKey == null ? null : _images.PublicBaseUrl + "/" + x.User.ProfilePhotoKey,
-            x.Source, x.Status, x.GuestPlayerId, x.OpeningId, x.Opening == null ? null : x.Opening.Position, x.CreateDate));
+            x.Source, x.Status, x.GuestPlayerId, x.OpeningId, x.Opening == null ? null : x.Opening.Position,
+            x.Message, x.DecisionReason, x.CreateDate));
 
     private string? Image(string? key) => key is null ? null : _images.BuildPublicUrl(key);
     private static PagedResultDto<T> EmptyPage<T>(int page, int pageSize) => new()

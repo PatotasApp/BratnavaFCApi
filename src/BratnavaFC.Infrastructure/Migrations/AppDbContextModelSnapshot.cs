@@ -1034,6 +1034,10 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<DateTime>("CreateDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DecisionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<Guid>("GroupId")
                         .HasColumnType("uuid");
 
@@ -1045,6 +1049,10 @@ namespace BratnavaFC.Infrastructure.Migrations
 
                     b.Property<Guid>("MatchId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<Guid?>("OpeningId")
                         .HasColumnType("uuid");

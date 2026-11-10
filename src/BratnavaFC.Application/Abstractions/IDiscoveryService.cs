@@ -6,7 +6,7 @@ namespace BratnavaFC.Application.Abstractions;
 
 public interface IDiscoveryService
 {
-    Task<Result<PagedResultDto<GroupSearchItemDto>>> SearchGroupsAsync(string? query, int page, int pageSize, CancellationToken ct);
+    Task<Result<PagedResultDto<GroupSearchItemDto>>> SearchGroupsAsync(Guid requesterId, string? query, int page, int pageSize, CancellationToken ct);
     Task<Result<PagedResultDto<PlayerSearchItemDto>>> SearchPlayersAsync(Guid requesterId, string? query, int page, int pageSize, CancellationToken ct);
     Task<Result<GroupProfileDto>> GetGroupProfileAsync(Guid groupId, Guid requesterId, CancellationToken ct);
     Task<Result> UpdateGroupProfileAsync(Guid groupId, UpdateGroupProfileDto dto, CancellationToken ct);
@@ -20,7 +20,7 @@ public interface IDiscoveryService
     Task<Result<List<GuestCandidateDto>>> GetGuestCandidatesAsync(Guid groupId, Guid userId, CancellationToken ct);
     Task<Result> ApproveAsync(Guid groupId, Guid applicationId, ApproveMatchApplicationDto dto, CancellationToken ct);
     Task<Result<MatchApplicationDto>> InviteAsync(Guid groupId, Guid adminUserId, CreateAdminMatchInviteDto dto, CancellationToken ct);
-    Task<Result> RejectByAdminAsync(Guid groupId, Guid applicationId, CancellationToken ct);
+    Task<Result> RejectByAdminAsync(Guid groupId, Guid applicationId, RejectMatchApplicationDto dto, CancellationToken ct);
     Task<Result> AcceptByPlayerAsync(Guid applicationId, Guid userId, CancellationToken ct);
     Task<Result> RejectByPlayerAsync(Guid applicationId, Guid userId, CancellationToken ct);
 }
