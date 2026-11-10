@@ -325,15 +325,18 @@ public static class PlayerRetrospectiveCalculator
         int goalNo = 0, assistNo = 0;
         (int Number, Guid? Scorer, DateTime At) last = default;
 
+        // A numeração dos gols da patota precisa ser idêntica à do Spotlight:
+        // todo gol registrado com autor entra na linha do tempo, inclusive gol contra.
+        // Registros cujo autor deixou de contar (por exemplo, DidNotPlay) ficam de fora.
         foreach (var unit in ordered)
-            foreach (var goal in unit.Goals.Where(g => !g.IsOwnGoal))
+            foreach (var goal in unit.Goals.Where(g => g.ScorerPlayerId is not null))
             {
                 goalNo++;
                 last = (goalNo, goal.ScorerPlayerId, unit.PlayedAt);
                 if (goal.ScorerPlayerId == playerId && (goalNo == 1 || goalNo % 100 == 0))
                     list.Add(new RetrospectiveMilestoneDto { Kind = goalNo == 1 ? "first_goal" : "goal_century", Number = goalNo, PlayedAt = unit.PlayedAt });
 
-                if (goal.AssistPlayerId is null) continue;
+                if (goal.IsOwnGoal || goal.AssistPlayerId is null) continue;
                 assistNo++;
                 if (goal.AssistPlayerId == playerId && (assistNo == 1 || assistNo % 100 == 0))
                     list.Add(new RetrospectiveMilestoneDto { Kind = assistNo == 1 ? "first_assist" : "assist_century", Number = assistNo, PlayedAt = unit.PlayedAt });

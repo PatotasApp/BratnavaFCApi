@@ -39,7 +39,7 @@ O admin escolhe de qual jogador ver; a resposta já traz a lista de quem jogou n
 | Decisivos | abriu o placar (1º gol da partida) e gol da vitória (o gol que deixou o vencedor um à frente do placar final do perdedor). Só em confronto direto com **todos os gols registrados** (registro incompleto não diz a ordem). Gol contra não credita ninguém. Ordem: horário digitado e, no mesmo minuto, ordem de cadastro |
 | Dupla de ouro | melhor aproveitamento no mesmo time, mín. 4 jogos com resultado; e quem mais jogou do lado |
 | Freguês / carrasco | times opostos em confronto direto, mín. 4 confrontos; freguês só com retrospecto positivo (V > D), carrasco só com negativo (D > V) |
-| Marcos | 1º gol, último gol (até agora, se o período não acabou), gols 100º/200º..., 1ª assistência e assistências 100ª/200ª... da patota no período |
+| Marcos | 1º gol, último gol (até agora, se o período não acabou), gols 100º/200º... da patota no período (mesma linha do tempo do Spotlight: todo gol registrado com autor, inclusive gol contra), 1ª assistência e assistências 100ª/200ª... |
 | MVP | MVPs, votos recebidos, posição |
 | Gol contra | quantos |
 | Perfil | Goleiro (mais da metade dos jogos no gol) = O Paredão. Senão, o dado em que fica mais bem colocado: O Fiel (presença), O Matador (gols/jogo), O Garçom (assistências/jogo), O Pé-quente (aproveitamento), O Craque da Galera (MVPs), O Decisivo (aberturas + gols da vitória por jogo). Empate de posição: nessa ordem |
