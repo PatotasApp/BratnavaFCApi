@@ -98,6 +98,7 @@ public class PlayersController : GroupAuthorizedController
     /// Requer permissão de admin do grupo.
     /// </summary>
     [HttpPost("{playerId:guid}/remove-from-group")]
+    [BratnavaFC.Api.Billing.AllowWhenGroupExpired]
     [Authorize(Roles = "User,Admin,GodMode")]
     public async Task<IActionResult> RemoveFromGroup(Guid playerId, CancellationToken cancellationToken)
     {
@@ -112,6 +113,7 @@ public class PlayersController : GroupAuthorizedController
     }
 
     [HttpPost("{playerId:guid}/leave")]
+    [BratnavaFC.Api.Billing.AllowWhenGroupExpired]
     [Authorize(Roles = "User,Admin,GodMode")]
     public async Task<IActionResult> LeaveGroup(Guid playerId, CancellationToken cancellationToken)
     {

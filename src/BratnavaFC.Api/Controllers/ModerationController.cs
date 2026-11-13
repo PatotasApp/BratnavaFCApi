@@ -14,6 +14,7 @@ namespace BratnavaFC.Api.Controllers;
 [ApiController]
 [Route("api")]
 [Authorize(Roles = "User,Admin,GodMode")]
+[BratnavaFC.Api.Billing.AllowWhenGroupExpired]
 public sealed class ModerationController : BaseApiController
 {
     private readonly IModerationService _moderation;

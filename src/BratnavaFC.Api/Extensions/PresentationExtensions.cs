@@ -12,7 +12,10 @@ public static class PresentationExtensions
         IWebHostEnvironment environment,
         IConfiguration configuration)
     {
-        services.AddControllers()
+        // Filtro global de somente leitura para patota vencida (desligado até o
+        // interruptor ser ligado no painel GodMode).
+        services.AddScoped<BratnavaFC.Api.Billing.BillingGateFilter>();
+        services.AddControllers(o => o.Filters.AddService<BratnavaFC.Api.Billing.BillingGateFilter>())
             .AddJsonOptions(opts =>
                 opts.JsonSerializerOptions.Converters.Add(new UtcDateTimeConverter()));
 
