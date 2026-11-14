@@ -740,6 +740,9 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<int?>("DefaultDayOfWeek")
                         .HasColumnType("integer");
 
+                    b.Property<string>("DefaultDaysOfWeekJson")
+                        .HasColumnType("text");
+
                     b.Property<TimeSpan?>("DefaultKickoffTime")
                         .HasColumnType("interval");
 

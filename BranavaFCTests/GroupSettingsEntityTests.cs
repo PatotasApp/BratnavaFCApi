@@ -64,6 +64,44 @@ public class GroupSettingsEntityTests
         Assert.Null(s.DefaultPlaceName);
     }
 
+    [Fact]
+    public void DefaultDays_ShouldSupportMoreThanOneWeekday()
+    {
+        var s = new GroupSettingsEntity(
+            Guid.NewGuid(), 6, 12, null, null, new TimeSpan(20, 30, 0));
+
+        s.SetDefaultDaysOfWeek([DayOfWeek.Thursday, DayOfWeek.Tuesday]);
+
+        Assert.Equal([DayOfWeek.Tuesday, DayOfWeek.Thursday], s.GetDefaultDaysOfWeek());
+        Assert.Equal(DayOfWeek.Tuesday, s.DefaultDayOfWeek);
+    }
+
+    [Fact]
+    public void NextDefaultMatch_ShouldPickNearestConfiguredDay()
+    {
+        var s = new GroupSettingsEntity(
+            Guid.NewGuid(), 6, 12, null, null, new TimeSpan(20, 30, 0));
+        s.SetDefaultDaysOfWeek([DayOfWeek.Tuesday, DayOfWeek.Thursday]);
+        var wednesday = new DateTime(2026, 11, 11, 10, 0, 0);
+
+        var next = s.GetNextDefaultMatchAt(wednesday);
+
+        Assert.Equal(new DateTime(2026, 11, 12, 20, 30, 0), next);
+    }
+
+    [Fact]
+    public void NextDefaultMatch_WhenTodaysTimePassed_ShouldUseNextConfiguredDay()
+    {
+        var s = new GroupSettingsEntity(
+            Guid.NewGuid(), 6, 12, null, null, new TimeSpan(20, 30, 0));
+        s.SetDefaultDaysOfWeek([DayOfWeek.Tuesday, DayOfWeek.Thursday]);
+        var tuesdayAfterGame = new DateTime(2026, 11, 10, 21, 0, 0);
+
+        var next = s.GetNextDefaultMatchAt(tuesdayAfterGame);
+
+        Assert.Equal(new DateTime(2026, 11, 12, 20, 30, 0), next);
+    }
+
     [Theory]
     [InlineData(-1, 0, 0)]
     [InlineData(24, 0, 0)]

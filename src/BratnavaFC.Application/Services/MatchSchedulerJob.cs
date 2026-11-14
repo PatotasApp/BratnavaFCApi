@@ -86,16 +86,8 @@ public sealed class MatchSchedulerJob : IMatchSchedulerJob
 
     private static DateTime ResolveRecurringMatchTime(GroupSettingsEntity setting, DateTime now)
     {
-        if (!setting.DefaultDayOfWeek.HasValue || !setting.DefaultKickoffTime.HasValue)
-            return DateTime.SpecifyKind(now.Date.Add(setting.MatchScheduleTime!.Value), DateTimeKind.Utc);
-
-        var daysUntilMatch = ((int)setting.DefaultDayOfWeek.Value - (int)now.DayOfWeek + 7) % 7;
-        var date = now.Date.AddDays(daysUntilMatch);
-        var playedAt = date.Add(setting.DefaultKickoffTime.Value);
-
-        if (playedAt < now)
-            playedAt = playedAt.AddDays(7);
-
+        var playedAt = setting.GetNextDefaultMatchAt(now) ??
+                       now.Date.Add(setting.MatchScheduleTime!.Value);
         return DateTime.SpecifyKind(playedAt, DateTimeKind.Utc);
     }
 

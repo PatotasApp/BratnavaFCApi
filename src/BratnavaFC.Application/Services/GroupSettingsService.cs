@@ -38,6 +38,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 MaxPlayers = 6,
                 DefaultPlaceName = null,
                 DefaultDayOfWeek = null,
+                DefaultDaysOfWeek = new(),
                 DefaultKickoffTime = null,
                 IsPersisted = false,
                 GoalIcon       = null,
@@ -91,6 +92,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 dto.DefaultPlaceName,
                 dto.DefaultDayOfWeek,
                 dto.DefaultKickoffTime);
+            entity.SetDefaultDaysOfWeek(ResolveDefaultDays(dto));
 
             entity.SetIcons(dto.GoalIcon, dto.GoalkeeperIcon, dto.AssistIcon, dto.OwnGoalIcon, dto.MvpIcon, dto.PlayerIcon, dto.Rank1Icon, dto.Rank2Icon, dto.Rank3Icon);
             entity.SetMonthlyFee(dto.MonthlyFee);
@@ -119,6 +121,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 dto.DefaultPlaceName,
                 dto.DefaultDayOfWeek,
                 dto.DefaultKickoffTime);
+            entity.SetDefaultDaysOfWeek(ResolveDefaultDays(dto));
             entity.SetIcons(dto.GoalIcon, dto.GoalkeeperIcon, dto.AssistIcon, dto.OwnGoalIcon, dto.MvpIcon, dto.PlayerIcon, dto.Rank1Icon, dto.Rank2Icon, dto.Rank3Icon);
             entity.SetMonthlyFee(dto.MonthlyFee);
             entity.SetGoalkeeperMonthlyFee(dto.GoalkeeperMonthlyFee);
@@ -155,6 +158,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 dto.DefaultPlaceName,
                 dto.DefaultDayOfWeek,
                 dto.DefaultKickoffTime);
+            existing.SetDefaultDaysOfWeek(ResolveDefaultDays(dto));
             existing.SetIcons(dto.GoalIcon, dto.GoalkeeperIcon, dto.AssistIcon, dto.OwnGoalIcon, dto.MvpIcon, dto.PlayerIcon, dto.Rank1Icon, dto.Rank2Icon, dto.Rank3Icon);
             existing.SetMonthlyFee(dto.MonthlyFee);
             existing.SetGoalkeeperMonthlyFee(dto.GoalkeeperMonthlyFee);
@@ -188,6 +192,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
         MaxPlayers = e.MaxPlayers,
         DefaultPlaceName = e.DefaultPlaceName,
         DefaultDayOfWeek = e.DefaultDayOfWeek,
+        DefaultDaysOfWeek = e.GetDefaultDaysOfWeek().ToList(),
         DefaultKickoffTime = e.DefaultKickoffTime,
         IsPersisted = isPersisted,
         GoalIcon       = e.GoalIcon,
@@ -225,6 +230,10 @@ public sealed class GroupSettingsService : IGroupSettingsService
             })
             .ToList(),
     };
+
+    private static IReadOnlyCollection<DayOfWeek> ResolveDefaultDays(UpsertGroupSettingsDto dto) =>
+        dto.DefaultDaysOfWeek ??
+        (dto.DefaultDayOfWeek.HasValue ? [dto.DefaultDayOfWeek.Value] : []);
 
     private static void ApplyStatsTabs(GroupSettingsEntity entity, UpsertGroupSettingsDto dto)
     {
