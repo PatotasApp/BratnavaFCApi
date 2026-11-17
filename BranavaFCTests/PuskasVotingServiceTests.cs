@@ -132,12 +132,12 @@ public class PuskasVotingServiceTests
         // Nenhum identificado: recusa.
         puskas.Setup(p => p.GetAsync(group, 10, null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<PuskasDto>.Ok(Top(group, (clips[0], false), (clips[1], false))));
-        Assert.False((await svc.OpenPollAsync(group, CancellationToken.None)).Success);
+        Assert.False((await svc.OpenPollAsync(group, true, CancellationToken.None)).Success);
 
         // 2 de 3 identificados: a votação nasce só com eles.
         puskas.Setup(p => p.GetAsync(group, 10, null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<PuskasDto>.Ok(Top(group, (clips[0], true), (clips[1], true), (clips[2], false))));
-        var opened = await svc.OpenPollAsync(group, CancellationToken.None);
+        var opened = await svc.OpenPollAsync(group, true, CancellationToken.None);
         Assert.True(opened.Success);
         Assert.Equal(2, opened.Data!.ClipCount);
 
@@ -147,8 +147,36 @@ public class PuskasVotingServiceTests
         await db.SaveChangesAsync();
         puskas.Setup(p => p.GetAsync(group, 10, null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<PuskasDto>.Ok(Top(group, (clips[1], true), (clips[2], true))));
-        var again = await svc.OpenPollAsync(group, CancellationToken.None);
+        var again = await svc.OpenPollAsync(group, true, CancellationToken.None);
         Assert.Equal(3, again.Data!.ClipCount);
+    }
+
+    [Theory]
+    [InlineData(true, new[] { 5, 4, 3, 2, 1 })]
+    [InlineData(false, new[] { 1, 2, 3, 4, 5 })]
+    public async Task Folha_segue_a_ordem_do_telao_e_traz_o_numero_de_cada_gol(bool countdown, int[] expected)
+    {
+        var c = Setup();
+        c.Poll.SetClips(c.Clips.Select(x => x.Id), countdown);
+        await c.Db.SaveChangesAsync();
+
+        var sheet = (await c.Svc.GetSheetAsync(c.Poll.Code, CancellationToken.None)).Data!;
+
+        Assert.Equal(expected, sheet.Items.Select(i => i.Number).ToArray());
+        // O número é a posição do gol no ranking (clip 0 = nº 1), independente da ordem de exibição.
+        Assert.All(sheet.Items, i => Assert.Equal(c.Clips.FindIndex(x => x.Id == i.ClipId) + 1, i.Number));
+    }
+
+    [Fact]
+    public void Votacao_criada_no_formato_antigo_continua_legivel()
+    {
+        var ids = new[] { Guid.NewGuid(), Guid.NewGuid() };
+        var poll = new PuskasPollEntity(Guid.NewGuid(), ids);
+        typeof(PuskasPollEntity).GetProperty(nameof(PuskasPollEntity.ClipIdsJson))!
+            .SetValue(poll, System.Text.Json.JsonSerializer.Serialize(ids));
+
+        Assert.Equal(ids, poll.ClipIds);
+        Assert.True(poll.Countdown);
     }
 }
 

@@ -30,7 +30,8 @@ public record SetPuskasScorerRequest(Guid? PlayerId);
 public record PuskasPollDto(string Code, bool IsOpen, int ClipCount, int Voters, int MaxVotes);
 
 /// <summary>Gol na folha de votação: só miniatura, autor e data (sem curtidas, para não influenciar).</summary>
-public record PuskasSheetItemDto(Guid ClipId, string VideoUrl, string ScorerName, DateTime? MatchPlayedAt, string? ClipTime);
+/// <summary>Number: o número do gol no telão (posição na lista), para a pessoa achar o vídeo.</summary>
+public record PuskasSheetItemDto(Guid ClipId, string VideoUrl, string ScorerName, DateTime? MatchPlayedAt, string? ClipTime, int Number);
 
 /// <summary>O que quem escaneou o QR code vê (público, sem login).</summary>
 public record PuskasSheetDto(string? GroupName, bool IsOpen, int MaxVotes, IReadOnlyList<PuskasSheetItemDto> Items);
@@ -42,6 +43,6 @@ public record SetPuskasPollOpenRequest(bool IsOpen);
 /// <summary>Resultado de um gol na apuração; Rank com empate (1, 1, 3).</summary>
 public record PuskasResultItemDto(
     Guid ClipId, string VideoUrl, string ScorerName, DateTime? MatchPlayedAt, string? ClipTime,
-    int Rank, int Votes, IReadOnlyList<string> Voters);
+    int Rank, int Votes, IReadOnlyList<string> Voters, int Number);
 
 public record PuskasResultsDto(PuskasPollDto Poll, int TotalVoters, IReadOnlyList<string> VoterNames, IReadOnlyList<PuskasResultItemDto> Items);

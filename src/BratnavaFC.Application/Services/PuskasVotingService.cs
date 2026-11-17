@@ -31,7 +31,7 @@ public sealed class PuskasVotingService : IPuskasVotingService
         _replayUrls = replayUrls;
     }
 
-    private sealed record ClipInfo(Guid ClipId, string VideoUrl, string Scorer, DateTime? PlayedAt, string? Time);
+    private sealed record ClipInfo(Guid ClipId, string VideoUrl, string Scorer, DateTime? PlayedAt, string? Time, int Number);
 
     private async Task<PuskasPollDto> ToDtoAsync(PuskasPollEntity poll, CancellationToken ct)
     {
@@ -46,7 +46,7 @@ public sealed class PuskasVotingService : IPuskasVotingService
         return Result<PuskasPollDto?>.Ok(poll is null ? null : await ToDtoAsync(poll, ct));
     }
 
-    public async Task<Result<PuskasPollDto>> OpenPollAsync(Guid groupId, CancellationToken ct)
+    public async Task<Result<PuskasPollDto>> OpenPollAsync(Guid groupId, bool countdown, CancellationToken ct)
     {
         var current = await _puskas.GetAsync(groupId, TopClips, null, null, ct);
         if (!current.Success || current.Data is null)
@@ -61,7 +61,7 @@ public sealed class PuskasVotingService : IPuskasVotingService
         var poll = await _db.PuskasPolls.FirstOrDefaultAsync(p => p.GroupId == groupId, ct);
         if (poll is null)
         {
-            poll = new PuskasPollEntity(groupId, clipIds);
+            poll = new PuskasPollEntity(groupId, clipIds, countdown);
             _db.PuskasPolls.Add(poll);
         }
         else
@@ -69,7 +69,8 @@ public sealed class PuskasVotingService : IPuskasVotingService
             // Com votos já computados nenhum gol sai da lista (os votos apontam para ela);
             // gols recém-identificados podem ser acrescentados.
             var hasVotes = await _db.PuskasVotes.AnyAsync(v => v.PollId == poll.Id, ct);
-            poll.SetClips(hasVotes ? poll.ClipIds.Union(clipIds) : clipIds);
+            // Ordem do ranking atual; gols com voto que saíram do top ficam no fim.
+            poll.SetClips(hasVotes ? clipIds.Concat(poll.ClipIds.Except(clipIds)) : clipIds, countdown);
             poll.SetOpen(true);
         }
         await _db.SaveChangesAsync(ct);
@@ -105,7 +106,7 @@ public sealed class PuskasVotingService : IPuskasVotingService
                 var name = scorer is not null && nameById.TryGetValue(scorer.PlayerId, out var full)
                     ? ReplayRankingService.ShortName(full, everyone) : "?";
                 return new ClipInfo(c.Id, _replayUrls.GeneratePresignedUrl(c.ObjectKey), name,
-                    playedAt.GetValueOrDefault(c.MatchId), ReplayRankingService.ParseClipTime(c.ObjectKey));
+                    playedAt.GetValueOrDefault(c.MatchId), ReplayRankingService.ParseClipTime(c.ObjectKey), ids.IndexOf(c.Id) + 1);
             })
             .OrderBy(x => ids.IndexOf(x.ClipId))
             .ToList();
@@ -130,7 +131,7 @@ public sealed class PuskasVotingService : IPuskasVotingService
         {
             if (i == 0 || rows[i].Voters.Count != rows[i - 1].Voters.Count) rank = i + 1;
             var c = rows[i].Clip;
-            items.Add(new PuskasResultItemDto(c.ClipId, c.VideoUrl, c.Scorer, c.PlayedAt, c.Time, rank, rows[i].Voters.Count, rows[i].Voters));
+            items.Add(new PuskasResultItemDto(c.ClipId, c.VideoUrl, c.Scorer, c.PlayedAt, c.Time, rank, rows[i].Voters.Count, rows[i].Voters, c.Number));
         }
 
         var voterNames = votes.GroupBy(v => v.VoterKey).Select(g => g.First().VoterName).OrderBy(n => n).ToList();
@@ -143,10 +144,10 @@ public sealed class PuskasVotingService : IPuskasVotingService
         if (poll is null) return Result<PuskasSheetDto>.Fail("Votação não encontrada.", ResultStatus.NotFound);
 
         var groupName = await _db.Groups.AsNoTracking().Where(g => g.Id == poll.GroupId).Select(g => g.Name).FirstOrDefaultAsync(ct);
-        // Ordem neutra (data do jogo), não a de curtidas, para não induzir o voto.
-        var items = (await LoadClipsAsync(poll, ct))
-            .OrderBy(c => c.PlayedAt).ThenBy(c => c.Time)
-            .Select(c => new PuskasSheetItemDto(c.ClipId, c.VideoUrl, c.Scorer, c.PlayedAt, c.Time))
+        // Mesma ordem em que os vídeos passam no telão, com o número de cada um.
+        var loaded = await LoadClipsAsync(poll, ct);
+        var items = (poll.Countdown ? loaded.OrderByDescending(c => c.Number) : loaded.OrderBy(c => c.Number))
+            .Select(c => new PuskasSheetItemDto(c.ClipId, c.VideoUrl, c.Scorer, c.PlayedAt, c.Time, c.Number))
             .ToList();
         return Result<PuskasSheetDto>.Ok(new PuskasSheetDto(groupName, poll.IsOpen, MaxVotes, items));
     }
