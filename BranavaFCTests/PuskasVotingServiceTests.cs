@@ -1,0 +1,113 @@
+using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Services;
+using BratnavaFC.Domain.Common;
+using BratnavaFC.Domain.Dtos;
+using BratnavaFC.Domain.Entities;
+using BratnavaFC.Domain.Enums;
+using BratnavaFC.Infrastructure.Cloudflare;
+using BratnavaFC.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
+using Moq;
+using Xunit;
+
+namespace BranavaFC.Tests;
+
+/// <summary>Votação do Puskas pelo QR code: até 3 gols por nome, um envio por nome, apuração com empate.</summary>
+public class PuskasVotingServiceTests
+{
+    private static AppDbContext CreateDb() =>
+        new(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+
+    private sealed record Ctx(PuskasVotingService Svc, AppDbContext Db, Guid Group, PuskasPollEntity Poll, List<ReplayClipEntity> Clips);
+
+    private static Ctx Setup(bool open = true, int clipCount = 5)
+    {
+        var db = CreateDb();
+        var group = Guid.NewGuid();
+        var clips = Enumerable.Range(0, clipCount)
+            .Select(i => new ReplayClipEntity(group, Guid.NewGuid(), "b", $"k{i}.mp4", "video/mp4", "e", DateTimeOffset.UtcNow, MatchEventType.GolTimeA))
+            .ToList();
+        var player = new PlayerEntity("Marlon", null, group, 0, false);
+        var poll = new PuskasPollEntity(group, clips.Select(c => c.Id));
+        poll.SetOpen(open);
+        db.AddRange(clips);
+        db.Add(player);
+        db.AddRange(clips.Select(c => new ReplayClipScorerEntity(group, c.Id, player.Id)));
+        db.Add(poll);
+        db.SaveChanges();
+
+        var urls = new Mock<IReplayUrlService>();
+        urls.Setup(u => u.GeneratePresignedUrl(It.IsAny<string>())).Returns<string>(k => $"https://x/{k}");
+        var puskas = new Mock<IPuskasService>();
+        return new Ctx(new PuskasVotingService(db, puskas.Object, urls.Object), db, group, poll, clips);
+    }
+
+    private static Task<Result> Vote(Ctx c, string name, params int[] idx) =>
+        c.Svc.SubmitVoteAsync(c.Poll.Code, name, idx.Select(i => c.Clips[i].Id).ToList(), CancellationToken.None);
+
+    [Fact]
+    public async Task Voto_com_ate_3_gols_e_salvo_e_aparece_na_apuracao_com_empate()
+    {
+        var c = Setup();
+        Assert.True((await Vote(c, "Ana", 0, 1, 2)).Success);
+        Assert.True((await Vote(c, "Bruno", 1, 2)).Success);
+        Assert.True((await Vote(c, "Carla", 2)).Success);
+
+        var results = (await c.Svc.GetResultsAsync(c.Group, CancellationToken.None)).Data!;
+
+        Assert.Equal(3, results.TotalVoters);
+        Assert.Equal([3, 2, 1, 0, 0], results.Items.Select(i => i.Votes).ToArray());
+        Assert.Equal([1, 2, 3, 4, 4], results.Items.Select(i => i.Rank).ToArray()); // empate pula colocação
+        Assert.Equal(["Ana", "Bruno", "Carla"], results.Items[0].Voters);
+        Assert.Equal("Marlon", results.Items[0].ScorerName);
+    }
+
+    [Fact]
+    public async Task Recusa_mais_de_3_nenhum_gol_nome_vazio_e_gol_de_fora_da_votacao()
+    {
+        var c = Setup();
+        Assert.False((await Vote(c, "Ana", 0, 1, 2, 3)).Success);
+        Assert.False((await Vote(c, "Ana")).Success);
+        Assert.False((await Vote(c, "   ", 0)).Success);
+        var outsider = await c.Svc.SubmitVoteAsync(c.Poll.Code, "Ana", [Guid.NewGuid()], CancellationToken.None);
+        Assert.False(outsider.Success);
+        Assert.Empty(c.Db.PuskasVotes);
+    }
+
+    [Fact]
+    public async Task Mesmo_nome_nao_vota_duas_vezes_mesmo_com_acento_e_caixa_diferentes()
+    {
+        var c = Setup();
+        Assert.True((await Vote(c, "José  Silva", 0)).Success);
+
+        var again = await Vote(c, "jose silva", 1);
+
+        Assert.False(again.Success);
+        Assert.Equal(ResultStatus.Conflict, again.Status);
+        Assert.Single(c.Db.PuskasVotes);
+    }
+
+    [Fact]
+    public async Task Votacao_encerrada_ou_codigo_errado_nao_aceita_voto()
+    {
+        var closed = Setup(open: false);
+        var r = await Vote(closed, "Ana", 0);
+        Assert.Equal(ResultStatus.Conflict, r.Status);
+
+        var open = Setup();
+        var wrong = await open.Svc.SubmitVoteAsync("codigo-errado", "Ana", [open.Clips[0].Id], CancellationToken.None);
+        Assert.Equal(ResultStatus.NotFound, wrong.Status);
+    }
+
+    [Fact]
+    public async Task Folha_publica_nao_traz_curtidas_nem_votos_e_so_com_codigo_valido()
+    {
+        var c = Setup();
+        var sheet = (await c.Svc.GetSheetAsync(c.Poll.Code, CancellationToken.None)).Data!;
+        Assert.Equal(5, sheet.Items.Count);
+        Assert.All(sheet.Items, i => Assert.Equal("Marlon", i.ScorerName));
+        Assert.Equal(3, sheet.MaxVotes);
+
+        Assert.Equal(ResultStatus.NotFound, (await c.Svc.GetSheetAsync("x", CancellationToken.None)).Status);
+    }
+}

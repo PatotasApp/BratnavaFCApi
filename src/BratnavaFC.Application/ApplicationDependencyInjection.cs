@@ -76,6 +76,8 @@ public static class ApplicationDependencyInjection
     {
         services.AddScoped<IMatchService, MatchService>();
         services.AddScoped<IReplayRankingService, ReplayRankingService>();
+        services.AddScoped<IPuskasService, PuskasService>();
+        services.AddScoped<IPuskasVotingService, PuskasVotingService>();
         services.AddScoped<IPlayerStatsService, PlayerStatsService>();
         services.AddScoped<IPlayerRetrospectiveService, PlayerRetrospectiveService>();
         services.AddScoped<ISpotlightService, SpotlightService>();
