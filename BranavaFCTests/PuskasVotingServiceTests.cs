@@ -110,4 +110,45 @@ public class PuskasVotingServiceTests
 
         Assert.Equal(ResultStatus.NotFound, (await c.Svc.GetSheetAsync("x", CancellationToken.None)).Status);
     }
+
+    private static PuskasDto Top(Guid group, params (ReplayClipEntity Clip, bool HasScorer)[] items) =>
+        new("G", 10, items.Count(i => i.HasScorer), items.Select((i, n) => new PuskasClipDto(
+            new RankedReplayDto(i.Clip.Id, i.Clip.MatchId, "k", "u", "GolTimeA", DateTimeOffset.UtcNow, null, null, n + 1, 5, [], null, null, null, null, null, null),
+            i.HasScorer ? Guid.NewGuid() : null, i.HasScorer ? "X" : null, [])).ToList());
+
+    [Fact]
+    public async Task Abrir_votacao_so_com_os_gols_ja_identificados_e_acrescenta_novos_depois_dos_votos()
+    {
+        var db = CreateDb();
+        var group = Guid.NewGuid();
+        var clips = Enumerable.Range(0, 3)
+            .Select(i => new ReplayClipEntity(group, Guid.NewGuid(), "b", $"k{i}.mp4", "video/mp4", "e", DateTimeOffset.UtcNow, MatchEventType.GolTimeA)).ToList();
+        db.AddRange(clips);
+        db.SaveChanges();
+        var puskas = new Mock<IPuskasService>();
+        var urls = new Mock<IReplayUrlService>();
+        var svc = new PuskasVotingService(db, puskas.Object, urls.Object);
+
+        // Nenhum identificado: recusa.
+        puskas.Setup(p => p.GetAsync(group, 10, null, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<PuskasDto>.Ok(Top(group, (clips[0], false), (clips[1], false))));
+        Assert.False((await svc.OpenPollAsync(group, CancellationToken.None)).Success);
+
+        // 2 de 3 identificados: a votação nasce só com eles.
+        puskas.Setup(p => p.GetAsync(group, 10, null, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<PuskasDto>.Ok(Top(group, (clips[0], true), (clips[1], true), (clips[2], false))));
+        var opened = await svc.OpenPollAsync(group, CancellationToken.None);
+        Assert.True(opened.Success);
+        Assert.Equal(2, opened.Data!.ClipCount);
+
+        // Com voto computado, identificar o 3º só acrescenta; nada sai.
+        var poll = await db.PuskasPolls.SingleAsync();
+        db.PuskasVotes.Add(new PuskasVoteEntity(poll.Id, clips[0].Id, "Ana", "ana"));
+        await db.SaveChangesAsync();
+        puskas.Setup(p => p.GetAsync(group, 10, null, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<PuskasDto>.Ok(Top(group, (clips[1], true), (clips[2], true))));
+        var again = await svc.OpenPollAsync(group, CancellationToken.None);
+        Assert.Equal(3, again.Data!.ClipCount);
+    }
 }
+
