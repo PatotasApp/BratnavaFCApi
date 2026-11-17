@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using BratnavaFC.Domain.Entities;
@@ -37,6 +37,9 @@ public class AppDbContext : DbContext
     public DbSet<UserAbsenceEntity> UserAbsences => Set<UserAbsenceEntity>();
     public DbSet<ReplayClipEntity> ReplayClips => Set<ReplayClipEntity>();
     public DbSet<ReplayLikeEntity> ReplayLikes => Set<ReplayLikeEntity>();
+    public DbSet<ReplayClipScorerEntity> ReplayClipScorers => Set<ReplayClipScorerEntity>();
+    public DbSet<PuskasPollEntity> PuskasPolls => Set<PuskasPollEntity>();
+    public DbSet<PuskasVoteEntity> PuskasVotes => Set<PuskasVoteEntity>();
     public DbSet<ReplayFavoriteEntity> ReplayFavorites => Set<ReplayFavoriteEntity>();
     public DbSet<ReplayEventOutboxEntity> ReplayEventOutbox => Set<ReplayEventOutboxEntity>();
     public DbSet<MatchBetEntity> MatchBets => Set<MatchBetEntity>();
@@ -64,6 +67,9 @@ public class AppDbContext : DbContext
     {
         // ── Notifications ────────────────────────────────────────────────────
         modelBuilder.ApplyConfiguration(new UserNotificationEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new ReplayClipScorerEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new PuskasPollEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new PuskasVoteEntityConfiguration());
         modelBuilder.ApplyConfiguration(new ContentReportEntityConfiguration());
         modelBuilder.ApplyConfiguration(new UserBlockEntityConfiguration());
         modelBuilder.ApplyConfiguration(new GroupSpreadsheetEntityConfiguration());

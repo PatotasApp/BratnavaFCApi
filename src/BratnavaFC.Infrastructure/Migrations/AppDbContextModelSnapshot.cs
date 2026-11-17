@@ -1772,6 +1772,84 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.ToTable("PushTokens");
                 });
 
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.PuskasPollEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClipIdsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsOpen")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("GroupId")
+                        .IsUnique();
+
+                    b.ToTable("PuskasPolls");
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.PuskasVoteEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PollId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VoterKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("VoterName")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClipId");
+
+                    b.HasIndex("PollId");
+
+                    b.HasIndex("PollId", "VoterKey", "ClipId")
+                        .IsUnique();
+
+                    b.ToTable("PuskasVotes");
+                });
+
             modelBuilder.Entity("BratnavaFC.Domain.Entities.ReplayClipEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1829,6 +1907,39 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.HasIndex("MatchId", "EventType");
 
                     b.ToTable("ReplayClips");
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.ReplayClipScorerEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PlayerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClipId")
+                        .IsUnique();
+
+                    b.HasIndex("GroupId");
+
+                    b.HasIndex("PlayerId");
+
+                    b.ToTable("ReplayClipScorers");
                 });
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.ReplayEventOutboxEntity", b =>
@@ -2952,6 +3063,36 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.PuskasVoteEntity", b =>
+                {
+                    b.HasOne("BratnavaFC.Domain.Entities.ReplayClipEntity", null)
+                        .WithMany()
+                        .HasForeignKey("ClipId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("BratnavaFC.Domain.Entities.PuskasPollEntity", null)
+                        .WithMany()
+                        .HasForeignKey("PollId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.ReplayClipScorerEntity", b =>
+                {
+                    b.HasOne("BratnavaFC.Domain.Entities.ReplayClipEntity", null)
+                        .WithMany()
+                        .HasForeignKey("ClipId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("BratnavaFC.Domain.Entities.PlayerEntity", null)
+                        .WithMany()
+                        .HasForeignKey("PlayerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.SeasonEntity", b =>
