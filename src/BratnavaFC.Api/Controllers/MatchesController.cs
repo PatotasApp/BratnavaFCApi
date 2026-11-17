@@ -518,10 +518,11 @@ public class MatchesController : GroupAuthorizedController
     /// <summary>Cria/reabre a votação do Puskas com o top 10 atual (todos os autores precisam estar informados).</summary>
     [HttpPost("group/{groupId:guid}/replays/puskas/poll")]
     public async Task<IActionResult> OpenPuskasPoll(
-        [FromRoute] Guid groupId, [FromServices] IPuskasVotingService voting, CancellationToken ct = default)
+        [FromRoute] Guid groupId, [FromServices] IPuskasVotingService voting,
+        [FromQuery] bool countdown = true, CancellationToken ct = default)
     {
         if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
-        return ToResponse(await voting.OpenPollAsync(groupId, ct));
+        return ToResponse(await voting.OpenPollAsync(groupId, countdown, ct));
     }
 
     /// <summary>Abre ou encerra a votação do Puskas.</summary>

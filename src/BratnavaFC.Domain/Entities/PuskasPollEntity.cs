@@ -17,19 +17,35 @@ public sealed class PuskasPollEntity : BaseEntity
     // EF Core
     private PuskasPollEntity() { }
 
-    public PuskasPollEntity(Guid groupId, IEnumerable<Guid> clipIds)
+    public PuskasPollEntity(Guid groupId, IEnumerable<Guid> clipIds, bool countdown = true)
     {
         GroupId = groupId;
         Code = Guid.NewGuid().ToString("N");
         IsOpen = true;
-        SetClips(clipIds);
+        SetClips(clipIds, countdown);
     }
 
-    public IReadOnlyList<Guid> ClipIds => JsonSerializer.Deserialize<List<Guid>>(ClipIdsJson) ?? [];
+    private sealed record Payload(List<Guid> Ids, bool Countdown);
 
-    public void SetClips(IEnumerable<Guid> clipIds)
+    private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
+
+    // Formato antigo: só um array de ids (contagem regressiva por padrão). Novo: { ids, countdown }.
+    private Payload Read()
     {
-        ClipIdsJson = JsonSerializer.Serialize(clipIds.Distinct().ToList());
+        if (ClipIdsJson.TrimStart().StartsWith('['))
+            return new Payload(JsonSerializer.Deserialize<List<Guid>>(ClipIdsJson) ?? [], true);
+        return JsonSerializer.Deserialize<Payload>(ClipIdsJson, Json) ?? new Payload([], true);
+    }
+
+    /// <summary>Gols da votação na ordem do ranking (posição 1, 2, 3…).</summary>
+    public IReadOnlyList<Guid> ClipIds => Read().Ids;
+
+    /// <summary>O telão passa do último ao 1º; a folha de votação segue a mesma ordem.</summary>
+    public bool Countdown => Read().Countdown;
+
+    public void SetClips(IEnumerable<Guid> clipIds, bool? countdown = null)
+    {
+        ClipIdsJson = JsonSerializer.Serialize(new Payload(clipIds.Distinct().ToList(), countdown ?? Countdown));
         UpdateDate = DateTime.UtcNow;
     }
 
