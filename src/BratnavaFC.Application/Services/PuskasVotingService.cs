@@ -53,11 +53,11 @@ public sealed class PuskasVotingService : IPuskasVotingService
             return Result<PuskasPollDto>.Fail(current.Error ?? "Falha ao carregar os gols.", current.Status);
         if (current.Data.Items.Count == 0)
             return Result<PuskasPollDto>.Fail("Nenhum gol curtido para votar.");
-        var missing = current.Data.Items.Count(i => i.ScorerPlayerId is null);
-        if (missing > 0)
-            return Result<PuskasPollDto>.Fail($"Faltam {missing} gols sem autor. Identifique todos antes de abrir a votação.");
+        // Só entram na votação os gols que já têm autor informado; o resto fica de fora.
+        var clipIds = current.Data.Items.Where(i => i.ScorerPlayerId is not null).Select(i => i.Clip.Id).ToList();
+        if (clipIds.Count == 0)
+            return Result<PuskasPollDto>.Fail("Identifique o autor de pelo menos 1 gol antes de abrir a votação.");
 
-        var clipIds = current.Data.Items.Select(i => i.Clip.Id).ToList();
         var poll = await _db.PuskasPolls.FirstOrDefaultAsync(p => p.GroupId == groupId, ct);
         if (poll is null)
         {
@@ -66,9 +66,10 @@ public sealed class PuskasVotingService : IPuskasVotingService
         }
         else
         {
-            // Com votos já computados a lista não muda (os votos apontam para ela).
+            // Com votos já computados nenhum gol sai da lista (os votos apontam para ela);
+            // gols recém-identificados podem ser acrescentados.
             var hasVotes = await _db.PuskasVotes.AnyAsync(v => v.PollId == poll.Id, ct);
-            if (!hasVotes) poll.SetClips(clipIds);
+            poll.SetClips(hasVotes ? poll.ClipIds.Union(clipIds) : clipIds);
             poll.SetOpen(true);
         }
         await _db.SaveChangesAsync(ct);
