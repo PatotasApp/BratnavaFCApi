@@ -36,6 +36,7 @@ public sealed class GroupSettingsEntity : BaseEntity
     public string? DefaultPlaceName { get; private set; }
 
     public DayOfWeek? DefaultDayOfWeek { get; private set; }
+    public string? DefaultDaysOfWeekJson { get; private set; }
     public TimeSpan? DefaultKickoffTime { get; private set; }
 
     public bool MatchSchedulingEnabled { get; private set; }
@@ -190,6 +191,54 @@ public sealed class GroupSettingsEntity : BaseEntity
         {
             return [];
         }
+    }
+
+    public IReadOnlyList<DayOfWeek> GetDefaultDaysOfWeek()
+    {
+        if (!string.IsNullOrWhiteSpace(DefaultDaysOfWeekJson))
+        {
+            try
+            {
+                var days = JsonSerializer.Deserialize<List<DayOfWeek>>(DefaultDaysOfWeekJson);
+                if (days is { Count: > 0 })
+                    return days.Distinct().OrderBy(x => (int)x).ToList();
+            }
+            catch (JsonException)
+            {
+                // Configurações anteriores continuam usando o campo singular.
+            }
+        }
+
+        return DefaultDayOfWeek.HasValue ? [DefaultDayOfWeek.Value] : [];
+    }
+
+    public DateTime? GetNextDefaultMatchAt(DateTime reference)
+    {
+        if (!DefaultKickoffTime.HasValue)
+            return null;
+
+        var candidates = GetDefaultDaysOfWeek()
+            .Select(day =>
+            {
+                var offset = ((int)day - (int)reference.DayOfWeek + 7) % 7;
+                var candidate = reference.Date.AddDays(offset).Add(DefaultKickoffTime.Value);
+                return candidate <= reference ? candidate.AddDays(7) : candidate;
+            })
+            .ToList();
+
+        return candidates.Count == 0 ? null : candidates.Min();
+    }
+
+    public void SetDefaultDaysOfWeek(IReadOnlyCollection<DayOfWeek>? days)
+    {
+        var normalized = (days ?? [])
+            .Distinct()
+            .OrderBy(x => (int)x)
+            .ToList();
+        DefaultDaysOfWeekJson = normalized.Count == 0
+            ? null
+            : JsonSerializer.Serialize(normalized);
+        DefaultDayOfWeek = normalized.Count == 0 ? null : normalized[0];
     }
 
     public void SetMatchScheduling(

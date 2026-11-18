@@ -8,6 +8,7 @@ public sealed class UpsertGroupSettingsDto
     public int MaxPlayers { get; set; }
     public string? DefaultPlaceName { get; set; }
     public DayOfWeek? DefaultDayOfWeek { get; set; }
+    public List<DayOfWeek>? DefaultDaysOfWeek { get; set; }
     public TimeSpan? DefaultKickoffTime { get; set; }
 
     // ── Ícones configuráveis ─────────────────────────────────────────────────

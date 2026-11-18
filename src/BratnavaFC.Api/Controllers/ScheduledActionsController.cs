@@ -388,12 +388,7 @@ public sealed class ScheduledActionsController : GroupAuthorizedController
 
     private static DateTime ResolveRecurringMatchTime(GroupSettingsEntity setting, DateTime triggerLocal)
     {
-        if (!setting.DefaultDayOfWeek.HasValue || !setting.DefaultKickoffTime.HasValue)
-            return triggerLocal;
-
-        var daysUntilMatch = ((int)setting.DefaultDayOfWeek.Value - (int)triggerLocal.DayOfWeek + 7) % 7;
-        var playedAt = triggerLocal.Date.AddDays(daysUntilMatch).Add(setting.DefaultKickoffTime.Value);
-        return playedAt < triggerLocal ? playedAt.AddDays(7) : playedAt;
+        return setting.GetNextDefaultMatchAt(triggerLocal) ?? triggerLocal;
     }
 
     private static DateTime NextPaymentReminderDate(DateTime nowLocal, int dueDay)

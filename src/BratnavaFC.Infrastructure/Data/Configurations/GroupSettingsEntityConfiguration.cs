@@ -26,6 +26,8 @@ public class GroupSettingsEntityConfiguration : IEntityTypeConfiguration<GroupSe
             .HasMaxLength(200);
 
         builder.Property(x => x.DefaultDayOfWeek);
+        builder.Property(x => x.DefaultDaysOfWeekJson)
+            .HasColumnType("text");
         builder.Property(x => x.DefaultKickoffTime);
         builder.Property(x => x.MatchSchedulingEnabled)
             .HasDefaultValue(false);
