@@ -46,6 +46,7 @@ public class GroupsController : GroupAuthorizedController
     /// histórico), não a ausência do caminho; é o que GitHub, Slack e Discord fazem.
     /// </summary>
     [HttpDelete("{groupId:guid}")]
+    [BratnavaFC.Api.Billing.AllowWhenGroupExpired]
     public async Task<IActionResult> DeleteGroupAsync(Guid groupId, CancellationToken cancellationToken)
     {
         var requestingUserId = GetCurrentUserId();
@@ -164,6 +165,7 @@ public class GroupsController : GroupAuthorizedController
     }
 
     [HttpPost("{groupId:guid}/admins")]
+    [BratnavaFC.Api.Billing.AllowWhenGroupExpired]
     public async Task<IActionResult> AddAdminAsync(Guid groupId, [FromBody] AddAdminToGroupDto request, CancellationToken cancellationToken)
     {
         if (request == null) return BadRequest();
@@ -176,6 +178,7 @@ public class GroupsController : GroupAuthorizedController
     }
 
     [HttpDelete("{groupId:guid}/admins/{userId:guid}")]
+    [BratnavaFC.Api.Billing.AllowWhenGroupExpired]
     public async Task<IActionResult> RemoveAdminAsync(Guid groupId, Guid userId, CancellationToken cancellationToken)
     {
         var requestingUserId = GetCurrentUserId();
@@ -198,6 +201,7 @@ public class GroupsController : GroupAuthorizedController
     }
 
     [HttpPost("{groupId:guid}/financeiros")]
+    [BratnavaFC.Api.Billing.AllowWhenGroupExpired]
     public async Task<IActionResult> AddFinanceiroAsync(Guid groupId, [FromBody] AddAdminToGroupDto request, CancellationToken cancellationToken)
     {
         if (request == null) return BadRequest();
@@ -210,6 +214,7 @@ public class GroupsController : GroupAuthorizedController
     }
 
     [HttpDelete("{groupId:guid}/financeiros/{userId:guid}")]
+    [BratnavaFC.Api.Billing.AllowWhenGroupExpired]
     public async Task<IActionResult> RemoveFinanceiroAsync(Guid groupId, Guid userId, CancellationToken cancellationToken)
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, cancellationToken))
@@ -220,6 +225,7 @@ public class GroupsController : GroupAuthorizedController
     }
 
     [HttpPost("{groupId:guid}/leave-creator")]
+    [BratnavaFC.Api.Billing.AllowWhenGroupExpired]
     [Authorize(Roles = "User,Admin,GodMode")]
     public async Task<IActionResult> CreatorLeaveGroupAsync(Guid groupId, [FromBody] CreatorLeaveGroupDto request, CancellationToken cancellationToken)
     {

@@ -1,4 +1,4 @@
-﻿using BratnavaFC.Application.Abstractions;
+using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Api.Realtime;
 using BratnavaFC.Domain.Common;
 using BratnavaFC.Domain.Dtos;
@@ -477,6 +477,71 @@ public class MatchesController : GroupAuthorizedController
         if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
         var result = await ranking.GetRankingAsync(groupId, goalsOnly, from, to, minLikes, top, ct);
         return ToResponse(result);
+    }
+
+    /// <summary>Telão do Puskas (admin): top N gols mais curtidos (empatados entram) com o autor informado.</summary>
+    [HttpGet("group/{groupId:guid}/replays/puskas")]
+    public async Task<IActionResult> GetPuskas(
+        [FromRoute] Guid groupId,
+        [FromServices] IPuskasService puskas,
+        [FromQuery] int top = 10,
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
+        CancellationToken ct = default)
+    {
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
+        return ToResponse(await puskas.GetAsync(groupId, top, from, to, ct));
+    }
+
+    /// <summary>Informa (ou limpa, com playerId nulo) quem fez o gol do replay.</summary>
+    [HttpPut("group/{groupId:guid}/replays/{clipId:guid}/scorer")]
+    public async Task<IActionResult> SetPuskasScorer(
+        [FromRoute] Guid groupId,
+        [FromRoute] Guid clipId,
+        [FromBody] SetPuskasScorerRequest request,
+        [FromServices] IPuskasService puskas,
+        CancellationToken ct = default)
+    {
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
+        return ToResponse(await puskas.SetScorerAsync(groupId, clipId, request.PlayerId, ct));
+    }
+
+    /// <summary>Votação do Puskas (admin): estado atual, ou data null se ainda não foi criada.</summary>
+    [HttpGet("group/{groupId:guid}/replays/puskas/poll")]
+    public async Task<IActionResult> GetPuskasPoll(
+        [FromRoute] Guid groupId, [FromServices] IPuskasVotingService voting, CancellationToken ct = default)
+    {
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
+        return ToResponse(await voting.GetPollAsync(groupId, ct));
+    }
+
+    /// <summary>Cria/reabre a votação do Puskas com o top 10 atual (todos os autores precisam estar informados).</summary>
+    [HttpPost("group/{groupId:guid}/replays/puskas/poll")]
+    public async Task<IActionResult> OpenPuskasPoll(
+        [FromRoute] Guid groupId, [FromServices] IPuskasVotingService voting,
+        [FromQuery] bool countdown = true, CancellationToken ct = default)
+    {
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
+        return ToResponse(await voting.OpenPollAsync(groupId, countdown, ct));
+    }
+
+    /// <summary>Abre ou encerra a votação do Puskas.</summary>
+    [HttpPut("group/{groupId:guid}/replays/puskas/poll/open")]
+    public async Task<IActionResult> SetPuskasPollOpen(
+        [FromRoute] Guid groupId, [FromBody] SetPuskasPollOpenRequest request,
+        [FromServices] IPuskasVotingService voting, CancellationToken ct = default)
+    {
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
+        return ToResponse(await voting.SetOpenAsync(groupId, request.IsOpen, ct));
+    }
+
+    /// <summary>Apuração da votação do Puskas: votos por gol e quem votou.</summary>
+    [HttpGet("group/{groupId:guid}/replays/puskas/results")]
+    public async Task<IActionResult> GetPuskasResults(
+        [FromRoute] Guid groupId, [FromServices] IPuskasVotingService voting, CancellationToken ct = default)
+    {
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
+        return ToResponse(await voting.GetResultsAsync(groupId, ct));
     }
 
     [HttpGet("group/{groupId:guid}/replays/my-likes")]

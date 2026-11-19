@@ -1,7 +1,8 @@
-﻿using System;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using BratnavaFC.Domain.Entities;
+using BratnavaFC.Domain.Entities.Billing;
 using BratnavaFC.Infrastructure.Data.Configurations;
 using Microsoft.EntityFrameworkCore;
 
@@ -39,6 +40,9 @@ public class AppDbContext : DbContext
     public DbSet<UserAbsenceEntity> UserAbsences => Set<UserAbsenceEntity>();
     public DbSet<ReplayClipEntity> ReplayClips => Set<ReplayClipEntity>();
     public DbSet<ReplayLikeEntity> ReplayLikes => Set<ReplayLikeEntity>();
+    public DbSet<ReplayClipScorerEntity> ReplayClipScorers => Set<ReplayClipScorerEntity>();
+    public DbSet<PuskasPollEntity> PuskasPolls => Set<PuskasPollEntity>();
+    public DbSet<PuskasVoteEntity> PuskasVotes => Set<PuskasVoteEntity>();
     public DbSet<ReplayFavoriteEntity> ReplayFavorites => Set<ReplayFavoriteEntity>();
     public DbSet<ReplayEventOutboxEntity> ReplayEventOutbox => Set<ReplayEventOutboxEntity>();
     public DbSet<MatchBetEntity> MatchBets => Set<MatchBetEntity>();
@@ -61,11 +65,21 @@ public class AppDbContext : DbContext
     public DbSet<ChampionshipBetEntity> ChampionshipBets => Set<ChampionshipBetEntity>();
     public DbSet<ChampionshipBetSelectionEntity> ChampionshipBetSelections => Set<ChampionshipBetSelectionEntity>();
     public DbSet<ChampionshipGameEventEntity> ChampionshipGameEvents => Set<ChampionshipGameEventEntity>();
+    public DbSet<BillingSettingsEntity> BillingSettings => Set<BillingSettingsEntity>();
+    public DbSet<BillingProductEntity> BillingProducts => Set<BillingProductEntity>();
+    public DbSet<GroupBillingEntity> GroupBillings => Set<GroupBillingEntity>();
+    public DbSet<BillingTrialGrantEntity> BillingTrialGrants => Set<BillingTrialGrantEntity>();
+    public DbSet<BillingPurchaseEntity> BillingPurchases => Set<BillingPurchaseEntity>();
+    public DbSet<BillingAdjustmentEntity> BillingAdjustments => Set<BillingAdjustmentEntity>();
+    public DbSet<StoreEventEntity> StoreEvents => Set<StoreEventEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // ── Notifications ────────────────────────────────────────────────────
         modelBuilder.ApplyConfiguration(new UserNotificationEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new ReplayClipScorerEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new PuskasPollEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new PuskasVoteEntityConfiguration());
         modelBuilder.ApplyConfiguration(new ContentReportEntityConfiguration());
         modelBuilder.ApplyConfiguration(new UserBlockEntityConfiguration());
         modelBuilder.ApplyConfiguration(new GroupSpreadsheetEntityConfiguration());
@@ -131,6 +145,15 @@ public class AppDbContext : DbContext
 
         // ── Financial Transactions ───────────────────────────────────────────
         modelBuilder.ApplyConfiguration(new GroupTransactionEntityConfiguration());
+
+        // ── Cobrança da patota (lojas) ───────────────────────────────────────
+        modelBuilder.ApplyConfiguration(new BillingSettingsEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new BillingProductEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new GroupBillingEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new BillingTrialGrantEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new BillingPurchaseEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new BillingAdjustmentEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new StoreEventEntityConfiguration());
     }
 
     public override int SaveChanges()

@@ -233,9 +233,11 @@ public sealed class PlayerRetrospectiveCalculatorTests
         {
             Game(Day(2, 1), [Ana, Beto], [Caio], 1, 0, [Goal(Ana, 1, Beto)]),
         };
-        // 98 gols do Caio (1 por jogo): o 100º gol da patota é do Beto, e o último (101º) da Ana.
-        for (var i = 0; i < 98; i++)
+        // Gol contra também ocupa posição na linha do tempo, como no Spotlight.
+        // Com 97 gols do Caio e um gol contra, o 100º é do Beto e o último (101º), da Ana.
+        for (var i = 0; i < 97; i++)
             units.Add(Game(Day(3, 1).AddDays(i), [Caio], [Davi], 1, 0, [Goal(Caio, 1)]));
+        units.Add(Game(Day(8, 31), [Davi], [Caio], 0, 1, [Own(Davi, 2)]));
         units.Add(Game(Day(9, 1), [Beto, Ana], [Caio], 2, 0, [Goal(Beto, 1, Ana), Goal(Ana, 1)]));
 
         var ana = Build(Ana, units.ToArray());

@@ -478,7 +478,6 @@ public class PushService : IPushService
                 Notification = new AndroidNotification
                 {
                     Sound = "default",
-                    ClickAction = "FLUTTER_NOTIFICATION_CLICK",
                 },
             },
             Apns = new ApnsConfig

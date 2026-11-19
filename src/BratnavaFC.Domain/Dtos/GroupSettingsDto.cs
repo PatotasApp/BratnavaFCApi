@@ -12,6 +12,7 @@ public sealed class GroupSettingsDto
     public string? DefaultPlaceName { get; init; }
 
     public DayOfWeek? DefaultDayOfWeek { get; init; }
+    public List<DayOfWeek> DefaultDaysOfWeek { get; init; } = new();
     public TimeSpan? DefaultKickoffTime { get; init; }
 
     public bool IsPersisted { get; init; }

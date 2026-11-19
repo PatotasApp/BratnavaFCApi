@@ -22,6 +22,333 @@ namespace BratnavaFC.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.Billing.BillingAdjustmentEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("Days")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Details")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid?>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GroupId", "CreateDate");
+
+                    b.ToTable("BillingAdjustments", (string)null);
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.Billing.BillingProductEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Months")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProductId")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<int>("ReferencePriceCents")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Store")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Store", "Months")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\" = TRUE");
+
+                    b.HasIndex("Store", "ProductId")
+                        .IsUnique();
+
+                    b.ToTable("BillingProducts", (string)null);
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.Billing.BillingPurchaseEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ConsumedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("Environment")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Months")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("PeriodEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PeriodStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("PriceMicros")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ProductId")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("PurchaseToken")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("PurchasedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RefundReason")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("RefundedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("State")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Store")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TransactionId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PurchaseToken");
+
+                    b.HasIndex("GroupId", "PurchasedAt");
+
+                    b.HasIndex("Store", "TransactionId")
+                        .IsUnique();
+
+                    b.ToTable("BillingPurchases", (string)null);
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.Billing.BillingSettingsEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("EnforcementEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("GraceDays")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("LaunchedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReminderDays")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<bool>("RemindersEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("TrialDays")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("BillingSettings", (string)null);
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.Billing.BillingTrialGrantEntity", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("GrantedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("UserId");
+
+                    b.HasIndex("GroupId");
+
+                    b.ToTable("BillingTrialGrants", (string)null);
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.Billing.GroupBillingEntity", b =>
+                {
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("HasPaidPeriod")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsLifetime")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LastReminderKey")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("LifetimeReason")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime?>("PaidUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("TrialEndsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("TrialGranted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("TrialStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("GroupId");
+
+                    b.ToTable("GroupBillings", (string)null);
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.Billing.StoreEventEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("NotificationType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTime?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RawPayload")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Store")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StoreReference")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Subtype")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GroupId");
+
+                    b.HasIndex("Status", "CreateDate");
+
+                    b.HasIndex("Store", "ExternalId")
+                        .IsUnique();
+
+                    b.ToTable("StoreEvents", (string)null);
+                });
+
             modelBuilder.Entity("BratnavaFC.Domain.Entities.CalendarCategoryEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -775,6 +1102,9 @@ namespace BratnavaFC.Infrastructure.Migrations
 
                     b.Property<int?>("DefaultDayOfWeek")
                         .HasColumnType("integer");
+
+                    b.Property<string>("DefaultDaysOfWeekJson")
+                        .HasColumnType("text");
 
                     b.Property<TimeSpan?>("DefaultKickoffTime")
                         .HasColumnType("interval");
@@ -1911,6 +2241,84 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.ToTable("PushTokens");
                 });
 
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.PuskasPollEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClipIdsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsOpen")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("GroupId")
+                        .IsUnique();
+
+                    b.ToTable("PuskasPolls");
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.PuskasVoteEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PollId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VoterKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("VoterName")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClipId");
+
+                    b.HasIndex("PollId");
+
+                    b.HasIndex("PollId", "VoterKey", "ClipId")
+                        .IsUnique();
+
+                    b.ToTable("PuskasVotes");
+                });
+
             modelBuilder.Entity("BratnavaFC.Domain.Entities.ReplayClipEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1968,6 +2376,39 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.HasIndex("MatchId", "EventType");
 
                     b.ToTable("ReplayClips");
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.ReplayClipScorerEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PlayerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClipId")
+                        .IsUnique();
+
+                    b.HasIndex("GroupId");
+
+                    b.HasIndex("PlayerId");
+
+                    b.ToTable("ReplayClipScorers");
                 });
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.ReplayEventOutboxEntity", b =>
@@ -2578,6 +3019,15 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.ToTable("Votes");
                 });
 
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.Billing.GroupBillingEntity", b =>
+                {
+                    b.HasOne("BratnavaFC.Domain.Entities.GroupEntity", null)
+                        .WithOne()
+                        .HasForeignKey("BratnavaFC.Domain.Entities.Billing.GroupBillingEntity", "GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("BratnavaFC.Domain.Entities.CalendarCategoryEntity", b =>
                 {
                     b.HasOne("BratnavaFC.Domain.Entities.GroupEntity", null)
@@ -3151,6 +3601,36 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.PuskasVoteEntity", b =>
+                {
+                    b.HasOne("BratnavaFC.Domain.Entities.ReplayClipEntity", null)
+                        .WithMany()
+                        .HasForeignKey("ClipId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("BratnavaFC.Domain.Entities.PuskasPollEntity", null)
+                        .WithMany()
+                        .HasForeignKey("PollId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.ReplayClipScorerEntity", b =>
+                {
+                    b.HasOne("BratnavaFC.Domain.Entities.ReplayClipEntity", null)
+                        .WithMany()
+                        .HasForeignKey("ClipId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("BratnavaFC.Domain.Entities.PlayerEntity", null)
+                        .WithMany()
+                        .HasForeignKey("PlayerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.SeasonEntity", b =>
