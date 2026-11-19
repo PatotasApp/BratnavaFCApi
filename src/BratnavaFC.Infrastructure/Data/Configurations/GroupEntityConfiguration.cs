@@ -17,6 +17,7 @@ public class GroupEntityConfiguration : IEntityTypeConfiguration<GroupEntity>
         builder.Property(x => x.IsPublic).HasDefaultValue(true).IsRequired();
         builder.Property(x => x.IsAcceptingPlayers).HasDefaultValue(false).IsRequired();
         builder.Property(x => x.ShowMembersOnProfile).HasDefaultValue(false).IsRequired();
+        builder.Property(x => x.ShowGoalsToGuests).HasDefaultValue(false).IsRequired();
         builder.Property(x => x.ProfileDescription).HasMaxLength(500);
         builder.Property(x => x.ProfileCity).HasMaxLength(100);
 

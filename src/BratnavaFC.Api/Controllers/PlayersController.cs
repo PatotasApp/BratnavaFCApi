@@ -3,6 +3,7 @@ using BratnavaFC.Domain.Dtos.Players;
 using BratnavaFC.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace BratnavaFC.Api.Controllers;
@@ -59,7 +60,16 @@ public class PlayersController : GroupAuthorizedController
         if (groupId == null) return NotFound();
 
         if (!await IsAuthorizedForGroupAsync(groupId.Value, _db, cancellationToken))
-            return Forbid();
+        {
+            // O mensalista pode ajustar o próprio apelido (e se é goleiro) na sua patota.
+            var me = GetCurrentUserId();
+            var isOwnPlayer = me != null && await _db.Players.AnyAsync(
+                p => p.Id == playerId && p.UserId == me.Value && !p.IsGuest, cancellationToken);
+            if (!isOwnPlayer) return Forbid();
+
+            return ToResponse(await _playerService.UpdateOwnAsync(
+                playerId, request.Name, request.IsGoalkeeper, cancellationToken));
+        }
 
         var result = await _playerService.UpdateAsync(playerId, request, cancellationToken);
         return ToResponse(result);

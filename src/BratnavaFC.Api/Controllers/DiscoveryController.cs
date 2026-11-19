@@ -69,14 +69,15 @@ public sealed class DiscoveryController : BaseApiController
         Respond(_service.ApplyAsync(groupId, UserId(), dto, ct));
 
     [HttpGet("groups/{groupId:guid}/applications")]
-    public async Task<IActionResult> GroupApplications(Guid groupId, CancellationToken ct)
+    public async Task<IActionResult> GroupApplications(Guid groupId, [FromQuery] bool history = false, CancellationToken ct = default)
     {
         if (!await IsAdmin(groupId, ct)) return Forbid();
-        return ToResponse(await _service.GetGroupApplicationsAsync(groupId, ct));
+        return ToResponse(await _service.GetGroupApplicationsAsync(groupId, history, ct));
     }
 
     [HttpGet("applications/mine")]
-    public Task<IActionResult> MyApplications(CancellationToken ct) => Respond(_service.GetMyApplicationsAsync(UserId(), ct));
+    public Task<IActionResult> MyApplications([FromQuery] bool history = false, CancellationToken ct = default) =>
+        Respond(_service.GetMyApplicationsAsync(UserId(), history, ct));
 
     [HttpGet("groups/{groupId:guid}/guest-candidates/{userId:guid}")]
     public async Task<IActionResult> GuestCandidates(Guid groupId, Guid userId, CancellationToken ct)
@@ -114,6 +115,16 @@ public sealed class DiscoveryController : BaseApiController
     [HttpPatch("applications/{applicationId:guid}/reject")]
     public Task<IActionResult> Reject(Guid applicationId, CancellationToken ct) =>
         Respond(_service.RejectByPlayerAsync(applicationId, UserId(), ct));
+
+    [HttpGet("guest-matches")]
+    public Task<IActionResult> GuestMatches(CancellationToken ct) => Respond(_service.GetGuestMatchesAsync(UserId(), ct));
+
+    [HttpGet("guest-matches/{matchId:guid}")]
+    public Task<IActionResult> GuestMatch(Guid matchId, CancellationToken ct) => Respond(_service.GetGuestMatchAsync(UserId(), matchId, ct));
+
+    [HttpPatch("guest-matches/{matchId:guid}/attendance")]
+    public Task<IActionResult> GuestAttendance(Guid matchId, SetGuestAttendanceDto dto, CancellationToken ct) =>
+        Respond(_service.SetGuestAttendanceAsync(UserId(), matchId, dto.Going, ct));
 
     private Guid UserId() => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
         ? id : throw new UnauthorizedAccessException();

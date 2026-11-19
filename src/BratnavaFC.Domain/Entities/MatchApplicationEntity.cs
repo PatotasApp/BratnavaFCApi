@@ -65,6 +65,21 @@ public sealed class MatchApplicationEntity : BaseEntity
     public void Reject(string? reason = null) { DecisionReason = NormalizeText(reason); Status = MatchApplicationStatus.Rejected; RespondedAt = DateTimeOffset.UtcNow; }
     public void Cancel() { Status = MatchApplicationStatus.Cancelled; RespondedAt = DateTimeOffset.UtcNow; }
 
+    /// <summary>O jogador ja confirmado desistiu ("nao vou"). Pode voltar atras enquanto a partida aceitar.</summary>
+    public void WithdrawByPlayer()
+    {
+        if (Status != MatchApplicationStatus.Accepted) throw new InvalidOperationException("Only a confirmed player can withdraw.");
+        Status = MatchApplicationStatus.Cancelled;
+        RespondedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void ReconfirmByPlayer()
+    {
+        if (Status != MatchApplicationStatus.Cancelled) throw new InvalidOperationException("Only a withdrawn confirmation can be reconfirmed.");
+        Status = MatchApplicationStatus.Accepted;
+        RespondedAt = DateTimeOffset.UtcNow;
+    }
+
     private static string? NormalizeText(string? value)
     {
         var text = value?.Trim();

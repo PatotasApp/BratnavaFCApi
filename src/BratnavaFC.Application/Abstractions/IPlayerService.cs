@@ -16,5 +16,8 @@ public interface IPlayerService
     Task<Result> RemoveFromGroupAsync(Guid playerId, CancellationToken cancellationToken);
     Task<Result<IReadOnlyList<BirthdayStatusDto>>> GetBirthdayStatusAsync(Guid groupId, CancellationToken cancellationToken);
     Task<Result<PlayerDto>> ToggleGoalkeeperAsync(Guid playerId, CancellationToken cancellationToken);
+    /// <summary>Edição feita pelo próprio jogador: só apelido e goleiro.</summary>
+    Task<Result<PlayerDto>> UpdateOwnAsync(Guid playerId, string name, bool isGoalkeeper, CancellationToken cancellationToken);
+
     Task<Guid?> GetGroupIdAsync(Guid playerId, CancellationToken cancellationToken);
 }

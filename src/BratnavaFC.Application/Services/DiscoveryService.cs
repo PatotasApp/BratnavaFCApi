@@ -29,19 +29,19 @@ public sealed class DiscoveryService : IDiscoveryService
         var term = (query ?? "").Trim().ToLower();
         if (term.Length == 0)
             return Result<PagedResultDto<GroupSearchItemDto>>.Ok(EmptyPage<GroupSearchItemDto>(page, pageSize));
-        var groups = _db.Groups.AsNoTracking().Where(g => g.Status == Status.Active && g.IsPublic &&
-            !g.Players.Any(p => p.UserId == requesterId && !p.IsGuest && p.Status == Status.Active) &&
-            !_db.GroupAdmins.Any(a => a.GroupId == g.Id && a.UserId == requesterId));
+        var groups = _db.Groups.AsNoTracking().Where(g => g.Status == Status.Active && g.IsPublic);
         groups = groups.Where(g => g.Name.ToLower().Contains(term) || g.Code.ToLower().Contains(term));
         var total = await groups.CountAsync(ct);
         var rows = await groups.OrderBy(g => g.Name).Skip((page - 1) * pageSize).Take(pageSize)
             .Select(g => new { g.Id, g.Name, g.Code, g.LogoKey, g.ProfileCity, g.IsAcceptingPlayers,
-                Count = g.Players.Count(p => !p.IsGuest && p.Status == Status.Active) }).ToListAsync(ct);
+                Count = g.Players.Count(p => !p.IsGuest && p.Status == Status.Active),
+                IsMember = g.Players.Any(p => p.UserId == requesterId && !p.IsGuest && p.Status == Status.Active) ||
+                    _db.GroupAdmins.Any(a => a.GroupId == g.Id && a.UserId == requesterId) }).ToListAsync(ct);
         return Result<PagedResultDto<GroupSearchItemDto>>.Ok(new()
         {
             Page = page, PageSize = pageSize, Total = total,
             Items = rows.Select(x => new GroupSearchItemDto(x.Id, x.Name, x.Code, Image(x.LogoKey),
-                x.ProfileCity, x.IsAcceptingPlayers, x.Count)).ToList()
+                x.ProfileCity, x.IsAcceptingPlayers, x.Count, x.IsMember)).ToList()
         });
     }
 
@@ -51,11 +51,11 @@ public sealed class DiscoveryService : IDiscoveryService
         var term = (query ?? "").Trim().ToLower();
         if (term.Length == 0)
             return Result<PagedResultDto<PlayerSearchItemDto>>.Ok(EmptyPage<PlayerSearchItemDto>(page, pageSize));
-        var myGroups = _db.Players.AsNoTracking().Where(p => p.UserId == requesterId).Select(p => p.GroupId);
+        var myGroups = _db.Players.AsNoTracking().Where(p => p.UserId == requesterId && !p.IsGuest).Select(p => p.GroupId);
         var visible = _db.Users.AsNoTracking().Where(u => u.Status == Status.Active && u.Id != requesterId &&
             (u.ProfileVisibility == ProfileVisibility.AuthenticatedUsers ||
              (u.ProfileVisibility == ProfileVisibility.SharedPatotas &&
-              u.Players.Any(p => myGroups.Contains(p.GroupId)))));
+              u.Players.Any(p => !p.IsGuest && myGroups.Contains(p.GroupId)))));
         visible = visible.Where(u => u.UserName.ToLower().Contains(term) ||
             (u.FirstName + " " + u.LastName).ToLower().Contains(term));
         var total = await visible.CountAsync(ct);
@@ -67,7 +67,7 @@ public sealed class DiscoveryService : IDiscoveryService
         return Result<PagedResultDto<PlayerSearchItemDto>>.Ok(new()
         {
             Page = page, PageSize = pageSize, Total = total,
-            Items = rows.Select(x => new PlayerSearchItemDto(x.Id, $"{x.FirstName} {x.LastName}".Trim(),
+            Items = rows.Select(x => new PlayerSearchItemDto(x.Id, UserEntity.JoinName(x.FirstName, x.LastName),
                 x.UserName, Image(x.ProfilePhotoKey), x.Goalkeeper.HasValue ? x.Goalkeeper.Value ? "Goleiro" : "Linha" : null)).ToList()
         });
     }
@@ -76,7 +76,7 @@ public sealed class DiscoveryService : IDiscoveryService
     {
         var group = await _db.Groups.AsNoTracking().FirstOrDefaultAsync(g => g.Id == groupId && g.Status == Status.Active, ct);
         if (group is null) return Result<GroupProfileDto>.Fail("Patota não encontrada.", ResultStatus.NotFound);
-        var isMember = await _db.Players.AnyAsync(p => p.GroupId == groupId && p.UserId == requesterId, ct);
+        var isMember = await _db.Players.AnyAsync(p => p.GroupId == groupId && p.UserId == requesterId && !p.IsGuest, ct);
         var isAdmin = await _db.GroupAdmins.AnyAsync(a => a.GroupId == groupId && a.UserId == requesterId, ct);
         if (!group.IsPublic && !isMember && !isAdmin)
             return Result<GroupProfileDto>.Fail("Esta patota é privada.", ResultStatus.NotFound);
@@ -89,10 +89,17 @@ public sealed class DiscoveryService : IDiscoveryService
         // Candidaturas públicas dependem de a patota estar aberta. O administrador,
         // porém, pode convidar diretamente um jogador para conhecer a patota mesmo
         // quando ela não recebe candidaturas espontâneas.
-        var matches = group.IsAcceptingPlayers || isAdmin
-            ? await _db.Matches.AsNoTracking().Where(m => m.GroupId == groupId && m.Status == MatchStatus.Acceptation && m.PlayedAt >= DateTime.UtcNow)
-                .OrderBy(m => m.PlayedAt).Take(10).Select(m => new { m.Id, m.PlayedAt, m.PlaceName }).ToListAsync(ct)
-            : [];
+        // Partidas em que o visitante ja esta confirmado (como mensalista ou convidado):
+        // aparecem mesmo que a patota nao esteja recebendo candidaturas.
+        var myMatchIds = await _db.MatchPlayers.AsNoTracking()
+            .Where(mp => mp.GroupId == groupId && mp.Player!.UserId == requesterId && mp.InviteResponse == InviteResponse.Accepted)
+            .Select(mp => mp.MatchId).ToListAsync(ct);
+        var showAllMatches = group.IsAcceptingPlayers || isAdmin;
+        // Todas as proximas partidas abertas, nao so a mais proxima.
+        var matches = await _db.Matches.AsNoTracking()
+            .Where(m => m.GroupId == groupId && m.Status == MatchStatus.Acceptation && m.PlayedAt >= DateTime.UtcNow &&
+                        (showAllMatches || myMatchIds.Contains(m.Id)))
+            .OrderBy(m => m.PlayedAt).Take(50).Select(m => new { m.Id, m.PlayedAt, m.PlaceName }).ToListAsync(ct);
         var matchIds = matches.Select(x => x.Id).ToList();
         var openings = await _db.MatchOpenings.AsNoTracking()
             .Where(x => matchIds.Contains(x.MatchId) && x.IsActive)
@@ -115,16 +122,18 @@ public sealed class DiscoveryService : IDiscoveryService
             Description = group.ProfileDescription, City = group.ProfileCity,
             DefaultDayOfWeek = settings?.DefaultDayOfWeek, DefaultKickoffTime = settings?.DefaultKickoffTime,
             MemberCount = await _db.Players.CountAsync(p => p.GroupId == groupId && !p.IsGuest && p.Status == Status.Active, ct),
-            IsPublic = group.IsPublic, IsAcceptingPlayers = group.IsAcceptingPlayers, ShowMembers = group.ShowMembersOnProfile,
+            IsPublic = group.IsPublic, IsAcceptingPlayers = group.IsAcceptingPlayers, ShowMembers = group.ShowMembersOnProfile, ShowGoalsToGuests = group.ShowGoalsToGuests,
             Members = members,
             UpcomingMatches = matches.Select(m =>
             {
                 applicationByMatch.TryGetValue(m.Id, out var appStatus);
-                var canSeePlace = isMember || isAdmin || appStatus is MatchApplicationStatus.PendingPlayer or MatchApplicationStatus.Accepted;
+                var participating = myMatchIds.Contains(m.Id);
+                var canSeePlace = isMember || isAdmin || participating || appStatus is MatchApplicationStatus.PendingPlayer or MatchApplicationStatus.Accepted;
                 return new PublicMatchDto(m.Id, m.PlayedAt, canSeePlace ? m.PlaceName : null,
                     applicationByMatch.ContainsKey(m.Id) ? appStatus : null,
                     openings.Where(x => x.MatchId == m.Id && x.Reserved < x.Slots)
-                        .Select(x => new MatchOpeningDto(x.Id, x.Slots, x.Slots - x.Reserved, x.Position)).ToList());
+                        .Select(x => new MatchOpeningDto(x.Id, x.Slots, x.Slots - x.Reserved, x.Position)).ToList(),
+                    participating);
             }).ToList()
         });
     }
@@ -133,7 +142,7 @@ public sealed class DiscoveryService : IDiscoveryService
     {
         var group = await _db.Groups.FindAsync([groupId], ct);
         if (group is null) return Result.Fail("Patota não encontrada.", ResultStatus.NotFound);
-        group.UpdateProfile(dto.IsPublic, dto.IsAcceptingPlayers, dto.ShowMembers, dto.Description, dto.City);
+        group.UpdateProfile(dto.IsPublic, dto.IsAcceptingPlayers, dto.ShowMembers, dto.Description, dto.City, dto.ShowGoalsToGuests ?? group.ShowGoalsToGuests);
         await _db.SaveChangesAsync(ct);
         return Result.Ok("Perfil da patota atualizado.");
     }
@@ -198,13 +207,23 @@ public sealed class DiscoveryService : IDiscoveryService
         return Result<MatchApplicationDto>.Ok(await MapAsync(application.Id, ct), "Candidatura enviada.", ResultStatus.Created);
     }
 
-    public async Task<Result<List<MatchApplicationDto>>> GetGroupApplicationsAsync(Guid groupId, CancellationToken ct) =>
-        Result<List<MatchApplicationDto>>.Ok(await MapQuery(_db.MatchApplications.AsNoTracking().Where(x => x.GroupId == groupId &&
-            (x.Status == MatchApplicationStatus.PendingAdmin || x.Status == MatchApplicationStatus.PendingPlayer))).ToListAsync(ct));
+    // Sem includeHistory: so o que ainda espera resposta (comportamento original, usado pelo site).
+    // Com includeHistory: tambem recusadas, canceladas e confirmadas dos ultimos 180 dias, para nada sumir.
+    private IQueryable<MatchApplicationEntity> ApplicationScope(IQueryable<MatchApplicationEntity> query, bool includeHistory)
+    {
+        if (!includeHistory)
+            return query.Where(x => x.Status == MatchApplicationStatus.PendingAdmin || x.Status == MatchApplicationStatus.PendingPlayer);
+        var since = DateTime.UtcNow.AddDays(-180);
+        return query.Where(x => x.CreateDate >= since);
+    }
 
-    public async Task<Result<List<MatchApplicationDto>>> GetMyApplicationsAsync(Guid userId, CancellationToken ct) =>
-        Result<List<MatchApplicationDto>>.Ok(await MapQuery(_db.MatchApplications.AsNoTracking().Where(x => x.UserId == userId &&
-            (x.Status == MatchApplicationStatus.PendingAdmin || x.Status == MatchApplicationStatus.PendingPlayer))).ToListAsync(ct));
+    public async Task<Result<List<MatchApplicationDto>>> GetGroupApplicationsAsync(Guid groupId, bool includeHistory, CancellationToken ct) =>
+        Result<List<MatchApplicationDto>>.Ok(await MapQuery(ApplicationScope(
+            _db.MatchApplications.AsNoTracking().Where(x => x.GroupId == groupId), includeHistory)).Take(300).ToListAsync(ct));
+
+    public async Task<Result<List<MatchApplicationDto>>> GetMyApplicationsAsync(Guid userId, bool includeHistory, CancellationToken ct) =>
+        Result<List<MatchApplicationDto>>.Ok(await MapQuery(ApplicationScope(
+            _db.MatchApplications.AsNoTracking().Where(x => x.UserId == userId), includeHistory)).Take(300).ToListAsync(ct));
 
     public async Task<Result<List<GuestCandidateDto>>> GetGuestCandidatesAsync(Guid groupId, Guid userId, CancellationToken ct)
     {
@@ -299,6 +318,136 @@ public sealed class DiscoveryService : IDiscoveryService
         return Result.Ok("Presença confirmada.");
     }
 
+    // -- Convidado de fora acompanhando a partida ----------------------------
+
+    private static string GuestResponse(MatchApplicationStatus status, InviteResponse? invite) => status switch
+    {
+        MatchApplicationStatus.Accepted => "going",
+        MatchApplicationStatus.Cancelled when invite == InviteResponse.Rejected => "not_going",
+        MatchApplicationStatus.Rejected => "not_going",
+        _ => "pending",
+    };
+
+    /// <summary>Candidaturas em que o jogador ja passou pela analise da patota (convite pendente, confirmado ou desistencia).</summary>
+    private IQueryable<MatchApplicationEntity> GuestApplications(Guid userId) =>
+        _db.MatchApplications.Where(x => x.UserId == userId &&
+            (x.Status == MatchApplicationStatus.PendingPlayer || x.Status == MatchApplicationStatus.Accepted ||
+             // Cancelada so conta se ele chegou a ter presenca na partida (desistiu); uma candidatura
+             // cancelada pelo sistema nao da acesso a nada da partida.
+             (x.Status == MatchApplicationStatus.Cancelled &&
+              _db.MatchPlayers.Any(mp => mp.MatchId == x.MatchId && mp.Player!.UserId == userId))));
+
+    public async Task<Result<List<GuestMatchSummaryDto>>> GetGuestMatchesAsync(Guid userId, CancellationToken ct)
+    {
+        var since = DateTime.UtcNow.AddDays(-7);
+        var rows = await GuestApplications(userId).AsNoTracking()
+            .Where(x => x.Match.PlayedAt >= since)
+            .Select(x => new
+            {
+                x.Id, x.GroupId, GroupName = x.Group.Name, x.MatchId, x.Match.PlayedAt, x.Match.PlaceName,
+                MatchStatus = x.Match.Status, x.Status,
+                Invite = _db.MatchPlayers.Where(mp => mp.MatchId == x.MatchId && mp.Player!.UserId == userId)
+                    .Select(mp => (InviteResponse?)mp.InviteResponse).FirstOrDefault()
+            })
+            .OrderBy(x => x.PlayedAt).ToListAsync(ct);
+        return Result<List<GuestMatchSummaryDto>>.Ok(rows.Select(x => new GuestMatchSummaryDto(
+            x.Id, x.GroupId, x.GroupName, x.MatchId, x.PlayedAt, x.PlaceName, (short)x.MatchStatus,
+            GuestResponse(x.Status, x.Invite))).ToList());
+    }
+
+    public async Task<Result<GuestMatchDto>> GetGuestMatchAsync(Guid userId, Guid matchId, CancellationToken ct)
+    {
+        var app = await GuestApplications(userId).AsNoTracking().Include(x => x.Group)
+            .Where(x => x.MatchId == matchId).OrderByDescending(x => x.RespondedAt).FirstOrDefaultAsync(ct);
+        if (app is null) return Result<GuestMatchDto>.Fail("Partida n\u00e3o encontrada.", ResultStatus.NotFound);
+        var match = await _db.Matches.AsNoTracking().Include(m => m.TeamAColor).Include(m => m.TeamBColor)
+            .FirstOrDefaultAsync(m => m.Id == matchId, ct);
+        if (match is null) return Result<GuestMatchDto>.Fail("Partida n\u00e3o encontrada.", ResultStatus.NotFound);
+
+        var invite = await _db.MatchPlayers.AsNoTracking()
+            .Where(mp => mp.MatchId == matchId && mp.Player!.UserId == userId)
+            .Select(mp => (InviteResponse?)mp.InviteResponse).FirstOrDefaultAsync(ct);
+        // Depois que a partida passa da aceitacao (formacao dos times, jogo, finalizada), so quem
+        // estava confirmado enxerga os dados. Quem ficou pendente, recusou ou desistiu so tem o status.
+        if (match.Status > MatchStatus.Acceptation && !(app.Status == MatchApplicationStatus.Accepted && invite == InviteResponse.Accepted))
+            return Result<GuestMatchDto>.Fail("Você não participou desta partida.", ResultStatus.Forbidden);
+
+        var players = await _db.MatchPlayers.AsNoTracking()
+            .Where(mp => mp.MatchId == matchId && mp.InviteResponse == InviteResponse.Accepted)
+            .Select(mp => new { mp.Id, mp.Player!.Name, mp.Player.UserId, Photo = mp.Player.User != null ? mp.Player.User.ProfilePhotoKey : null, mp.Team, mp.IsGoalkeeper, IsMvp = mp.IsMvp == true })
+            .OrderBy(x => x.Team).ThenBy(x => x.Name).ToListAsync(ct);
+        // Gols so aparecem se a patota habilitou; o MVP aparece sempre.
+        var goalsVisible = app.Group.ShowGoalsToGuests;
+        var goals = new List<GuestMatchGoalDto>();
+        int? myGoals = null, myAssists = null;
+        if (goalsVisible)
+        {
+            var rows = await _db.Goals.AsNoTracking().Where(g => g.MatchId == matchId)
+                .OrderBy(g => g.TimeSeconds).ThenBy(g => g.CreateDate)
+                .Select(g => new
+                {
+                    Scorer = g.ScorerMatchPlayer!.Player!.Name, ScorerUser = g.ScorerMatchPlayer.Player.UserId, g.ScorerMatchPlayer.Team,
+                    Assist = g.AssistMatchPlayer != null ? g.AssistMatchPlayer.Player!.Name : null,
+                    AssistUser = g.AssistMatchPlayer != null ? g.AssistMatchPlayer.Player!.UserId : null,
+                    g.IsOwnGoal
+                }).ToListAsync(ct);
+            goals = rows.Select(g => new GuestMatchGoalDto(g.Scorer, g.Assist, g.Team, g.IsOwnGoal)).ToList();
+            myGoals = rows.Count(g => g.ScorerUser == userId && !g.IsOwnGoal);
+            myAssists = rows.Count(g => g.AssistUser == userId);
+        }
+
+        return Result<GuestMatchDto>.Ok(new GuestMatchDto
+        {
+            GoalsVisible = goalsVisible, Goals = goals, MyGoals = myGoals, MyAssists = myAssists,
+            ApplicationId = app.Id, GroupId = app.GroupId, GroupName = app.Group.Name, MatchId = matchId,
+            PlayedAt = match.PlayedAt, PlaceName = match.PlaceName, MatchStatus = (short)match.Status,
+            TeamAGoals = match.TeamAGoals, TeamBGoals = match.TeamBGoals,
+            TeamAColor = match.TeamAColor is null ? null : new(match.TeamAColor.Name, match.TeamAColor.HexValue),
+            TeamBColor = match.TeamBColor is null ? null : new(match.TeamBColor.Name, match.TeamBColor.HexValue),
+            MyResponse = GuestResponse(app.Status, invite),
+            CanChangeAttendance = match.Status == MatchStatus.Acceptation,
+            Players = players.Select(x => new GuestMatchPlayerDto(x.Name, Image(x.Photo), x.Team, x.IsGoalkeeper, x.UserId == userId, x.IsMvp)).ToList()
+        });
+    }
+
+    public async Task<Result<GuestMatchDto>> SetGuestAttendanceAsync(Guid userId, Guid matchId, bool going, CancellationToken ct)
+    {
+        var app = await GuestApplications(userId).Include(x => x.Match)
+            .Where(x => x.MatchId == matchId).OrderByDescending(x => x.RespondedAt).FirstOrDefaultAsync(ct);
+        if (app is null) return Result<GuestMatchDto>.Fail("Partida n\u00e3o encontrada.", ResultStatus.NotFound);
+        if (app.Match.Status != MatchStatus.Acceptation)
+            return Result<GuestMatchDto>.Fail("A partida j\u00e1 come\u00e7ou; a presen\u00e7a n\u00e3o pode mais ser alterada.", ResultStatus.Conflict);
+
+        if (app.Status == MatchApplicationStatus.PendingPlayer)
+        {
+            var answered = going ? await AcceptByPlayerAsync(app.Id, userId, ct) : await RejectByPlayerAsync(app.Id, userId, ct);
+            if (!answered.Success) return Result<GuestMatchDto>.Fail(answered.Error ?? "N\u00e3o foi poss\u00edvel responder.", answered.Status);
+        }
+        else
+        {
+            var matchPlayer = await _db.MatchPlayers.Include(mp => mp.Player)
+                .FirstOrDefaultAsync(mp => mp.MatchId == matchId && mp.Player!.UserId == userId, ct);
+            if (matchPlayer is null) return Result<GuestMatchDto>.Fail("Presen\u00e7a n\u00e3o encontrada.", ResultStatus.NotFound);
+            if (going && app.Status == MatchApplicationStatus.Cancelled)
+            {
+                matchPlayer.AcceptInvite();
+                app.ReconfirmByPlayer();
+            }
+            else if (!going && app.Status == MatchApplicationStatus.Accepted)
+            {
+                matchPlayer.RejectInvite();
+                app.WithdrawByPlayer();
+            }
+            else return await GetGuestMatchAsync(userId, matchId, ct);
+            await _db.SaveChangesAsync(ct);
+            await _push.SendToGroupAdminsAsync(app.GroupId,
+                going ? "Jogador confirmado" : "Jogador desistiu",
+                going ? $"{matchPlayer.Player!.Name} voltou a confirmar presen\u00e7a na partida."
+                      : $"{matchPlayer.Player!.Name} n\u00e3o poder\u00e1 mais jogar a partida.", cancellationToken: ct);
+        }
+        return await GetGuestMatchAsync(userId, matchId, ct);
+    }
+
     public async Task<Result> RejectByPlayerAsync(Guid applicationId, Guid userId, CancellationToken ct)
     {
         var app = await _db.MatchApplications.FirstOrDefaultAsync(x => x.Id == applicationId && x.UserId == userId && x.Status == MatchApplicationStatus.PendingPlayer, ct);
@@ -354,10 +503,10 @@ public sealed class DiscoveryService : IDiscoveryService
         .OrderByDescending(x => x.CreateDate)
         .Select(x => new MatchApplicationDto(x.Id, x.GroupId, x.Group.Name, x.MatchId, x.Match.PlayedAt,
             x.Status == MatchApplicationStatus.PendingPlayer || x.Status == MatchApplicationStatus.Accepted ? x.Match.PlaceName : null,
-            x.UserId, (x.User.FirstName + " " + x.User.LastName).Trim(), x.User.UserName,
+            x.UserId, (x.User.LastName == "-" ? x.User.FirstName : x.User.FirstName + " " + x.User.LastName).Trim(), x.User.UserName,
             x.User.ProfilePhotoKey == null ? null : _images.PublicBaseUrl + "/" + x.User.ProfilePhotoKey,
             x.Source, x.Status, x.GuestPlayerId, x.OpeningId, x.Opening == null ? null : x.Opening.Position,
-            x.Message, x.DecisionReason, x.CreateDate));
+            x.Message, x.DecisionReason, x.CreateDate, x.RespondedAt, (short)x.Match.Status));
 
     private string? Image(string? key) => key is null ? null : _images.BuildPublicUrl(key);
     private static PagedResultDto<T> EmptyPage<T>(int page, int pageSize) => new()

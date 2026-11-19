@@ -132,7 +132,7 @@ public class PushService : IPushService
         }
 
         var userIds = await _context.Players
-            .Where(p => p.GroupId == groupId && p.UserId != null)
+            .Where(p => p.GroupId == groupId && p.UserId != null && !p.IsGuest)
             .Select(p => p.UserId!.Value)
             .Distinct()
             .ToListAsync(cancellationToken);
@@ -289,7 +289,7 @@ public class PushService : IPushService
     {
         var groupName = await GetGroupNameAsync(groupId, cancellationToken);
         var userIds = await _context.Players
-            .Where(p => p.GroupId == groupId && p.UserId != null)
+            .Where(p => p.GroupId == groupId && p.UserId != null && !p.IsGuest)
             .Select(p => p.UserId!.Value)
             .Distinct()
             .ToListAsync(cancellationToken);

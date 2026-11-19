@@ -231,7 +231,7 @@ public class UserService : IUserService
                 UpdateDate = u.UpdateDate,
                 InactivatedAt = u.InactivatedAt,
 
-                PlayerIds = u.Players.Select(x => x.Id).ToArray(),
+                PlayerIds = u.Players.Where(x => !x.IsGuest).Select(x => x.Id).ToArray(),
                 GroupAdminIds = u.Admins.Select(x => x.GroupId).ToArray()
             })
             .FirstOrDefaultAsync(x => x.Id == userId, cancellationToken);

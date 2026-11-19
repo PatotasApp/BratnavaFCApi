@@ -680,6 +680,11 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<DateTimeOffset?>("ScheduleMatchDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("ShowGoalsToGuests")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("ShowMembersOnProfile")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")

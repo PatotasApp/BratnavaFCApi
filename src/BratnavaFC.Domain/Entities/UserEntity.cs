@@ -117,7 +117,19 @@ public sealed class UserEntity : InactivatableEntity
     /// Nome de exibição enviado ao Firebase (campo DisplayName do UserRecord). Derivado do
     /// perfil, não do UserName — é dado de apresentação, não identificador.
     /// </summary>
-    public string DisplayName => $"{FirstName} {LastName}".Trim();
+    public string DisplayName => JoinName(FirstName, LastName);
+
+    /// <summary>
+    /// Junta nome e sobrenome. O provisionamento grava "-" como sobrenome quando o login
+    /// social não informa um (LastName é obrigatório); esse marcador nunca deve aparecer na tela.
+    /// </summary>
+    public static string JoinName(string? firstName, string? lastName)
+    {
+        var last = lastName?.Trim();
+        return string.IsNullOrEmpty(last) || last == "-"
+            ? (firstName ?? "").Trim()
+            : $"{(firstName ?? "").Trim()} {last}".Trim();
+    }
 
     public void SetFirebaseUid(string firebaseUid)
     {

@@ -7,6 +7,8 @@ public class GroupEntity : InactivatableEntity
     public bool IsPublic { get; private set; } = true;
     public bool IsAcceptingPlayers { get; private set; }
     public bool ShowMembersOnProfile { get; private set; }
+    /// <summary>Se verdadeiro, convidados de fora veem a lista de gols das partidas em que jogaram.</summary>
+    public bool ShowGoalsToGuests { get; private set; }
     public string? ProfileDescription { get; private set; }
     public string? ProfileCity { get; private set; }
     public DateTimeOffset? ScheduleMatchDate { get; private set; }
@@ -50,8 +52,9 @@ public class GroupEntity : InactivatableEntity
     }
 
     public void UpdateProfile(bool isPublic, bool isAcceptingPlayers, bool showMembers,
-        string? description, string? city)
+        string? description, string? city, bool showGoalsToGuests = false)
     {
+        ShowGoalsToGuests = showGoalsToGuests;
         IsPublic = isPublic;
         IsAcceptingPlayers = isAcceptingPlayers;
         ShowMembersOnProfile = showMembers;

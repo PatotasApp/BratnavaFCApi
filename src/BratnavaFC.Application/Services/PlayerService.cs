@@ -254,7 +254,7 @@ public class PlayerService : IPlayerService
 
         var rows = await _context.Players
             .AsNoTracking()
-            .Where(p => p.UserId == userId)
+            .Where(p => p.UserId == userId && !p.IsGuest)
             .OrderBy(p => p.Group.Name)
             .Select(p => new
             {
@@ -461,6 +461,20 @@ public class PlayerService : IPlayerService
     }
 
     // ── Consultas auxiliares ──────────────────────────────────────────────────
+
+    public async Task<Result<PlayerDto>> UpdateOwnAsync(Guid playerId, string name, bool isGoalkeeper, CancellationToken cancellationToken)
+    {
+        var player = await _repository.GetByIdIncludingInactiveAsync(playerId, cancellationToken);
+        if (player == null)
+            return Result<PlayerDto>.Fail("Jogador não encontrado.", ResultStatus.NotFound);
+
+        player.Rename(name);
+        player.SetGoalkeeper(isGoalkeeper);
+
+        _repository.Update(player);
+        await _repository.SaveChangesAsync(cancellationToken);
+        return Result<PlayerDto>.Ok(MapToDto(player), "Jogador atualizado com sucesso.");
+    }
 
     public async Task<Guid?> GetGroupIdAsync(Guid playerId, CancellationToken cancellationToken)
     {

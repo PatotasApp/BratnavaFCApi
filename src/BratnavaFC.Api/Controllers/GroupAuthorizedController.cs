@@ -99,8 +99,10 @@ public abstract class GroupAuthorizedController : BaseApiController
         if (await db.GroupAdmins.AnyAsync(x => x.GroupId == groupId && x.UserId == userId.Value, ct))
             return true;
 
+        // Convidado com conta (aceito numa partida pela busca) nao e membro: ele acompanha a
+        // partida pela API de convidado e so ve a patota se o admin o vincular como mensalista.
         return await db.Players
-            .AnyAsync(x => x.GroupId == groupId && x.UserId == userId.Value, ct);
+            .AnyAsync(x => x.GroupId == groupId && x.UserId == userId.Value && !x.IsGuest, ct);
     }
 
     /// <summary>

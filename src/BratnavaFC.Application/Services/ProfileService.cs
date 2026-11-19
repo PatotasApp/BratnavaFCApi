@@ -1,5 +1,6 @@
 ﻿using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Domain.Dtos.Conquistas;
+using BratnavaFC.Domain.Entities;
 using BratnavaFC.Domain.Dtos.Profile;
 using BratnavaFC.Domain.Enums;
 using BratnavaFC.Infrastructure.Cloudflare;
@@ -110,7 +111,7 @@ public sealed class ProfileService : IProfileService
         var profile = new UserProfileDto
         {
             UserId = user.Id,
-            Name = $"{user.FirstName} {user.LastName}".Trim(),
+            Name = UserEntity.JoinName(user.FirstName, user.LastName),
             UserName = user.UserName,
             PhotoUrl = user.ProfilePhotoKey is { } photoKey
                 ? _images.BuildPublicUrl(photoKey) : null,
@@ -196,9 +197,9 @@ public sealed class ProfileService : IProfileService
 
     private async Task<bool> ShareAGroupAsync(Guid userId, Guid requesterId, CancellationToken ct)
     {
-        var ownerGroups = _db.Players.AsNoTracking().Where(x => x.UserId == userId).Select(x => x.GroupId);
+        var ownerGroups = _db.Players.AsNoTracking().Where(x => x.UserId == userId && !x.IsGuest).Select(x => x.GroupId);
         return await _db.Players.AsNoTracking()
-            .AnyAsync(x => x.UserId == requesterId && ownerGroups.Contains(x.GroupId), ct);
+            .AnyAsync(x => x.UserId == requesterId && !x.IsGuest && ownerGroups.Contains(x.GroupId), ct);
     }
 
     private static IEnumerable<ConquistaDto> TopHighlights(UserProfileDto profile) =>
