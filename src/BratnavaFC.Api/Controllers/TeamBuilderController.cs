@@ -26,8 +26,7 @@ public sealed class TeamBuilderController : GroupAuthorizedController
         [FromBody] TeamBuilderRequestDto dto,
         CancellationToken ct)
     {
-        // Somente admin do grupo (ou admin de plataforma / GodMode) pode visualizar.
-        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
 
         var result = await _teamBuilder.GetStatsAsync(groupId, dto, ct);
 
@@ -44,7 +43,7 @@ public sealed class TeamBuilderController : GroupAuthorizedController
         [FromQuery] TeamBuilderFilterDto filter,
         CancellationToken ct)
     {
-        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
 
         var result = await _teamBuilder.GetPlayersAsync(groupId, filter, ct);
 

@@ -52,6 +52,8 @@ public static class SpotlightCalculator
         var rivals = new Dictionary<(Guid Me, Guid Other), RivalAcc>();
         var assistPairs = new Dictionary<(Guid Assist, Guid Scorer), int>();
         var hauls = new List<SpotlightHaul>();
+        var assistHauls = new List<SpotlightMatchContribution>();
+        var participationHauls = new List<SpotlightMatchContribution>();
         var comebacks = new List<SpotlightComeback>();
         var timeline = new List<(SpotlightUnit Unit, StatGoal Goal)>();
 
@@ -146,6 +148,37 @@ public static class SpotlightCalculator
                 acc[g.Key].BestHaul = Math.Max(acc[g.Key].BestHaul, count);
             }
 
+            var matchContributions = new Dictionary<Guid, (int Goals, int Assists)>();
+            foreach (var goal in countable.Where(g => !g.IsOwnGoal))
+            {
+                var scorer = goal.ScorerPlayerId!.Value;
+                if (tracked.Contains(scorer))
+                {
+                    var current = matchContributions.GetValueOrDefault(scorer);
+                    matchContributions[scorer] = (current.Goals + 1, current.Assists);
+                }
+
+                if (goal.AssistPlayerId is Guid assist && tracked.Contains(assist))
+                {
+                    var current = matchContributions.GetValueOrDefault(assist);
+                    matchContributions[assist] = (current.Goals, current.Assists + 1);
+                }
+            }
+            foreach (var (playerId, contribution) in matchContributions)
+            {
+                if (contribution.Assists > 0)
+                    assistHauls.Add(new SpotlightMatchContribution
+                    {
+                        PlayerId = playerId, Name = NameOf(playerId), Value = contribution.Assists, PlayedAt = stat.PlayedAt
+                    });
+
+                participationHauls.Add(new SpotlightMatchContribution
+                {
+                    PlayerId = playerId, Name = NameOf(playerId),
+                    Value = contribution.Goals + contribution.Assists, PlayedAt = stat.PlayedAt
+                });
+            }
+
             var opener = countable.FirstOrDefault();
             if (opener is { IsOwnGoal: false } && acc.TryGetValue(opener.ScorerPlayerId!.Value, out var oa))
                 oa.OpenedScoring++;
@@ -230,6 +263,10 @@ public static class SpotlightCalculator
         report.Records = new SpotlightRecords
         {
             Hauls = TopRanked(hauls, h => h.Goals, h => h.PlayedAt.Ticks.ToString("D19"))
+                .Select(x => { x.Item.Rank = x.Rank; return x.Item; }).ToList(),
+            AssistHauls = TopRanked(assistHauls, h => h.Value, h => h.PlayedAt.Ticks.ToString("D19"))
+                .Select(x => { x.Item.Rank = x.Rank; return x.Item; }).ToList(),
+            ParticipationHauls = TopRanked(participationHauls, h => h.Value, h => h.PlayedAt.Ticks.ToString("D19"))
                 .Select(x => { x.Item.Rank = x.Rank; return x.Item; }).ToList(),
             Comebacks = TopRanked(comebacks, c => c.Deficit, c => c.PlayedAt.Ticks.ToString("D19"))
                 .Select(x => { x.Item.Rank = x.Rank; return x.Item; }).ToList(),

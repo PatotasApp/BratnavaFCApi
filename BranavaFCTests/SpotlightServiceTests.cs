@@ -179,21 +179,31 @@ public sealed class SpotlightServiceTests
         todos.Rankings.Goals!.Single().Name.Should().Be("Visita");
     }
 
-    // ── Acesso: só admin da patota ───────────────────────────────────────────
+    // ── Acesso: membros assistem; só admins configuram ───────────────────────
 
     [Fact]
-    public async Task Controller_MembroQueNaoEhAdmin_Recebe403EmTudo()
+    public async Task Controller_MembroQueNaoEhAdmin_AssisteMasNaoConfigura()
     {
-        await using var db = DbContextFactory.Create(nameof(Controller_MembroQueNaoEhAdmin_Recebe403EmTudo));
+        await using var db = DbContextFactory.Create(nameof(Controller_MembroQueNaoEhAdmin_AssisteMasNaoConfigura));
         var group = await SeedGroupAsync(db);
         var userId = Guid.NewGuid();
         await SeedPlayerAsync(db, group.Id, "Membro", userId: userId);
         var sut = Controller(db, userId, "User");
 
-        (await sut.GetReport(group.Id, CancellationToken.None)).Should().BeOfType<ForbidResult>();
+        (await sut.GetReport(group.Id, CancellationToken.None)).Should().BeOfType<OkObjectResult>();
         (await sut.GetSettings(group.Id, CancellationToken.None)).Should().BeOfType<ForbidResult>();
         (await sut.SaveSettings(group.Id, new SpotlightSettings(), CancellationToken.None)).Should().BeOfType<ForbidResult>();
         (await db.GroupSettings.AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Controller_UsuarioQueNaoPertenceAPatota_Recebe403NoRelatorio()
+    {
+        await using var db = DbContextFactory.Create(nameof(Controller_UsuarioQueNaoPertenceAPatota_Recebe403NoRelatorio));
+        var group = await SeedGroupAsync(db);
+
+        (await Controller(db, Guid.NewGuid(), "User").GetReport(group.Id, CancellationToken.None))
+            .Should().BeOfType<ForbidResult>();
     }
 
     [Theory]
