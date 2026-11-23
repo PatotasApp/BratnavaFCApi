@@ -14,13 +14,15 @@ namespace BratnavaFC.Application.Billing.Apple;
 /// pelo <see cref="AppleJwsVerifier"/>. Tenta produção e, se a Apple não conhecer a
 /// transação, o Sandbox (TestFlight e testadores).
 ///
-/// Os pacotes são "Non-Renewing Subscription" (assinatura sem renovação): a Apple não
-/// controla vencimento, quem soma os meses é a nossa API.
+/// Os pacotes são "Consumable" (é o que o App Store Connect deixa criar hoje) ou
+/// "Non-Renewing Subscription": nos dois a Apple não controla vencimento, quem soma os
+/// meses é a nossa API. Assinatura com renovação automática é recusada.
 /// </summary>
 public sealed class AppleStoreVerifier : IStoreVerifier
 {
     public const string HttpClientName = "AppStoreServerApi";
-    public const string ExpectedType = "Non-Renewing Subscription";
+    public static readonly IReadOnlySet<string> AcceptedTypes =
+        new HashSet<string>(StringComparer.Ordinal) { "Consumable", "Non-Renewing Subscription" };
     private const string ProductionBase = "https://api.storekit.itunes.apple.com";
     private const string SandboxBase = "https://api.storekit-sandbox.itunes.apple.com";
 
@@ -59,8 +61,9 @@ public sealed class AppleStoreVerifier : IStoreVerifier
             throw new StoreVerificationException("Transação da Apple é de outro app.");
 
         var type = Str(transaction, "type");
-        if (type is not null && type != ExpectedType)
-            throw new StoreVerificationException($"Produto da Apple de tipo inesperado ({type}); os pacotes devem ser \"{ExpectedType}\".");
+        if (type is not null && !AcceptedTypes.Contains(type))
+            throw new StoreVerificationException(
+                $"Produto da Apple de tipo inesperado ({type}); os pacotes devem ser \"Consumable\" ou \"Non-Renewing Subscription\".");
 
         var revokedAt = Millis(transaction, "revocationDate");
         Guid? hint = Guid.TryParse(Str(transaction, "appAccountToken"), out var g) ? g : null;
