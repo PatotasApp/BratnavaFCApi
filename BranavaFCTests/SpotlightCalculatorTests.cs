@@ -246,6 +246,24 @@ public sealed class SpotlightCalculatorTests
         r.Records.Hauls!.Select(h => (h.Name, h.Goals, h.Rank)).Should().Equal(("Ana", 3, 1), ("Bia", 3, 1), ("Bia", 1, 3), ("Caio", 1, 3));
     }
 
+    [Fact]
+    public void MaisAssistenciasEParticipacoesNumaPartida_SaoRecordesSeparados()
+    {
+        var p = new Patota();
+        var (a, b, c) = (p.Add("Ana"), p.Add("Bia"), p.Add("Caio"));
+
+        var r = p.Build(
+        [
+            Game(1, [a, b], [c], [Gol(a, 0, b), Gol(a, 0, b), Gol(b, 0, a)]),
+            Game(2, [a], [b, c], [Gol(a, 0, c), Gol(b, 1, c)]),
+        ]);
+
+        r.Records.AssistHauls!.Select(h => (h.Name, h.Value, h.Rank)).Should()
+            .Equal(("Bia", 2, 1), ("Caio", 2, 1), ("Ana", 1, 3));
+        r.Records.ParticipationHauls!.Select(h => (h.Name, h.Value, h.Rank)).Should()
+            .Equal(("Ana", 3, 1), ("Bia", 3, 1), ("Caio", 2, 3), ("Ana", 1, 4), ("Bia", 1, 4));
+    }
+
     // ── Sequências ───────────────────────────────────────────────────────────
 
     [Fact]

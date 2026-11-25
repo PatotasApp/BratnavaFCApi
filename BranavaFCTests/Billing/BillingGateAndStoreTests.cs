@@ -238,7 +238,30 @@ public sealed class AppleJwsVerifierTests
 
         var renewing = JsonSerializer.SerializeToElement(new { transactionId = "1", productId = "x", type = "Auto-Renewable Subscription" });
         var wrongType = () => AppleStoreVerifier.FromPayload(renewing, null);
-        wrongType.Should().Throw<StoreVerificationException>().WithMessage("*Non-Renewing*");
+        wrongType.Should().Throw<StoreVerificationException>().WithMessage("*Consumable*Non-Renewing*");
+
+        var nonConsumable = JsonSerializer.SerializeToElement(new { transactionId = "1", productId = "x", type = "Non-Consumable" });
+        var lifetime = () => AppleStoreVerifier.FromPayload(nonConsumable, null);
+        lifetime.Should().Throw<StoreVerificationException>();
+    }
+
+    [Fact]
+    public void FromPayload_AppleConsumable_IsAccepted()
+    {
+        var group = Guid.NewGuid();
+        var json = JsonSerializer.SerializeToElement(new
+        {
+            transactionId = "3000", originalTransactionId = "3000", productId = "patota_1m", bundleId = "br.com.patotasapp",
+            purchaseDate = 1_762_000_000_000L, appAccountToken = group.ToString(),
+            type = "Consumable", price = 29900, currency = "BRL", environment = "Sandbox",
+        });
+
+        var tx = AppleStoreVerifier.FromPayload(json, "br.com.patotasapp");
+
+        tx.TransactionId.Should().Be("3000");
+        tx.ProductId.Should().Be("patota_1m");
+        tx.GroupHint.Should().Be(group);
+        tx.NeedsConsume.Should().BeFalse();
     }
 }
 

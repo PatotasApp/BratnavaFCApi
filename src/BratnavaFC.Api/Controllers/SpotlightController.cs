@@ -7,8 +7,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace BratnavaFC.Api.Controllers;
 
 /// <summary>
-/// Spotlight do telão (site). Tudo aqui é só dos admins da patota (e de Admin/GodMode da
-/// plataforma): quem não é admin recebe 403, inclusive no relatório.
+/// Spotlight do telão (site). Todos os membros da patota podem assistir; somente admins
+/// da patota (e Admin/GodMode da plataforma) podem ler ou alterar a configuração global.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
@@ -28,7 +28,7 @@ public sealed class SpotlightController : GroupAuthorizedController
     [ProducesResponseType(typeof(SpotlightEventReport), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetReport(Guid groupId, CancellationToken ct)
     {
-        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
+        if (!await IsGroupMemberAsync(groupId, _db, ct)) return Forbid();
         return ToResponse(await _service.GetReportAsync(groupId, ct));
     }
 

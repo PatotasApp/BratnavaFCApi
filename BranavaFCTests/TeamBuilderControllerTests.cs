@@ -12,7 +12,7 @@ using Moq;
 
 namespace BranavaFC.Tests;
 
-/// <summary>Monte seu Time é só para o admin da patota (além de Admin/GodMode da plataforma).</summary>
+/// <summary>Monte seu Time é acessível a todos os membros da patota.</summary>
 public sealed class TeamBuilderControllerTests
 {
     private static readonly Guid GroupId = Guid.NewGuid();
@@ -46,9 +46,9 @@ public sealed class TeamBuilderControllerTests
         await sut.GetPlayers(GroupId, new TeamBuilderFilterDto(), CancellationToken.None));
 
     [Fact]
-    public async Task MembroComum_RecebeForbid_ENaoCalculaNada()
+    public async Task UsuarioQueNaoPertenceAPatota_RecebeForbid_ENaoCalculaNada()
     {
-        await using var db = DbContextFactory.Create(nameof(MembroComum_RecebeForbid_ENaoCalculaNada));
+        await using var db = DbContextFactory.Create(nameof(UsuarioQueNaoPertenceAPatota_RecebeForbid_ENaoCalculaNada));
         var service = Service();
 
         var (stats, players) = await CallBothAsync(Sut(db, service, Guid.NewGuid(), "User"));
@@ -56,6 +56,20 @@ public sealed class TeamBuilderControllerTests
         stats.Should().BeOfType<ForbidResult>();
         players.Should().BeOfType<ForbidResult>();
         service.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task MembroComum_RecebeOk()
+    {
+        var userId = Guid.NewGuid();
+        await using var db = DbContextFactory.Create(nameof(MembroComum_RecebeOk));
+        db.Players.Add(new PlayerEntity("Membro", userId, GroupId, 3m, false));
+        await db.SaveChangesAsync();
+
+        var (stats, players) = await CallBothAsync(Sut(db, Service(), userId, "User"));
+
+        stats.Should().BeOfType<OkObjectResult>();
+        players.Should().BeOfType<OkObjectResult>();
     }
 
     [Fact]

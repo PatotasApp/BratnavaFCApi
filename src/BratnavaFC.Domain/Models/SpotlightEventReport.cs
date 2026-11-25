@@ -141,6 +141,15 @@ public sealed class SpotlightHaul
     public int Rank { get; set; }
 }
 
+public sealed class SpotlightMatchContribution
+{
+    public Guid PlayerId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public int Value { get; set; }
+    public DateTime PlayedAt { get; set; }
+    public int Rank { get; set; }
+}
+
 public sealed class SpotlightComeback
 {
     public DateTime PlayedAt { get; set; }
@@ -154,6 +163,8 @@ public sealed class SpotlightComeback
 public sealed class SpotlightRecords
 {
     public List<SpotlightHaul>? Hauls { get; set; }
+    public List<SpotlightMatchContribution>? AssistHauls { get; set; }
+    public List<SpotlightMatchContribution>? ParticipationHauls { get; set; }
     public List<SpotlightComeback> Comebacks { get; set; } = new();
     public int ComebacksTotal { get; set; }
 }
