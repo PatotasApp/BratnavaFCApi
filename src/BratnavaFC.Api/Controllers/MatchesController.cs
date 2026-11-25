@@ -221,30 +221,60 @@ public class MatchesController : GroupAuthorizedController
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
+    /// <summary>
+    /// Admin responde por qualquer jogador da patota (registrado como ação do admin). Quem não é
+    /// admin só pode responder pelo PRÓPRIO playerId — compatibilidade com versões do app e do
+    /// site que usam este endpoint também para o jogador confirmar a si mesmo; nesse caso a ação
+    /// é registrada como do jogador, igual a <c>my-invite/accept</c>.
+    /// </summary>
     [HttpPatch("group/{groupId:guid}/{matchId:guid}/invite/accept")]
     public async Task<IActionResult> AcceptInviteAsync(Guid groupId, Guid matchId, [FromBody] InviteActionDto dto, CancellationToken cancellationToken)
     {
-        if (!await IsGroupAdminAsync(groupId, _db, cancellationToken)) return Forbid();
+        var isAdmin = await IsGroupAdminAsync(groupId, _db, cancellationToken);
+        var selfUserId = isAdmin ? null : await GetSelfUserIdAsync(groupId, dto.PlayerId, cancellationToken);
+        if (!isAdmin && selfUserId is null) return Forbid();
         try
         {
-            var result = await _service.AcceptInviteAsync(groupId, matchId, dto.PlayerId, cancellationToken, GetCurrentUserId());
+            var result = isAdmin
+                ? await _service.AcceptInviteAsync(groupId, matchId, dto.PlayerId, cancellationToken, GetCurrentUserId())
+                : await _service.AcceptInviteAsPlayerAsync(groupId, matchId, dto.PlayerId, selfUserId!.Value, cancellationToken);
             await NotifyMatchChangedIfSuccess(result, groupId, matchId, "match.invite.accepted", cancellationToken);
             return ToResponse(result);
         }
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
+    /// <summary>Mesma regra de <see cref="AcceptInviteAsync"/>.</summary>
     [HttpPatch("group/{groupId:guid}/{matchId:guid}/invite/reject")]
     public async Task<IActionResult> RejectInviteAsync(Guid groupId, Guid matchId, [FromBody] InviteActionDto dto, CancellationToken cancellationToken)
     {
-        if (!await IsGroupAdminAsync(groupId, _db, cancellationToken)) return Forbid();
+        var isAdmin = await IsGroupAdminAsync(groupId, _db, cancellationToken);
+        var selfUserId = isAdmin ? null : await GetSelfUserIdAsync(groupId, dto.PlayerId, cancellationToken);
+        if (!isAdmin && selfUserId is null) return Forbid();
         try
         {
-            var result = await _service.RejectInviteAsync(groupId, matchId, dto.PlayerId, cancellationToken, GetCurrentUserId());
+            var result = isAdmin
+                ? await _service.RejectInviteAsync(groupId, matchId, dto.PlayerId, cancellationToken, GetCurrentUserId())
+                : await _service.RejectInviteAsPlayerAsync(groupId, matchId, dto.PlayerId, selfUserId!.Value, cancellationToken);
             await NotifyMatchChangedIfSuccess(result, groupId, matchId, "match.invite.rejected", cancellationToken);
             return ToResponse(result);
         }
         catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    /// <summary>
+    /// Devolve o userId do chamador quando <paramref name="playerId"/> é o jogador (não convidado)
+    /// dele nesta patota; senão null.
+    /// </summary>
+    private async Task<Guid?> GetSelfUserIdAsync(Guid groupId, Guid playerId, CancellationToken ct)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return null;
+
+        var isSelf = await _db.Players.AnyAsync(p =>
+            p.Id == playerId && p.GroupId == groupId && p.UserId == userId.Value && !p.IsGuest, ct);
+
+        return isSelf ? userId : null;
     }
 
     [HttpGet("group/{groupId:guid}/{matchId:guid}/players/{playerId:guid}/participation-history")]
