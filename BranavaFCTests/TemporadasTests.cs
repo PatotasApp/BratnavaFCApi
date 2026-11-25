@@ -207,7 +207,7 @@ public sealed class TemporadasTests : IClassFixture<CampeonatoPostgresFixture>
         var comJogos = await SeedLegacyGroupAsync(db);
         var semJogos = await SeedLegacyGroupAsync(db);
         // 31/12/2024 23:30 em Brasília já é 2025 em UTC: o ano conta pelo horário de Brasília.
-        await SeedMatchAsync(db, comJogos, Brt(2024, 12, 31, 23, 30), finalized: true);
+        await SeedLegacyMatchAsync(db, comJogos, Brt(2024, 12, 31, 23, 30));
 
         await migrator.MigrateAsync();
 
@@ -263,6 +263,21 @@ public sealed class TemporadasTests : IClassFixture<CampeonatoPostgresFixture>
         await db.SaveChangesAsync();
         if (finalized)
             await db.Database.ExecuteSqlInterpolatedAsync($@"UPDATE ""Matches"" SET ""Status"" = 6 WHERE ""Id"" = {match.Id}");
+        db.ChangeTracker.Clear();
+    }
+
+    private static async Task SeedLegacyMatchAsync(
+        AppDbContext db,
+        Guid groupId,
+        DateTimeOffset playedAt)
+    {
+        var id = Guid.NewGuid();
+        var playedAtUtc = playedAt.UtcDateTime;
+        var createdAt = DateTime.UtcNow;
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "Matches" ("Id", "PlayedAt", "CreateDate", "GroupId", "PlaceName", "Status")
+            VALUES ({id}, {playedAtUtc}, {createdAt}, {groupId}, {"Arena"}, {(short)6})
+            """);
         db.ChangeTracker.Clear();
     }
 
