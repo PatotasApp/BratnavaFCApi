@@ -44,7 +44,20 @@ namespace BratnavaFC.Infrastructure.Migrations
                 table: "Groups",
                 type: "boolean",
                 nullable: false,
-                defaultValue: true);
+                defaultValue: false);
+
+            // Patotas que já existiam não optaram por aparecer na busca. Mantém
+            // essas linhas privadas, mas preserva o padrão público para patotas
+            // criadas depois da implantação desta migration.
+            migrationBuilder.AlterColumn<bool>(
+                name: "IsPublic",
+                table: "Groups",
+                type: "boolean",
+                nullable: false,
+                defaultValue: true,
+                oldClrType: typeof(bool),
+                oldType: "boolean",
+                oldDefaultValue: false);
 
             migrationBuilder.AddColumn<string>(
                 name: "ProfileCity",

@@ -109,7 +109,13 @@ public sealed class MatchSchedulerJob : IMatchSchedulerJob
             ? "Partida"
             : setting.DefaultPlaceName;
 
-        var result = await _matches.Create(setting.GroupId, new MatchEntity(setting.GroupId, playedAt, placeName), ct);
+        var result = await _matches.Create(setting.GroupId, new MatchEntity(
+            setting.GroupId,
+            playedAt,
+            placeName,
+            setting.DefaultPlaceAddress,
+            setting.DefaultPlaceLatitude,
+            setting.DefaultPlaceLongitude), ct);
         if (result.Success)
             return result.Data!.Id;
 

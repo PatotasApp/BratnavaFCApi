@@ -584,8 +584,9 @@ public sealed class PollService : IPollService
             var voteError = poll.ValidateVote(dto.OptionIds.Count);
             if (voteError is not null) return Result<PollDto>.Fail(voteError);
 
-            var validOptionIds = await _db.PollOptions.Where(o => o.PollId == pollId).Select(o => o.Id).ToListAsync(ct);
-            if (dto.OptionIds.Any(id => !validOptionIds.Contains(id)))
+            var options = await _db.PollOptions.Where(o => o.PollId == pollId)
+                .Select(o => new { o.Id, o.Text }).ToListAsync(ct);
+            if (dto.OptionIds.Any(id => options.All(o => o.Id != id)))
                 return Result<PollDto>.Fail("Opção inválida.");
 
             var existingVotes = await _db.PollVotes.Where(v => v.PollId == pollId && v.PlayerId == playerId).ToListAsync(ct);
@@ -593,6 +594,12 @@ public sealed class PollService : IPollService
 
             foreach (var optionId in dto.OptionIds.Distinct())
                 _db.PollVotes.Add(new PollVoteEntity(pollId, optionId, playerId));
+
+            var selected = options.Where(o => dto.OptionIds.Contains(o.Id)).Select(o => o.Text);
+            _db.ParticipationActionHistory.Add(new ParticipationActionHistoryEntity(
+                groupId, poll.IsEventType() ? "event" : "poll", pollId, playerId,
+                poll.IsEventType() ? EventAction(selected) : "voted",
+                string.Join(", ", selected)));
 
             await _db.SaveChangesAsync(ct);
             return await GetPollAsync(groupId, pollId, playerId, isAdmin, ct, skipImages: true);
@@ -615,7 +622,13 @@ public sealed class PollService : IPollService
             if (changeError is not null) return Result<PollDto>.Fail(changeError);
 
             var votes = await _db.PollVotes.Where(v => v.PollId == pollId && v.PlayerId == playerId).ToListAsync(ct);
+            var previousOptions = await _db.PollOptions
+                .Where(o => o.PollId == pollId && votes.Select(v => v.OptionId).Contains(o.Id))
+                .Select(o => o.Text).ToListAsync(ct);
             _db.PollVotes.RemoveRange(votes);
+            _db.ParticipationActionHistory.Add(new ParticipationActionHistoryEntity(
+                groupId, poll.IsEventType() ? "event" : "poll", pollId, playerId,
+                "removed_vote", string.Join(", ", previousOptions)));
             await _db.SaveChangesAsync(ct);
             return await GetPollAsync(groupId, pollId, playerId, isAdmin, ct, skipImages: true);
         }
@@ -626,7 +639,7 @@ public sealed class PollService : IPollService
         }
     }
 
-    public async Task<Result<PollDto>> AdminCastVoteAsync(Guid groupId, Guid pollId, AdminCastVoteDto dto, CancellationToken ct = default)
+    public async Task<Result<PollDto>> AdminCastVoteAsync(Guid groupId, Guid pollId, AdminCastVoteDto dto, Guid? performedByUserId = null, CancellationToken ct = default)
     {
         try
         {
@@ -649,6 +662,14 @@ public sealed class PollService : IPollService
             foreach (var optionId in dto.OptionIds.Distinct())
                 _db.PollVotes.Add(new PollVoteEntity(pollId, optionId, dto.PlayerId));
 
+            var selected = await _db.PollOptions
+                .Where(o => o.PollId == pollId && dto.OptionIds.Contains(o.Id))
+                .Select(o => o.Text).ToListAsync(ct);
+            _db.ParticipationActionHistory.Add(new ParticipationActionHistoryEntity(
+                groupId, poll.IsEventType() ? "event" : "poll", pollId, dto.PlayerId,
+                dto.OptionIds.Count == 0 ? "removed_vote" : poll.IsEventType() ? EventAction(selected) : "voted",
+                string.Join(", ", selected), performedByUserId, performedByAdmin: true));
+
             await _db.SaveChangesAsync(ct);
             return await GetPollAsync(groupId, pollId, Guid.Empty, true, ct, skipImages: true);
         }
@@ -657,6 +678,18 @@ public sealed class PollService : IPollService
             _logger.LogError(ex, "Erro em AdminCastVoteAsync.");
             return Result<PollDto>.Fail("Erro interno. Tente novamente.");
         }
+    }
+
+    private static string EventAction(IEnumerable<string> selected)
+    {
+        var answer = selected.FirstOrDefault()?.Trim().ToLowerInvariant();
+        return answer switch
+        {
+            "sim" => "accepted",
+            "não" or "nao" => "rejected",
+            "talvez" => "tentative",
+            _ => "voted"
+        };
     }
 
     public async Task<Result> UpdateDeadlineAsync(Guid groupId, Guid pollId, UpdatePollDeadlineDto dto, CancellationToken ct = default)

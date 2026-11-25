@@ -30,12 +30,39 @@ public class MatchPlayerEntity : BaseEntity
     public Guid? VotedForId { get; private set; }
 
     public InviteResponse InviteResponse { get; private set; } = InviteResponse.None;
+    public DateTimeOffset? InviteRespondedAt { get; private set; }
 
-    public void AcceptInvite() => InviteResponse = InviteResponse.Accepted;
-    public void RejectInvite() => InviteResponse = InviteResponse.Rejected;
+    public void AcceptInvite()
+    {
+        InviteResponse = InviteResponse.Accepted;
+        InviteRespondedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void JoinWaitingList()
+    {
+        InviteResponse = InviteResponse.Waiting;
+        InviteRespondedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void PromoteFromWaitingList()
+    {
+        if (InviteResponse != InviteResponse.Waiting)
+            throw new InvalidOperationException("Somente jogador na lista de espera pode ser promovido.");
+        InviteResponse = InviteResponse.Accepted;
+    }
+
+    public void RejectInvite()
+    {
+        InviteResponse = InviteResponse.Rejected;
+        InviteRespondedAt = DateTimeOffset.UtcNow;
+    }
 
     /// <summary>Restaura uma resposta salva (usado ao recriar MatchPlayers em re-sync/rewind).</summary>
-    public void RestoreInviteResponse(InviteResponse response) => InviteResponse = response;
+    public void RestoreInviteResponse(InviteResponse response, DateTimeOffset? respondedAt = null)
+    {
+        InviteResponse = response;
+        InviteRespondedAt = respondedAt;
+    }
 
     public Guid? AutoRejectedByAbsenceId { get; private set; }
     public UserAbsenceEntity? AutoRejectedByAbsence { get; private set; }
@@ -44,6 +71,7 @@ public class MatchPlayerEntity : BaseEntity
     {
         if (absenceId == Guid.Empty) throw new InvalidOperationException("AbsenceId é obrigatório.");
         InviteResponse = InviteResponse.Rejected;
+        InviteRespondedAt = DateTimeOffset.UtcNow;
         AutoRejectedByAbsenceId = absenceId;
     }
 
@@ -53,6 +81,7 @@ public class MatchPlayerEntity : BaseEntity
         AutoRejectedByAbsenceId = null;
         AutoRejectedByAbsence   = null;
         InviteResponse          = InviteResponse.None;
+        InviteRespondedAt       = null;
     }
 
     public List<GoalEntity> GoalsScored { get; private set; } = new();

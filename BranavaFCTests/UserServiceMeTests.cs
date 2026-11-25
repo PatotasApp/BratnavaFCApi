@@ -57,6 +57,26 @@ public class UserServiceMeTests
         var result = await Sut(db).GetMeAsync(user.Id, null, CancellationToken.None);
 
         result.Data!.PhotoUrl.Should().BeNull();
+        result.Data.HasGuestActivity.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetMeAsync_WithMatchApplication_IdentifiesGuestActivity()
+    {
+        await using var db = DbContextFactory.Create(nameof(GetMeAsync_WithMatchApplication_IdentifiesGuestActivity));
+        var user = User("convidado", "convidado@test.com");
+        db.Users.Add(user);
+        db.MatchApplications.Add(new MatchApplicationEntity(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            user.Id,
+            MatchApplicationSource.AdminInvite));
+        await db.SaveChangesAsync();
+
+        var result = await Sut(db).GetMeAsync(user.Id, null, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Data!.HasGuestActivity.Should().BeTrue();
     }
 
     private static UserEntity User(

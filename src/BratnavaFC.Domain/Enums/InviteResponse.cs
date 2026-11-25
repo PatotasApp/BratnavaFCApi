@@ -4,5 +4,6 @@ public enum InviteResponse
 {
     None = 1,
     Rejected,
-    Accepted
+    Accepted,
+    Waiting
 }

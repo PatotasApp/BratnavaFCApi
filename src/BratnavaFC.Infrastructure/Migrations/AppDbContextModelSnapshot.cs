@@ -1109,6 +1109,16 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<TimeSpan?>("DefaultKickoffTime")
                         .HasColumnType("interval");
 
+                    b.Property<string>("DefaultPlaceAddress")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<double?>("DefaultPlaceLatitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("DefaultPlaceLongitude")
+                        .HasColumnType("double precision");
+
                     b.Property<string>("DefaultPlaceName")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -1539,6 +1549,16 @@ namespace BratnavaFC.Infrastructure.Migrations
                     b.Property<Guid?>("LinkedPollId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("PlaceAddress")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<double?>("PlaceLatitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("PlaceLongitude")
+                        .HasColumnType("double precision");
+
                     b.Property<string>("PlaceName")
                         .IsRequired()
                         .HasColumnType("text");
@@ -1634,6 +1654,9 @@ namespace BratnavaFC.Infrastructure.Migrations
 
                     b.Property<Guid>("GroupId")
                         .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("InviteRespondedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("InviteResponse")
                         .ValueGeneratedOnAdd()
@@ -1744,6 +1767,54 @@ namespace BratnavaFC.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("MonthlyPayments");
+                });
+
+            modelBuilder.Entity("BratnavaFC.Domain.Entities.ParticipationActionHistoryEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime>("CreateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Details")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("PerformedByAdmin")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("PerformedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PlayerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SubjectType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("UpdateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GroupId", "SubjectType", "SubjectId", "PlayerId", "CreateDate");
+
+                    b.ToTable("ParticipationActionHistory", (string)null);
                 });
 
             modelBuilder.Entity("BratnavaFC.Domain.Entities.PlayerEntity", b =>

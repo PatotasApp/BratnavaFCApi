@@ -914,6 +914,11 @@ public class PollServiceCoverageTests
         result.Data!.MyVotedOptionIds.Should().ContainSingle().Which.Should().Be(opt2.Id);
         var votes = await db.PollVotes.Where(v => v.PollId == poll.Id && v.PlayerId == player.Id).ToListAsync();
         votes.Should().ContainSingle().Which.OptionId.Should().Be(opt2.Id);
+        var history = await db.ParticipationActionHistory.SingleAsync(h =>
+            h.SubjectId == poll.Id && h.PlayerId == player.Id);
+        history.Action.Should().Be("voted");
+        history.Details.Should().Be("B");
+        history.PerformedByAdmin.Should().BeFalse();
     }
 
     [Fact]
@@ -1025,10 +1030,12 @@ public class PollServiceCoverageTests
         var sut = BuildSut(db);
 
         var result = await sut.AdminCastVoteAsync(groupId, poll.Id,
-            new AdminCastVoteDto { PlayerId = player.Id, OptionIds = [opt.Id] });
+            new AdminCastVoteDto { PlayerId = player.Id, OptionIds = [opt.Id] }, Guid.NewGuid());
 
         result.Success.Should().BeTrue("admin pode votar em nome de jogador mesmo com a votação encerrada.");
         (await db.PollVotes.CountAsync(v => v.PollId == poll.Id && v.PlayerId == player.Id)).Should().Be(1);
+        (await db.ParticipationActionHistory.SingleAsync(h => h.SubjectId == poll.Id))
+            .PerformedByAdmin.Should().BeTrue();
     }
 
     // ── RemoveVoteAsync ───────────────────────────────────────────────────────

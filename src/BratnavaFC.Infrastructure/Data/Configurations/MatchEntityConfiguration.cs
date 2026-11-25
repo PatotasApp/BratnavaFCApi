@@ -12,6 +12,8 @@ public class MatchEntityConfiguration : IEntityTypeConfiguration<MatchEntity>
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.GroupId).IsRequired();
+        builder.Property(x => x.PlaceName).IsRequired();
+        builder.Property(x => x.PlaceAddress).HasMaxLength(500);
 
         builder.HasOne(x => x.Group)
             .WithMany()

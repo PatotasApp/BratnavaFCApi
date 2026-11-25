@@ -20,12 +20,14 @@ public interface IMatchService
 
     Task<Result> SyncPlayersFromGroupAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken);
 
-    Task<Result> AcceptInviteAsync(Guid groupId, Guid matchId, Guid playerId, CancellationToken cancellationToken);
-    Task<Result> RejectInviteAsync(Guid groupId, Guid matchId, Guid playerId, CancellationToken cancellationToken);
+    Task<Result> AcceptInviteAsync(Guid groupId, Guid matchId, Guid playerId, CancellationToken cancellationToken, Guid? performedByUserId = null);
+    Task<Result> RejectInviteAsync(Guid groupId, Guid matchId, Guid playerId, CancellationToken cancellationToken, Guid? performedByUserId = null);
 
     /// <summary>Aceita/rejeita convite resolvendo o playerId pelo userId do token JWT.</summary>
     Task<Result> AcceptMyInviteAsync(Guid groupId, Guid matchId, Guid userId, CancellationToken cancellationToken);
     Task<Result> RejectMyInviteAsync(Guid groupId, Guid matchId, Guid userId, CancellationToken cancellationToken);
+    Task<Result> AcceptInviteAsPlayerAsync(Guid groupId, Guid matchId, Guid playerId, Guid userId, CancellationToken cancellationToken);
+    Task<Result> RejectInviteAsPlayerAsync(Guid groupId, Guid matchId, Guid playerId, Guid userId, CancellationToken cancellationToken);
 
     Task<Result> StartMatchAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken);
     Task<Result> EndMatchAsync(Guid groupId, Guid matchId, CancellationToken cancellationToken);

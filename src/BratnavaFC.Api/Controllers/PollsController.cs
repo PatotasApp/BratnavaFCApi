@@ -1,6 +1,7 @@
 using BratnavaFC.Application.Abstractions;
 using BratnavaFC.Api.Realtime;
 using BratnavaFC.Domain.Common;
+using BratnavaFC.Domain.Dtos;
 using BratnavaFC.Domain.Dtos.Polls;
 using BratnavaFC.Infrastructure.Data;
 using BratnavaFC.Domain.Entities;
@@ -188,9 +189,32 @@ public sealed class PollsController : GroupAuthorizedController
     public async Task<IActionResult> AdminCastVote(Guid groupId, Guid pollId, [FromBody] AdminCastVoteDto dto, CancellationToken ct)
     {
         if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
-        var result = await _polls.AdminCastVoteAsync(groupId, pollId, dto, ct);
+        var result = await _polls.AdminCastVoteAsync(groupId, pollId, dto, GetCurrentUserId(), ct);
         await NotifyPollChangedIfSuccess(result, groupId, pollId, "poll.vote.changed", ct);
         return ToResponse(result);
+    }
+
+    [HttpGet("group/{groupId:guid}/{pollId:guid}/players/{playerId:guid}/participation-history")]
+    public async Task<IActionResult> GetParticipationHistory(Guid groupId, Guid pollId, Guid playerId, CancellationToken ct)
+    {
+        if (!await IsAuthorizedForGroupAsync(groupId, _db, ct)) return Forbid();
+
+        var player = await _db.Players.AsNoTracking()
+            .Where(p => p.GroupId == groupId && p.Id == playerId)
+            .Select(p => new { p.Name, p.UserId })
+            .FirstOrDefaultAsync(ct);
+        if (player is null) return NotFound();
+
+        var history = await _db.ParticipationActionHistory.AsNoTracking()
+            .Where(h => h.GroupId == groupId && (h.SubjectType == "poll" || h.SubjectType == "event") &&
+                        h.SubjectId == pollId && h.PlayerId == playerId)
+            .OrderByDescending(h => h.CreateDate)
+            .Select(h => new ParticipationActionHistoryDto(h.Id, h.SubjectType, h.SubjectId, h.PlayerId,
+                player.Name, h.Action, h.Details, h.CreateDate,
+                h.PerformedByAdmin))
+            .ToListAsync(ct);
+
+        return Ok(history);
     }
 
     // DELETE /api/Polls/group/{groupId}/{pollId}/vote

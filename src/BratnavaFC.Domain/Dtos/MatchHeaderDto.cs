@@ -8,6 +8,9 @@ namespace BratnavaFC.Domain.Dtos
         public Guid GroupId { get; init; }
         public DateTime PlayedAt { get; init; }
         public string PlaceName { get; init; } = string.Empty;
+        public string? PlaceAddress { get; init; }
+        public double? PlaceLatitude { get; init; }
+        public double? PlaceLongitude { get; init; }
 
         public short Status { get; init; }
         public string StatusName { get; init; } = string.Empty;

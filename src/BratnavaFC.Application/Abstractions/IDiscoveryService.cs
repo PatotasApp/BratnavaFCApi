@@ -7,7 +7,7 @@ namespace BratnavaFC.Application.Abstractions;
 public interface IDiscoveryService
 {
     Task<Result<PagedResultDto<GroupSearchItemDto>>> SearchGroupsAsync(Guid requesterId, string? query, int page, int pageSize, CancellationToken ct);
-    Task<Result<PagedResultDto<PlayerSearchItemDto>>> SearchPlayersAsync(Guid requesterId, string? query, int page, int pageSize, CancellationToken ct);
+    Task<Result<PagedResultDto<PlayerSearchItemDto>>> SearchPlayersAsync(Guid requesterId, string? query, int page, int pageSize, CancellationToken ct, Guid? groupId = null);
     Task<Result<GroupProfileDto>> GetGroupProfileAsync(Guid groupId, Guid requesterId, CancellationToken ct);
     Task<Result> UpdateGroupProfileAsync(Guid groupId, UpdateGroupProfileDto dto, CancellationToken ct);
     Task<Result<string>> RegenerateGroupCodeAsync(Guid groupId, CancellationToken ct);

@@ -24,6 +24,8 @@ public class GroupSettingsEntityConfiguration : IEntityTypeConfiguration<GroupSe
 
         builder.Property(x => x.DefaultPlaceName)
             .HasMaxLength(200);
+        builder.Property(x => x.DefaultPlaceAddress)
+            .HasMaxLength(500);
 
         builder.Property(x => x.DefaultDayOfWeek);
         builder.Property(x => x.DefaultDaysOfWeekJson)

@@ -15,12 +15,14 @@ public sealed class DiscoveryService : IDiscoveryService
     private readonly AppDbContext _db;
     private readonly IImageStorageService _images;
     private readonly IPushService _push;
+    private readonly IMatchService _matches;
 
-    public DiscoveryService(AppDbContext db, IImageStorageService images, IPushService push)
+    public DiscoveryService(AppDbContext db, IImageStorageService images, IPushService push, IMatchService matches)
     {
         _db = db;
         _images = images;
         _push = push;
+        _matches = matches;
     }
 
     public async Task<Result<PagedResultDto<GroupSearchItemDto>>> SearchGroupsAsync(Guid requesterId, string? query, int page, int pageSize, CancellationToken ct)
@@ -29,7 +31,13 @@ public sealed class DiscoveryService : IDiscoveryService
         var term = (query ?? "").Trim().ToLower();
         if (term.Length == 0)
             return Result<PagedResultDto<GroupSearchItemDto>>.Ok(EmptyPage<GroupSearchItemDto>(page, pageSize));
-        var groups = _db.Groups.AsNoTracking().Where(g => g.Status == Status.Active && g.IsPublic);
+        // Uma patota privada não deve aparecer para outras pessoas, mas precisa
+        // continuar encontrável pelo próprio mensalista/admin. Caso contrário,
+        // o selo "SUA PATOTA" nunca aparece justamente nas patotas privadas.
+        var groups = _db.Groups.AsNoTracking().Where(g => g.Status == Status.Active &&
+            (g.IsPublic ||
+             g.Players.Any(p => p.UserId == requesterId && !p.IsGuest && p.Status == Status.Active) ||
+             _db.GroupAdmins.Any(a => a.GroupId == g.Id && a.UserId == requesterId)));
         groups = groups.Where(g => g.Name.ToLower().Contains(term) || g.Code.ToLower().Contains(term));
         var total = await groups.CountAsync(ct);
         var rows = await groups.OrderBy(g => g.Name).Skip((page - 1) * pageSize).Take(pageSize)
@@ -45,13 +53,24 @@ public sealed class DiscoveryService : IDiscoveryService
         });
     }
 
-    public async Task<Result<PagedResultDto<PlayerSearchItemDto>>> SearchPlayersAsync(Guid requesterId, string? query, int page, int pageSize, CancellationToken ct)
+    public async Task<Result<PagedResultDto<PlayerSearchItemDto>>> SearchPlayersAsync(Guid requesterId, string? query, int page, int pageSize, CancellationToken ct, Guid? groupId = null)
     {
         (page, pageSize) = Page(page, pageSize);
         var term = (query ?? "").Trim().ToLower();
         if (term.Length == 0)
             return Result<PagedResultDto<PlayerSearchItemDto>>.Ok(EmptyPage<PlayerSearchItemDto>(page, pageSize));
-        var myGroups = _db.Players.AsNoTracking().Where(p => p.UserId == requesterId && !p.IsGuest).Select(p => p.GroupId);
+        var myGroups = _db.Players.AsNoTracking()
+            .Where(p => p.UserId == requesterId && !p.IsGuest && p.Status == Status.Active)
+            .Select(p => p.GroupId);
+        Guid? membershipScopeGroupId = null;
+        if (groupId.HasValue)
+        {
+            var canInspectMembership = await _db.Players.AsNoTracking().AnyAsync(p =>
+                    p.GroupId == groupId.Value && p.UserId == requesterId && !p.IsGuest && p.Status == Status.Active, ct) ||
+                await _db.GroupAdmins.AsNoTracking().AnyAsync(a =>
+                    a.GroupId == groupId.Value && a.UserId == requesterId, ct);
+            if (canInspectMembership) membershipScopeGroupId = groupId;
+        }
         var visible = _db.Users.AsNoTracking().Where(u => u.Status == Status.Active && u.Id != requesterId &&
             (u.ProfileVisibility == ProfileVisibility.AuthenticatedUsers ||
              (u.ProfileVisibility == ProfileVisibility.SharedPatotas &&
@@ -62,13 +81,14 @@ public sealed class DiscoveryService : IDiscoveryService
         var rows = await visible.OrderBy(u => u.FirstName).ThenBy(u => u.LastName)
             .Skip((page - 1) * pageSize).Take(pageSize)
             .Select(u => new { u.Id, u.FirstName, u.LastName, u.UserName, u.ProfilePhotoKey,
-                Goalkeeper = u.Players.Where(p => !p.IsGuest).Select(p => (bool?)p.IsGoalkeeper).FirstOrDefault() })
+                InGroup = membershipScopeGroupId != null && u.Players.Any(p =>
+                    p.GroupId == membershipScopeGroupId && !p.IsGuest && p.Status == Status.Active) })
             .ToListAsync(ct);
         return Result<PagedResultDto<PlayerSearchItemDto>>.Ok(new()
         {
             Page = page, PageSize = pageSize, Total = total,
             Items = rows.Select(x => new PlayerSearchItemDto(x.Id, UserEntity.JoinName(x.FirstName, x.LastName),
-                x.UserName, Image(x.ProfilePhotoKey), x.Goalkeeper.HasValue ? x.Goalkeeper.Value ? "Goleiro" : "Linha" : null)).ToList()
+                x.UserName, Image(x.ProfilePhotoKey), null, x.InGroup)).ToList()
         });
     }
 
@@ -76,7 +96,8 @@ public sealed class DiscoveryService : IDiscoveryService
     {
         var group = await _db.Groups.AsNoTracking().FirstOrDefaultAsync(g => g.Id == groupId && g.Status == Status.Active, ct);
         if (group is null) return Result<GroupProfileDto>.Fail("Patota não encontrada.", ResultStatus.NotFound);
-        var isMember = await _db.Players.AnyAsync(p => p.GroupId == groupId && p.UserId == requesterId && !p.IsGuest, ct);
+        var isMember = await _db.Players.AnyAsync(p => p.GroupId == groupId && p.UserId == requesterId &&
+            !p.IsGuest && p.Status == Status.Active, ct);
         var isAdmin = await _db.GroupAdmins.AnyAsync(a => a.GroupId == groupId && a.UserId == requesterId, ct);
         if (!group.IsPublic && !isMember && !isAdmin)
             return Result<GroupProfileDto>.Fail("Esta patota é privada.", ResultStatus.NotFound);
@@ -290,6 +311,7 @@ public sealed class DiscoveryService : IDiscoveryService
         var app = await _db.MatchApplications.Include(x => x.Match).FirstOrDefaultAsync(x => x.Id == applicationId && x.UserId == userId && x.Status == MatchApplicationStatus.PendingPlayer, ct);
         if (app is null) return Result.Fail("Convite não encontrado.", ResultStatus.NotFound);
         if (app.Match.Status != MatchStatus.Acceptation) { app.Cancel(); await _db.SaveChangesAsync(ct); return Result.Fail("A partida já começou; o convite foi cancelado.", ResultStatus.Conflict); }
+        await using var transaction = await _db.Database.BeginTransactionAsync(ct);
         var player = await _db.Players.FirstOrDefaultAsync(p => p.GroupId == app.GroupId && p.UserId == userId && p.IsGuest, ct);
         if (player is null && app.GuestPlayerId.HasValue)
         {
@@ -311,18 +333,21 @@ public sealed class DiscoveryService : IDiscoveryService
             matchPlayer.AssignToPlayer(player);
             _db.MatchPlayers.Add(matchPlayer);
         }
-        matchPlayer.AcceptInvite();
         app.AcceptByPlayer(player.Id);
         await _db.SaveChangesAsync(ct);
-        await _push.SendToGroupAdminsAsync(app.GroupId, "Jogador confirmado", $"{player.Name} confirmou presença na partida.", cancellationToken: ct);
-        return Result.Ok("Presença confirmada.");
+        var attendance = await _matches.AcceptInviteAsPlayerAsync(
+            app.GroupId, app.MatchId, player.Id, userId, ct);
+        if (!attendance.Success) return attendance;
+        await transaction.CommitAsync(ct);
+        return Result.Ok(attendance.Message ?? "Presença confirmada.");
     }
 
     // -- Convidado de fora acompanhando a partida ----------------------------
 
     private static string GuestResponse(MatchApplicationStatus status, InviteResponse? invite) => status switch
     {
-        MatchApplicationStatus.Accepted => "going",
+        MatchApplicationStatus.Accepted when invite == InviteResponse.Accepted => "going",
+        MatchApplicationStatus.Accepted when invite == InviteResponse.Waiting => "waiting",
         MatchApplicationStatus.Cancelled when invite == InviteResponse.Rejected => "not_going",
         MatchApplicationStatus.Rejected => "not_going",
         _ => "pending",
@@ -332,10 +357,12 @@ public sealed class DiscoveryService : IDiscoveryService
     private IQueryable<MatchApplicationEntity> GuestApplications(Guid userId) =>
         _db.MatchApplications.Where(x => x.UserId == userId &&
             (x.Status == MatchApplicationStatus.PendingPlayer || x.Status == MatchApplicationStatus.Accepted ||
+             x.Status == MatchApplicationStatus.Rejected ||
              // Cancelada so conta se ele chegou a ter presenca na partida (desistiu); uma candidatura
              // cancelada pelo sistema nao da acesso a nada da partida.
              (x.Status == MatchApplicationStatus.Cancelled &&
-              _db.MatchPlayers.Any(mp => mp.MatchId == x.MatchId && mp.Player!.UserId == userId))));
+              _db.MatchPlayers.Any(mp => mp.MatchId == x.MatchId &&
+                  (mp.Player!.UserId == userId || (x.GuestPlayerId.HasValue && mp.PlayerId == x.GuestPlayerId.Value))))));
 
     public async Task<Result<List<GuestMatchSummaryDto>>> GetGuestMatchesAsync(Guid userId, CancellationToken ct)
     {
@@ -346,7 +373,8 @@ public sealed class DiscoveryService : IDiscoveryService
             {
                 x.Id, x.GroupId, GroupName = x.Group.Name, x.MatchId, x.Match.PlayedAt, x.Match.PlaceName,
                 MatchStatus = x.Match.Status, x.Status,
-                Invite = _db.MatchPlayers.Where(mp => mp.MatchId == x.MatchId && mp.Player!.UserId == userId)
+                Invite = _db.MatchPlayers.Where(mp => mp.MatchId == x.MatchId &&
+                        (mp.Player!.UserId == userId || (x.GuestPlayerId.HasValue && mp.PlayerId == x.GuestPlayerId.Value)))
                     .Select(mp => (InviteResponse?)mp.InviteResponse).FirstOrDefault()
             })
             .OrderBy(x => x.PlayedAt).ToListAsync(ct);
@@ -365,7 +393,8 @@ public sealed class DiscoveryService : IDiscoveryService
         if (match is null) return Result<GuestMatchDto>.Fail("Partida n\u00e3o encontrada.", ResultStatus.NotFound);
 
         var invite = await _db.MatchPlayers.AsNoTracking()
-            .Where(mp => mp.MatchId == matchId && mp.Player!.UserId == userId)
+            .Where(mp => mp.MatchId == matchId &&
+                (mp.Player!.UserId == userId || (app.GuestPlayerId.HasValue && mp.PlayerId == app.GuestPlayerId.Value)))
             .Select(mp => (InviteResponse?)mp.InviteResponse).FirstOrDefaultAsync(ct);
         // Depois que a partida passa da aceitacao (formacao dos times, jogo, finalizada), so quem
         // estava confirmado enxerga os dados. Quem ficou pendente, recusou ou desistiu so tem o status.
@@ -374,7 +403,7 @@ public sealed class DiscoveryService : IDiscoveryService
 
         var players = await _db.MatchPlayers.AsNoTracking()
             .Where(mp => mp.MatchId == matchId && mp.InviteResponse == InviteResponse.Accepted)
-            .Select(mp => new { mp.Id, mp.Player!.Name, mp.Player.UserId, Photo = mp.Player.User != null ? mp.Player.User.ProfilePhotoKey : null, mp.Team, mp.IsGoalkeeper, IsMvp = mp.IsMvp == true })
+            .Select(mp => new { mp.Id, mp.PlayerId, mp.Player!.Name, mp.Player.UserId, Photo = mp.Player.User != null ? mp.Player.User.ProfilePhotoKey : null, mp.Team, mp.IsGoalkeeper, IsMvp = mp.IsMvp == true })
             .OrderBy(x => x.Team).ThenBy(x => x.Name).ToListAsync(ct);
         // Gols so aparecem se a patota habilitou; o MVP aparece sempre.
         var goalsVisible = app.Group.ShowGoalsToGuests;
@@ -386,14 +415,16 @@ public sealed class DiscoveryService : IDiscoveryService
                 .OrderBy(g => g.TimeSeconds).ThenBy(g => g.CreateDate)
                 .Select(g => new
                 {
-                    Scorer = g.ScorerMatchPlayer!.Player!.Name, ScorerUser = g.ScorerMatchPlayer.Player.UserId, g.ScorerMatchPlayer.Team,
+                    Scorer = g.ScorerMatchPlayer!.Player!.Name, ScorerPlayer = g.ScorerMatchPlayer.PlayerId,
+                    ScorerUser = g.ScorerMatchPlayer.Player.UserId, g.ScorerMatchPlayer.Team,
                     Assist = g.AssistMatchPlayer != null ? g.AssistMatchPlayer.Player!.Name : null,
+                    AssistPlayer = g.AssistMatchPlayer != null ? g.AssistMatchPlayer.PlayerId : (Guid?)null,
                     AssistUser = g.AssistMatchPlayer != null ? g.AssistMatchPlayer.Player!.UserId : null,
                     g.IsOwnGoal
                 }).ToListAsync(ct);
             goals = rows.Select(g => new GuestMatchGoalDto(g.Scorer, g.Assist, g.Team, g.IsOwnGoal)).ToList();
-            myGoals = rows.Count(g => g.ScorerUser == userId && !g.IsOwnGoal);
-            myAssists = rows.Count(g => g.AssistUser == userId);
+            myGoals = rows.Count(g => (g.ScorerUser == userId || g.ScorerPlayer == app.GuestPlayerId) && !g.IsOwnGoal);
+            myAssists = rows.Count(g => g.AssistUser == userId || g.AssistPlayer == app.GuestPlayerId);
         }
 
         return Result<GuestMatchDto>.Ok(new GuestMatchDto
@@ -401,12 +432,14 @@ public sealed class DiscoveryService : IDiscoveryService
             GoalsVisible = goalsVisible, Goals = goals, MyGoals = myGoals, MyAssists = myAssists,
             ApplicationId = app.Id, GroupId = app.GroupId, GroupName = app.Group.Name, MatchId = matchId,
             PlayedAt = match.PlayedAt, PlaceName = match.PlaceName, MatchStatus = (short)match.Status,
-            TeamAGoals = match.TeamAGoals, TeamBGoals = match.TeamBGoals,
+            TeamAGoals = goalsVisible ? match.TeamAGoals : null,
+            TeamBGoals = goalsVisible ? match.TeamBGoals : null,
             TeamAColor = match.TeamAColor is null ? null : new(match.TeamAColor.Name, match.TeamAColor.HexValue),
             TeamBColor = match.TeamBColor is null ? null : new(match.TeamBColor.Name, match.TeamBColor.HexValue),
             MyResponse = GuestResponse(app.Status, invite),
             CanChangeAttendance = match.Status == MatchStatus.Acceptation,
-            Players = players.Select(x => new GuestMatchPlayerDto(x.Name, Image(x.Photo), x.Team, x.IsGoalkeeper, x.UserId == userId, x.IsMvp)).ToList()
+            Players = players.Select(x => new GuestMatchPlayerDto(x.Name, Image(x.Photo), x.Team, x.IsGoalkeeper,
+                x.UserId == userId || x.PlayerId == app.GuestPlayerId, x.IsMvp)).ToList()
         });
     }
 
@@ -426,24 +459,30 @@ public sealed class DiscoveryService : IDiscoveryService
         else
         {
             var matchPlayer = await _db.MatchPlayers.Include(mp => mp.Player)
-                .FirstOrDefaultAsync(mp => mp.MatchId == matchId && mp.Player!.UserId == userId, ct);
+                .FirstOrDefaultAsync(mp => mp.MatchId == matchId &&
+                    (mp.Player!.UserId == userId || (app.GuestPlayerId.HasValue && mp.PlayerId == app.GuestPlayerId.Value)), ct);
             if (matchPlayer is null) return Result<GuestMatchDto>.Fail("Presen\u00e7a n\u00e3o encontrada.", ResultStatus.NotFound);
+            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+            Result attendance;
             if (going && app.Status == MatchApplicationStatus.Cancelled)
             {
-                matchPlayer.AcceptInvite();
+                attendance = await _matches.AcceptInviteAsPlayerAsync(
+                    app.GroupId, matchId, matchPlayer.PlayerId, userId, ct);
+                if (!attendance.Success)
+                    return Result<GuestMatchDto>.Fail(attendance.Error ?? "Não foi possível confirmar.", attendance.Status);
                 app.ReconfirmByPlayer();
             }
             else if (!going && app.Status == MatchApplicationStatus.Accepted)
             {
-                matchPlayer.RejectInvite();
+                attendance = await _matches.RejectInviteAsPlayerAsync(
+                    app.GroupId, matchId, matchPlayer.PlayerId, userId, ct);
+                if (!attendance.Success)
+                    return Result<GuestMatchDto>.Fail(attendance.Error ?? "Não foi possível cancelar.", attendance.Status);
                 app.WithdrawByPlayer();
             }
             else return await GetGuestMatchAsync(userId, matchId, ct);
             await _db.SaveChangesAsync(ct);
-            await _push.SendToGroupAdminsAsync(app.GroupId,
-                going ? "Jogador confirmado" : "Jogador desistiu",
-                going ? $"{matchPlayer.Player!.Name} voltou a confirmar presen\u00e7a na partida."
-                      : $"{matchPlayer.Player!.Name} n\u00e3o poder\u00e1 mais jogar a partida.", cancellationToken: ct);
+            await transaction.CommitAsync(ct);
         }
         return await GetGuestMatchAsync(userId, matchId, ct);
     }

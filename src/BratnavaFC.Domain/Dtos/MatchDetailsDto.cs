@@ -7,6 +7,9 @@ public sealed class MatchDetailsDto
     public string GroupName { get; set; } = "";
     public DateTime PlayedAt { get; set; }
     public string PlaceName { get; set; } = "";
+    public string? PlaceAddress { get; set; }
+    public double? PlaceLatitude { get; set; }
+    public double? PlaceLongitude { get; set; }
 
     public short Status { get; set; }
     public string StatusName { get; set; } = "";
@@ -63,6 +66,7 @@ public sealed class PlayerInMatchDto
     public bool IsGuest { get; set; }
     public short Team { get; set; }
     public short InviteResponse { get; set; } // enum convertido (Accepted/Rejected/None)
+    public DateTimeOffset? InviteRespondedAt { get; set; }
     public bool IsMvp { get; set; }
 
     /// <summary>Preenchido apenas quando a rejeição foi automática (BackgroundService). Null = rejeição manual.</summary>

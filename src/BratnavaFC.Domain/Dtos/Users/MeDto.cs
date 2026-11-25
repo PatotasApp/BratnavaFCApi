@@ -21,4 +21,10 @@ public sealed record MeDto(
     /// a foto de quem está logado: ela representa o USUÁRIO, e usar o MyPlayerDto para isso
     /// deixava sem avatar quem ainda não tem jogador em nenhuma patota.
     /// </summary>
-    string? PhotoUrl);
+    string? PhotoUrl,
+    /// <summary>
+    /// Indica que a conta já participou do fluxo de candidatura/convite para uma partida.
+    /// O app combina este sinal com a ausência de patota ativa para distinguir um usuário
+    /// novo de alguém que usa o produto somente como convidado.
+    /// </summary>
+    bool HasGuestActivity);

@@ -6,7 +6,7 @@ public sealed record GroupSearchItemDto(Guid GroupId, string Name, string Code, 
     string? City, bool IsAcceptingPlayers, int MemberCount, bool IsMember = false);
 
 public sealed record PlayerSearchItemDto(Guid UserId, string Name, string UserName, string? PhotoUrl,
-    string? Position);
+    string? Position, bool InGroup = false);
 
 public sealed record GroupProfileMemberDto(Guid UserId, string Name, string UserName, string? PhotoUrl);
 

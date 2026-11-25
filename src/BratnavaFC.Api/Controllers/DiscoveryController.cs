@@ -22,8 +22,8 @@ public sealed class DiscoveryController : BaseApiController
         Respond(_service.SearchGroupsAsync(UserId(), q, page, pageSize, ct));
 
     [HttpGet("players")]
-    public Task<IActionResult> SearchPlayers([FromQuery] string? q, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default) =>
-        Respond(_service.SearchPlayersAsync(UserId(), q, page, pageSize, ct));
+    public Task<IActionResult> SearchPlayers([FromQuery] string? q, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] Guid? groupId = null, CancellationToken ct = default) =>
+        Respond(_service.SearchPlayersAsync(UserId(), q, page, pageSize, ct, groupId));
 
     [HttpGet("groups/{groupId:guid}")]
     public Task<IActionResult> GroupProfile(Guid groupId, CancellationToken ct) =>

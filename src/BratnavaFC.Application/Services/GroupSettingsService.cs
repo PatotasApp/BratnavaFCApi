@@ -25,6 +25,11 @@ public sealed class GroupSettingsService : IGroupSettingsService
         var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
         if (!groupCheck.Success) return Result<GroupSettingsDto>.Fail(groupCheck.Error!, groupCheck.Status);
 
+        var groupCity = await _context.Groups.AsNoTracking()
+            .Where(x => x.Id == groupId)
+            .Select(x => x.ProfileCity)
+            .FirstOrDefaultAsync(ct);
+
         var entity = await _context.GroupSettings
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.GroupId == groupId, ct);
@@ -34,6 +39,7 @@ public sealed class GroupSettingsService : IGroupSettingsService
             return Result<GroupSettingsDto>.Ok(new GroupSettingsDto
             {
                 GroupId = groupId,
+                GroupCity = groupCity,
                 MinPlayers = 5,
                 MaxPlayers = 6,
                 DefaultPlaceName = null,
@@ -70,7 +76,10 @@ public sealed class GroupSettingsService : IGroupSettingsService
             });
         }
 
-        return Result<GroupSettingsDto>.Ok(ToDto(entity, isPersisted: true));
+        return Result<GroupSettingsDto>.Ok(ToDto(
+            entity,
+            isPersisted: true,
+            groupCity: groupCity));
     }
 
     public async Task<Result<GroupSettingsDto>> UpsertAsync(Guid groupId, UpsertGroupSettingsDto dto, CancellationToken ct)
@@ -93,6 +102,8 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 dto.DefaultDayOfWeek,
                 dto.DefaultKickoffTime);
             entity.SetDefaultDaysOfWeek(ResolveDefaultDays(dto));
+            if (dto.HasStructuredLocation)
+                entity.SetDefaultLocation(dto.DefaultPlaceAddress, dto.DefaultPlaceLatitude, dto.DefaultPlaceLongitude);
 
             entity.SetIcons(dto.GoalIcon, dto.GoalkeeperIcon, dto.AssistIcon, dto.OwnGoalIcon, dto.MvpIcon, dto.PlayerIcon, dto.Rank1Icon, dto.Rank2Icon, dto.Rank3Icon);
             entity.SetMonthlyFee(dto.MonthlyFee);
@@ -122,6 +133,8 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 dto.DefaultDayOfWeek,
                 dto.DefaultKickoffTime);
             entity.SetDefaultDaysOfWeek(ResolveDefaultDays(dto));
+            if (dto.HasStructuredLocation)
+                entity.SetDefaultLocation(dto.DefaultPlaceAddress, dto.DefaultPlaceLatitude, dto.DefaultPlaceLongitude);
             entity.SetIcons(dto.GoalIcon, dto.GoalkeeperIcon, dto.AssistIcon, dto.OwnGoalIcon, dto.MvpIcon, dto.PlayerIcon, dto.Rank1Icon, dto.Rank2Icon, dto.Rank3Icon);
             entity.SetMonthlyFee(dto.MonthlyFee);
             entity.SetGoalkeeperMonthlyFee(dto.GoalkeeperMonthlyFee);
@@ -159,6 +172,8 @@ public sealed class GroupSettingsService : IGroupSettingsService
                 dto.DefaultDayOfWeek,
                 dto.DefaultKickoffTime);
             existing.SetDefaultDaysOfWeek(ResolveDefaultDays(dto));
+            if (dto.HasStructuredLocation)
+                existing.SetDefaultLocation(dto.DefaultPlaceAddress, dto.DefaultPlaceLatitude, dto.DefaultPlaceLongitude);
             existing.SetIcons(dto.GoalIcon, dto.GoalkeeperIcon, dto.AssistIcon, dto.OwnGoalIcon, dto.MvpIcon, dto.PlayerIcon, dto.Rank1Icon, dto.Rank2Icon, dto.Rank3Icon);
             existing.SetMonthlyFee(dto.MonthlyFee);
             existing.SetGoalkeeperMonthlyFee(dto.GoalkeeperMonthlyFee);
@@ -185,12 +200,19 @@ public sealed class GroupSettingsService : IGroupSettingsService
     }
 
 
-    private static GroupSettingsDto ToDto(GroupSettingsEntity e, bool isPersisted) => new()
+    private static GroupSettingsDto ToDto(
+        GroupSettingsEntity e,
+        bool isPersisted,
+        string? groupCity = null) => new()
     {
         GroupId = e.GroupId,
+        GroupCity = groupCity,
         MinPlayers = e.MinPlayers,
         MaxPlayers = e.MaxPlayers,
         DefaultPlaceName = e.DefaultPlaceName,
+        DefaultPlaceAddress = e.DefaultPlaceAddress,
+        DefaultPlaceLatitude = e.DefaultPlaceLatitude,
+        DefaultPlaceLongitude = e.DefaultPlaceLongitude,
         DefaultDayOfWeek = e.DefaultDayOfWeek,
         DefaultDaysOfWeek = e.GetDefaultDaysOfWeek().ToList(),
         DefaultKickoffTime = e.DefaultKickoffTime,

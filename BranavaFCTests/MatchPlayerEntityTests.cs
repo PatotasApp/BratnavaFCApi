@@ -119,5 +119,38 @@ public class MatchPlayerEntityTests
         // Assert
         Assert.Equal(InviteResponse.None, mp.InviteResponse);
         Assert.Null(mp.AutoRejectedByAbsenceId);
+        Assert.Null(mp.InviteRespondedAt);
+    }
+
+    [Fact]
+    public void JoinWaitingList_ShouldRecordResponseTime()
+    {
+        var mp = new MatchPlayerEntity(Guid.NewGuid());
+
+        mp.JoinWaitingList();
+
+        Assert.Equal(InviteResponse.Waiting, mp.InviteResponse);
+        Assert.NotNull(mp.InviteRespondedAt);
+    }
+
+    [Fact]
+    public void PromoteFromWaitingList_ShouldKeepOriginalQueueTime()
+    {
+        var mp = new MatchPlayerEntity(Guid.NewGuid());
+        var queuedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+        mp.RestoreInviteResponse(InviteResponse.Waiting, queuedAt);
+
+        mp.PromoteFromWaitingList();
+
+        Assert.Equal(InviteResponse.Accepted, mp.InviteResponse);
+        Assert.Equal(queuedAt, mp.InviteRespondedAt);
+    }
+
+    [Fact]
+    public void PromoteFromWaitingList_WhenNotWaiting_ShouldThrow()
+    {
+        var mp = new MatchPlayerEntity(Guid.NewGuid());
+
+        Assert.Throws<InvalidOperationException>(() => mp.PromoteFromWaitingList());
     }
 }

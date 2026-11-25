@@ -5,13 +5,15 @@ public class MatchEntity : BaseEntity
 {
     private MatchEntity() { } // EF
 
-    public MatchEntity(Guid groupId, DateTime playedAt, string placeName)
+    public MatchEntity(Guid groupId, DateTime playedAt, string placeName,
+        string? placeAddress = null, double? placeLatitude = null, double? placeLongitude = null)
     {
         if (groupId == Guid.Empty) throw new InvalidOperationException("GroupId e obrigatorio.");
 
         GroupId = groupId;
         PlayedAt = playedAt;
         PlaceName = placeName ?? throw new ArgumentNullException(nameof(placeName));
+        SetLocation(placeAddress, placeLatitude, placeLongitude);
 
         Status = MatchStatus.Created;
     }
@@ -23,6 +25,9 @@ public class MatchEntity : BaseEntity
     public int? TeamAGoals { get; private set; }
     public int? TeamBGoals { get; private set; }
     public string PlaceName { get; private set; } = string.Empty;
+    public string? PlaceAddress { get; private set; }
+    public double? PlaceLatitude { get; private set; }
+    public double? PlaceLongitude { get; private set; }
 
     public List<MatchPlayerEntity> Players { get; private set; } = [];
     public List<VoteEntity> Votes { get; private set; } = [];
@@ -117,7 +122,8 @@ public class MatchEntity : BaseEntity
         Status = MatchStatus.PostGame;
     }
 
-    public void UpdateDetails(Guid groupIdFromRequest, DateTime playedAt, string placeName, Guid matchIdFromRoute, Guid? dtoId)
+    public void UpdateDetails(Guid groupIdFromRequest, DateTime playedAt, string placeName, Guid matchIdFromRoute, Guid? dtoId,
+        string? placeAddress = null, double? placeLatitude = null, double? placeLongitude = null)
     {
         EnsureNotFinalized();
 
@@ -135,6 +141,22 @@ public class MatchEntity : BaseEntity
 
         PlayedAt = playedAt;
         PlaceName = placeName;
+        if (placeAddress is not null || placeLatitude.HasValue || placeLongitude.HasValue)
+            SetLocation(placeAddress, placeLatitude, placeLongitude);
+    }
+
+    private void SetLocation(string? address, double? latitude, double? longitude)
+    {
+        if (latitude.HasValue != longitude.HasValue)
+            throw new InvalidOperationException("Latitude e longitude devem ser informadas juntas.");
+        if (latitude is < -90 or > 90)
+            throw new InvalidOperationException("Latitude invalida.");
+        if (longitude is < -180 or > 180)
+            throw new InvalidOperationException("Longitude invalida.");
+
+        PlaceAddress = string.IsNullOrWhiteSpace(address) ? null : address.Trim();
+        PlaceLatitude = latitude;
+        PlaceLongitude = longitude;
     }
 
     public void EnsureCanDelete()

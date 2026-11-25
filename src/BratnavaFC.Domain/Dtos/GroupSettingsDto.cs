@@ -5,11 +5,15 @@ namespace BratnavaFC.Domain.Dtos;
 public sealed class GroupSettingsDto
 {
     public Guid GroupId { get; init; }
+    public string? GroupCity { get; init; }
 
     public int MinPlayers { get; init; }
     public int MaxPlayers { get; init; }
 
     public string? DefaultPlaceName { get; init; }
+    public string? DefaultPlaceAddress { get; init; }
+    public double? DefaultPlaceLatitude { get; init; }
+    public double? DefaultPlaceLongitude { get; init; }
 
     public DayOfWeek? DefaultDayOfWeek { get; init; }
     public List<DayOfWeek> DefaultDaysOfWeek { get; init; } = new();

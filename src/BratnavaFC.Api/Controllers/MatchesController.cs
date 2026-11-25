@@ -129,7 +129,8 @@ public class MatchesController : GroupAuthorizedController
         if (!await IsGroupAdminAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
-            var entity = new MatchEntity(groupId, dto.PlayedAt, dto.PlaceName);
+            var entity = new MatchEntity(groupId, dto.PlayedAt, dto.PlaceName,
+                dto.PlaceAddress, dto.PlaceLatitude, dto.PlaceLongitude);
             var created = await _service.Create(groupId, entity, cancellationToken);
 
             if (!created.Success || created.Data is null)
@@ -223,31 +224,49 @@ public class MatchesController : GroupAuthorizedController
     [HttpPatch("group/{groupId:guid}/{matchId:guid}/invite/accept")]
     public async Task<IActionResult> AcceptInviteAsync(Guid groupId, Guid matchId, [FromBody] InviteActionDto dto, CancellationToken cancellationToken)
     {
+        if (!await IsGroupAdminAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
-            await _service.AcceptInviteAsync(groupId, matchId, dto.PlayerId, cancellationToken);
-            await _realtime.MatchChangedAsync(groupId, matchId, "match.invite.accepted", cancellationToken);
-            return NoContent();
+            var result = await _service.AcceptInviteAsync(groupId, matchId, dto.PlayerId, cancellationToken, GetCurrentUserId());
+            await NotifyMatchChangedIfSuccess(result, groupId, matchId, "match.invite.accepted", cancellationToken);
+            return ToResponse(result);
         }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
     [HttpPatch("group/{groupId:guid}/{matchId:guid}/invite/reject")]
     public async Task<IActionResult> RejectInviteAsync(Guid groupId, Guid matchId, [FromBody] InviteActionDto dto, CancellationToken cancellationToken)
     {
+        if (!await IsGroupAdminAsync(groupId, _db, cancellationToken)) return Forbid();
         try
         {
-            await _service.RejectInviteAsync(groupId, matchId, dto.PlayerId, cancellationToken);
-            await _realtime.MatchChangedAsync(groupId, matchId, "match.invite.rejected", cancellationToken);
-            return NoContent();
+            var result = await _service.RejectInviteAsync(groupId, matchId, dto.PlayerId, cancellationToken, GetCurrentUserId());
+            await NotifyMatchChangedIfSuccess(result, groupId, matchId, "match.invite.rejected", cancellationToken);
+            return ToResponse(result);
         }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpGet("group/{groupId:guid}/{matchId:guid}/players/{playerId:guid}/participation-history")]
+    public async Task<IActionResult> GetParticipationHistory(Guid groupId, Guid matchId, Guid playerId, CancellationToken ct)
+    {
+        if (!await IsGroupAdminAsync(groupId, _db, ct)) return Forbid();
+
+        var player = await _db.Players.AsNoTracking()
+            .Where(p => p.GroupId == groupId && p.Id == playerId)
+            .Select(p => new { p.Name, p.UserId })
+            .FirstOrDefaultAsync(ct);
+        if (player is null) return NotFound();
+
+        var history = await _db.ParticipationActionHistory.AsNoTracking()
+            .Where(h => h.GroupId == groupId && h.SubjectType == "match" && h.SubjectId == matchId && h.PlayerId == playerId)
+            .OrderByDescending(h => h.CreateDate)
+            .Select(h => new ParticipationActionHistoryDto(h.Id, h.SubjectType, h.SubjectId, h.PlayerId,
+                player.Name, h.Action, h.Details, h.CreateDate,
+                h.PerformedByAdmin))
+            .ToListAsync(ct);
+
+        return Ok(history);
     }
 
     [HttpPost("group/{groupId:guid}/{matchId:guid}/start")]

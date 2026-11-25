@@ -7,6 +7,28 @@ public sealed class UpsertGroupSettingsDto
     public int MinPlayers { get; set; }
     public int MaxPlayers { get; set; }
     public string? DefaultPlaceName { get; set; }
+    private string? _defaultPlaceAddress;
+    private double? _defaultPlaceLatitude;
+    private double? _defaultPlaceLongitude;
+
+    public string? DefaultPlaceAddress
+    {
+        get => _defaultPlaceAddress;
+        set { _defaultPlaceAddress = value; HasStructuredLocation = true; }
+    }
+    public double? DefaultPlaceLatitude
+    {
+        get => _defaultPlaceLatitude;
+        set { _defaultPlaceLatitude = value; HasStructuredLocation = true; }
+    }
+    public double? DefaultPlaceLongitude
+    {
+        get => _defaultPlaceLongitude;
+        set { _defaultPlaceLongitude = value; HasStructuredLocation = true; }
+    }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool HasStructuredLocation { get; private set; }
     public DayOfWeek? DefaultDayOfWeek { get; set; }
     public List<DayOfWeek>? DefaultDaysOfWeek { get; set; }
     public TimeSpan? DefaultKickoffTime { get; set; }

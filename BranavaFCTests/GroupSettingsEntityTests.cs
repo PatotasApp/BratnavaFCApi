@@ -18,7 +18,6 @@ public class GroupSettingsEntityTests
     [InlineData(0, 10, "MinPlayers deve ser maior que 0.")]
     [InlineData(-1, 10, "MinPlayers deve ser maior que 0.")]
     [InlineData(1, 0, "MaxPlayers deve ser maior que 0.")]
-    [InlineData(10, 9, "MinPlayers nao pode ser maior que MaxPlayers.")]
     [InlineData(1, 23, "MaxPlayers nao pode ser maior que 22.")]
     public void Ctor_WithInvalidLimits_ShouldThrow(int min, int max, string msg)
     {

@@ -2148,4 +2148,43 @@ public sealed class MatchServiceTests
         reloaded.Should().NotContain(mp => mp.IsMvp == true,
             "IsMvp não deve ser persistido enquanto nem todos os participantes votaram");
     }
+
+    [Fact]
+    public async Task InviteResponses_ShouldQueueAndPromoteInFifoOrder()
+    {
+        await using var db = DbContextFactory.Create(nameof(InviteResponses_ShouldQueueAndPromoteInFifoOrder));
+        var sut = CreateSut(db, BuildRepoMock(db));
+        var group = await SeedGroupAsync(db);
+        db.GroupSettings.Add(new GroupSettingsEntity(group.Id, 1, 2, null, null, null));
+        await db.SaveChangesAsync();
+        var (match, players) = await SeedMatchAsync(db, group.Id, 4,
+            MatchStatus.Acceptation, acceptAllInvites: false);
+
+        await sut.AcceptInviteAsync(group.Id, match.Id, players[0].Id, CancellationToken.None);
+        await sut.AcceptInviteAsync(group.Id, match.Id, players[1].Id, CancellationToken.None);
+        await sut.AcceptInviteAsync(group.Id, match.Id, players[2].Id, CancellationToken.None);
+        await sut.AcceptInviteAsync(group.Id, match.Id, players[3].Id, CancellationToken.None);
+
+        var queued = await db.MatchPlayers.AsNoTracking()
+            .Where(x => x.MatchId == match.Id && x.InviteResponse == InviteResponse.Waiting)
+            .OrderBy(x => x.InviteRespondedAt)
+            .Select(x => x.PlayerId)
+            .ToListAsync();
+        queued.Should().Equal(players[2].Id, players[3].Id);
+
+        await sut.RejectInviteAsync(group.Id, match.Id, players[0].Id, CancellationToken.None);
+
+        var promoted = await db.MatchPlayers.AsNoTracking()
+            .SingleAsync(x => x.MatchId == match.Id && x.PlayerId == players[2].Id);
+        var stillWaiting = await db.MatchPlayers.AsNoTracking()
+            .SingleAsync(x => x.MatchId == match.Id && x.PlayerId == players[3].Id);
+        promoted.InviteResponse.Should().Be(InviteResponse.Accepted);
+        stillWaiting.InviteResponse.Should().Be(InviteResponse.Waiting);
+
+        var actions = await db.ParticipationActionHistory.AsNoTracking()
+            .Where(x => x.SubjectId == match.Id)
+            .Select(x => x.Action)
+            .ToListAsync();
+        actions.Should().Contain(["accepted", "waiting", "rejected", "promoted"]);
+    }
 }

@@ -365,7 +365,11 @@ public sealed class MatchService : IMatchService
         if (match is null)
             return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
-        match.UpdateDetails(groupId, dto.PlayedAt, dto.PlaceName, matchIdFromRoute: matchId, dtoId: dto.Id);
+        match.UpdateDetails(groupId, dto.PlayedAt, dto.PlaceName,
+            matchIdFromRoute: matchId, dtoId: dto.Id,
+            placeAddress: dto.PlaceAddress,
+            placeLatitude: dto.PlaceLatitude,
+            placeLongitude: dto.PlaceLongitude);
         await SyncManualScheduleEntryAsync(groupId, matchId, match.PlayedAt, ct);
 
         await _context.SaveChangesAsync(ct);
@@ -445,37 +449,13 @@ public sealed class MatchService : IMatchService
         return Result.Ok();
     }
 
-    public async Task<Result> AcceptInviteAsync(Guid groupId, Guid matchId, Guid playerId, CancellationToken ct)
-    {
-        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
-        if (!groupCheck.Success) return groupCheck;
+    public Task<Result> AcceptInviteAsync(Guid groupId, Guid matchId, Guid playerId,
+        CancellationToken ct, Guid? performedByUserId = null) =>
+        RespondToInviteAsync(groupId, matchId, playerId, accept: true, performedByUserId, performedByAdmin: true, ct: ct);
 
-        var match = await LoadMatchForDomainActionsAsync(groupId, matchId, ct);
-        if (match is null)
-            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
-
-        match.AcceptInvite(playerId);
-
-        await _context.SaveChangesAsync(ct);
-        _ = NotifyAttendanceAsync(groupId, matchId, playerId, accepted: true, ct);
-        return Result.Ok("Partida atualizada com sucesso.");
-    }
-
-    public async Task<Result> RejectInviteAsync(Guid groupId, Guid matchId, Guid playerId, CancellationToken ct)
-    {
-        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
-        if (!groupCheck.Success) return groupCheck;
-
-        var match = await LoadMatchForDomainActionsAsync(groupId, matchId, ct);
-        if (match is null)
-            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
-
-        match.RejectInvite(playerId);
-
-        await _context.SaveChangesAsync(ct);
-        _ = NotifyAttendanceAsync(groupId, matchId, playerId, accepted: false, ct);
-        return Result.Ok("Partida atualizada com sucesso.");
-    }
+    public Task<Result> RejectInviteAsync(Guid groupId, Guid matchId, Guid playerId,
+        CancellationToken ct, Guid? performedByUserId = null) =>
+        RespondToInviteAsync(groupId, matchId, playerId, accept: false, performedByUserId, performedByAdmin: true, ct: ct);
 
     /// <summary>Aceita convite usando o userId do JWT — sem precisar do playerId.</summary>
     public async Task<Result> AcceptMyInviteAsync(Guid groupId, Guid matchId, Guid userId, CancellationToken ct)
@@ -491,14 +471,7 @@ public sealed class MatchService : IMatchService
         if (playerId == Guid.Empty)
             return Result.Fail("Jogador não encontrado no grupo.", ResultStatus.NotFound);
 
-        var match = await LoadMatchForDomainActionsAsync(groupId, matchId, ct);
-        if (match is null)
-            return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
-
-        match.AcceptInvite(playerId);
-        await _context.SaveChangesAsync(ct);
-        _ = NotifyAttendanceAsync(groupId, matchId, playerId, accepted: true, ct);
-        return Result.Ok("Presença confirmada.");
+        return await RespondToInviteAsync(groupId, matchId, playerId, accept: true, userId, performedByAdmin: false, ct: ct);
     }
 
     /// <summary>Rejeita convite usando o userId do JWT — sem precisar do playerId.</summary>
@@ -515,14 +488,121 @@ public sealed class MatchService : IMatchService
         if (playerId == Guid.Empty)
             return Result.Fail("Jogador não encontrado no grupo.", ResultStatus.NotFound);
 
+        return await RespondToInviteAsync(groupId, matchId, playerId, accept: false, userId, performedByAdmin: false, ct: ct);
+    }
+
+    public Task<Result> AcceptInviteAsPlayerAsync(Guid groupId, Guid matchId, Guid playerId, Guid userId, CancellationToken ct) =>
+        RespondToInviteAsync(groupId, matchId, playerId, accept: true, userId, performedByAdmin: false, ct: ct);
+
+    public Task<Result> RejectInviteAsPlayerAsync(Guid groupId, Guid matchId, Guid playerId, Guid userId, CancellationToken ct) =>
+        RespondToInviteAsync(groupId, matchId, playerId, accept: false, userId, performedByAdmin: false, ct: ct);
+
+    private async Task<Result> RespondToInviteAsync(
+        Guid groupId,
+        Guid matchId,
+        Guid playerId,
+        bool accept,
+        Guid? performedByUserId,
+        bool performedByAdmin,
+        CancellationToken ct)
+    {
+        var groupCheck = await EnsureGroupExistsAsync(groupId, ct);
+        if (!groupCheck.Success) return groupCheck;
+
+        await using var transaction = _context.Database.CurrentTransaction is null
+            ? await _context.Database.BeginTransactionAsync(ct)
+            : null;
+        if (_context.Database.IsNpgsql())
+        {
+            // Serializa respostas da mesma partida: duas pessoas não podem ocupar
+            // simultaneamente a última vaga disponível.
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtext({matchId.ToString()}))", ct);
+        }
+
         var match = await LoadMatchForDomainActionsAsync(groupId, matchId, ct);
         if (match is null)
             return Result.Fail("Partida não encontrada.", ResultStatus.NotFound);
 
-        match.RejectInvite(playerId);
+        if (match.Status != MatchStatus.Acceptation)
+            throw new InvalidOperationException(accept
+                ? "So e possivel aceitar convite quando a partida esta em Acceptation."
+                : "So e possivel recusar convite quando a partida esta em Acceptation.");
+
+        var matchPlayer = match.Players.FirstOrDefault(x => x.PlayerId == playerId || x.Id == playerId);
+        if (matchPlayer is null)
+            return Result.Fail("Jogador não encontrado nesta partida.", ResultStatus.NotFound);
+
+        MatchPlayerEntity? promoted = null;
+        string action;
+
+        if (accept)
+        {
+            var maxPlayers = await _context.GroupSettings
+                .Where(x => x.GroupId == groupId)
+                .Select(x => x.MaxPlayers)
+                .FirstOrDefaultAsync(ct);
+            var acceptedCount = match.Players.Count(x =>
+                x.InviteResponse == InviteResponse.Accepted && x.Id != matchPlayer.Id);
+
+            if (maxPlayers > 0 && acceptedCount >= maxPlayers)
+            {
+                matchPlayer.JoinWaitingList();
+                action = "waiting";
+            }
+            else
+            {
+                matchPlayer.AcceptInvite();
+                action = "accepted";
+            }
+        }
+        else
+        {
+            var releasedSlot = matchPlayer.InviteResponse == InviteResponse.Accepted;
+            matchPlayer.RejectInvite();
+            action = "rejected";
+
+            if (releasedSlot)
+            {
+                promoted = match.Players
+                    .Where(x => x.InviteResponse == InviteResponse.Waiting)
+                    .OrderBy(x => x.InviteRespondedAt ?? DateTimeOffset.MaxValue)
+                    .ThenBy(x => x.CreateDate)
+                    .FirstOrDefault();
+                promoted?.PromoteFromWaitingList();
+            }
+        }
+
+        _context.ParticipationActionHistory.Add(new ParticipationActionHistoryEntity(
+            groupId, "match", matchId, matchPlayer.PlayerId, action,
+            performedByUserId: performedByUserId,
+            performedByAdmin: performedByAdmin));
+
+        if (promoted is not null)
+        {
+            _context.ParticipationActionHistory.Add(new ParticipationActionHistoryEntity(
+                groupId, "match", matchId, promoted.PlayerId, "promoted",
+                "Promovido automaticamente da lista de espera."));
+        }
+
         await _context.SaveChangesAsync(ct);
-        _ = NotifyAttendanceAsync(groupId, matchId, playerId, accepted: false, ct);
-        return Result.Ok("Presença recusada.");
+        if (transaction is not null)
+            await transaction.CommitAsync(ct);
+
+        if (action == "waiting")
+            _ = NotifyWaitingListAsync(groupId, matchId, matchPlayer.PlayerId, ct);
+        else
+            _ = NotifyAttendanceAsync(groupId, matchId, matchPlayer.PlayerId, action == "accepted", ct);
+
+        if (promoted is not null)
+            _ = NotifyPromotedFromWaitingListAsync(groupId, matchId, promoted.PlayerId, ct);
+
+        return Result.Ok(action switch
+        {
+            "waiting" => "A partida está lotada. Você entrou na lista de espera.",
+            "accepted" => "Presença confirmada.",
+            _ => "Presença recusada."
+        });
     }
 
     public async Task<Result> StartMatchAsync(Guid groupId, Guid matchId, CancellationToken ct)
@@ -1125,6 +1205,9 @@ public sealed class MatchService : IMatchService
                 GroupId      = m.GroupId,
                 PlayedAt     = m.PlayedAt,
                 PlaceName    = m.PlaceName,
+                PlaceAddress = m.PlaceAddress,
+                PlaceLatitude = m.PlaceLatitude,
+                PlaceLongitude = m.PlaceLongitude,
                 Status       = (short)m.Status,
                 StatusName   = m.Status.ToString(),
                 StepKey         = ToStepKey(m.Status),
@@ -1317,7 +1400,8 @@ public sealed class MatchService : IMatchService
                 .ToListAsync(ct);
 
             var savedResponses = existingMps
-                .ToDictionary(mp => mp.PlayerId, mp => (mp.InviteResponse, mp.AutoRejectedByAbsenceId));
+                .ToDictionary(mp => mp.PlayerId, mp =>
+                    (mp.InviteResponse, mp.InviteRespondedAt, mp.AutoRejectedByAbsenceId));
 
             _context.MatchPlayers.RemoveRange(existingMps);
 
@@ -1334,7 +1418,7 @@ public sealed class MatchService : IMatchService
 
                 if (savedResponses.TryGetValue(player.Id, out var saved))
                 {
-                    newMp.RestoreInviteResponse(saved.InviteResponse);
+                    newMp.RestoreInviteResponse(saved.InviteResponse, saved.InviteRespondedAt);
                     if (saved.AutoRejectedByAbsenceId.HasValue)
                         newMp.AutoRejectByAbsence(saved.AutoRejectedByAbsenceId.Value);
                 }
@@ -1366,6 +1450,9 @@ public sealed class MatchService : IMatchService
                 GroupId      = m.GroupId,
                 PlayedAt     = m.PlayedAt,
                 PlaceName    = m.PlaceName,
+                PlaceAddress = m.PlaceAddress,
+                PlaceLatitude = m.PlaceLatitude,
+                PlaceLongitude = m.PlaceLongitude,
                 Status       = (short)m.Status,
                 StatusName   = m.Status.ToString(),
                 StepKey         = ToStepKey(m.Status),
@@ -1415,6 +1502,7 @@ public sealed class MatchService : IMatchService
                         IsGuest = mp.Player!.IsGuest,
                         Team = mp.Team,
                         InviteResponse = (short)mp.InviteResponse,
+                        InviteRespondedAt = mp.InviteRespondedAt,
                         AbsenceType = mp.AutoRejectedByAbsenceId != null ? (int?)mp.AutoRejectedByAbsence!.AbsenceType : null,
                         AbsenceDescription = mp.AutoRejectedByAbsenceId != null
                             ? (mp.AutoRejectedByAbsence!.Description == null
@@ -1432,11 +1520,10 @@ public sealed class MatchService : IMatchService
         var settings = await _context.GroupSettings
             .AsNoTracking()
             .Where(s => s.GroupId == groupId)
-            .Select(s => new { s.MaxPlayers, s.MinPlayers })
+            .Select(s => s.MaxPlayers)
             .FirstOrDefaultAsync(ct);
 
-        var maxPlayers = settings?.MaxPlayers ?? 0;
-        var minPlayers = settings?.MinPlayers ?? 2;
+        var maxPlayers = settings;
         // Quando a partida já passou da aceitação, quem não respondeu não pode mais aceitar
         // → retorna como recusado no DTO (sem alterar o banco)
         var acceptationClosed = matchData.Status > (short)MatchStatus.Acceptation;
@@ -1451,6 +1538,11 @@ public sealed class MatchService : IMatchService
 
         var accepted = matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.Accepted).ToList();
         var rejected = matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.Rejected).ToList();
+        var waiting = matchData.Players
+            .Where(p => p.InviteResponse == (short)InviteResponse.Waiting)
+            .OrderBy(p => p.InviteRespondedAt ?? DateTimeOffset.MaxValue)
+            .ThenBy(p => p.PlayerName)
+            .ToList();
         var pending = acceptationClosed
             ? []
             : matchData.Players.Where(p => p.InviteResponse == (short)InviteResponse.None).ToList();
@@ -1461,11 +1553,14 @@ public sealed class MatchService : IMatchService
             MatchId = matchData.Id,
             Status = matchData.Status,
             MaxPlayers = maxPlayers,
+            // Compatibilidade com partidas antigas que já estavam acima do limite.
+            // A flag é informativa: não bloqueia mais o avanço.
             AcceptedOverLimit = overLimit,
-            CanAdvanceToMatchmaking = !overLimit && accepted.Count >= Math.Max(2, minPlayers),
+            CanAdvanceToMatchmaking = accepted.Count >= 2,
             AcceptedPlayers = accepted,
             RejectedPlayers = rejected,
             PendingPlayers = pending,
+            WaitingPlayers = waiting,
         };
 
         return Result<MatchAcceptationDto>.Ok(dto);
@@ -1490,6 +1585,7 @@ public sealed class MatchService : IMatchService
             AcceptedPlayers          = d.AcceptedPlayers,
             RejectedPlayers          = d.RejectedPlayers.Where(p => !p.IsGuest).ToList(),
             PendingPlayers           = d.PendingPlayers .Where(p => !p.IsGuest).ToList(),
+            WaitingPlayers           = d.WaitingPlayers .Where(p => !p.IsGuest).ToList(),
         });
     }
 
@@ -2225,6 +2321,9 @@ public sealed class MatchService : IMatchService
             GroupId = match.GroupId,
             PlayedAt = match.PlayedAt,
             PlaceName = match.PlaceName,
+            PlaceAddress = match.PlaceAddress,
+            PlaceLatitude = match.PlaceLatitude,
+            PlaceLongitude = match.PlaceLongitude,
 
             Status = (short)match.Status,
             StatusName = match.Status.ToString(),
@@ -2409,7 +2508,7 @@ public sealed class MatchService : IMatchService
     }
 
     /// <summary>
-    /// Notifica admins sobre confirmação/recusa de presença e verifica se o quorum mínimo foi atingido.
+    /// Notifica admins sobre confirmação/recusa de presença.
     /// Fire-and-forget — não bloqueia a resposta do endpoint.
     /// </summary>
     private async Task NotifyAttendanceAsync(Guid groupId, Guid matchId, Guid playerId, bool accepted, CancellationToken ct)
@@ -2435,22 +2534,6 @@ public sealed class MatchService : IMatchService
                     data:  new Dictionary<string, string> { ["type"] = "attendance_confirmed", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
                     ct);
 
-                // Quorum: notifica apenas quando o limiar é atingido exatamente
-                var minPlayers = await _context.GroupSettings
-                    .AsNoTracking()
-                    .Where(s => s.GroupId == groupId)
-                    .Select(s => (int?)s.MinPlayers)
-                    .FirstOrDefaultAsync(ct);
-
-                if (minPlayers.HasValue && minPlayers.Value > 0 && confirmedCount == minPlayers.Value)
-                {
-                    await _push.SendToGroupAdminsAsync(
-                        groupId,
-                        title: "Quorum atingido!",
-                        body:  $"Já são {confirmedCount} jogadores confirmados para a partida.",
-                        data:  new Dictionary<string, string> { ["type"] = "quorum_reached", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
-                        ct);
-                }
             }
             else
             {
@@ -2461,6 +2544,52 @@ public sealed class MatchService : IMatchService
                     data:  new Dictionary<string, string> { ["type"] = "attendance_rejected", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
                     ct);
             }
+        }
+        catch { /* notificação não crítica */ }
+    }
+
+    private async Task NotifyWaitingListAsync(Guid groupId, Guid matchId, Guid playerId, CancellationToken ct)
+    {
+        try
+        {
+            var player = await _context.Players.AsNoTracking()
+                .Where(p => p.Id == playerId)
+                .Select(p => new { p.Name, p.UserId })
+                .FirstOrDefaultAsync(ct);
+            if (player is null) return;
+
+            if (player.UserId.HasValue)
+                await _push.SendToUserAsync(player.UserId.Value, "Você entrou na lista de espera",
+                    "A partida atingiu o limite de jogadores. Avisaremos se uma vaga abrir.",
+                    new Dictionary<string, string> { ["type"] = "match_waiting_list", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
+                    ct, groupId);
+
+            await _push.SendToGroupAdminsAsync(groupId, $"{player.Name} entrou na lista de espera.",
+                "A pessoa será promovida automaticamente quando chegar a vez dela.",
+                new Dictionary<string, string> { ["type"] = "match_waiting_list", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() }, ct);
+        }
+        catch { /* notificação não crítica */ }
+    }
+
+    private async Task NotifyPromotedFromWaitingListAsync(Guid groupId, Guid matchId, Guid playerId, CancellationToken ct)
+    {
+        try
+        {
+            var player = await _context.Players.AsNoTracking()
+                .Where(p => p.Id == playerId)
+                .Select(p => new { p.Name, p.UserId })
+                .FirstOrDefaultAsync(ct);
+            if (player is null) return;
+
+            if (player.UserId.HasValue)
+                await _push.SendToUserAsync(player.UserId.Value, "Você entrou na partida!",
+                    "Uma vaga abriu e sua presença foi confirmada automaticamente.",
+                    new Dictionary<string, string> { ["type"] = "match_waiting_promoted", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() },
+                    ct, groupId);
+
+            await _push.SendToGroupAdminsAsync(groupId, $"{player.Name} saiu da lista de espera.",
+                "A primeira pessoa da fila foi confirmada automaticamente.",
+                new Dictionary<string, string> { ["type"] = "match_waiting_promoted", ["groupId"] = groupId.ToString(), ["matchId"] = matchId.ToString() }, ct);
         }
         catch { /* notificação não crítica */ }
     }

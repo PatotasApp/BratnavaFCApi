@@ -34,6 +34,23 @@ public sealed class GroupSettingsEntity : BaseEntity
     public int MaxPlayers { get; private set; }
 
     public string? DefaultPlaceName { get; private set; }
+    public string? DefaultPlaceAddress { get; private set; }
+    public double? DefaultPlaceLatitude { get; private set; }
+    public double? DefaultPlaceLongitude { get; private set; }
+
+    public void SetDefaultLocation(string? address, double? latitude, double? longitude)
+    {
+        if (latitude.HasValue != longitude.HasValue)
+            throw new InvalidOperationException("Latitude e longitude devem ser informadas juntas.");
+        if (latitude is < -90 or > 90)
+            throw new InvalidOperationException("Latitude invalida.");
+        if (longitude is < -180 or > 180)
+            throw new InvalidOperationException("Longitude invalida.");
+
+        DefaultPlaceAddress = string.IsNullOrWhiteSpace(address) ? null : address.Trim();
+        DefaultPlaceLatitude = latitude;
+        DefaultPlaceLongitude = longitude;
+    }
 
     public DayOfWeek? DefaultDayOfWeek { get; private set; }
     public string? DefaultDaysOfWeekJson { get; private set; }
@@ -304,9 +321,6 @@ public sealed class GroupSettingsEntity : BaseEntity
 
         if (maxPlayers <= 0)
             throw new InvalidOperationException("MaxPlayers deve ser maior que 0.");
-
-        if (minPlayers > maxPlayers)
-            throw new InvalidOperationException("MinPlayers nao pode ser maior que MaxPlayers.");
 
         if (maxPlayers > 22)
             throw new InvalidOperationException("MaxPlayers nao pode ser maior que 22.");

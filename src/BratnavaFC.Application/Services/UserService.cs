@@ -46,6 +46,9 @@ public class UserService : IUserService
 
         await SyncEmailFromTokenAsync(user, tokenEmail, cancellationToken);
 
+        var hasGuestActivity = await _db.MatchApplications
+            .AnyAsync(application => application.UserId == userId, cancellationToken);
+
         var me = new MeDto(
             user.Id,
             user.Email,
@@ -55,7 +58,8 @@ public class UserService : IUserService
             user.Phone,
             user.Role,
             user.Status,
-            user.ProfilePhotoKey is { } photoKey ? _images.BuildPublicUrl(photoKey) : null);
+            user.ProfilePhotoKey is { } photoKey ? _images.BuildPublicUrl(photoKey) : null,
+            hasGuestActivity);
 
         return Result<MeDto>.Ok(me);
     }

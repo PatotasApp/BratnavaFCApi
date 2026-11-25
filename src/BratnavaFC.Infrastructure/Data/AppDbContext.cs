@@ -26,6 +26,7 @@ public class AppDbContext : DbContext
     public DbSet<GroupInviteEntity> GroupInvites => Set<GroupInviteEntity>();
     public DbSet<MatchApplicationEntity> MatchApplications => Set<MatchApplicationEntity>();
     public DbSet<MatchOpeningEntity> MatchOpenings => Set<MatchOpeningEntity>();
+    public DbSet<ParticipationActionHistoryEntity> ParticipationActionHistory => Set<ParticipationActionHistoryEntity>();
     public DbSet<CalendarCategoryEntity> CalendarCategories => Set<CalendarCategoryEntity>();
     public DbSet<CalendarEventEntity> CalendarEvents => Set<CalendarEventEntity>();
     public DbSet<MonthlyPaymentEntity> MonthlyPayments => Set<MonthlyPaymentEntity>();
@@ -96,6 +97,7 @@ public class AppDbContext : DbContext
         modelBuilder.ApplyConfiguration(new MatchApplicationEntityConfiguration());
         modelBuilder.ApplyConfiguration(new MatchOpeningEntityConfiguration());
         modelBuilder.ApplyConfiguration(new MatchPlayerEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new ParticipationActionHistoryEntityConfiguration());
         modelBuilder.ApplyConfiguration(new VoteEntityConfiguration());
         modelBuilder.ApplyConfiguration(new GoalEntityConfiguration());
         modelBuilder.ApplyConfiguration(new TeamColorEntityConfiguration());

@@ -382,10 +382,10 @@ public sealed class MatchService_NewFeaturesTests
     }
 
     [Fact]
-    public async Task GetAcceptationAsync_WhenTooFewPlayersAccepted_CanAdvanceShouldBeFalse()
+    public async Task GetAcceptationAsync_IgnoresConfiguredMinimumWhenTwoPlayersAccepted()
     {
         // Arrange — MinPlayers=4, apenas 2 aceitam
-        await using var db  = DbContextFactory.Create(nameof(GetAcceptationAsync_WhenTooFewPlayersAccepted_CanAdvanceShouldBeFalse));
+        await using var db  = DbContextFactory.Create(nameof(GetAcceptationAsync_IgnoresConfiguredMinimumWhenTwoPlayersAccepted));
         var repo = BuildRepoMock(db);
         var sut  = CreateSut(db, repo);
         var grp  = await SeedGroupAsync(db);
@@ -404,15 +404,15 @@ public sealed class MatchService_NewFeaturesTests
         var result = await sut.GetAcceptationAsync(grp.Id, match.Id, CancellationToken.None);
 
         // Assert
-        result.Data!.CanAdvanceToMatchmaking.Should().BeFalse(
-            "2 aceitos < MinPlayers=4.");
+        result.Data!.CanAdvanceToMatchmaking.Should().BeTrue(
+            "o mínimo configurável foi removido do fluxo e o administrador decide quando iniciar");
     }
 
     [Fact]
-    public async Task GetAcceptationAsync_WhenAcceptedOverLimit_CanAdvanceShouldBeFalse()
+    public async Task GetAcceptationAsync_LegacyAcceptedOverLimit_DoesNotBlockAdvance()
     {
         // Arrange — MaxPlayers=2, 3 aceitam → over limit
-        await using var db  = DbContextFactory.Create(nameof(GetAcceptationAsync_WhenAcceptedOverLimit_CanAdvanceShouldBeFalse));
+        await using var db  = DbContextFactory.Create(nameof(GetAcceptationAsync_LegacyAcceptedOverLimit_DoesNotBlockAdvance));
         var repo = BuildRepoMock(db);
         var sut  = CreateSut(db, repo);
         var grp  = await SeedGroupAsync(db);
@@ -430,8 +430,8 @@ public sealed class MatchService_NewFeaturesTests
 
         // Assert
         result.Data!.AcceptedOverLimit.Should().BeTrue();
-        result.Data!.CanAdvanceToMatchmaking.Should().BeFalse(
-            "over limit impede avanço independente do número mínimo.");
+        result.Data!.CanAdvanceToMatchmaking.Should().BeTrue(
+            "o máximo agora controla a fila de espera e não bloqueia partidas legadas já acima do limite");
     }
 
     [Fact]
