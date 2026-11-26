@@ -126,7 +126,9 @@ public sealed class AppleJwsVerifier
     {
         try
         {
-            return new X509Certificate2(Convert.FromBase64String(base64 ?? ""));
+            // Nome totalmente qualificado: este método privado tem o mesmo nome da classe do BCL.
+            return System.Security.Cryptography.X509Certificates.X509CertificateLoader
+                .LoadCertificate(Convert.FromBase64String(base64 ?? ""));
         }
         catch
         {
