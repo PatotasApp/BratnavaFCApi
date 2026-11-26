@@ -22,8 +22,7 @@ public sealed class CampeonatoPostgresFixture : IAsyncLifetime
 
     // Criado só no InitializeAsync: Build() já valida o Docker, e falhar no construtor
     // esconde o motivo atrás de "constructor parameters did not have matching fixture data".
-    private static PostgreSqlContainer BuildContainer() => new PostgreSqlBuilder()
-        .WithImage("postgres:17-alpine")
+    private static PostgreSqlContainer BuildContainer() => new PostgreSqlBuilder("postgres:17-alpine")
         .WithDatabase("bratnava_tests")
         .WithUsername("postgres")
         .WithPassword("postgres")

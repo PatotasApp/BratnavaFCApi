@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
       - name: Force UTF-8 locale (pt_BR)
         run: |
           sudo apt-get update
@@ -58,11 +58,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
       # O install global vai para $HOME/.dotnet/tools, que não está no PATH do runner.
       - name: Install dotnet-ef
         run: |
-          dotnet tool install --global dotnet-ef --version 8.*
+          dotnet tool install --global dotnet-ef --version 10.*
           echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
 
       # Pega o erro mais comum: mexer numa entidade e esquecer de gerar a migration.
@@ -90,13 +90,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
       # Roda antes do deploy: se a migration falhar, a versão nova não sobe.
       # A connection string aqui usa o endpoint DIRETO (sem -pooler), porque DDL
       # através do PgBouncer é problemático.
       - name: Apply EF migrations
         run: |
-          dotnet tool install --global dotnet-ef --version 8.*
+          dotnet tool install --global dotnet-ef --version 10.*
           export PATH="$PATH:$HOME/.dotnet/tools"
           dotnet ef database update \
             --project src/BratnavaFC.Infrastructure \
@@ -119,11 +119,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
       # Ver a nota no job deploy-dev.
       - name: Apply EF migrations
         run: |
-          dotnet tool install --global dotnet-ef --version 8.*
+          dotnet tool install --global dotnet-ef --version 10.*
           export PATH="$PATH:$HOME/.dotnet/tools"
           dotnet ef database update \
             --project src/BratnavaFC.Infrastructure \
