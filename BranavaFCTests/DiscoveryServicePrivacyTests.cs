@@ -17,9 +17,9 @@ public sealed class DiscoveryServicePrivacyTests
         "hash", null, null);
 
     [Fact]
-    public async Task GroupSearch_ShowsOwnPrivateGroupButKeepsItHiddenFromOthers()
+    public async Task GroupSearch_ShowsEveryActiveGroupAsPrivate()
     {
-        await using var db = DbContextFactory.Create(nameof(GroupSearch_ShowsOwnPrivateGroupButKeepsItHiddenFromOthers));
+        await using var db = DbContextFactory.Create(nameof(GroupSearch_ShowsEveryActiveGroupAsPrivate));
         var member = User("private-member");
         var outsider = User("private-outsider");
         var group = new GroupEntity("Resenha privada", null, member.Id);
@@ -34,9 +34,33 @@ public sealed class DiscoveryServicePrivacyTests
             outsider.Id, "Resenha", 1, 20, default);
 
         memberResult.Success.Should().BeTrue();
-        memberResult.Data!.Items.Should().ContainSingle().Which.IsMember.Should().BeTrue();
+        var memberItem = memberResult.Data!.Items.Should().ContainSingle().Subject;
+        memberItem.IsMember.Should().BeTrue();
+        memberItem.IsPublic.Should().BeFalse();
+        memberItem.IsAcceptingPlayers.Should().BeFalse();
         outsiderResult.Success.Should().BeTrue();
-        outsiderResult.Data!.Items.Should().BeEmpty();
+        var outsiderItem = outsiderResult.Data!.Items.Should().ContainSingle().Subject;
+        outsiderItem.IsMember.Should().BeFalse();
+        outsiderItem.IsPublic.Should().BeFalse();
+        outsiderItem.IsAcceptingPlayers.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task NewExternalInteractions_AreTemporarilyBlocked()
+    {
+        await using var db = DbContextFactory.Create(nameof(NewExternalInteractions_AreTemporarilyBlocked));
+        var service = Service(db);
+
+        var application = await service.ApplyAsync(
+            Guid.NewGuid(), Guid.NewGuid(), new(Guid.NewGuid()), default);
+        var invitation = await service.InviteAsync(
+            Guid.NewGuid(), Guid.NewGuid(),
+            new(Guid.NewGuid(), Guid.NewGuid(), null), default);
+
+        application.Success.Should().BeFalse();
+        application.Status.Should().Be(BratnavaFC.Domain.Common.ResultStatus.Forbidden);
+        invitation.Success.Should().BeFalse();
+        invitation.Status.Should().Be(BratnavaFC.Domain.Common.ResultStatus.Forbidden);
     }
 
     [Fact]

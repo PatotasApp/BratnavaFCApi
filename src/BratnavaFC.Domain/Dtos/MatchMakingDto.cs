@@ -29,5 +29,15 @@ namespace BratnavaFC.Domain.Dtos
         /// Frontend deve usar este flag em vez de verificar contagens localmente.
         /// </summary>
         public bool CanStartMatch { get; init; }
+
+        /// <summary>Todos os jogadores de linha confirmados têm ataque, defesa e físico cadastrados.</summary>
+        public bool CanGenerateByProfile { get; set; }
+
+        public string? ProfileGenerationBlockedReason { get; set; }
+
+        /// <summary>A patota já possui ao menos três partidas finalizadas.</summary>
+        public bool CanGenerateByAlgorithm { get; set; }
+
+        public string? AlgorithmGenerationBlockedReason { get; set; }
     }
 }

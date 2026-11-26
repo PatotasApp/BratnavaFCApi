@@ -31,13 +31,10 @@ public sealed class DiscoveryService : IDiscoveryService
         var term = (query ?? "").Trim().ToLower();
         if (term.Length == 0)
             return Result<PagedResultDto<GroupSearchItemDto>>.Ok(EmptyPage<GroupSearchItemDto>(page, pageSize));
-        // Uma patota privada não deve aparecer para outras pessoas, mas precisa
-        // continuar encontrável pelo próprio mensalista/admin. Caso contrário,
-        // o selo "SUA PATOTA" nunca aparece justamente nas patotas privadas.
-        var groups = _db.Groups.AsNoTracking().Where(g => g.Status == Status.Active &&
-            (g.IsPublic ||
-             g.Players.Any(p => p.UserId == requesterId && !p.IsGuest && p.Status == Status.Active) ||
-             _db.GroupAdmins.Any(a => a.GroupId == g.Id && a.UserId == requesterId)));
+        // Durante a pausa das interações externas, a busca funciona como um
+        // diretório: todas as patotas ativas aparecem, mas são apresentadas
+        // como privadas e seus detalhes continuam protegidos.
+        var groups = _db.Groups.AsNoTracking().Where(g => g.Status == Status.Active);
         groups = groups.Where(g => g.Name.ToLower().Contains(term) || g.Code.ToLower().Contains(term));
         var total = await groups.CountAsync(ct);
         var rows = await groups.OrderBy(g => g.Name).Skip((page - 1) * pageSize).Take(pageSize)
@@ -49,7 +46,10 @@ public sealed class DiscoveryService : IDiscoveryService
         {
             Page = page, PageSize = pageSize, Total = total,
             Items = rows.Select(x => new GroupSearchItemDto(x.Id, x.Name, x.Code, Image(x.LogoKey),
-                x.ProfileCity, x.IsAcceptingPlayers, x.Count, x.IsMember)).ToList()
+                x.ProfileCity,
+                FeatureFlags.ExternalPlayerInteractionsEnabled && x.IsAcceptingPlayers,
+                x.Count, x.IsMember,
+                FeatureFlags.ExternalPlayerInteractionsEnabled)).ToList()
         });
     }
 
@@ -99,7 +99,7 @@ public sealed class DiscoveryService : IDiscoveryService
         var isMember = await _db.Players.AnyAsync(p => p.GroupId == groupId && p.UserId == requesterId &&
             !p.IsGuest && p.Status == Status.Active, ct);
         var isAdmin = await _db.GroupAdmins.AnyAsync(a => a.GroupId == groupId && a.UserId == requesterId, ct);
-        if (!group.IsPublic && !isMember && !isAdmin)
+        if ((!FeatureFlags.ExternalPlayerInteractionsEnabled || !group.IsPublic) && !isMember && !isAdmin)
             return Result<GroupProfileDto>.Fail("Esta patota é privada.", ResultStatus.NotFound);
 
         var settings = await _db.GroupSettings.AsNoTracking().FirstOrDefaultAsync(x => x.GroupId == groupId, ct);
@@ -143,7 +143,10 @@ public sealed class DiscoveryService : IDiscoveryService
             Description = group.ProfileDescription, City = group.ProfileCity,
             DefaultDayOfWeek = settings?.DefaultDayOfWeek, DefaultKickoffTime = settings?.DefaultKickoffTime,
             MemberCount = await _db.Players.CountAsync(p => p.GroupId == groupId && !p.IsGuest && p.Status == Status.Active, ct),
-            IsPublic = group.IsPublic, IsAcceptingPlayers = group.IsAcceptingPlayers, ShowMembers = group.ShowMembersOnProfile, ShowGoalsToGuests = group.ShowGoalsToGuests,
+            // Membros e administradores ainda precisam receber os valores
+            // reais para que a tela de configuração não sobrescreva o cadastro.
+            IsPublic = group.IsPublic, IsAcceptingPlayers = group.IsAcceptingPlayers,
+            ShowMembers = group.ShowMembersOnProfile, ShowGoalsToGuests = group.ShowGoalsToGuests,
             Members = members,
             UpcomingMatches = matches.Select(m =>
             {
@@ -181,6 +184,8 @@ public sealed class DiscoveryService : IDiscoveryService
 
     public async Task<Result<MatchOpeningDto>> CreateOpeningAsync(Guid groupId, Guid matchId, UpsertMatchOpeningDto dto, CancellationToken ct)
     {
+        if (!FeatureFlags.ExternalPlayerInteractionsEnabled)
+            return Result<MatchOpeningDto>.Fail("Interações com jogadores externos estão temporariamente indisponíveis.", ResultStatus.Forbidden);
         if (await MatchUnavailable(matchId, ct, groupId))
             return Result<MatchOpeningDto>.Fail("A partida não está na fase de aceitação.", ResultStatus.Conflict);
         var opening = new MatchOpeningEntity(groupId, matchId, dto.Slots, dto.Position);
@@ -191,6 +196,8 @@ public sealed class DiscoveryService : IDiscoveryService
 
     public async Task<Result<MatchOpeningDto>> UpdateOpeningAsync(Guid groupId, Guid openingId, UpsertMatchOpeningDto dto, CancellationToken ct)
     {
+        if (!FeatureFlags.ExternalPlayerInteractionsEnabled)
+            return Result<MatchOpeningDto>.Fail("Interações com jogadores externos estão temporariamente indisponíveis.", ResultStatus.Forbidden);
         var opening = await _db.MatchOpenings.FirstOrDefaultAsync(x => x.Id == openingId && x.GroupId == groupId && x.IsActive, ct);
         if (opening is null) return Result<MatchOpeningDto>.Fail("Vaga não encontrada.", ResultStatus.NotFound);
         if (await MatchUnavailable(opening.MatchId, ct)) return Result<MatchOpeningDto>.Fail("A partida não está mais em aceitação.", ResultStatus.Conflict);
@@ -211,12 +218,21 @@ public sealed class DiscoveryService : IDiscoveryService
         foreach (var application in pending) application.Cancel();
         await _db.SaveChangesAsync(ct);
         foreach (var application in pending)
-            await _push.SendToUserAsync(application.UserId, "Vaga encerrada", "A vaga desta partida foi encerrada pelo administrador.", groupId: groupId, cancellationToken: ct);
+            await _push.SendToUserAsync(application.UserId, "Vaga encerrada",
+                "A vaga desta partida foi encerrada pelo administrador.",
+                new()
+                {
+                    ["type"] = "match_application_closed",
+                    ["matchId"] = opening.MatchId.ToString(),
+                },
+                groupId: groupId, cancellationToken: ct);
         return Result.Ok("Vaga removida.");
     }
 
     public async Task<Result<MatchApplicationDto>> ApplyAsync(Guid groupId, Guid userId, CreateMatchApplicationDto dto, CancellationToken ct)
     {
+        if (!FeatureFlags.ExternalPlayerInteractionsEnabled)
+            return Result<MatchApplicationDto>.Fail("Candidaturas para partidas estão temporariamente indisponíveis.", ResultStatus.Forbidden);
         var validation = await ValidateApplicationAsync(groupId, dto.MatchId, userId, requireOpenGroup: true, ct);
         if (validation is not null) return Result<MatchApplicationDto>.Fail(validation.Value.Error, validation.Value.Status);
         var application = new MatchApplicationEntity(groupId, dto.MatchId, userId,
@@ -275,6 +291,8 @@ public sealed class DiscoveryService : IDiscoveryService
 
     public async Task<Result<MatchApplicationDto>> InviteAsync(Guid groupId, Guid adminUserId, CreateAdminMatchInviteDto dto, CancellationToken ct)
     {
+        if (!FeatureFlags.ExternalPlayerInteractionsEnabled)
+            return Result<MatchApplicationDto>.Fail("Convites para jogadores externos estão temporariamente indisponíveis.", ResultStatus.Forbidden);
         var validation = await ValidateApplicationAsync(groupId, dto.MatchId, dto.UserId, requireOpenGroup: false, ct);
         if (validation is not null) return Result<MatchApplicationDto>.Fail(validation.Value.Error, validation.Value.Status);
         var guestError = await ValidateGuestAsync(groupId, dto.UserId, dto.GuestPlayerId, ct);
@@ -302,7 +320,14 @@ public sealed class DiscoveryService : IDiscoveryService
         if (app is null) return Result.Fail("Candidatura não encontrada.", ResultStatus.NotFound);
         app.Reject(dto.Reason); await _db.SaveChangesAsync(ct);
         var detail = string.IsNullOrWhiteSpace(dto.Reason) ? "" : $" Motivo: {dto.Reason.Trim()}";
-        await _push.SendToUserAsync(app.UserId, "Candidatura atualizada", $"A patota não conseguiu aceitar sua participação nesta partida.{detail}", groupId: groupId, cancellationToken: ct);
+        await _push.SendToUserAsync(app.UserId, "Candidatura atualizada",
+            $"A patota não conseguiu aceitar sua participação nesta partida.{detail}",
+            new()
+            {
+                ["type"] = "match_application_rejected",
+                ["matchId"] = app.MatchId.ToString(),
+            },
+            groupId: groupId, cancellationToken: ct);
         return Result.Ok("Candidatura recusada.");
     }
 
@@ -492,7 +517,14 @@ public sealed class DiscoveryService : IDiscoveryService
         var app = await _db.MatchApplications.FirstOrDefaultAsync(x => x.Id == applicationId && x.UserId == userId && x.Status == MatchApplicationStatus.PendingPlayer, ct);
         if (app is null) return Result.Fail("Convite não encontrado.", ResultStatus.NotFound);
         app.Reject(); await _db.SaveChangesAsync(ct);
-        await _push.SendToGroupAdminsAsync(app.GroupId, "Convite recusado", "O jogador não poderá participar desta partida.", cancellationToken: ct);
+        await _push.SendToGroupAdminsAsync(app.GroupId, "Convite recusado",
+            "O jogador não poderá participar desta partida.",
+            new()
+            {
+                ["type"] = "match_application_declined",
+                ["matchId"] = app.MatchId.ToString(),
+            },
+            cancellationToken: ct);
         return Result.Ok("Convite recusado.");
     }
 
@@ -532,7 +564,13 @@ public sealed class DiscoveryService : IDiscoveryService
         var note = app.DecisionReason ?? app.Message;
         var detail = string.IsNullOrWhiteSpace(note) ? "" : $" Mensagem: {note}";
         await _push.SendToUserAsync(app.UserId, "Convite para jogar", $"Você foi aceito para jogar em {match.PlayedAt:dd/MM 'às' HH:mm}, em {match.PlaceName}. Confirme sua presença.{detail}",
-            new() { ["type"] = "match_application_invite", ["applicationId"] = app.Id.ToString(), ["matchId"] = app.MatchId.ToString() }, ct, app.GroupId);
+            new()
+            {
+                ["type"] = "match_application_invite",
+                ["applicationId"] = app.Id.ToString(),
+                ["matchId"] = app.MatchId.ToString(),
+                ["groupId"] = app.GroupId.ToString(),
+            }, ct, app.GroupId);
     }
 
     private async Task<MatchApplicationDto> MapAsync(Guid id, CancellationToken ct) =>

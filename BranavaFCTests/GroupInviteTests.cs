@@ -21,12 +21,13 @@ file static class Builders
     public static GroupEntity MakeGroup(string name = "Patota FC") =>
         new(name, null, Guid.NewGuid());
 
-    public static GroupService MakeSut(BratnavaFC.Infrastructure.Data.AppDbContext db)
+    public static GroupService MakeSut(
+        BratnavaFC.Infrastructure.Data.AppDbContext db,
+        IPushService? push = null)
     {
         var logger = Mock.Of<ILogger<GroupService>>();
         var repo   = new Mock<IRepositoryBase<GroupEntity>>().Object;
-        var push   = Mock.Of<IPushService>();
-        return new GroupService(db, logger, repo, push, TestImageStorage.Create());
+        return new GroupService(db, logger, repo, push ?? Mock.Of<IPushService>(), TestImageStorage.Create());
     }
 }
 
@@ -99,6 +100,33 @@ public class GroupInviteEntityTests
 
 public class GroupService_CreateInviteTests
 {
+    [Fact]
+    public async Task HappyPath_ShouldNotifyInvitedUser()
+    {
+        await using var db = DbContextFactory.Create(nameof(HappyPath_ShouldNotifyInvitedUser));
+        var push = new Mock<IPushService>();
+        var sut = Builders.MakeSut(db, push.Object);
+        var user = Builders.MakeUser();
+        var group = Builders.MakeGroup("Resenha FC");
+        db.Users.Add(user);
+        db.Groups.Add(group);
+        await db.SaveChangesAsync();
+
+        var result = await sut.CreateInviteAsync(
+            group.Id,
+            new CreateGroupInviteDto(user.Id, null),
+            CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        push.Verify(x => x.SendToUserAsync(
+            user.Id,
+            "Convite para grupo",
+            It.Is<string>(body => body.Contains("Resenha FC")),
+            It.Is<Dictionary<string, string>>(data => data["type"] == "group_invite"),
+            It.IsAny<CancellationToken>(),
+            group.Id), Times.Once);
+    }
+
     [Fact]
     public async Task HappyPath_WithoutGuest_ShouldPersistPendingInvite()
     {

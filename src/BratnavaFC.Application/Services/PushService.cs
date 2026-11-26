@@ -105,8 +105,10 @@ public class PushService : IPushService
             ? await PrefixWithGroupNameAsync(title, groupId.Value, cancellationToken)
             : title;
 
-        // Mantém o destinatário no payload para rastreamento e roteamento.
-        var enrichedData = EnrichWithUserId(data, userId);
+        // Mantém o destinatário e a patota no payload para rastreamento e
+        // roteamento. O groupId não pode existir apenas na coluna do inbox:
+        // o FCM e o app também dependem dele para trocar o contexto ativo.
+        var enrichedData = EnrichContext(data, userId, groupId);
 
         // Persiste na caixa de entrada independente de ter token ativo
         await PersistAsync([userId], groupId, prefixedTitle, body, enrichedData, cancellationToken);
@@ -124,6 +126,8 @@ public class PushService : IPushService
         Guid groupId, Dictionary<string, string> data,
         CancellationToken cancellationToken = default)
     {
+        data = EnrichContext(data, groupId: groupId);
+
         // Prefixa o title dentro do data dict com o nome do grupo
         if (data.TryGetValue("title", out var rawTitle))
         {
@@ -222,6 +226,8 @@ public class PushService : IPushService
             _logger.LogWarning("[Push DataOnly] Nenhum usuário destinatário para a notificação.");
             return;
         }
+
+        data = EnrichContext(data, groupId: groupId);
 
         if (groupId.HasValue && data.TryGetValue("title", out var rawTitle))
         {
@@ -344,8 +350,10 @@ public class PushService : IPushService
             return;
         }
 
+        var contextualData = EnrichContext(data, groupId: groupId);
+
         // Persiste na caixa de entrada de cada usuário (sem prefixo de nome)
-        await PersistAsync(userIds, groupId, title, body, data, cancellationToken);
+        await PersistAsync(userIds, groupId, title, body, contextualData, cancellationToken);
 
         // Busca tokens agrupados por usuário para enriquecer o payload de cada destinatário.
         var tokensByUser = await _context.PushTokens
@@ -365,7 +373,7 @@ public class PushService : IPushService
         foreach (var group in tokensByUser.GroupBy(t => t.UserId))
         {
             var tokens = group.Select(t => t.Token).ToList();
-            var enrichedData = EnrichWithUserId(data, group.Key);
+            var enrichedData = EnrichContext(contextualData, group.Key, groupId);
             await SendToTokensAsync(tokens, title, body, enrichedData, cancellationToken);
         }
     }
@@ -379,6 +387,7 @@ public class PushService : IPushService
         var tokenList = tokens.Distinct().ToList();
         if (tokenList.Count == 0) return;
 
+        var contextualData = EnrichContext(data, groupId: groupId);
         var prefixedTitle = groupId.HasValue
             ? await PrefixWithGroupNameAsync(title, groupId.Value, cancellationToken)
             : title;
@@ -392,7 +401,7 @@ public class PushService : IPushService
 
         foreach (var batch in batches)
         {
-            await SendBatchAsync(batch, prefixedTitle, body, data, cancellationToken);
+            await SendBatchAsync(batch, prefixedTitle, body, contextualData, cancellationToken);
         }
     }
 
@@ -431,15 +440,26 @@ public class PushService : IPushService
     // ── Helpers privados ──────────────────────────────────────────────────────
 
     /// <summary>
-    /// Injeta userId no payload de dados para rastreamento e roteamento.
+    /// Injeta o destinatário e a patota no payload de dados. Os argumentos do
+    /// serviço são a fonte autoritativa e sobrescrevem valores inconsistentes.
     /// </summary>
-    private static Dictionary<string, string> EnrichWithUserId(
-        Dictionary<string, string>? data, Guid userId)
+    private static Dictionary<string, string> EnrichContext(
+        Dictionary<string, string>? data,
+        Guid? userId = null,
+        Guid? groupId = null)
     {
         var enriched = data is null
             ? new Dictionary<string, string>()
             : new Dictionary<string, string>(data);
-        enriched["userId"] = userId.ToString();
+        // Nunca envie um payload impossível de interpretar. Os casos de
+        // negócio devem informar um tipo específico; generic é a proteção
+        // final para notificações administrativas sem destino dedicado.
+        if (!enriched.TryGetValue("type", out var type) || string.IsNullOrWhiteSpace(type))
+            enriched["type"] = "generic";
+        if (userId.HasValue)
+            enriched["userId"] = userId.Value.ToString();
+        if (groupId.HasValue)
+            enriched["groupId"] = groupId.Value.ToString();
         return enriched;
     }
 

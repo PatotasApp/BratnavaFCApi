@@ -3,7 +3,7 @@ using BratnavaFC.Domain.Entities;
 namespace BratnavaFC.Domain.Dtos.Discovery;
 
 public sealed record GroupSearchItemDto(Guid GroupId, string Name, string Code, string? LogoUrl,
-    string? City, bool IsAcceptingPlayers, int MemberCount, bool IsMember = false);
+    string? City, bool IsAcceptingPlayers, int MemberCount, bool IsMember = false, bool IsPublic = true);
 
 public sealed record PlayerSearchItemDto(Guid UserId, string Name, string UserName, string? PhotoUrl,
     string? Position, bool InGroup = false);

@@ -337,7 +337,13 @@ public sealed class MatchService : IMatchService
         await _context.SaveChangesAsync(ct);
         foreach (var application in externalPending)
             await _push.SendToUserAsync(application.UserId, "Candidatura encerrada",
-                "A partida avançou e a candidatura foi cancelada.", groupId: groupId, cancellationToken: ct);
+                "A partida avançou e a candidatura foi cancelada.",
+                new Dictionary<string, string>
+                {
+                    ["type"] = "match_application_closed",
+                    ["matchId"] = application.MatchId.ToString(),
+                },
+                groupId: groupId, cancellationToken: ct);
         return Result.Ok("Partida atualizada com sucesso.");
     }
 
@@ -1696,6 +1702,32 @@ public sealed class MatchService : IMatchService
 
         if (dto is null)
             return Result<MatchMatchMakingDto>.Fail("Partida não encontrada.", ResultStatus.NotFound);
+
+        var missingProfileCount = await _context.MatchPlayers
+            .AsNoTracking()
+            .Where(mp => mp.MatchId == matchId
+                && mp.Player!.Status == Status.Active
+                && mp.InviteResponse == InviteResponse.Accepted
+                && !mp.IsGoalkeeper
+                && (mp.Player.AttackRating == null
+                    || mp.Player.DefenseRating == null
+                    || mp.Player.OverallRating == null))
+            .CountAsync(ct);
+
+        var finalizedMatchCount = await _context.Matches
+            .AsNoTracking()
+            .CountAsync(m => m.GroupId == groupId && m.Status == MatchStatus.Finalized, ct);
+
+        dto.CanGenerateByProfile = missingProfileCount == 0;
+        dto.ProfileGenerationBlockedReason = missingProfileCount == 0
+            ? null
+            : missingProfileCount == 1
+                ? "1 jogador de linha ainda não tem o perfil completo. Cadastre ataque, defesa e físico."
+                : $"{missingProfileCount} jogadores de linha ainda não têm o perfil completo. Cadastre ataque, defesa e físico.";
+        dto.CanGenerateByAlgorithm = finalizedMatchCount >= 3;
+        dto.AlgorithmGenerationBlockedReason = finalizedMatchCount >= 3
+            ? null
+            : $"O algoritmo será liberado após 3 partidas finalizadas. Esta patota tem {finalizedMatchCount}.";
 
         return Result<MatchMatchMakingDto>.Ok(dto);
     }
